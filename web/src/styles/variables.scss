@@ -1,0 +1,89 @@
+// 设计 Token（SCSS 变量 + CSS 变量双轨）
+// - SCSS 变量：编译期使用（mixin、计算、工具类生成）
+// - CSS 变量（:root）：运行期使用，便于主题切换与组件内引用
+// 与 Element Plus 主色对齐，新组件/页面统一引用，避免硬编码。
+
+// ===== SCSS 变量 =====
+// 品牌色
+$color-primary: #409eff;
+$color-success: #67c23a;
+$color-warning: #e6a23c;
+$color-danger: #f56c6c;
+$color-info: #909399;
+
+// 文本色
+$color-text-primary: #303133;
+$color-text-regular: #606266;
+$color-text-secondary: #909399;
+$color-text-placeholder: #a8abb2;
+
+// 背景与边框
+$color-bg-page: #f0f2f5;
+$color-bg-container: #ffffff;
+$color-border: #dcdfe6;
+$color-border-light: #e4e7ed;
+
+// 间距（4 的倍数）
+$space-xs: 4px;
+$space-sm: 8px;
+$space-md: 16px;
+$space-lg: 24px;
+$space-xl: 32px;
+
+// 圆角
+$radius-sm: 2px;
+$radius-md: 4px;
+$radius-lg: 8px;
+$radius-full: 9999px;
+
+// 字号
+$font-size-xs: 12px;
+$font-size-sm: 13px;
+$font-size-base: 14px;
+$font-size-lg: 16px;
+$font-size-xl: 20px;
+
+// 阴影
+$shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+$shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
+$shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.12);
+
+// ===== CSS 变量（运行期可用） =====
+:root {
+  --color-primary: #{$color-primary};
+  --color-success: #{$color-success};
+  --color-warning: #{$color-warning};
+  --color-danger: #{$color-danger};
+  --color-info: #{$color-info};
+
+  --color-text-primary: #{$color-text-primary};
+  --color-text-regular: #{$color-text-regular};
+  --color-text-secondary: #{$color-text-secondary};
+  --color-text-placeholder: #{$color-text-placeholder};
+
+  --color-bg-page: #{$color-bg-page};
+  --color-bg-container: #{$color-bg-container};
+  --color-border: #{$color-border};
+  --color-border-light: #{$color-border-light};
+
+  --space-xs: #{$space-xs};
+  --space-sm: #{$space-sm};
+  --space-md: #{$space-md};
+  --space-lg: #{$space-lg};
+  --space-xl: #{$space-xl};
+
+  --radius-sm: #{$radius-sm};
+  --radius-md: #{$radius-md};
+  --radius-lg: #{$radius-lg};
+  --radius-full: #{$radius-full};
+
+  --font-size-xs: #{$font-size-xs};
+  --font-size-sm: #{$font-size-sm};
+  --font-size-base: #{$font-size-base};
+  --font-size-lg: #{$font-size-lg};
+  --font-size-xl: #{$font-size-xl};
+
+  --shadow-sm: #{$shadow-sm};
+  --shadow-md: #{$shadow-md};
+  --shadow-lg: #{$shadow-lg};
+}

@@ -1,0 +1,172 @@
+# AGENTS-COMPONENTS.md
+
+> 通用组件与工具的**契约速查**。前端新页面对照 `views/article/` demo 复制后，具体渲染/交互/校验/权限全部由这里的组件封装承担；页面本身**只写"包含哪些功能"与业务字段/权限码**。
+>
+> 想理解页面级"用哪个组件、传什么"，看这里；想改组件本身，读源码 `web/src/components/`。
+
+## 组件速览
+
+| 组件 | 定位 | 页面里用来做什么 |
+| --- | --- | --- |
+| `PageContainer` | 页面外壳（标题 + 内容卡片） | 每个 `Index.vue` 都用它包一层 |
+| `ProTable` | 搜索 + 表格 + 分页 + 权限操作列 + 批量操作 | 列表页主体 |
+| `ProForm` | 配置驱动表单 + 插槽兜底 | 编辑弹窗 / 搜索栏内部使用 |
+| `ProDialog` | 弹窗外壳（预设宽度/滚动/确定取消） | `Edit.vue` / `View.vue` 都用它包一层 |
+| `MenuTree` | 递归渲染菜单树 | `MainLayout` 侧边栏用 |
+
+## 工具速览（`web/src/utils/`）
+
+| 模块 | 主要函数/常量 | 用途 |
+| --- | --- | --- |
+| `request.ts` | 默认导出 Axios 实例 | 全局请求封装（自动拆包 `data`、注入 Bearer） |
+| `format.ts` | `formatDateTime` 等 | 日期/数字格式化 |
+| `permission.ts` | `getPermissionActionColor` / `getPermissionActionLabel` / `getPermissionAction` | 按权限码 `Module.action` 返回语义 `type` 与中文短标签 |
+
+## Store 速览（`web/src/stores/`）
+
+| Store | 关键 state / getter | 用途 |
+| --- | --- | --- |
+| `user.ts` | `userInfo`、`isAdmin`、`permissions`、`hasPermission(code)`、`menus`、`fetchProfile()`、`fetchMenus()` | 登录态、鉴权判断、动态菜单 |
+
+---
+
+## PageContainer
+
+**契约**：只有一个 `title` prop 和默认 slot，用来统一标题样式与内容卡片留白。
+
+```vue
+<PageContainer title="账号管理">
+  <!-- 页面主体（一般是 ProTable） -->
+</PageContainer>
+```
+
+- Props：`title: string`
+- Slot：默认
+
+---
+
+## ProTable
+
+**契约**：一站式列表页组件。**页面只需要提供**「列配置 / 搜索字段 / 请求函数 / 权限模块名 / 删除请求」——**其它都由组件托管**。
+
+### Props
+
+| Prop | 类型 | 默认 | 说明 |
+| --- | --- | --- | --- |
+| `columns` | `ProTableColumn[]` | 必填 | 列配置（`prop/label/width/minWidth/fixed/slot`），特殊列用 `slot:true` 后写 `#column-<prop>` 插槽 |
+| `request` | `(params) => Promise<{list,total}>` | 必填 | 数据请求函数，接收分页与搜索参数 |
+| `searchFields` | `ProFormField[]` | `[]` | 搜索栏字段配置（不传则不显示搜索栏） |
+| `pageSizes` | `number[]` | `[10,20,50]` | 分页大小选项 |
+| `permModule` | `string` | `''` | 权限模块名小写（如 `'article'`）；组件内部自动拼 `Article.read/update/delete` 校验 |
+| `showActions` | `boolean` | `true` | 是否显示内置操作列（**排在首位、固定左侧**） |
+| `showView` / `showEdit` / `showDelete` | `boolean` | `true` | 内置三个动作独立开关 |
+| `actionWidth` | `string \| number` | `180` | 操作列宽度 |
+| `checkAble` | `boolean` | `false` | 是否开启勾选列（用于批量操作） |
+| `checkMode` | `'single' \| 'multiple'` | `'multiple'` | 勾选模式 |
+| `rowKey` | `string` | `'id'` | 行主键字段名（批量删除提取 ids 用） |
+| `deleteRequest` | `(row) => Promise<unknown>` | — | 删除 API；传入后由组件负责二次确认 + 执行 + 自动刷新 |
+| `batchDeleteRequest` | `({ids,rows}) => Promise<unknown>` | — | 批量删除 API；同上 |
+| `autoRefreshOnDelete` / `autoRefreshOnBatchDelete` | `boolean` | `true` | 删除成功后是否自动刷新 |
+
+### Emits
+
+- `@view(row)` / `@edit(row)`：内置按钮触发（页面负责弹窗）
+- `@delete(row)` / `@batch-delete(rows)`：未传 `deleteRequest`/`batchDeleteRequest` 时才回退到事件由页面自处理
+- `@selection-change(rows)` / `@selection-action(payload)`：勾选联动
+
+### 插槽
+
+- `#toolbar` — 表格上方工具栏（常放"新增"按钮）
+- `#column-<prop>` — 单元格自定义（列配置需 `slot: true`）
+- `#actions` — 操作列末尾追加自定义按钮
+
+### `defineExpose`（供页面 ref 调用）
+
+- `refresh()`：刷新表格
+- `search()`：走一遍搜索
+- `runBatchDelete()`：程序化触发批量删除（等价于点批量删除按钮）
+- `getSelectedRows()` / `clearSelection()` / `canBatchDelete`
+
+### 权限动作映射
+
+- ProTable 内部会把按钮语义映射为动作码：`view→read`、`edit→update`、`delete→delete`
+- 页面**只传模块名小写** `perm-module="article"`，无需拼动作
+- 超管 `isAdmin` 放行一切；非超管无对应权限则该按钮自动隐藏
+
+### 颜色
+
+- 内置按钮 `查看=info` / `编辑=primary` / `删除=danger`，符合 `.design-spec.md` 第 6 节配色标准，**页面无需手配**
+
+---
+
+## ProForm
+
+**契约**：配置驱动的表单。字段用 `fields` 配置一次性描述，需要自定义控件时开 `slot: true` 并用 `#field-<prop>` 插槽兜底。
+
+### Props
+
+| Prop | 类型 | 默认 | 说明 |
+| --- | --- | --- | --- |
+| `fields` | `ProFormField[]` | 必填 | 字段配置：`prop/label/type/placeholder/options/rows/slot` |
+| `rules` | `FormRules` | — | Element Plus 校验规则 |
+| `labelWidth` | `string` | `'80px'` | 标签宽度 |
+| `inline` | `boolean` | `false` | 是否行内布局（搜索栏用） |
+
+- v-model：绑定表单数据对象（`Record<string,any>`）
+- Emits：`@enter`（回车触发，用于搜索栏）
+- 插槽：`#field-<prop>` 自定义某个字段渲染
+
+### `defineExpose`
+
+- `validate()` / `resetFields()`
+
+### `ProFormField.type`
+
+- `input` / `textarea` / `select`（其它类型请用 `slot: true` + `#field-<prop>` 插槽自定义）
+
+---
+
+## ProDialog
+
+**契约**：弹窗外壳，预设宽度 / 内容区滚动 / 确定取消按钮 / 挂到 body / 关闭销毁。
+
+### Props
+
+| Prop | 类型 | 默认 | 说明 |
+| --- | --- | --- | --- |
+| `title` | `string` | `''` | 标题 |
+| `width` | `string \| number` | `'800px'` | 宽度 |
+| `bodyMaxHeight` | `string` | `'70vh'` | 内容区最大高度（超出滚动，`''` 不限制） |
+| `confirmLoading` | `boolean` | `false` | 确定按钮 loading |
+| `confirmText` / `cancelText` | `string` | `'确定' / '取消'` | 按钮文案 |
+| `showFooter` | `boolean` | `true` | 是否显示默认底部按钮；`false` 时用 `#footer` 插槽自定义 |
+
+- v-model：控制显隐
+- Emits：`@confirm` / `@cancel`
+- 插槽：默认 slot（内容）、`#footer`（自定义底部）
+
+---
+
+## MenuTree
+
+**契约**：递归渲染菜单树的展示组件，`MainLayout` 侧边栏专用。
+
+- Props：`items: MenuNode[]`（结构见 `web/src/api/menu.ts`）
+- 无 emits；点击菜单由 `el-menu` 自身 router 属性驱动跳转
+- 一般业务页面**不直接使用**
+
+---
+
+## 请求封装（`utils/request.ts`）
+
+- 全局 `baseURL = /api`（Vite 代理到后端 3000）
+- 响应拦截：`{ statusCode, data, success, message }` 中的 `data` 已被拆包，**页面拿到的直接是业务数据**
+- 请求拦截：token 存在时自动 `Authorization: Bearer <token>`
+- 401：清空登录态并跳登录页
+
+## 权限工具（`utils/permission.ts`）
+
+- **只按动作后缀判色**（`.` 之后）；模块无关
+- 未识别动作 → `info` 灰兜底
+- 全站 tag/按钮共用同一映射，禁止硬编码 `type`
+- 配色标准详见 `.design-spec.md` 第 6 节

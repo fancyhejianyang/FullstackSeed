@@ -1,0 +1,95 @@
+// 语义化原子工具类（Tailwind 风格，命名贴合语义）
+// 用 SCSS 变量驱动生成，配合组件 scoped 样式使用。
+@use 'variables' as *;
+
+// ===== 布局 =====
+.flex { display: flex; }
+.inline-flex { display: inline-flex; }
+.flex-col { flex-direction: column; }
+.flex-1 { flex: 1; }
+.flex-wrap { flex-wrap: wrap; }
+.items-center { align-items: center; }
+.items-start { align-items: flex-start; }
+.items-end { align-items: flex-end; }
+.justify-center { justify-content: center; }
+.justify-between { justify-content: space-between; }
+.justify-end { justify-content: flex-end; }
+.hidden { display: none; }
+.block { display: block; }
+
+// ===== 间距（gap / margin / padding，基于 space token） =====
+$spaces: (
+  'xs': $space-xs,
+  'sm': $space-sm,
+  'md': $space-md,
+  'lg': $space-lg,
+  'xl': $space-xl,
+);
+
+@each $name, $val in $spaces {
+  .gap-#{$name} { gap: $val; }
+  .m-#{$name} { margin: $val; }
+  .mt-#{$name} { margin-top: $val; }
+  .mb-#{$name} { margin-bottom: $val; }
+  .ml-#{$name} { margin-left: $val; }
+  .mr-#{$name} { margin-right: $val; }
+  .mx-#{$name} { margin-left: $val; margin-right: $val; }
+  .my-#{$name} { margin-top: $val; margin-bottom: $val; }
+  .p-#{$name} { padding: $val; }
+  .pt-#{$name} { padding-top: $val; }
+  .pb-#{$name} { padding-bottom: $val; }
+  .pl-#{$name} { padding-left: $val; }
+  .pr-#{$name} { padding-right: $val; }
+  .px-#{$name} { padding-left: $val; padding-right: $val; }
+  .py-#{$name} { padding-top: $val; padding-bottom: $val; }
+}
+
+// ===== 文字 =====
+.text-xs { font-size: $font-size-xs; }
+.text-sm { font-size: $font-size-sm; }
+.text-base { font-size: $font-size-base; }
+.text-lg { font-size: $font-size-lg; }
+.text-xl { font-size: $font-size-xl; }
+.font-medium { font-weight: 500; }
+.font-bold { font-weight: 600; }
+.text-left { text-align: left; }
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+.truncate {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+// ===== 文本颜色 =====
+.text-primary { color: $color-primary; }
+.text-success { color: $color-success; }
+.text-warning { color: $color-warning; }
+.text-danger { color: $color-danger; }
+.text-info { color: $color-info; }
+.text-main { color: $color-text-primary; }
+.text-regular { color: $color-text-regular; }
+.text-secondary { color: $color-text-secondary; }
+
+// ===== 背景 =====
+.bg-container { background-color: $color-bg-container; }
+.bg-page { background-color: $color-bg-page; }
+
+// ===== 圆角 =====
+.rounded-sm { border-radius: $radius-sm; }
+.rounded { border-radius: $radius-md; }
+.rounded-lg { border-radius: $radius-lg; }
+.rounded-full { border-radius: $radius-full; }
+
+// ===== 阴影 =====
+.shadow-sm { box-shadow: $shadow-sm; }
+.shadow { box-shadow: $shadow-md; }
+.shadow-lg { box-shadow: $shadow-lg; }
+
+// ===== 通用容器卡片（业务页面常用） =====
+.card {
+  background-color: $color-bg-container;
+  border-radius: $radius-md;
+  padding: $space-md;
+  box-shadow: $shadow-sm;
+}

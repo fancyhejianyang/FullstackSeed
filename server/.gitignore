@@ -1,0 +1,16 @@
+# 依赖
+/node_modules
+
+# 构建产物
+/dist
+/coverage
+
+# 环境变量（包含敏感信息，不提交）
+.env
+
+# 日志
+*.log
+
+# IDE / 系统
+.DS_Store
+*.tsbuildinfo
