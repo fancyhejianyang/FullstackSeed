@@ -113,11 +113,10 @@ async function handleSubmit() {
   <ProDialog
     v-model="visible"
     :title="props.row ? '编辑用户' : '新增用户'"
-    width="520px"
     :confirm-loading="submitting"
     @confirm="handleSubmit"
   >
-    <ProForm ref="formRef" v-model="form" :fields="fields" :rules="rules">
+    <ProForm ref="formRef" v-model="form" :fields="fields" :rules="rules" label-width="120px">
       <!-- 编辑态用户名禁改 -->
       <template v-if="isEdit" #field-username>
         <el-input v-model="form.username" disabled />

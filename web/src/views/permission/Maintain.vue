@@ -142,7 +142,6 @@ function handleCancel() {
   <ProDialog
     v-model="visible"
     :title="`维护操作权限 - ${menuName}`"
-    width="720px"
     :show-footer="false"
   >
     <el-table :data="rows" border size="small" empty-text="暂无操作权限">

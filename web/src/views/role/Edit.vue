@@ -97,7 +97,6 @@ async function handleSubmit() {
   <ProDialog
     v-model="visible"
     :title="props.row ? '编辑角色' : '新增角色'"
-    width="560px"
     :confirm-loading="submitting"
     @confirm="handleSubmit"
   >

@@ -27,7 +27,7 @@ export default defineConfig({
     // 开发环境代理到后端，统一 /api 前缀（与后端 setGlobalPrefix('api') 对齐）
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:4000',
         changeOrigin: true,
       },
     },
