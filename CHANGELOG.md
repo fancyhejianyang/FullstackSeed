@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-08-02 系统配置新增日志记录和数据导入入口
+- 新增：
+  - `web/src/api/moduleModel.ts`（封装模块模型列表、详情、字段列表接口）
+  - `web/src/views/log-record/Index.vue`（日志记录系统配置入口，复用模块字段元数据做模块筛选与字段预览）
+  - `web/src/views/data-import/Index.vue`（数据导入系统配置入口，复用模块字段元数据做导入字段预览）
+- 修改：
+  - `server/src/menus/menus.service.ts`（系统配置 seed 追加“日志记录”“数据导入”两个子菜单）
+  - `web/src/router/index.ts`（新增 `/system-config/log-record` 与 `/system-config/data-import` 路由，页面文件不挂载在 `views/system/` 下）
+  - `CHANGELOG.md`（追加本次快照）
+- 删除：无
+- 说明：为后续数据导入与日志功能预留入口，并将功能页面按业务域拆分到独立目录，避免 `views/system/` 继续膨胀。已执行 `web` 的 `npm.cmd run type-check` 与 `server` 的 `npm.cmd run build`，均通过。
+
 ### 2026-08-02 新增模块模型字段元数据接口
 - 新增：
   - `server/src/module-models/module-models.map.ts`（模块 id 到 Model 字段集的静态映射，覆盖 user/role/permission/menu/demo）

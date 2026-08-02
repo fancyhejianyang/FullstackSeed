@@ -75,6 +75,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '微信 / 小程序', permission: 'Menu.read' },
       },
       {
+        path: 'system-config/log-record',
+        name: 'system-config-log-record',
+        component: () => import('@/views/log-record/Index.vue'),
+        meta: { title: '日志记录', permission: 'Menu.read' },
+      },
+      {
+        path: 'system-config/data-import',
+        name: 'system-config-data-import',
+        component: () => import('@/views/data-import/Index.vue'),
+        meta: { title: '数据导入', permission: 'Menu.read' },
+      },
+      {
         // 布局内兜底 404（保留侧边栏）
         path: ':pathMatch(.*)*',
         name: 'not-found',
