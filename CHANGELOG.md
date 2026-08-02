@@ -14,6 +14,17 @@
 - 说明：本次改动目的与验证情况
 -->
 
+### 2026-08-02 开关字段校验改为有值即可
+- 新增：
+  - `server/src/common/utils/bool-like.ts`（统一兼容 `true/false`、`1/0`、`'true'/'false'`、`'1'/'0'` 的开关值转换）
+- 修改：
+  - `server/src/users/dto/user.dto.ts`、`server/src/roles/dto/role.dto.ts`、`server/src/menus/dto/menu.dto.ts`（`isActive`、`isAdmin`、`isSystem` 等开关字段校验调整为传入时非空即可，不再强制限定原始类型必须为 boolean）
+  - `web/src/api/user.ts`、`web/src/api/role.ts`、`web/src/api/menu.ts`（前端接口类型放宽为常见开关值表达）
+  - `web/src/views/user/Edit.vue`、`web/src/views/role/Edit.vue`（表单侧保持有值校验，并统一回显转换）
+  - `CHANGELOG.md`（追加本次规则调整快照）
+- 删除：无
+- 说明：按开关/状态字段的实际业务语义统一前后端校验口径：只要求有值，不纠结布尔、数字或字符串表现形式；后端转换后仍按实体 tinyint 入库。
+
 ### 2026-08-02 用户布尔状态表单统一 0/1
 - 新增：无
 - 修改：

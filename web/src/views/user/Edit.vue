@@ -9,7 +9,7 @@ import {
   updateUser,
   type UserItem,
   type UserForm,
-  type BoolNumber,
+  type BoolLike,
 } from '@/api/user';
 
 const props = defineProps<{
@@ -70,6 +70,8 @@ function buildFields() {
 
 const rules: FormRules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+  isActive: [{ required: true, message: '请选择状态', trigger: 'change' }],
+  isAdmin: [{ required: true, message: '请选择是否为超级管理员', trigger: 'change' }],
 };
 
 function resetForm() {
@@ -84,12 +86,14 @@ function fillForm(data: UserItem) {
   form.username = data.username ?? '';
   form.nickname = data.nickname ?? '';
   form.password = '';
-  form.isActive = Number(data.isActive) ? 1 : 0;
-  form.isAdmin = Number(data.isAdmin) ? 1 : 0;
+  form.isActive = toBoolNumber(data.isActive);
+  form.isAdmin = toBoolNumber(data.isAdmin);
 }
 
-function toBoolNumber(value: UserForm['isActive']): BoolNumber {
-  return Number(value) ? 1 : 0;
+function toBoolNumber(value: BoolLike | undefined): 0 | 1 {
+  return value === true || value === 1 || value === '1' || value === 'true'
+    ? 1
+    : 0;
 }
 
 // 打开时：编辑态强制走详情接口取最新数据，新增态取默认值

@@ -1,6 +1,6 @@
 import request from '@/utils/request';
 
-export type BoolNumber = 0 | 1;
+export type BoolLike = boolean | 0 | 1 | '0' | '1' | 'true' | 'false';
 
 export interface UserRole {
   id: number;
@@ -12,8 +12,8 @@ export interface UserItem {
   id: number;
   username: string;
   nickname: string;
-  isActive: boolean | BoolNumber;
-  isAdmin: boolean | BoolNumber;
+  isActive: BoolLike;
+  isAdmin: BoolLike;
   roles: UserRole[];
   createdAt: string;
   updatedAt: string;
@@ -34,8 +34,8 @@ export interface UserForm {
   username: string;
   password?: string;
   nickname?: string;
-  isActive?: boolean | BoolNumber;
-  isAdmin?: boolean | BoolNumber;
+  isActive?: BoolLike;
+  isAdmin?: BoolLike;
   roleIds?: number[];
 }
 

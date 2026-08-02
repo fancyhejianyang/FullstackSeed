@@ -59,6 +59,7 @@ const fields: ProFormField[] = [
 const rules: FormRules = {
   code: [{ required: true, message: '请输入角色编码', trigger: 'blur' }],
   name: [{ required: true, message: '请输入角色名称', trigger: 'blur' }],
+  isActive: [{ required: true, message: '请选择状态', trigger: 'change' }],
 };
 
 onMounted(async () => {
@@ -119,6 +120,10 @@ function getPermissionLabel(code: string) {
   return PERMISSION_LABEL_MAP[action] ?? action;
 }
 
+function isTruthyValue(value: unknown) {
+  return value === true || value === 1 || value === '1' || value === 'true';
+}
+
 const permissionTreeData = computed<PermissionTreeNode[]>(() => {
   const buildMenus = (menus: MenuNode[]): PermissionTreeNode[] =>
     menus.flatMap((menu) => {
@@ -174,7 +179,7 @@ function fillForm(data: Role) {
   form.code = data.code ?? '';
   form.name = data.name ?? '';
   form.description = data.description ?? '';
-  form.isActive = data.isActive ? 1 : 0;
+  form.isActive = isTruthyValue(data.isActive) ? 1 : 0;
   form.permissionCodes = data.permissions?.map((p) => p.code) ?? [];
 }
 

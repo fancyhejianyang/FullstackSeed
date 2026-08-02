@@ -3,12 +3,13 @@ import {
   IsNotEmpty,
   IsOptional,
   IsInt,
-  IsBoolean,
   IsIn,
+  ValidateIf,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { PartialType } from '@nestjs/swagger';
 import type { MenuType } from '../entities/menu.entity';
+import { toBoolLike } from '../../common/utils/bool-like';
 
 export class CreateMenuDto {
   @Type(() => Number)
@@ -41,11 +42,15 @@ export class CreateMenuDto {
   @IsOptional()
   permissionCode?: string;
 
-  @IsBoolean()
+  @Transform(({ value }) => toBoolLike(value))
+  @ValidateIf((_, value) => value !== undefined && value !== null)
+  @IsNotEmpty()
   @IsOptional()
   isSystem?: boolean;
 
-  @IsBoolean()
+  @Transform(({ value }) => toBoolLike(value))
+  @ValidateIf((_, value) => value !== undefined && value !== null)
+  @IsNotEmpty()
   @IsOptional()
   isActive?: boolean;
 }

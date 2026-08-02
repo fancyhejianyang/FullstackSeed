@@ -1,4 +1,5 @@
 import request from '@/utils/request';
+import type { BoolLike } from './user';
 
 export type MenuType = 'menu' | 'button';
 
@@ -12,8 +13,8 @@ export interface MenuNode {
   type: MenuType;
   permissionCode: string;
   // 系统固定菜单：仅超管可见、不可分配给角色（由「系统配置 > 配置菜单」维护）
-  isSystem: boolean;
-  isActive: boolean;
+  isSystem: BoolLike;
+  isActive: BoolLike;
   children: MenuNode[];
 }
 
@@ -25,8 +26,8 @@ export interface MenuForm {
   sort?: number;
   type?: MenuType;
   permissionCode?: string;
-  isSystem?: boolean;
-  isActive?: boolean;
+  isSystem?: BoolLike;
+  isActive?: BoolLike;
 }
 
 /** 当前用户可见菜单树（按权限过滤，超管返回全部） */

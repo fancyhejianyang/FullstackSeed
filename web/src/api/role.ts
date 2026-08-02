@@ -1,12 +1,13 @@
 import request from '@/utils/request';
 import type { Permission } from './permission';
+import type { BoolLike } from './user';
 
 export interface Role {
   id: number;
   code: string;
   name: string;
   description: string;
-  isActive: boolean;
+  isActive: BoolLike;
   permissions: Permission[];
   createdAt: string;
   updatedAt: string;
@@ -27,7 +28,7 @@ export interface RoleForm {
   code: string;
   name: string;
   description?: string;
-  isActive?: boolean;
+  isActive?: BoolLike;
   permissionIds?: number[];
   permissionCodes?: string[];
 }

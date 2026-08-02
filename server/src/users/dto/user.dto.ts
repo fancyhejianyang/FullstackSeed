@@ -2,25 +2,15 @@ import {
   IsString,
   IsNotEmpty,
   IsOptional,
-  IsBoolean,
   IsInt,
   Min,
   MinLength,
   IsArray,
+  ValidateIf,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { PartialType } from '@nestjs/swagger';
-
-function toBoolean(value: unknown) {
-  if (value === undefined || value === null || value === '') return undefined;
-  if (value === true || value === 1 || value === '1' || value === 'true') {
-    return true;
-  }
-  if (value === false || value === 0 || value === '0' || value === 'false') {
-    return false;
-  }
-  return value;
-}
+import { toBoolLike } from '../../common/utils/bool-like';
 
 export class CreateUserDto {
   @IsString()
@@ -35,13 +25,15 @@ export class CreateUserDto {
   @IsOptional()
   nickname?: string;
 
-  @Transform(({ value }) => toBoolean(value))
-  @IsBoolean()
+  @Transform(({ value }) => toBoolLike(value))
+  @ValidateIf((_, value) => value !== undefined && value !== null)
+  @IsNotEmpty()
   @IsOptional()
   isActive?: boolean;
 
-  @Transform(({ value }) => toBoolean(value))
-  @IsBoolean()
+  @Transform(({ value }) => toBoolLike(value))
+  @ValidateIf((_, value) => value !== undefined && value !== null)
+  @IsNotEmpty()
   @IsOptional()
   isAdmin?: boolean;
 

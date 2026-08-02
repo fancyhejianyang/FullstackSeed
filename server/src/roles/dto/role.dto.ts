@@ -4,11 +4,12 @@ import {
   IsOptional,
   IsInt,
   IsArray,
-  IsBoolean,
   Min,
+  ValidateIf,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { PartialType } from '@nestjs/swagger';
+import { toBoolLike } from '../../common/utils/bool-like';
 
 export class CreateRoleDto {
   @IsString()
@@ -23,7 +24,9 @@ export class CreateRoleDto {
   @IsOptional()
   description?: string;
 
-  @IsBoolean()
+  @Transform(({ value }) => toBoolLike(value))
+  @ValidateIf((_, value) => value !== undefined && value !== null)
+  @IsNotEmpty()
   @IsOptional()
   isActive?: boolean;
 
