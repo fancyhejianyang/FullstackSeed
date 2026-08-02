@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-08-02 新增模块模型字段元数据接口
+- 新增：
+  - `server/src/module-models/module-models.map.ts`（模块 id 到 Model 字段集的静态映射，覆盖 user/role/permission/menu/demo）
+  - `server/src/module-models/module-models.service.ts`（模块列表、模块详情、字段列表查询逻辑）
+  - `server/src/module-models/module-models.controller.ts`（新增 `GET /api/module-models`、`GET /api/module-models/:moduleId`、`GET /api/module-models/:moduleId/fields`）
+  - `server/src/module-models/module-models.module.ts`（模块模型元数据模块）
+- 修改：
+  - `server/src/app.module.ts`（挂载 `ModuleModelsModule`）
+  - `CHANGELOG.md`（追加本次后端接口快照）
+- 删除：无
+- 说明：新增只读模型元数据能力，用显式映射文件维护模块列表与字段定义，便于后续按模块 id 获取字段集。已执行 `server` 的 `npm.cmd run build`，新增目录执行 `npx.cmd eslint src/module-models/*.ts` 通过；`app.module.ts` 参与 lint 时仍会暴露项目既有 `require` 风格导入等历史 lint 问题，本次未改动该历史债务。
+
 > 本文件用于存放项目变更快照（最新在上）。
 
 ## 修改快照记录

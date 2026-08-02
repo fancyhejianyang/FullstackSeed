@@ -13,6 +13,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
 import { RolesModule } from './roles/roles.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { MenusModule } from './menus/menus.module';
+import { ModuleModelsModule } from './module-models/module-models.module';
 
 @Module({
   imports: [
@@ -90,6 +91,7 @@ import { MenusModule } from './menus/menus.module';
     RolesModule,
     PermissionsModule,
     MenusModule,
+    ModuleModelsModule,
     DemoModule,
   ],
   controllers: [AppController],
