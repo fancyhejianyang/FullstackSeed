@@ -121,17 +121,21 @@ function getPermissionLabel(code: string) {
 
 const permissionTreeData = computed<PermissionTreeNode[]>(() => {
   const buildMenus = (menus: MenuNode[]): PermissionTreeNode[] =>
-    menus.map((menu) => {
+    menus.flatMap((menu) => {
+      if (menu.isSystem) return [];
+
       const children = buildMenus(menu.children || []);
-      const permissions = splitMenuPermissionCodes(menu.permissionCode).map((rawCode) => {
-        const code = normalizePermissionCode(menu, rawCode);
-        return {
-          id: `permission-${code}`,
-          label: `${getPermissionLabel(code)}（${code.includes('.') ? code.split('.').pop() : code}）`,
-          type: 'permission' as const,
-          permissionCode: code,
-        };
-      });
+      const permissions = splitMenuPermissionCodes(menu.permissionCode).map(
+        (rawCode) => {
+          const code = normalizePermissionCode(menu, rawCode);
+          return {
+            id: `permission-${code}`,
+            label: `${getPermissionLabel(code)}（${code.includes('.') ? code.split('.').pop() : code}）`,
+            type: 'permission' as const,
+            permissionCode: code,
+          };
+        },
+      );
       return {
         id: `menu-${menu.id}`,
         label: menu.name,
