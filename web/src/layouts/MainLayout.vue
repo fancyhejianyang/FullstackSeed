@@ -81,13 +81,24 @@ async function handleLogout() {
   border-right: none;
   background: #304156;
 }
-.layout__aside :deep(.el-menu-item) {
+.layout__aside :deep(.el-menu-item),
+.layout__aside :deep(.el-sub-menu__title) {
   color: #bfcbd9;
   transition: color 0.2s, background-color 0.2s;
 }
-.layout__aside :deep(.el-menu-item:hover) {
+.layout__aside :deep(.el-menu-item:hover),
+.layout__aside :deep(.el-sub-menu__title:hover) {
   color: #fff;
   background: rgba(64, 158, 255, 0.12);
+}
+.layout__aside :deep(.el-sub-menu.is-opened > .el-sub-menu__title),
+.layout__aside :deep(.el-sub-menu.is-active > .el-sub-menu__title) {
+  color: #fff;
+  font-weight: 600;
+}
+.layout__aside :deep(.el-sub-menu.is-active > .el-sub-menu__title) {
+  background: #263445;
+  box-shadow: inset 3px 0 0 #409eff;
 }
 .layout__aside :deep(.el-menu-item.is-active) {
   color: #fff;
@@ -97,6 +108,9 @@ async function handleLogout() {
 }
 .layout__aside :deep(.el-menu-item.is-active:hover) {
   background: #263445;
+}
+.layout__aside :deep(.el-sub-menu .el-menu) {
+  background: #304156;
 }
 .layout__header {
   display: flex;

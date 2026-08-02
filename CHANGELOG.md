@@ -14,6 +14,14 @@
 - 说明：本次改动目的与验证情况
 -->
 
+### 2026-08-02 修复侧边栏父级菜单配色
+- 新增：无
+- 修改：
+  - `web/src/layouts/MainLayout.vue`（补齐 `.el-sub-menu__title` 的常规、hover、active/open 样式，使“系统配置”等父级菜单符合 `.design-spec.md` 侧边栏配色规范）
+  - `CHANGELOG.md`（追加本次样式修复快照）
+- 删除：无
+- 说明：修复系统配置父级菜单使用 Element Plus 默认标题样式导致背景色、字体色与侧边栏设计规范不一致的问题。本次仅前端样式调整，执行前端类型检查验证。
+
 ### 2026-08-02 系统配置 Tab 拆为子菜单
 - 新增：
   - `web/src/views/system/AiModel.vue`（AI 大模型账号独立菜单页）
