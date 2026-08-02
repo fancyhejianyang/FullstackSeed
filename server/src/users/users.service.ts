@@ -18,18 +18,41 @@ import {
   QueryUserDto,
 } from './dto/user.dto';
 
-// 内置权限点种子：纯动作目录（与模块无关）。
-// 权限管理只维护抽象动作；「菜单/模块 × 动作」如何组合成完备权限由关联层另行设计。
+const STANDARD_ACTIONS = [
+  ['read', '查看'],
+  ['create', '新增'],
+  ['update', '编辑'],
+  ['delete', '删除'],
+  ['batchDelete', '批量删除'],
+] as const;
+
+const STANDARD_MODULES = [
+  ['Demo', '示例'],
+  ['User', '账号'],
+  ['Role', '角色'],
+  ['Permission', '权限'],
+  ['Menu', '菜单'],
+] as const;
+
+// 内置权限点种子：保留纯动作目录，同时补齐当前框架内置模块的 Module.action 权限点。
+// 角色授权与 API 守卫以 Module.action 为主，纯动作码仅作为旧数据/抽象动作兼容。
 const SEED_PERMISSIONS: Array<{
   code: string;
   name: string;
   type: 'menu' | 'button' | 'api';
 }> = [
-  { code: 'read', name: '查看', type: 'button' },
-  { code: 'create', name: '新增', type: 'button' },
-  { code: 'update', name: '编辑', type: 'button' },
-  { code: 'delete', name: '删除', type: 'button' },
-  { code: 'batchDelete', name: '批量删除', type: 'button' },
+  ...STANDARD_ACTIONS.map(([code, name]) => ({
+    code,
+    name,
+    type: 'button' as const,
+  })),
+  ...STANDARD_MODULES.flatMap(([module, moduleName]) =>
+    STANDARD_ACTIONS.map(([action, actionName]) => ({
+      code: `${module}.${action}`,
+      name: `${actionName}${moduleName}`,
+      type: 'button' as const,
+    })),
+  ),
 ];
 
 // 系统内置保留账号用户名：禁止创建同名、禁止删除
@@ -122,7 +145,11 @@ export class UsersService implements OnModuleInit {
     });
     if (!exist) {
       const rounds = this.configService.get<number>('BCRYPT_SALT_ROUNDS', 10);
-      const password = await bcrypt.hash('root123', rounds);
+      const adminPassword = this.configService.get<string>(
+        'ADMIN_PASSWORD',
+        'root123',
+      );
+      const password = await bcrypt.hash(adminPassword, rounds);
       await this.userRepository.save(
         this.userRepository.create({
           username: 'root',

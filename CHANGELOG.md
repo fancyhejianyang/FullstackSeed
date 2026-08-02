@@ -14,6 +14,22 @@
 - 说明：本次改动目的与验证情况
 -->
 
+### 2026-08-02 补齐通用全栈框架闭环
+- 新增：
+  - `server/src/data-source.ts`（TypeORM migration CLI 使用的数据源配置，读取 `.env` 并关闭 synchronize）
+  - `server/src/migrations/.gitkeep`（保留迁移目录）
+- 修改：
+  - `AGENTS.md`、`AGENTS-BACKEND.md`、`AGENTS-FRONTEND.md`（参考 demo 从旧 `articles/article` 对齐为当前 `demo`；补充生产管理员密码与迁移命令说明）
+  - `server/src/demo/dto/demo.dto.ts`、`server/src/demo/demo.service.ts`、`server/src/demo/demo.controller.ts`、`web/src/api/demo.ts`、`web/src/views/demo/Index.vue`（补齐标准批量删除接口与前端调用，替代前端循环单删）
+  - `server/src/users/users.service.ts`、`server/src/permissions/permissions.service.ts`（补齐内置模块 `Module.action` 权限种子；权限列表支持 code/name 搜索）
+  - `server/src/menus/menus.service.ts`（删除父菜单时同步软删除后代菜单，避免孤儿菜单提升为根节点）
+  - `server/src/app.module.ts`、`server/src/main.ts`、`server/.env.example`（生产环境强制配置 `JWT_SECRET` 与 `ADMIN_PASSWORD`；CORS 与端口统一走配置）
+  - `server/package.json`（新增 TypeORM migration 脚本）
+  - `web/src/router/index.ts`、`web/src/stores/user.ts`（路由增加页面级权限校验；权限判断兼容纯动作码）
+  - `web/src/components/ProButton.vue`（异步点击可通过 `done(promise)` 接入 loading 等待）
+- 删除：无
+- 说明：面向通用全栈开发框架补齐 demo 契约、RBAC、菜单树、生产配置与迁移基础。本次为框架能力补齐，按规则执行前后端静态检查，不自动启动服务。
+
 ### 2026-08-02 新增 AI 自动提交规则
 - 新增：无
 - 修改：

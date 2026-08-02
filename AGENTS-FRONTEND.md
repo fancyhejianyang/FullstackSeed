@@ -1,19 +1,19 @@
 # AGENTS-FRONTEND.md
 
-> 前端（`web/`）专属规则与约定。**核心原则：新页面以 `views/article/` 为 demo 复制生成，本文档只写"生成规则"和"页面功能清单模板"**；组件用法（ProTable/ProForm/ProDialog 等）在 [`AGENTS-COMPONENTS.md`](AGENTS-COMPONENTS.md) 集中说明；跨端契约见 `AGENTS.md`；设计规范见 `.design-spec.md`。
+> 前端（`web/`）专属规则与约定。**核心原则：新页面以 `views/demo/` 为 demo 复制生成，本文档只写"生成规则"和"页面功能清单模板"**；组件用法（ProTable/ProForm/ProDialog 等）在 [`AGENTS-COMPONENTS.md`](AGENTS-COMPONENTS.md) 集中说明；跨端契约见 `AGENTS.md`；设计规范见 `.design-spec.md`。
 
-## 参考 Demo：`views/article/`
+## 参考 Demo：`views/demo/`
 
-**新增前端页面 = 复制 `web/src/views/article/` 的目录结构 + `api/article.ts` 的写法 → 按业务字段/权限码替换**。
+**新增前端页面 = 复制 `web/src/views/demo/` 的目录结构 + `api/demo.ts` 的写法 → 按业务字段/权限码替换**。
 
 demo 覆盖的能力：
 
 | 文件 | 承担的功能 |
 | --- | --- |
-| `views/article/Index.vue` | 列表页：搜索栏 / 表格 / 分页 / 权限操作列 / 批量删除 / 新增按钮 |
-| `views/article/Edit.vue` | 新增 & 编辑弹窗（同一个组件，用 `row` 判断态） |
-| `views/article/View.vue` | 详情弹窗（只读） |
-| `api/article.ts` | 类型定义 + 5 个 CRUD 函数（getList/create/update/delete/batchDelete） |
+| `views/demo/Index.vue` | 列表页：搜索栏 / 表格 / 分页 / 权限操作列 / 批量删除 / 新增按钮 |
+| `views/demo/Edit.vue` | 新增 & 编辑弹窗（同一个组件，用 `row` 判断态） |
+| `views/demo/View.vue` | 详情弹窗（只读） |
+| `api/demo.ts` | 类型定义 + CRUD 函数（列表/详情/创建/更新/删除/批量删除） |
 
 **页面里不要重复实现"表格搜索/分页/权限控制/删除确认/批量删除"** —— 这些都在 [`ProTable`](AGENTS-COMPONENTS.md#protable) 里；**不要重复实现"表单渲染/校验/弹窗滚动"** —— 这些在 [`ProForm`](AGENTS-COMPONENTS.md#proform) / [`ProDialog`](AGENTS-COMPONENTS.md#prodialog) 里。
 
@@ -24,9 +24,9 @@ demo 覆盖的能力：
 - `src/stores/` — Pinia 状态（`user.ts` 承载登录态、权限、动态菜单）
 - `src/components/` — 二次封装通用组件（详见 [`AGENTS-COMPONENTS.md`](AGENTS-COMPONENTS.md)）
 - `src/utils/` — 纯函数（`request.ts` / `format.ts` / `permission.ts`）
-- `src/api/<module>.ts` — 按模块建接口文件，参考 `api/article.ts`
+- `src/api/<module>.ts` — 按模块建接口文件，参考 `api/demo.ts`
 - `src/layouts/MainLayout.vue` — 主布局，侧边菜单**动态渲染**（后端 `/menus/mine` 下发）
-- `src/views/<module>/` — 业务模块目录，参考 `views/article/`
+- `src/views/<module>/` — 业务模块目录，参考 `views/demo/`
 - `src/styles/` — 全局 SCSS（token / 工具类 / 入口）
 
 ## 技术栈
@@ -44,7 +44,7 @@ demo 覆盖的能力：
 ## 开发与构建命令
 
 - 安装：`npm install`
-- 开发：`npm run dev`（`http://localhost:5173`，`/api` 代理至后端 3000）
+- 开发：`npm run dev`（`http://localhost:5173`，`/api` 代理至后端 4000）
 - 构建：`npm run build`
 - 预览：`npm run preview`
 - 类型检查：`npm run type-check`
@@ -67,11 +67,11 @@ demo 覆盖的能力：
 
 > 前置：后端 `Foo` 模块已按 [`AGENTS-BACKEND.md`](AGENTS-BACKEND.md) 完成。**动作命名严格 `read/create/update/delete/batchDelete`**。
 
-1. **复制 demo**：把 `views/article/` 整个目录复制为 `views/foo/`；把 `api/article.ts` 复制为 `api/foo.ts`。
-2. **改类型 & API**：把 `api/foo.ts` 里的 `Article`/`ArticleForm`/`QueryArticleParams` 与 5 个函数改为 `Foo` 语义；接口路径 `/articles` → `/foos`。
+1. **复制 demo**：把 `views/demo/` 整个目录复制为 `views/foo/`；把 `api/demo.ts` 复制为 `api/foo.ts`。
+2. **改类型 & API**：把 `api/foo.ts` 里的 `Demo`/`DemoForm`/`QueryDemoParams` 与 5 个函数改为 `Foo` 语义；接口路径 `/demo` → `/foos`。
 3. **改列表页 `Index.vue`**：改 `columns` 和 `searchFields` 字段；`perm-module="foo"`；`request`/`deleteRequest`/`batchDeleteRequest` 换成 `foo.ts` 里的函数。
 4. **改弹窗 `Edit.vue` / `View.vue`**：改 `ProForm` 的 `fields` 与 `rules`；改初值/提交时的字段名。
-5. **加路由**：`router/index.ts` 增 `{ path:'foos', name:'foos', component:()=>import('@/views/foo/Index.vue'), meta:{title:'Foo 管理'} }`。
+5. **加路由**：`router/index.ts` 增 `{ path:'foos', name:'foos', component:()=>import('@/views/foo/Index.vue'), meta:{title:'Foo 管理', permission:'Foo.read'} }`。
 
 **侧边栏**：不用改。后端 `SEED_MENUS` 加了新菜单、重启后 `MainLayout` 通过 `/menus/mine` 自动渲染。
 
@@ -85,7 +85,7 @@ demo 覆盖的能力：
 - **详情弹窗字段**：需展示哪些只读字段
 - **权限规则例外**：默认按 `perm-module` 自动拼；如需自定义按钮权限或隐藏某内置按钮，另说
 
-只要给出上述规格，AI 就能对照 `views/article/` demo 生成整套页面。
+只要给出上述规格，AI 就能对照 `views/demo/` demo 生成整套页面。
 
 ## 前端 CRUD 通用约定（不重复写组件细节）
 

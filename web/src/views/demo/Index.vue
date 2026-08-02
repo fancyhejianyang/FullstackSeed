@@ -4,7 +4,7 @@ import PageContainer from '@/components/PageContainer.vue';
 import ProTable, { type ProTableColumn } from '@/components/ProTable.vue';
 import type { ProFormField } from '@/components/ProForm.vue';
 import { formatDateTime } from '@/utils/format';
-import { getDemos, deleteDemo, type Demo } from '@/api/demo';
+import { getDemos, deleteDemo, batchDeleteDemos, type Demo } from '@/api/demo';
 import { useUserStore } from '@/stores/user';
 import { DicService } from '@/dic/service';
 import { DEMO_CATEGORY, DEMO_STATUS } from '@/dic';
@@ -82,7 +82,7 @@ function deleteDemoRequest(row: Demo) {
 }
 
 async function batchDeleteDemoRequest(payload: { ids: Array<string | number> }) {
-  await Promise.all(payload.ids.map((id) => deleteDemo(Number(id))));
+  await batchDeleteDemos(payload.ids);
 }
 </script>
 

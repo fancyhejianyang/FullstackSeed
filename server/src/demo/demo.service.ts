@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Like, Repository } from 'typeorm';
+import { In, Like, Repository } from 'typeorm';
 import { Demo } from './entities/demo.entity';
 import {
   CreateDemoDto,
@@ -57,9 +57,17 @@ export class DemoService {
   }
   /** 批量删除（软删除） */
   async batchRemove(ids: number[]) {
-    for (const id of ids) {
-      await this.remove(id);
+    const uniqueIds = Array.from(new Set(ids));
+    if (uniqueIds.length === 0) {
+      return { ids: [] };
     }
-    return { ids };
+    const count = await this.demoRepository.count({
+      where: { id: In(uniqueIds) },
+    });
+    if (count !== uniqueIds.length) {
+      throw new NotFoundException('部分示例不存在');
+    }
+    await this.demoRepository.softDelete(uniqueIds);
+    return { ids: uniqueIds };
   }
 }

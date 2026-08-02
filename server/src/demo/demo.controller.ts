@@ -15,6 +15,7 @@ import {
   CreateDemoDto,
   UpdateDemoDto,
   QueryDemoDto,
+  BatchDeleteDemoDto,
 } from './dto/demo.dto';
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator';
 
@@ -60,5 +61,12 @@ export class DemoController {
   @ApiOperation({ summary: '删除示例' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.demoService.remove(id);
+  }
+
+  @Post('batch-delete')
+  @RequirePermissions('Demo.batchDelete')
+  @ApiOperation({ summary: '批量删除示例' })
+  batchRemove(@Body() dto: BatchDeleteDemoDto) {
+    return this.demoService.batchRemove(dto.ids);
   }
 }

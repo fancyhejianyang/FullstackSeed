@@ -151,6 +151,25 @@ export class MenusService implements OnModuleInit {
     this.assertAdminForLockedMenu(isAdmin, this.isLockedMenu(parent));
   }
 
+  private collectDescendantIds(list: Menu[], parentId: number): number[] {
+    const childrenMap = new Map<number, Menu[]>();
+    list.forEach((item) => {
+      if (!item.parentId) return;
+      const children = childrenMap.get(item.parentId) ?? [];
+      children.push(item);
+      childrenMap.set(item.parentId, children);
+    });
+
+    const ids: number[] = [];
+    const stack = [...(childrenMap.get(parentId) ?? [])];
+    while (stack.length) {
+      const current = stack.pop()!;
+      ids.push(current.id);
+      stack.push(...(childrenMap.get(current.id) ?? []));
+    }
+    return ids;
+  }
+
   async create(dto: CreateMenuDto, isAdmin: boolean) {
     await this.assertCreateOrMoveAllowed(dto, isAdmin);
     return this.menuRepository.save(this.menuRepository.create(dto));
@@ -180,7 +199,9 @@ export class MenusService implements OnModuleInit {
       throw new NotFoundException('菜单不存在');
     }
     this.assertAdminForLockedMenu(isAdmin, this.isLockedMenu(menu));
-    await this.menuRepository.softDelete(id);
-    return { id };
+    const descendants = this.collectDescendantIds(await this.findAllFlat(), id);
+    const ids = [id, ...descendants];
+    await this.menuRepository.softDelete(ids);
+    return { id, ids };
   }
 }

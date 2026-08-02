@@ -12,14 +12,14 @@ FullstackSeed 是一个全栈项目种子（模板），采用前后端分离结
 | `server/`   | 后端服务       | NestJS + 登录鉴权模块已就绪 | [`AGENTS-BACKEND.md`](AGENTS-BACKEND.md) |
 | `web/`      | 前端 Web 应用  | Vue 3 + 登录/主布局已就绪   | [`AGENTS-FRONTEND.md`](AGENTS-FRONTEND.md) |
 
-> 已打通登录鉴权（JWT + bcrypt）与中后台主布局。默认超级管理员 `root/root123`（首启自动创建，`isAdmin=true` 放行一切）。新业务模块/页面由开发者按示例模块扩展。项目迁移见 `MIGRATION.md`。
+> 已打通登录鉴权（JWT + bcrypt）与中后台主布局。开发默认超级管理员 `root/root123`（首启自动创建，生产环境必须通过 `ADMIN_PASSWORD` 显式配置，`isAdmin=true` 放行一切）。新业务模块/页面由开发者按示例模块扩展。项目迁移见 `MIGRATION.md`。
 
 ## 参考 Demo（跨端约定）
 
 **新增业务模块/页面，一律按 demo 复制 → 按字段/权限码替换**，不允许从零重写：
 
-- **后端** → 参考 `server/src/articles/`（Entity/DTO/Service/Controller/Module 五件套）
-- **前端** → 参考 `web/src/views/article/`（`Index.vue` / `Edit.vue` / `View.vue`）+ `web/src/api/article.ts`
+- **后端** → 参考 `server/src/demo/`（Entity/DTO/Service/Controller/Module 五件套）
+- **前端** → 参考 `web/src/views/demo/`（`Index.vue` / `Edit.vue` / `View.vue`）+ `web/src/api/demo.ts`
 - **组件用法** → 见 [`AGENTS-COMPONENTS.md`](AGENTS-COMPONENTS.md)，页面文档不重复描述 ProTable/ProForm/ProDialog 等的 props/emits
 
 具体复制步骤：后端 6 步见 [`AGENTS-BACKEND.md`](AGENTS-BACKEND.md#新增业务模块后端-6-步)；前端 5 步见 [`AGENTS-FRONTEND.md`](AGENTS-FRONTEND.md#新增业务模块前端-5-步)。
@@ -27,8 +27,8 @@ FullstackSeed 是一个全栈项目种子（模板），采用前后端分离结
 ## 目录导航（根目录）
 
 - `AGENTS.md` — 本文件，项目导航与跨端规则（保持精简，不存放历史快照明细）
-- `AGENTS-BACKEND.md` — 后端专属规则（以 `articles/` 为 demo；新模块 6 步/易踩坑）
-- `AGENTS-FRONTEND.md` — 前端专属规则（以 `views/article/` 为 demo；新页面 5 步/功能清单）
+- `AGENTS-BACKEND.md` — 后端专属规则（以 `demo/` 为 demo；新模块 6 步/易踩坑）
+- `AGENTS-FRONTEND.md` — 前端专属规则（以 `views/demo/` 为 demo；新页面 5 步/功能清单）
 - `AGENTS-COMPONENTS.md` — 通用组件与工具契约（ProTable/ProForm/ProDialog/PageContainer/MenuTree/utils）
 - `.design-spec.md` — 设计规范（配色/字体/图标/操作按钮 & Tag 配色标准）
 - `MIGRATION.md` — 后端标准模块迁移文档（项目复刻参考）
@@ -55,7 +55,7 @@ FullstackSeed 是一个全栈项目种子（模板），采用前后端分离结
 - 接口字段对齐规则：登录令牌等接口契约字段（如 `access_token`、`statusCode`、`success`）前后端必须一字不差对齐，**改字段先改两端类型定义**
 - 文件 / 目录命名：后端用 **kebab-case**（`jwt-auth.guard.ts`、`auth.module.ts`）；前端组件/页面用 **PascalCase**（`LoginView.vue`、`MainLayout.vue`），其他 ts 文件 camelCase。前端菜单模块在 `views/<module>/`（小写目录）下用标准文件名 `Index.vue`/`Edit.vue`/`View.vue`
 - 组件 / 类 / 函数命名：类用 PascalCase（`AuthService`）；函数/方法 camelCase（`getProfile`）；Vue 组件名 PascalCase
-- **权限码格式（前后端共契约）**：`Module.action`，模块首字母大写 + 点号，动作统一 `read/create/update/delete/batchDelete`，如 `Role.read` / `Article.batchDelete`
+- **权限码格式（前后端共契约）**：`Module.action`，模块首字母大写 + 点号，动作统一 `read/create/update/delete/batchDelete`，如 `Role.read` / `Demo.batchDelete`
 
 ## 变更前 AI 输出格式
 
@@ -90,8 +90,8 @@ FullstackSeed 是一个全栈项目种子（模板），采用前后端分离结
 
 > 新增一个业务模块（假设名 `Foo`，路由 `/foos`，权限码前缀 `Foo`）的标准作业总览。**核心动作是"复制 demo → 改字段/权限码"**，具体步骤见各端文档：
 
-- **后端 6 步** → 见 [`AGENTS-BACKEND.md`](AGENTS-BACKEND.md#新增业务模块后端-6-步)：复制 `articles/` → 改字段 → 改权限码 → 挂根模块 → SEED 权限点 → SEED 菜单
-- **前端 5 步** → 见 [`AGENTS-FRONTEND.md`](AGENTS-FRONTEND.md#新增业务模块前端-5-步)：复制 `views/article/` → 改类型 & API → 改列表页 → 改弹窗 → 加路由（侧边栏动态自动接管）
+- **后端 6 步** → 见 [`AGENTS-BACKEND.md`](AGENTS-BACKEND.md#新增业务模块后端-6-步)：复制 `demo/` → 改字段 → 改权限码 → 挂根模块 → SEED 权限点 → SEED 菜单
+- **前端 5 步** → 见 [`AGENTS-FRONTEND.md`](AGENTS-FRONTEND.md#新增业务模块前端-5-步)：复制 `views/demo/` → 改类型 & API → 改列表页 → 改弹窗 → 加路由（侧边栏动态自动接管）
 - **组件用法** → 见 [`AGENTS-COMPONENTS.md`](AGENTS-COMPONENTS.md)：不要在业务页里重造 ProTable/ProForm/ProDialog 的能力
 - **跨端字段对齐** → 前端 `Foo` 类型 = 后端 DTO = 实体字段名（camelCase 一字不差）；权限码 `Module.action`；分页 `{list,total}`
 
@@ -99,8 +99,8 @@ FullstackSeed 是一个全栈项目种子（模板），采用前后端分离结
 
 > 项目专题文档索引。
 
-- [AGENTS-BACKEND.md](AGENTS-BACKEND.md) — 后端专属规则（以 `articles/` 为 demo；新模块 6 步/易踩坑）
-- [AGENTS-FRONTEND.md](AGENTS-FRONTEND.md) — 前端专属规则（以 `views/article/` 为 demo；新页面 5 步/功能清单）
+- [AGENTS-BACKEND.md](AGENTS-BACKEND.md) — 后端专属规则（以 `demo/` 为 demo；新模块 6 步/易踩坑）
+- [AGENTS-FRONTEND.md](AGENTS-FRONTEND.md) — 前端专属规则（以 `views/demo/` 为 demo；新页面 5 步/功能清单）
 - [AGENTS-COMPONENTS.md](AGENTS-COMPONENTS.md) — 通用组件与工具契约（props/emits/插槽/用法）
 - [.design-spec.md](.design-spec.md) — 设计规范（配色/字体/图标/操作按钮 & Tag 配色标准）
 - [MIGRATION.md](MIGRATION.md) — 后端标准模块迁移文档（必迁/可选模块、步骤、依赖、env、前端对应）

@@ -59,3 +59,10 @@ export function updateDemo(id: number, data: DemoForm) {
 export function deleteDemo(id: number) {
   return request.delete<unknown, { id: number }>(`/demo/${id}`);
 }
+
+/** 批量删除示例 */
+export function batchDeleteDemos(ids: Array<string | number>) {
+  return request.post<unknown, { ids: number[] }>('/demo/batch-delete', {
+    ids: ids.map(Number),
+  });
+}

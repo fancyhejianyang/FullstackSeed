@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import type { RouteRecordRaw } from 'vue-router';
+import { ElMessage } from 'element-plus';
 import { useUserStore } from '@/stores/user';
 
 const routes: RouteRecordRaw[] = [
@@ -23,37 +24,37 @@ const routes: RouteRecordRaw[] = [
         path: 'demo',
         name: 'demo',
         component: () => import('@/views/demo/Index.vue'),
-        meta: { title: '示例管理' },
+        meta: { title: '示例管理', permission: 'Demo.read' },
       },
       {
         path: 'users',
         name: 'users',
         component: () => import('@/views/user/Index.vue'),
-        meta: { title: '账号管理' },
+        meta: { title: '账号管理', permission: 'User.read' },
       },
       {
         path: 'roles',
         name: 'roles',
         component: () => import('@/views/role/Index.vue'),
-        meta: { title: '角色管理' },
+        meta: { title: '角色管理', permission: 'Role.read' },
       },
       {
         path: 'permissions',
         name: 'permissions',
         component: () => import('@/views/permission/Index.vue'),
-        meta: { title: '权限管理' },
+        meta: { title: '权限管理', permission: 'Permission.read' },
       },
       {
         path: 'menus',
         name: 'menus',
         component: () => import('@/views/menu/Index.vue'),
-        meta: { title: '菜单管理' },
+        meta: { title: '菜单管理', permission: 'Menu.read' },
       },
       {
         path: 'system-config',
         name: 'system-config',
         component: () => import('@/views/system/Index.vue'),
-        meta: { title: '系统配置' },
+        meta: { title: '系统配置', permission: 'Menu.read' },
       },
       {
         // 布局内兜底 404（保留侧边栏）
@@ -91,6 +92,11 @@ router.beforeEach(async (to) => {
       userStore.logout();
       return { path: '/login', query: { redirect: to.fullPath } };
     }
+  }
+  const permission = to.meta.permission;
+  if (typeof permission === 'string' && !userStore.hasPermission(permission)) {
+    ElMessage.warning('暂无权限访问该页面');
+    return { path: '/' };
   }
   return true;
 });

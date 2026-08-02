@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
@@ -8,10 +9,17 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const configService = app.get(ConfigService);
 
   // 安全
   app.use(helmet());
-  app.enableCors();
+  const corsOrigin = configService.get<string>('CORS_ORIGIN', '*');
+  app.enableCors({
+    origin:
+      corsOrigin === '*'
+        ? true
+        : corsOrigin.split(',').map((item) => item.trim()).filter(Boolean),
+  });
 
   // 全局 API 前缀
   app.setGlobalPrefix('api');
@@ -38,7 +46,8 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('docs', app, document);
 
-  await app.listen(process.env.PORT ?? 4000);
+  const port = configService.get<number>('PORT', 4000);
+  await app.listen(port);
   console.log(`Application is running on: ${await app.getUrl()}`);
   console.log(`Swagger documentation available at: ${await app.getUrl()}/docs`);
 }

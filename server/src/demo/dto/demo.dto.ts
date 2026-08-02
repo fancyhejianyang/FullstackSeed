@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsIn,
   IsInt,
+  IsArray,
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -51,4 +52,12 @@ export class QueryDemoDto {
   @IsString()
   @IsOptional()
   keyword?: string;
+}
+
+export class BatchDeleteDemoDto {
+  @IsArray()
+  @Type(() => Number)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  ids: number[];
 }

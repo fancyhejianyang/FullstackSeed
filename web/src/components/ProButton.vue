@@ -8,7 +8,7 @@
  * - **自动配色**：按权限码动作后缀映射 Element 语义 `type`
  * - **内置图标**：按动作后缀自动匹配图标，`icon` prop 可覆盖
  * - **二次确认**：破坏性操作（delete/disable/revoke/reset/publish…）默认开启二次确认
- * - **并发保护**：确认弹窗 / click 回调执行期间自动 loading，防止重复点击
+ * - **并发保护**：确认弹窗 / click 回调执行期间自动 loading，防止重复点击；异步点击可通过 `done(promise)` 接入等待
  * - **透传**：其余 props/attrs/events 全部透传给 el-button，用法与原生一致
  *
  * 设计规范：见 `.design-spec.md` 第 6 节「操作按钮配色标准」。
@@ -83,7 +83,7 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
-  click: [e: MouseEvent];
+  click: [e: MouseEvent, done: (task?: Promise<unknown> | unknown) => void];
   /** 用户取消二次确认时触发 */
   cancel: [];
 }>();
@@ -187,7 +187,11 @@ async function handleClick(e: MouseEvent) {
         return;
       }
     }
-    emit('click', e);
+    let task: Promise<unknown> | unknown;
+    emit('click', e, (value) => {
+      task = value;
+    });
+    await task;
   } finally {
     pending.value = false;
   }

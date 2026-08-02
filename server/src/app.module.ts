@@ -30,9 +30,19 @@ import { MenusModule } from './menus/menus.module';
         NODE_ENV: Joi.string()
           .valid('development', 'production', 'test')
           .default('development'),
-        JWT_SECRET: Joi.string().default('fullstack_seed_secret'),
+        CORS_ORIGIN: Joi.string().default('*'),
+        JWT_SECRET: Joi.when('NODE_ENV', {
+          is: 'production',
+          then: Joi.string().min(32).required(),
+          otherwise: Joi.string().default('fullstack_seed_secret'),
+        }),
         JWT_EXPIRES_IN: Joi.string().default('7d'),
         BCRYPT_SALT_ROUNDS: Joi.number().integer().min(4).max(15).default(10),
+        ADMIN_PASSWORD: Joi.when('NODE_ENV', {
+          is: 'production',
+          then: Joi.string().min(8).required(),
+          otherwise: Joi.string().default('root123'),
+        }),
       }),
     }),
     // TypeORM 数据库模块

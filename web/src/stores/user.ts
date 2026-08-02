@@ -34,7 +34,9 @@ export const useUserStore = defineStore('user', () => {
   function hasPermission(code?: string) {
     if (!code) return true;
     if (isAdmin.value) return true;
-    return permissions.value.includes(code);
+    if (permissions.value.includes(code)) return true;
+    const action = code.includes('.') ? code.split('.').pop() : '';
+    return !!action && permissions.value.includes(action);
   }
 
   /** 登录 */

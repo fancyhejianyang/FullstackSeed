@@ -24,7 +24,9 @@ export class PermissionsService {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
     const [list, total] = await this.permissionRepository.findAndCount({
-      where: query.keyword ? { name: Like(`%${query.keyword}%`) } : {},
+      where: query.keyword
+        ? [{ code: Like(`%${query.keyword}%`) }, { name: Like(`%${query.keyword}%`) }]
+        : {},
       order: { id: 'DESC' },
       skip: (page - 1) * pageSize,
       take: pageSize,
