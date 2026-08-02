@@ -14,6 +14,18 @@
 - 说明：本次改动目的与验证情况
 -->
 
+### 2026-08-02 系统配置 Tab 拆为子菜单
+- 新增：
+  - `web/src/views/system/AiModel.vue`（AI 大模型账号独立菜单页）
+  - `web/src/views/system/Wechat.vue`（微信 / 小程序独立菜单页）
+- 修改：
+  - `server/src/menus/menus.service.ts`（系统配置 seed 改为父级菜单，并新增“配置菜单 / AI 大模型账号 / 微信 / 小程序”三个子菜单；seed 支持按 `parentPath` 挂载父子关系）
+  - `web/src/router/index.ts`（`/system-config` 改为重定向，新增三个系统配置子路由）
+  - `web/src/views/system/Index.vue`（移除 tabs，保留为“配置菜单”独立页面）
+  - `CHANGELOG.md`（追加本次结构调整快照）
+- 删除：无
+- 说明：将系统配置页内 Tab 拆为侧边栏父子菜单结构，便于后续各配置域独立扩展。需重启后端触发菜单 seed 补齐子菜单。
+
 ### 2026-08-02 用户编辑支持选择角色
 - 新增：无
 - 修改：

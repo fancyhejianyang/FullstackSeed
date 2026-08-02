@@ -53,8 +53,26 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'system-config',
         name: 'system-config',
-        component: () => import('@/views/system/Index.vue'),
+        redirect: '/system-config/menu',
         meta: { title: '系统配置', permission: 'Menu.read' },
+      },
+      {
+        path: 'system-config/menu',
+        name: 'system-config-menu',
+        component: () => import('@/views/system/Index.vue'),
+        meta: { title: '配置菜单', permission: 'Menu.read' },
+      },
+      {
+        path: 'system-config/ai',
+        name: 'system-config-ai',
+        component: () => import('@/views/system/AiModel.vue'),
+        meta: { title: 'AI 大模型账号', permission: 'Menu.read' },
+      },
+      {
+        path: 'system-config/wechat',
+        name: 'system-config-wechat',
+        component: () => import('@/views/system/Wechat.vue'),
+        meta: { title: '微信 / 小程序', permission: 'Menu.read' },
       },
       {
         // 布局内兜底 404（保留侧边栏）

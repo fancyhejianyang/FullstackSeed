@@ -14,9 +14,11 @@ export interface MenuTreeNode extends Menu {
   children: MenuTreeNode[];
 }
 
+type SeedMenu = Partial<Menu> & { parentPath?: string };
+
 // 内置菜单种子（path 对应前端路由）
 // isSystem=true 为系统固定菜单：仅超管可见、不可分配给角色；业务菜单 isSystem=false 可分配。
-const SEED_MENUS: Array<Partial<Menu>> = [
+const SEED_MENUS: SeedMenu[] = [
   { name: '首页', path: '/', icon: 'HomeFilled', sort: 0, permissionCode: '', isSystem: false },
   { name: '示例管理', path: '/demo', icon: 'Document', sort: 10, permissionCode: 'Demo.read', isSystem: false },
   { name: '账号管理', path: '/users', icon: 'User', sort: 20, permissionCode: 'User.read', isSystem: true },
@@ -24,6 +26,9 @@ const SEED_MENUS: Array<Partial<Menu>> = [
   { name: '权限管理', path: '/permissions', icon: 'Key', sort: 40, permissionCode: 'Permission.read', isSystem: true },
   { name: '菜单管理', path: '/menus', icon: 'Menu', sort: 50, permissionCode: 'Menu.read', isSystem: true },
   { name: '系统配置', path: '/system-config', icon: 'Setting', sort: 60, permissionCode: 'Menu.read', isSystem: true },
+  { name: '配置菜单', path: '/system-config/menu', icon: 'Operation', sort: 10, permissionCode: 'Menu.read', isSystem: true, parentPath: '/system-config' },
+  { name: 'AI 大模型账号', path: '/system-config/ai', icon: 'Connection', sort: 20, permissionCode: 'Menu.read', isSystem: true, parentPath: '/system-config' },
+  { name: '微信 / 小程序', path: '/system-config/wechat', icon: 'ChatDotRound', sort: 30, permissionCode: 'Menu.read', isSystem: true, parentPath: '/system-config' },
 ];
 
 // 锁定菜单路径：前端不限制操作，后端 API 对此类菜单统一做管理员身份校验
@@ -43,15 +48,28 @@ export class MenusService implements OnModuleInit {
    */
   async onModuleInit() {
     for (const seed of SEED_MENUS) {
+      const parent = seed.parentPath
+        ? await this.menuRepository.findOne({ where: { path: seed.parentPath } })
+        : null;
+      const { parentPath, ...menuSeed } = seed;
       const exist = await this.menuRepository.findOne({
         where: [
-          ...(seed.path ? [{ path: seed.path }] : []),
-          ...(seed.name ? [{ name: seed.name }] : []),
+          ...(menuSeed.path ? [{ path: menuSeed.path }] : []),
+          ...(menuSeed.name ? [{ name: menuSeed.name }] : []),
         ],
       });
       if (!exist) {
-        await this.menuRepository.save(this.menuRepository.create(seed));
+        await this.menuRepository.save(
+          this.menuRepository.create({
+            ...menuSeed,
+            parentId: parent?.id ?? menuSeed.parentId ?? null,
+          }),
+        );
         continue;
+      }
+      if (parent && exist.parentId !== parent.id) {
+        exist.parentId = parent.id;
+        await this.menuRepository.save(exist);
       }
     }
   }
@@ -123,7 +141,13 @@ export class MenusService implements OnModuleInit {
   }
 
   private isLockedPath(path: string | undefined): boolean {
-    return !!path && PROTECTED_MENU_PATHS.includes(path);
+    return (
+      !!path &&
+      PROTECTED_MENU_PATHS.some(
+        (protectedPath) =>
+          path === protectedPath || path.startsWith(`${protectedPath}/`),
+      )
+    );
   }
 
   private assertAdminForLockedMenu(isAdmin: boolean, locked: boolean) {
