@@ -9,13 +9,13 @@ import {
 import { Type } from 'class-transformer';
 import { PartialType } from '@nestjs/swagger';
 import {
-  ARTICLE_CATEGORIES,
-  ARTICLE_STATUSES,
-  type ArticleStatus,
-  type ArticleCategory,
-} from '../articles.constants';
+  DEMO_CATEGORIES,
+  DEMO_STATUSES,
+  type DemoStatus,
+  type DemoCategory,
+} from '../demo.constants';
 
-export class CreateArticleDto {
+export class CreateDemoDto {
   @IsString()
   @IsNotEmpty()
   title: string;
@@ -24,18 +24,18 @@ export class CreateArticleDto {
   @IsOptional()
   content?: string;
 
-  @IsIn(ARTICLE_CATEGORIES)
+  @IsIn(DEMO_CATEGORIES)
   @IsOptional()
-  category?: ArticleCategory;
+  category?: DemoCategory;
 
-  @IsIn(ARTICLE_STATUSES)
+  @IsIn(DEMO_STATUSES)
   @IsOptional()
-  status?: ArticleStatus;
+  status?: DemoStatus;
 }
 
-export class UpdateArticleDto extends PartialType(CreateArticleDto) {}
+export class UpdateDemoDto extends PartialType(CreateDemoDto) {}
 
-export class QueryArticleDto {
+export class QueryDemoDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)

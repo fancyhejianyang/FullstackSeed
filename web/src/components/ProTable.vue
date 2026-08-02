@@ -31,7 +31,7 @@ const props = withDefaults(
     // 搜索栏字段配置（不传则不显示搜索栏）
     searchFields?: ProFormField[];
     pageSizes?: number[];
-    // 权限模块名（如 'article'），内部按动作码拼 `Module.action` 校验
+    // 权限模块名（如 'demo'），内部按动作码拼 `Module.action` 校验
     permModule?: string;
     // 是否显示内置操作列（查看/编辑/删除）
     showActions?: boolean;
@@ -93,11 +93,11 @@ const emit = defineEmits<{
 const userStore = useUserStore();
 
 // 按权限模块拼权限码并校验（无 permModule 时不做限制）
-// 格式：模块名首字母大写 + 点号 + 动作，如 article → Article.batchDelete
+// 格式：模块名首字母大写 + 点号 + 动作，如 demo → Demo.batchDelete
 function canDo(action: 'read' | 'create' | 'update' | 'delete' | 'batchDelete') {
   if (!props.permModule) return true;
   const mod = props.permModule.charAt(0).toUpperCase() + props.permModule.slice(1);
-  return userStore.hasPermission(`${mod}.${action}`);
+  return userStore.hasPermission(`${mod}.${action}`) || userStore.hasPermission(action);
 }
 const canView = computed(() => props.showView && canDo('read'));
 const canEdit = computed(() => props.showEdit && canDo('update'));

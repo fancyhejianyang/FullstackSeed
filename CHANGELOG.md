@@ -22,6 +22,102 @@
 - 删除：无
 - 说明：固化后续协作规则，避免自动提交混入工作区已有未提交改动。本次仅文档规则调整，未 build、未启动服务。
 
+### 2026-07-29 移除角色授权未分组权限
+- 新增：无
+- 修改：
+  - `web/src/views/role/Edit.vue`（角色授权树移除“未分组权限”兜底节点；不再读取权限管理列表作为展示数据源；权限中文名称改为组件内置动作映射，授权树只展示菜单 `permissionCode` 拆出的权限叶子）
+- 删除：无
+- 说明：角色菜单权限配置页只展示菜单下挂载的权限，权限管理列表不再混入角色授权树。已执行 `web` 的 `npm.cmd run type-check` 与 `server` 的 `npx.cmd tsc --noEmit -p tsconfig.json`，均通过；未 build、未启动服务。
+
+### 2026-07-29 角色授权树改用菜单权限码
+- 新增：无
+- 修改：
+  - `server/src/roles/dto/role.dto.ts`（角色保存入参新增 `permissionCodes`，支持提交 `Role.read` 等模块权限码）
+  - `server/src/permissions/permissions.service.ts`（新增按权限编码查找或自动创建权限点能力）
+  - `server/src/roles/roles.service.ts`（创建/更新角色时优先使用 `permissionCodes` 覆盖角色权限）
+  - `server/src/users/users.service.ts`（启动清理规则允许 `Module.action` 权限码，避免自动创建的模块权限被清理）
+  - `server/src/auth/auth.service.ts`（避免模块权限码二次拼接）
+  - `web/src/api/role.ts`（`RoleForm` 新增 `permissionCodes`）
+  - `web/src/views/role/Edit.vue`（角色授权树改为从菜单树 `permissionCode` 拆分权限叶子，纯动作码按菜单模块补成 `Module.action`，显示中文名称并保存模块权限码）
+- 删除：无
+- 说明：修正角色配置菜单权限的数据来源，授权树不再依赖 `permissions.menuId`，而是按菜单自身配置的权限字符串构建。已执行 `web` 的 `npm.cmd run type-check` 与 `server` 的 `npx.cmd tsc --noEmit -p tsconfig.json`，均通过；未 build、未启动服务。
+
+### 2026-07-29 Auth 权限返回模块动作码
+- 新增：无
+- 修改：
+  - `server/src/auth/auth.module.ts`（Auth 模块引入 `Menu` 仓库，用于根据权限归属菜单推导模块权限码）
+  - `server/src/auth/auth.service.ts`（`login` 与 `profile` 返回的 `isAdmin` 归一为 boolean；权限列表保留纯动作码并额外扩展为 `Module.action`，如 `Role.read` / `Role.create` / `Role.update`）
+  - `web/src/stores/user.ts`（超管判断改为 boolean 归一，兼容后端 tinyint 返回的 `1`）
+  - `web/src/components/ProTable.vue`（内置操作列权限判断兼容 `Module.action` 与纯动作码 `action`）
+- 删除：无
+- 说明：修复 root 管理员因 `isAdmin=1` 未被前端放行、以及角色绑定菜单权限后操作按钮无法按模块权限显示的问题。已执行 `web` 的 `npm.cmd run type-check` 与 `server` 的 `npx.cmd tsc --noEmit -p tsconfig.json`，均通过；未 build、未启动服务。变更 JWT 权限载荷后需重新登录获取新 token。
+
+### 2026-07-29 角色权限绑定改为菜单树
+- 新增：无
+- 修改：
+  - `web/src/views/menu/Index.vue`（菜单名称列固定为 150px；权限码列按权限名称中文显示，多权限用顿号分隔，空值显示“登录可见”）
+  - `web/src/views/role/Edit.vue`（角色新增/编辑弹窗的权限选择由平铺 checkbox 改为菜单权限树，按菜单分组展示权限叶子，支持勾选菜单批量选中其下权限）
+- 删除：无
+- 说明：菜单和权限关联后，角色授权入口改为更贴近菜单结构的树形勾选交互。已执行 `web` 的 `npm.cmd run type-check` 与 `server` 的 `npx.cmd tsc --noEmit -p tsconfig.json`，均通过；未 build、未启动服务。
+
+### 2026-07-29 菜单分配权限支持多选
+- 新增：无
+- 修改：
+  - `web/src/views/menu/Index.vue`（分配权限弹窗 checkbox 取消单选限制，支持勾选多个权限；单菜单打开时回显已分配权限；保存时用逗号分隔写入 `permissionCode`）
+  - `server/src/menus/menus.service.ts`（当前用户菜单过滤支持逗号分隔的多个 `permissionCode`，用户拥有任一权限即可看到菜单）
+- 删除：无
+- 说明：菜单可见权限从单权限扩展为多权限兼容，不改表结构；已执行 `web` 的 `npm.cmd run type-check` 与 `server` 的 `npx.cmd tsc --noEmit -p tsconfig.json`，均通过；未 build、未启动服务。
+
+### 2026-07-29 分配权限弹窗改为平铺勾选
+- 新增：无
+- 修改：
+  - `web/src/views/menu/Index.vue`（分配权限弹窗由下拉框改为平铺 checkbox 列表，卡片间保留间距；当前菜单 `permissionCode` 为单值字段，因此 checkbox 组限制最多选择 1 项，不勾选保存则清空为登录可见）
+- 删除：无
+- 说明：优化菜单分配权限交互，权限项更直观可扫；已执行 `web` 的 `npm.cmd run type-check` 通过；未 build、未启动服务。
+
+### 2026-07-29 修复菜单分配权限按钮与局部更新类型
+- 新增：无
+- 修改：
+  - `web/src/api/menu.ts`（`updateMenu` 入参改为 `Partial<MenuForm>`，匹配 PATCH 局部更新语义，修复批量分配 `permissionCode` 类型报错）
+  - `web/src/views/menu/Index.vue`（菜单操作按钮权限判断兼容 `Menu.action` 与纯动作码 `action`，确保“分配权限”等按钮在当前权限体系下正常展示）
+- 删除：无
+- 说明：修复菜单管理页分配权限代码 TS 报错与按钮缺失问题。已执行 `web` 的 `npm.cmd run type-check` 与 `server` 的 `npx.cmd tsc --noEmit -p tsconfig.json`，均通过；未 build、未启动服务。
+
+### 2026-07-29 页面标题移至顶部横条
+- 新增：无
+- 修改：
+  - `web/src/layouts/MainLayout.vue`（顶部横条读取当前路由 `meta.title` 并显示页面标题，位于折叠按钮右侧）
+  - `web/src/components/PageContainer.vue`（移除内容卡片内标题区，页面内容顶部释放给新增、分配权限等工具按钮）
+- 删除：无
+- 说明：页面标题统一由主布局承载，业务页面卡片内不再占用标题行；菜单管理等页面的工具按钮自然上移到内容区顶部。已执行 `web` 的 `npm.cmd run type-check` 通过；未 build、未启动服务。
+
+### 2026-07-29 菜单列表支持勾选分配权限
+- 新增：无
+- 修改：
+  - `web/src/views/menu/Index.vue`（菜单表格新增勾选列；工具栏新增“分配权限”按钮；勾选菜单后可批量维护 `permissionCode`，支持选择现有权限码或清空为登录可见；保存后刷新菜单表格与侧边栏菜单缓存）
+- 删除：无
+- 说明：菜单管理页增加批量分配菜单可见权限入口，前端只负责选择与提交，后端仍由菜单更新接口统一校验。已执行 `web` 的 `npm.cmd run type-check` 与 `server` 的 `npx.cmd tsc --noEmit -p tsconfig.json`，均通过；未 build、未启动服务。
+
+### 2026-07-29 锁定菜单改为后端管理员校验
+- 新增：无
+- 修改：
+  - `server/src/menus/menus.controller.ts`（菜单创建、更新、删除接口注入当前用户，将 `isAdmin` 传入 service）
+  - `server/src/menus/menus.service.ts`（锁定菜单相关创建/移动/更新/删除统一在后端校验管理员身份；非管理员操作锁定菜单返回 403；启动 seed 不再强制恢复核心菜单系统固定状态）
+  - `web/src/views/menu/Index.vue`（移除核心菜单加子级/删除按钮隐藏，前端操作入口一律按普通权限展示）
+  - `web/src/views/menu/Edit.vue`（移除核心菜单系统固定开关禁用与强制提交，编辑表单前端不再做锁定菜单限制）
+  - `web/src/views/system/Index.vue`（配置菜单开关不再禁用核心菜单，移除“核心菜单锁定”提示，说明文案改为后端按管理员身份校验）
+- 删除：无
+- 说明：锁定菜单的操作限制从前端迁到后端 API，前端按钮和开关全部放开；已执行 `web` 的 `npm.cmd run type-check` 与 `server` 的 `npx.cmd tsc --noEmit -p tsconfig.json`，均通过；未 build、未启动服务。
+
+### 2026-07-29 菜单管理支持编辑名称与路由
+- 新增：无
+- 修改：
+  - `web/src/views/menu/Index.vue`（核心菜单开放编辑入口；核心菜单仍禁止加子级和删除；路由列文案改为“路由地址”；新增/编辑/删除成功后同步刷新侧边栏菜单缓存）
+  - `web/src/views/menu/Edit.vue`（编辑弹窗补齐路由地址、权限码、系统固定、启用状态等字段提交；核心菜单锁定系统固定开关；提交前 trim 字符串并拦截空名称）
+  - `server/src/menus/menus.service.ts`（启动 seed 只补齐缺失菜单，不再覆盖已存在菜单的可编辑字段，避免菜单名称/路由等后台修改被重启还原）
+- 删除：无
+- 说明：菜单管理现在可对已有菜单执行编辑，支持维护名称、路由地址、图标、排序、权限码、启用状态等；系统核心菜单保留安全边界。已执行 `web` 的 `npm.cmd run type-check` 与 `server` 的 `npx.cmd tsc --noEmit -p tsconfig.json`，均通过；未 build、未启动服务。
+
 ### 2026-06-26 AGENTS 文档以 articles demo 驱动 + 抽出组件契约文档
 - 新增：
   - `AGENTS-COMPONENTS.md`（通用组件与工具契约：PageContainer/ProTable/ProForm/ProDialog/MenuTree/请求封装/权限工具/user store 的 props/emits/插槽/用法一览）
@@ -48,7 +144,7 @@
 
 ### 2026-06-26 权限列 tag 文案去模块名（复用短标签映射）
 - 新增：无
-- 修改：`web/src/views/permission/Index.vue`（操作权限列 tag 文案由 `op.name`（含模块名，如「批量删除文章」）改为 `getPermissionActionLabel(op.code)`（如「批量删除」））
+- 修改：`web/src/views/permission/Index.vue`（操作权限列 tag 文案由 `op.name`（含模块名，如「批量删除示例」）改为 `getPermissionActionLabel(op.code)`（如「批量删除」））
 - 删除：无
 - 说明：按 `.design-spec.md` 第 6.4 节短标签映射统一 tag 文案，去除冗余模块名（模块信息由所属行菜单已表达）。仅静态改动，未 build。
 
@@ -68,7 +164,7 @@
 - 修改：
   - `server/src/users/users.module.ts`（imports 加 `Menu` 仓库）
   - `server/src/users/users.service.ts`（新增 `ensurePermissionMenuId`：遍历菜单表，按 `permissionCode` 的 Module 前缀 + `MENU_NAME_TO_MODULE` 兜底，回填权限点 `menuId`；在 `onModuleInit` 里于 `ensurePermissions` 后执行）
-  - `server/src/menus/menus.service.ts`（seed 中文章管理菜单补 `permissionCode: 'Article.read'`）
+  - `server/src/menus/menus.service.ts`（seed 中示例管理菜单补 `permissionCode: 'Article.read'`）
 - 删除：无
 - 说明：修复"权限管理页对应菜单行看不到操作权限"——原因是 `SEED_PERMISSIONS` 从未设 `menuId`。新增启动自动归属：按菜单 permissionCode 或 name 反查 Module，将 `Module.*` 权限点回填 menuId。**只回填 menuId 为空的权限**，人工调整过的归属不会被覆盖。已 `npm.cmd run build` 通过（exit 0）。**需重启后端使归属生效**。
 
@@ -94,13 +190,13 @@
 - 删除：无
 - 说明：调用方可通过字典定义 key 初始化实例并直接读取 `items`，满足字典服务统一入口需求。
 
-### 2026-06-26 文章模块新增 View 查看页实现
+### 2026-06-26 示例模块新增 View 查看页实现
 - 新增：无
 - 修改：
-  - `web/src/views/article/View.vue`（实现文章查看页：只读展示标题/状态/内容/创建时间/更新时间，使用 `ProDialog` 封装）
+  - `web/src/views/article/View.vue`（实现示例查看页：只读展示标题/状态/内容/创建时间/更新时间，使用 `ProDialog` 封装）
   - `web/src/views/article/Index.vue`（`handleView` 改为打开 `View.vue`，不再复用编辑弹窗）
 - 删除：无
-- 说明：完成文章模块 `View.vue` 标准页落地，查看与编辑职责分离，保持现有接口字段不变。
+- 说明：完成示例模块 `View.vue` 标准页落地，查看与编辑职责分离，保持现有接口字段不变。
 
 ### 2026-06-26 ProTable 内置删除执行与自动刷新
 - 新增：无
@@ -196,7 +292,7 @@
   - `AGENTS.md`（后端/前端导航、快照）
 - 删除：无
 - 字段对齐：Menu=`{id,parentId,name,path,icon,sort,type,permissionCode,isActive,children[]}`；`GET /api/menus/mine` 返回按权限过滤后的菜单树（超管全返回）；管理接口 `GET/POST/PATCH/DELETE /api/menus`（`Menu.read/create/update/delete`）。
-- 设计要点：Menu 自关联（parentId）建树；`menus.service.findMine` 按 `permissionCode` 过滤（空码登录可见、超管全放行）；启动 seed 内置菜单（首页/文章/账号/角色/权限，后三者带 `User.read`/`Role.read`/`Permission.read`）。前端 `MenuTree.vue` 递归渲染 `el-sub-menu`/`el-menu-item` 支持多级。
+- 设计要点：Menu 自关联（parentId）建树；`menus.service.findMine` 按 `permissionCode` 过滤（空码登录可见、超管全放行）；启动 seed 内置菜单（首页/示例/账号/角色/权限，后三者带 `User.read`/`Role.read`/`Permission.read`）。前端 `MenuTree.vue` 递归渲染 `el-sub-menu`/`el-menu-item` 支持多级。
 - 说明：菜单管理页（`views/menu/`）下轮做；本轮侧边栏已动态化。已前后端 `npm.cmd run build` 均通过（exit 0）。**需重启后端使 menu seed 生效**。
 
 ### 2026-06-23 前端角色管理 + 权限管理页面（RBAC 配置 UI）
@@ -267,15 +363,15 @@
 - 删除：无
 - 说明：将 Dialog 二次封装为统一组件，预设宽高/滚动等属性，业务弹窗（如 Edit.vue）直接复用。已 `npm.cmd run build` 自测通过（exit 0）。
 
-### 2026-06-23 ProTable/ProForm 封装 + 文章模块目录化（Index/Edit）
+### 2026-06-23 ProTable/ProForm 封装 + 示例模块目录化（Index/Edit）
 - 新增：
   - `web/src/components/ProForm.vue`（配置 `fields` + `#field-[prop]` 插槽驱动的表单封装，暴露 validate/resetFields）
   - `web/src/components/ProTable.vue`（搜索 ProForm + el-table + 分页集成，内部托管 loading/分页/搜索请求，暴露 refresh/search；泛型组件）
-  - `web/src/views/article/Index.vue`（文章列表页，用 ProTable + columns/searchFields 配置 + 具名插槽）
+  - `web/src/views/article/Index.vue`（示例列表页，用 ProTable + columns/searchFields 配置 + 具名插槽）
   - `web/src/views/article/Edit.vue`（新增/编辑弹窗，用 ProForm）
 - 修改：`web/src/router/index.ts`（路由指向 `article/Index.vue`）、`AGENTS.md`（前端 CRUD 规则新增「菜单模块目录规范」、命名规则、目录导航、示例模块、快照）
 - 删除：`web/src/views/ArticleView.vue`（拆分为 `article/Index.vue` + `Edit.vue`）
-- 说明：新增前端规则——每个菜单模块独立目录 `views/<module>/`，标准文件名 `Index.vue`/`Edit.vue`/`View.vue`。文章模块作为首个落地范例。封装 ProForm（表单）与 ProTable（列表集成）二次组件。已 `npm.cmd run build` 自测通过（exit 0）；修复了泛型组件 `InstanceType<typeof ProTable>` 取不到类型的 TS2344，改用显式 expose 接口类型。
+- 说明：新增前端规则——每个菜单模块独立目录 `views/<module>/`，标准文件名 `Index.vue`/`Edit.vue`/`View.vue`。示例模块作为首个落地范例。封装 ProForm（表单）与 ProTable（列表集成）二次组件。已 `npm.cmd run build` 自测通过（exit 0）；修复了泛型组件 `InstanceType<typeof ProTable>` 取不到类型的 TS2344，改用显式 expose 接口类型。
 
 ### 2026-06-22 引入 SCSS + 语义化全局样式（设计 token / 工具类）
 - 新增：
@@ -292,7 +388,7 @@
 - 删除：无
 - 说明：原 hover 沿用 Element Plus 默认浅灰，叠加在深色侧边栏上突兀不协调。按 web-design skill 生成并持久化设计规范，将 hover/active 与品牌蓝对齐。纯前端样式改动，无后端涉及，按规则只做静态修改不 build。
 
-### 2026-06-22 文章管理示例模块（前后端 CRUD demo）
+### 2026-06-22 示例管理示例模块（前后端 CRUD demo）
 - 新增：
   - 后端：`server/src/articles/entities/article.entity.ts`、`articles/dto/article.dto.ts`、`articles/articles.service.ts`、`articles/articles.controller.ts`、`articles/articles.module.ts`
   - 前端：`web/src/api/article.ts`、`web/src/views/ArticleView.vue`
@@ -432,4 +528,3 @@
 - 修改：`web/src/api/auth.ts`（request 引用改为 `@/utils/request`）、`AGENTS.md`（目录导航、前端 CRUD 规则、快照）
 - 删除：`web/src/api/request.ts`（迁移至 `utils/`）
 - 说明：新增 `components/` 存放二次封装组件、`utils/` 存放纯函数/转换方法，并将 Axios 封装 `request.ts` 迁至 `utils/`。仅前端结构调整，已 GetDiagnostics 静态检查无错误（按规则非新功能不启动服务）。
-

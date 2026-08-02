@@ -56,6 +56,50 @@ export class PermissionsService {
     return this.permissionRepository.findBy({ id: In(ids) });
   }
 
+  private getPermissionNameByCode(code: string) {
+    const action = code.includes('.') ? code.split('.').pop()! : code;
+    const labelMap: Record<string, string> = {
+      read: '查看',
+      create: '新增',
+      update: '编辑',
+      delete: '删除',
+      batchDelete: '批量删除',
+    };
+    return labelMap[action] ?? action;
+  }
+
+  /** 按权限编码列表查询；不存在的编码自动补齐为按钮权限 */
+  async findOrCreateByCodes(codes: string[]) {
+    const normalized = Array.from(
+      new Set(codes.map((code) => code.trim()).filter(Boolean)),
+    );
+    if (normalized.length === 0) {
+      return [] as Permission[];
+    }
+
+    const existing = await this.permissionRepository.findBy({
+      code: In(normalized),
+    });
+    const existingCodes = new Set(existing.map((permission) => permission.code)); 
+    const missing = normalized
+      .filter((code) => !existingCodes.has(code))
+      .map((code) =>
+        this.permissionRepository.create({
+          code,
+          name: this.getPermissionNameByCode(code),
+          type: 'button',
+        }),
+      );
+    const created = missing.length
+      ? await this.permissionRepository.save(missing)
+      : [];
+    const all = [...existing, ...created];
+    const order = new Map(normalized.map((code, index) => [code, index]));
+    return all.sort(
+      (a, b) => (order.get(a.code) ?? 0) - (order.get(b.code) ?? 0),
+    );
+  }
+
   /** 创建（code 唯一） */
   async create(dto: CreatePermissionDto) {
     const exist = await this.permissionRepository.findOne({

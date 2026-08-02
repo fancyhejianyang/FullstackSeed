@@ -33,6 +33,10 @@ export class Menu extends BaseEntity {
   @Column({ default: '' })
   permissionCode: string;
 
+  // 系统固定菜单：仅超级管理员可见，不可分配给角色（由「系统配置 > 配置菜单」维护）
+  @Column({ type: 'tinyint', default: false })
+  isSystem: boolean;
+
   @Column({ type: 'tinyint', default: true })
   isActive: boolean;
 }

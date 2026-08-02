@@ -1,15 +1,15 @@
 // 本文件收纳固定字典和API字典
 //
 // 使用方式：
-//   import { ARTICLE_CATEGORY, ARTICLE_STATUS } from '@/dic'
-//   DicService.init(ARTICLE_CATEGORY, items)  // 直接写入 Ref
-//   const dic = await DicService.init(ARTICLE_CATEGORY)
+//   import { DEMO_CATEGORY, DEMO_STATUS } from '@/dic'
+//   DicService.init(DEMO_CATEGORY, items)  // 直接写入 Ref
+//   const dic = await DicService.init(DEMO_CATEGORY)
 //   dic.getLabel('original') // → '原创'
 
 import type { DicDefinition } from './service'
 
-// ========== 文章分类 ==========
-export const ARTICLE_CATEGORY = {
+// ========== 示例分类 ==========
+export const DEMO_CATEGORY = {
     isStatic: true,
     items: [
         { label: '原创', value: 'original' },
@@ -18,8 +18,8 @@ export const ARTICLE_CATEGORY = {
     ],
 } satisfies DicDefinition
 
-// ========== 文章状态 ==========
-export const ARTICLE_STATUS = {
+// ========== 示例状态 ==========
+export const DEMO_STATUS = {
     isStatic: true,
     items: [
         { label: '草稿', value: 'draft' },

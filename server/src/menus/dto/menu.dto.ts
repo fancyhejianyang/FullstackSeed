@@ -43,6 +43,10 @@ export class CreateMenuDto {
 
   @IsBoolean()
   @IsOptional()
+  isSystem?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
   isActive?: boolean;
 }
 

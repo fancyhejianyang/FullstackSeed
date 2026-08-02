@@ -29,11 +29,17 @@ export interface RoleForm {
   description?: string;
   isActive?: boolean;
   permissionIds?: number[];
+  permissionCodes?: string[];
 }
 
 /** 分页查询角色 */
 export function getRoles(params: QueryRoleParams) {
   return request.get<unknown, RoleListResult>('/roles', { params });
+}
+
+/** 角色详情（编辑/查看态取最新数据） */
+export function getRole(id: number) {
+  return request.get<unknown, Role>(`/roles/${id}`);
 }
 
 /** 创建角色 */

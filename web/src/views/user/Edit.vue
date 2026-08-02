@@ -5,13 +5,14 @@ import ProForm, { type ProFormField } from '@/components/ProForm.vue';
 import ProDialog from '@/components/ProDialog.vue';
 import {
   createUser,
+  getUser,
   updateUser,
   type UserItem,
   type UserForm,
 } from '@/api/user';
 
 const props = defineProps<{
-  // 编辑对象；为 null 表示新增
+  // 编辑对象；为 null 表示新增。这里只用它的 id 触发详情接口
   row?: UserItem | null;
 }>();
 
@@ -20,6 +21,7 @@ const emit = defineEmits<{ success: [] }>();
 const visible = defineModel<boolean>('visible', { required: true });
 
 const submitting = ref(false);
+const loading = ref(false);
 const formRef = ref<InstanceType<typeof ProForm>>();
 const form = reactive<UserForm>({
   username: '',
@@ -69,15 +71,38 @@ const rules: FormRules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
 };
 
-watch(visible, (val) => {
-  if (val) {
-    isEdit.value = !!props.row;
-    form.username = props.row?.username ?? '';
-    form.nickname = props.row?.nickname ?? '';
-    form.password = '';
-    form.isActive = props.row ? props.row.isActive : true;
-    form.isAdmin = props.row ? props.row.isAdmin : false;
-    buildFields();
+function resetForm() {
+  form.username = '';
+  form.nickname = '';
+  form.password = '';
+  form.isActive = true;
+  form.isAdmin = false;
+}
+
+function fillForm(data: UserItem) {
+  form.username = data.username ?? '';
+  form.nickname = data.nickname ?? '';
+  form.password = '';
+  form.isActive = !!data.isActive;
+  form.isAdmin = !!data.isAdmin;
+}
+
+// 打开时：编辑态强制走详情接口取最新数据，新增态取默认值
+watch(visible, async (val) => {
+  if (!val) return;
+  isEdit.value = !!props.row;
+  buildFields();
+
+  if (props.row?.id) {
+    loading.value = true;
+    try {
+      const detail = await getUser(props.row.id);
+      fillForm(detail);
+    } finally {
+      loading.value = false;
+    }
+  } else {
+    resetForm();
   }
 });
 
@@ -116,11 +141,13 @@ async function handleSubmit() {
     :confirm-loading="submitting"
     @confirm="handleSubmit"
   >
-    <ProForm ref="formRef" v-model="form" :fields="fields" :rules="rules" label-width="120px">
-      <!-- 编辑态用户名禁改 -->
-      <template v-if="isEdit" #field-username>
-        <el-input v-model="form.username" disabled />
-      </template>
-    </ProForm>
+    <div v-loading="loading">
+      <ProForm ref="formRef" v-model="form" :fields="fields" :rules="rules" label-width="120px">
+        <!-- 编辑态用户名禁改 -->
+        <template v-if="isEdit" #field-username>
+          <el-input v-model="form.username" disabled />
+        </template>
+      </ProForm>
+    </div>
   </ProDialog>
 </template>

@@ -12,6 +12,7 @@
 | `ProTable` | 搜索 + 表格 + 分页 + 权限操作列 + 批量操作 | 列表页主体 |
 | `ProForm` | 配置驱动表单 + 插槽兜底 | 编辑弹窗 / 搜索栏内部使用 |
 | `ProDialog` | 弹窗外壳（预设宽度/滚动/确定取消） | `Edit.vue` / `View.vue` 都用它包一层 |
+| `ProButton` | 按钮二次封装（权限码驱动 + 自动配色 + 无权限隐藏） | 业务页自定义操作按钮统一用它，禁止裸写 `el-button` + 硬编码 `type` |
 | `MenuTree` | 递归渲染菜单树 | `MainLayout` 侧边栏用 |
 
 ## 工具速览（`web/src/utils/`）
@@ -20,7 +21,7 @@
 | --- | --- | --- |
 | `request.ts` | 默认导出 Axios 实例 | 全局请求封装（自动拆包 `data`、注入 Bearer） |
 | `format.ts` | `formatDateTime` 等 | 日期/数字格式化 |
-| `permission.ts` | `getPermissionActionColor` / `getPermissionActionLabel` / `getPermissionAction` | 按权限码 `Module.action` 返回语义 `type` 与中文短标签 |
+| `permission.ts` | `getPermissionActionColor` / `getPermissionActionLabel` / `getPermissionActionIcon` / `isDestructiveAction` / `getPermissionActionConfirmText` | 按权限码 `Module.action` 返回语义 `type`、中文短标签、内置图标名、是否需要二次确认、确认默认文案；映射表统一在此维护 |
 
 ## Store 速览（`web/src/stores/`）
 
@@ -144,6 +145,68 @@
 - v-model：控制显隐
 - Emits：`@confirm` / `@cancel`
 - 插槽：默认 slot（内容）、`#footer`（自定义底部）
+
+---
+
+## ProButton
+
+**契约**：基于 `el-button` 二次封装。传 `perm` 权限码后，**自动校验权限 + 自动配色 + 无权限降级**（超管放行）。破坏性操作默认开启**二次确认**，确认期间**自动 loading + 防重复点击**。映射表统一维护在 `utils/permission.ts`，新增动作只改一处。其余 props/attrs/events 透传给 `el-button`，用法与原生一致。
+
+### Props
+
+| Prop | 类型 | 默认 | 说明 |
+| --- | --- | --- | --- |
+| `perm` | `string` | `''` | 权限码（`Module.action`，如 `'User.create'`）；不传则不做权限校验，按钮始终显示 |
+| `autoType` | `boolean` | `true` | 是否按权限码动作后缀自动推导 `type` |
+| `autoLabel` | `boolean` | `false` | 是否用权限码动作后缀推导默认文案；`true` 且未传插槽内容时生效 |
+| `icon` | `string \| Component` | — | 图标覆盖：字符串（图标名）/ 组件 / 空串 `''` 强制无图标；不传则按 `perm` 自动匹配 |
+| `autoIcon` | `boolean` | `true` | 是否在 `perm` 存在时自动推导内置图标 |
+| `confirm` | `boolean \| 'auto'` | `'auto'` | 二次确认：`'auto'`→破坏性操作自动开启；`true`→强制；`false`→关闭 |
+| `confirmTitle` | `string` | `'提示'` | 二次确认弹窗标题 |
+| `confirmText` | `string` | — | 二次确认弹窗内容；不传则按动作后缀自动推导默认文案（`delete→'确认删除该记录？'` 等） |
+| `confirmType` | `'success' \| 'warning' \| 'info' \| 'error'` | `'warning'` | 二次确认弹窗类型 |
+| `fallback` | `'hide' \| 'disable'` | `'hide'` | 无权限降级策略：`'hide'`→不渲染；`'disable'`→渲染但 disabled + tooltip |
+| `fallbackText` | `string` | — | `fallback='disable'` 时的 tooltip 文案；不传默认 `'暂无权限'` |
+
+- 透传：其余 attrs 全部透传给 `el-button`（`inheritAttrs: false`，已显式 `v-bind="$attrs"`）
+- 默认 slot：按钮内容；未传且 `autoLabel=true` 时用动作中文短标签兜底
+- Emits：`@click(e)` — 点击事件（已内置二次确认 + 并发保护，确认通过且非 pending 才触发）；`@cancel()` — 用户取消二次确认时触发
+- **权限异步态**：有 `perm` 且 `userInfo` 为 null（权限未就绪）时先隐藏；无 `perm` 不受影响（登录页等可直接渲染）
+- **并发保护**：确认弹窗 / click 执行期间 `pending=true`，按钮自动 `loading + disabled`，防止叠弹窗
+- **配色/图标/确认文案来源**：全部来自 `utils/permission.ts`，映射表统一维护
+
+### 破坏性动作白名单（`confirm='auto'` 时自动开启二次确认）
+
+`delete` / `batchDelete` / `disable` / `revoke` / `reset` / `publish` / `unpublish` / `approve` / `reject`
+
+> 新增动作只需在 `utils/permission.ts` 的四张映射表（`ACTION_TYPE_MAP` / `ACTION_LABEL_MAP` / `ACTION_ICON_MAP` / `ACTION_CONFIRM_TEXT_MAP`）和 `DESTRUCTIVE_ACTIONS` 集合中补一行。
+
+### 用法
+
+```vue
+<!-- 权限码驱动：自动 type + 自动图标 + 无权限隐藏 -->
+<ProButton perm="User.create" @click="openCreate">新增用户</ProButton>
+
+<!-- 删除：confirm='auto' 默认开启，自动文案"确认删除该记录？" -->
+<ProButton perm="User.delete" auto-label link @click="handleDelete" />
+
+<!-- 无权限降级为 disabled + tooltip（避免列宽抖动） -->
+<ProButton perm="User.delete" auto-label link fallback="disable" @click="handleDelete" />
+
+<!-- 覆盖图标 -->
+<ProButton perm="User.read" icon="Search" @click="handleSearch">查询</ProButton>
+
+<!-- 强制开启二次确认 + 自定义文案 -->
+<ProButton perm="Order.audit" confirm confirm-title="审核确认" confirm-text="确认通过审核？">
+  审核
+</ProButton>
+
+<!-- 批量删除：自动开启二次确认 + 并发保护（自动 loading） -->
+<ProButton perm="User.batchDelete" auto-label :disabled="!canBatch" @click="handleBatchDelete" />
+
+<!-- 强制关闭二次确认 -->
+<ProButton perm="User.delete" :confirm="false" auto-label link @click="handleDelete" />
+```
 
 ---
 

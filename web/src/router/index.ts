@@ -20,10 +20,10 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '首页' },
       },
       {
-        path: 'articles',
-        name: 'articles',
-        component: () => import('@/views/article/Index.vue'),
-        meta: { title: '文章管理' },
+        path: 'demo',
+        name: 'demo',
+        component: () => import('@/views/demo/Index.vue'),
+        meta: { title: '示例管理' },
       },
       {
         path: 'users',
@@ -44,6 +44,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '权限管理' },
       },
       {
+        path: 'menus',
+        name: 'menus',
+        component: () => import('@/views/menu/Index.vue'),
+        meta: { title: '菜单管理' },
+      },
+      {
+        path: 'system-config',
+        name: 'system-config',
+        component: () => import('@/views/system/Index.vue'),
+        meta: { title: '系统配置' },
+      },
+      {
         // 布局内兜底 404（保留侧边栏）
         path: ':pathMatch(.*)*',
         name: 'not-found',
@@ -59,14 +71,26 @@ const router = createRouter({
   routes,
 });
 
-// 全局前置守卫：未登录跳转登录页
-router.beforeEach((to) => {
+// 全局前置守卫：
+// 1. 公开页直接放行
+// 2. 未登录跳转登录页
+// 3. 已登录但会话（用户信息 + 菜单）未加载时，先引导加载再放行；
+//    引导失败（如 token 失效）则登出并跳登录页
+router.beforeEach(async (to) => {
   const userStore = useUserStore();
   if (to.meta.public) {
     return true;
   }
   if (!userStore.token) {
     return { path: '/login', query: { redirect: to.fullPath } };
+  }
+  if (!userStore.loaded) {
+    try {
+      await userStore.bootstrap();
+    } catch {
+      userStore.logout();
+      return { path: '/login', query: { redirect: to.fullPath } };
+    }
   }
   return true;
 });

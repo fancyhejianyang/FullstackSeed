@@ -37,21 +37,25 @@ export class MenusController {
   @Post()
   @RequirePermissions('Menu.create')
   @ApiOperation({ summary: '创建菜单' })
-  create(@Body() dto: CreateMenuDto) {
-    return this.menusService.create(dto);
+  create(@Body() dto: CreateMenuDto, @CurrentUser() user: AuthUser) {
+    return this.menusService.create(dto, user.isAdmin);
   }
 
   @Patch(':id')
   @RequirePermissions('Menu.update')
   @ApiOperation({ summary: '更新菜单' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateMenuDto) {
-    return this.menusService.update(id, dto);
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateMenuDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.menusService.update(id, dto, user.isAdmin);
   }
 
   @Delete(':id')
   @RequirePermissions('Menu.delete')
   @ApiOperation({ summary: '删除菜单' })
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.menusService.remove(id);
+  remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: AuthUser) {
+    return this.menusService.remove(id, user.isAdmin);
   }
 }

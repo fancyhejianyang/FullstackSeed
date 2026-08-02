@@ -1,9 +1,9 @@
 import { Entity, Column } from 'typeorm';
 import { BaseEntity } from '../../common/entities/base.entity';
-import type { ArticleStatus, ArticleCategory } from '../articles.constants';
+import type { DemoStatus, DemoCategory } from '../demo.constants';
 
-@Entity('articles')
-export class Article extends BaseEntity {
+@Entity('demo')
+export class Demo extends BaseEntity {
   @Column()
   title: string;
 
@@ -11,8 +11,8 @@ export class Article extends BaseEntity {
   content: string;
 
   @Column({ type: 'varchar', length: 20, default: 'original' })
-  category: ArticleCategory;
+  category: DemoCategory;
 
   @Column({ type: 'varchar', length: 20, default: 'draft' })
-  status: ArticleStatus;
+  status: DemoStatus;
 }

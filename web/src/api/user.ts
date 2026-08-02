@@ -42,6 +42,11 @@ export function getUsers(params: QueryUserParams) {
   return request.get<unknown, UserListResult>('/users', { params });
 }
 
+/** 用户详情（编辑/查看态取最新数据） */
+export function getUser(id: number) {
+  return request.get<unknown, UserItem>(`/users/${id}`);
+}
+
 /** 创建用户 */
 export function createUser(data: UserForm) {
   return request.post<unknown, UserItem>('/users', data);

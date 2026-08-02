@@ -30,7 +30,7 @@
 
 | 模块/路径 | 作用 | 说明 |
 | --- | --- | --- |
-| `src/articles/**` | 文章 CRUD demo | 仅作 CRUD 范例，新项目可删除或替换为真实业务模块 |
+| `src/articles/**` | 示例 CRUD demo | 仅作 CRUD 范例，新项目可删除或替换为真实业务模块 |
 | `src/app.controller.ts` / `src/app.service.ts` | 根路由 demo | `GET /api` 健康检查，可保留 |
 
 ### 新业务模块（在新项目里按规范新增）

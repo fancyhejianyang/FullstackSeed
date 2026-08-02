@@ -4,17 +4,18 @@ import { ElMessage, type FormRules } from 'element-plus';
 import ProForm, { type ProFormField } from '@/components/ProForm.vue';
 import ProDialog from '@/components/ProDialog.vue';
 import {
-  createArticle,
-  updateArticle,
-  type Article,
-  type ArticleForm,
-} from '@/api/article';
+  createDemo,
+  getDemo,
+  updateDemo,
+  type Demo,
+  type DemoForm,
+} from '@/api/demo';
 import { DicService, type DicItem } from '@/dic/service';
-import { ARTICLE_CATEGORY, ARTICLE_STATUS } from '@/dic';
+import { DEMO_CATEGORY, DEMO_STATUS } from '@/dic';
 
 const props = defineProps<{
   // 编辑对象；为 null 表示新增
-  row?: Article | null;
+  row?: Demo | null;
 }>();
 
 const emit = defineEmits<{ success: [] }>();
@@ -23,13 +24,14 @@ const emit = defineEmits<{ success: [] }>();
 const visible = defineModel<boolean>('visible', { required: true });
 
 const submitting = ref(false);
+const loading = ref(false);
 const formRef = ref<InstanceType<typeof ProForm>>();
-const form = reactive<ArticleForm>({ title: '', content: '', status: 'draft', category: '' });
+const form = reactive<DemoForm>({ title: '', content: '', status: 'draft', category: '' });
 
 const categoryDic = ref<DicItem[]>([]);
 const statusDic = ref<DicItem[]>([]);
-DicService.init(ARTICLE_CATEGORY, categoryDic);
-DicService.init(ARTICLE_STATUS, statusDic);
+DicService.init(DEMO_CATEGORY, categoryDic);
+DicService.init(DEMO_STATUS, statusDic);
 
 const fields: ProFormField[] = [
   { prop: 'title', label: '标题', type: 'input' },
@@ -44,13 +46,33 @@ const rules: FormRules = {
   status: [{ required: true, message: '请选择状态', trigger: 'change' }],
 };
 
-// 打开时回填
-watch(visible, (val) => {
-  if (val) {
-    form.title = props.row?.title ?? '';
-    form.content = props.row?.content ?? '';
-    form.category = props.row?.category ?? '';
-    form.status = props.row?.status ?? 'draft';
+function resetForm() {
+  form.title = '';
+  form.content = '';
+  form.category = '';
+  form.status = 'draft';
+}
+
+function fillForm(data: Demo) {
+  form.title = data.title ?? '';
+  form.content = data.content ?? '';
+  form.category = data.category ?? '';
+  form.status = data.status ?? 'draft';
+}
+
+// 打开时：编辑态强制走详情接口取最新数据
+watch(visible, async (val) => {
+  if (!val) return;
+  if (props.row?.id) {
+    loading.value = true;
+    try {
+      const detail = await getDemo(props.row.id);
+      fillForm(detail);
+    } finally {
+      loading.value = false;
+    }
+  } else {
+    resetForm();
   }
 });
 
@@ -59,10 +81,10 @@ async function handleSubmit() {
   submitting.value = true;
   try {
     if (props.row) {
-      await updateArticle(props.row.id, { ...form });
+      await updateDemo(props.row.id, { ...form });
       ElMessage.success('更新成功');
     } else {
-      await createArticle({ ...form });
+      await createDemo({ ...form });
       ElMessage.success('创建成功');
     }
     visible.value = false;
@@ -76,10 +98,12 @@ async function handleSubmit() {
 <template>
   <ProDialog
     v-model="visible"
-    :title="props.row ? '编辑文章' : '新增文章'"
+    :title="props.row ? '编辑示例' : '新增示例'"
     :confirm-loading="submitting"
     @confirm="handleSubmit"
   >
-    <ProForm ref="formRef" v-model="form" :fields="fields" :rules="rules" />
+    <div v-loading="loading">
+      <ProForm ref="formRef" v-model="form" :fields="fields" :rules="rules" />
+    </div>
   </ProDialog>
 </template>

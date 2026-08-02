@@ -12,57 +12,28 @@ import * as bcrypt from 'bcrypt';
 import { User } from './entities/user.entity';
 import { Role } from '../roles/entities/role.entity';
 import { Permission } from '../permissions/entities/permission.entity';
-import { Menu } from '../menus/entities/menu.entity';
 import {
   CreateUserDto,
   UpdateUserDto,
   QueryUserDto,
 } from './dto/user.dto';
 
-// 内置权限点种子（资源:动作）
+// 内置权限点种子：纯动作目录（与模块无关）。
+// 权限管理只维护抽象动作；「菜单/模块 × 动作」如何组合成完备权限由关联层另行设计。
 const SEED_PERMISSIONS: Array<{
   code: string;
   name: string;
   type: 'menu' | 'button' | 'api';
 }> = [
-  { code: 'Role.read', name: '查看角色', type: 'api' },
-  { code: 'Role.create', name: '创建角色', type: 'api' },
-  { code: 'Role.update', name: '更新角色', type: 'api' },
-  { code: 'Role.delete', name: '删除角色', type: 'api' },
-  { code: 'Role.batchDelete', name: '批量删除角色', type: 'api' },
-  { code: 'Permission.read', name: '查看权限', type: 'api' },
-  { code: 'Permission.create', name: '创建权限', type: 'api' },
-  { code: 'Permission.update', name: '更新权限', type: 'api' },
-  { code: 'Permission.delete', name: '删除权限', type: 'api' },
-  { code: 'Permission.batchDelete', name: '批量删除权限', type: 'api' },
-  { code: 'User.read', name: '查看用户', type: 'api' },
-  { code: 'User.create', name: '创建用户', type: 'api' },
-  { code: 'User.update', name: '更新用户', type: 'api' },
-  { code: 'User.delete', name: '删除用户', type: 'api' },
-  { code: 'User.batchDelete', name: '批量删除用户', type: 'api' },
-  { code: 'Menu.read', name: '查看菜单', type: 'api' },
-  { code: 'Menu.create', name: '创建菜单', type: 'api' },
-  { code: 'Menu.update', name: '更新菜单', type: 'api' },
-  { code: 'Menu.delete', name: '删除菜单', type: 'api' },
-  { code: 'Menu.batchDelete', name: '批量删除菜单', type: 'api' },
-  { code: 'Article.read', name: '查看文章', type: 'api' },
-  { code: 'Article.create', name: '创建文章', type: 'api' },
-  { code: 'Article.update', name: '更新文章', type: 'api' },
-  { code: 'Article.delete', name: '删除文章', type: 'api' },
-  { code: 'Article.batchDelete', name: '批量删除', type: 'api' },
+  { code: 'read', name: '查看', type: 'button' },
+  { code: 'create', name: '新增', type: 'button' },
+  { code: 'update', name: '编辑', type: 'button' },
+  { code: 'delete', name: '删除', type: 'button' },
+  { code: 'batchDelete', name: '批量删除', type: 'button' },
 ];
 
 // 系统内置保留账号用户名：禁止创建同名、禁止删除
 const RESERVED_USERNAMES = ['root', 'admin'];
-
-// 无 permissionCode 的菜单兜底：菜单 name → 权限 Module 前缀
-const MENU_NAME_TO_MODULE: Record<string, string> = {
-  文章管理: 'Article',
-  账号管理: 'User',
-  角色管理: 'Role',
-  权限管理: 'Permission',
-  菜单管理: 'Menu',
-};
 
 @Injectable()
 export class UsersService implements OnModuleInit {
@@ -73,8 +44,6 @@ export class UsersService implements OnModuleInit {
     private readonly roleRepository: Repository<Role>,
     @InjectRepository(Permission)
     private readonly permissionRepository: Repository<Permission>,
-    @InjectRepository(Menu)
-    private readonly menuRepository: Repository<Menu>,
     private readonly configService: ConfigService,
   ) {}
 
@@ -87,63 +56,20 @@ export class UsersService implements OnModuleInit {
   async onModuleInit() {
     await this.cleanLegacyPermissions();
     const permissions = await this.ensurePermissions();
-    await this.ensurePermissionMenuId(permissions);
     const adminRole = await this.ensureAdminRole(permissions);
     await this.ensureDefaultAdmin(adminRole);
   }
 
   /**
-   * 自动将权限归属到菜单：
-   * 遍历菜单表，取每个菜单的 Module 前缀（优先来自 permissionCode，其次兜底 MENU_NAME_TO_MODULE），
-   * 把该 Module 下 menuId 为空的权限自动回填 menuId。
-   * 目的：让权限管理页能按菜单分组显示权限点。
-   */
-  private async ensurePermissionMenuId(permissions: Permission[]): Promise<void> {
-    const menus = await this.menuRepository.find();
-    if (menus.length === 0) return;
-
-    // 建立 Module → menuId 映射
-    const moduleToMenuId = new Map<string, number>();
-    for (const m of menus) {
-      let mod = '';
-      if (m.permissionCode) {
-        const idx = m.permissionCode.indexOf('.');
-        mod = idx > 0 ? m.permissionCode.slice(0, idx) : m.permissionCode;
-      }
-      if (!mod && MENU_NAME_TO_MODULE[m.name]) {
-        mod = MENU_NAME_TO_MODULE[m.name];
-      }
-      if (mod && !moduleToMenuId.has(mod)) {
-        moduleToMenuId.set(mod, m.id);
-      }
-    }
-
-    // 回填 menuId 为空 且 Module 有对应菜单 的权限
-    for (const p of permissions) {
-      if (p.menuId != null) continue;
-      const idx = p.code.indexOf('.');
-      if (idx <= 0) continue;
-      const mod = p.code.slice(0, idx);
-      const menuId = moduleToMenuId.get(mod);
-      if (menuId) {
-        p.menuId = menuId;
-        await this.permissionRepository.save(p);
-      }
-    }
-  }
-
-  /**
    * 清理不符合规范的旧权限点：
-   * 权限码格式必须为 `Module.action`（模块首字母大写 + 点号 + 动作小写开头）。
-   * 例如 `User.read` 合规；`user:read` / `article.view` 均不合规。
-   * 匹配规则：`^[A-Z][A-Za-z0-9]*\.[a-z][A-Za-z0-9]*$`
-   * 不合规的记录会被物理删除（同时会级联清掉 role_permissions 关联）。
+   * 权限码支持纯动作标识（read / batchDelete）与模块动作码（Role.read）。
+   * `user:read` 等旧格式不合规，会被物理删除（同时级联清掉 role_permissions 关联）。
    */
   private async cleanLegacyPermissions(): Promise<void> {
     const all = await this.permissionRepository.find({
       relations: { roles: true },
     });
-    const validPattern = /^[A-Z][A-Za-z0-9]*\.[a-z][A-Za-z0-9]*$/;
+    const validPattern = /^([A-Z][A-Za-z0-9]*\.)?[a-z][A-Za-z0-9]*$/;
     const legacy = all.filter((p) => !validPattern.test(p.code));
     if (legacy.length === 0) return;
     // 先解除与角色的多对多关联，避免外键阻塞

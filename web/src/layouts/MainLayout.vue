@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { ElMessageBox } from 'element-plus';
 import { useUserStore } from '@/stores/user';
@@ -11,18 +11,10 @@ const userStore = useUserStore();
 
 const isCollapse = ref(false);
 const activeMenu = computed(() => route.path);
+const pageTitle = computed(() => String(route.meta.title || ''));
 
-// 菜单来自后端（按权限过滤），动态渲染
+// 菜单来自后端（按权限过滤，超管返回全部），由路由守卫在进入前引导加载
 const menus = computed(() => userStore.menus);
-
-onMounted(async () => {
-  if (!userStore.userInfo) {
-    userStore.fetchProfile().catch(() => {});
-  }
-  if (!userStore.menus.length) {
-    userStore.fetchMenus().catch(() => {});
-  }
-});
 
 async function handleLogout() {
   await ElMessageBox.confirm('确认退出登录？', '提示', { type: 'warning' });
@@ -42,9 +34,12 @@ async function handleLogout() {
 
     <el-container>
       <el-header class="layout__header">
-        <el-icon class="layout__collapse" @click="isCollapse = !isCollapse">
-          <component :is="isCollapse ? 'Expand' : 'Fold'" />
-        </el-icon>
+        <div class="layout__header-left">
+          <el-icon class="layout__collapse" @click="isCollapse = !isCollapse">
+            <component :is="isCollapse ? 'Expand' : 'Fold'" />
+          </el-icon>
+          <h1 class="layout__title">{{ pageTitle }}</h1>
+        </div>
         <el-dropdown @command="handleLogout">
           <span class="layout__user">
             {{ userStore.userInfo?.nickname || userStore.userInfo?.username || '用户' }}
@@ -110,9 +105,26 @@ async function handleLogout() {
   background: #fff;
   border-bottom: 1px solid #dcdfe6;
 }
+.layout__header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
 .layout__collapse {
   font-size: 20px;
   cursor: pointer;
+  flex: 0 0 auto;
+}
+.layout__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .layout__user {
   display: flex;

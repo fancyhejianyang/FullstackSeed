@@ -1,25 +1,25 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Like, Repository } from 'typeorm';
-import { Article } from './entities/article.entity';
+import { Demo } from './entities/demo.entity';
 import {
-  CreateArticleDto,
-  UpdateArticleDto,
-  QueryArticleDto,
-} from './dto/article.dto';
+  CreateDemoDto,
+  UpdateDemoDto,
+  QueryDemoDto,
+} from './dto/demo.dto';
 
 @Injectable()
-export class ArticlesService {
+export class DemoService {
   constructor(
-    @InjectRepository(Article)
-    private readonly articleRepository: Repository<Article>,
+    @InjectRepository(Demo)
+    private readonly demoRepository: Repository<Demo>,
   ) {}
 
   /** 分页查询（支持标题关键字搜索） */
-  async findAll(query: QueryArticleDto) {
+  async findAll(query: QueryDemoDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
-    const [list, total] = await this.articleRepository.findAndCount({
+    const [list, total] = await this.demoRepository.findAndCount({
       where: query.keyword ? { title: Like(`%${query.keyword}%`) } : {},
       order: { id: 'DESC' },
       skip: (page - 1) * pageSize,
@@ -30,29 +30,29 @@ export class ArticlesService {
 
   /** 详情 */
   async findOne(id: number) {
-    const article = await this.articleRepository.findOne({ where: { id } });
-    if (!article) {
-      throw new NotFoundException('文章不存在');
+    const demo = await this.demoRepository.findOne({ where: { id } });
+    if (!demo) {
+      throw new NotFoundException('示例不存在');
     }
-    return article;
+    return demo;
   }
 
   /** 创建 */
-  create(dto: CreateArticleDto) {
-    return this.articleRepository.save(this.articleRepository.create(dto));
+  create(dto: CreateDemoDto) {
+    return this.demoRepository.save(this.demoRepository.create(dto));
   }
 
   /** 更新 */
-  async update(id: number, dto: UpdateArticleDto) {
-    const article = await this.findOne(id);
-    Object.assign(article, dto);
-    return this.articleRepository.save(article);
+  async update(id: number, dto: UpdateDemoDto) {
+    const demo = await this.findOne(id);
+    Object.assign(demo, dto);
+    return this.demoRepository.save(demo);
   }
 
   /** 删除（软删除） */
   async remove(id: number) {
     await this.findOne(id);
-    await this.articleRepository.softDelete(id);
+    await this.demoRepository.softDelete(id);
     return { id };
   }
   /** 批量删除（软删除） */

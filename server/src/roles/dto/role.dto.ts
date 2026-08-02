@@ -32,6 +32,12 @@ export class CreateRoleDto {
   @IsInt({ each: true })
   @IsOptional()
   permissionIds?: number[];
+
+  // 关联的权限编码列表（如 Role.read / Role.update），用于菜单权限树提交
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  permissionCodes?: string[];
 }
 
 export class UpdateRoleDto extends PartialType(CreateRoleDto) {}

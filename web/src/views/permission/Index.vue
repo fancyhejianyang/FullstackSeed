@@ -1,133 +1,98 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { ref } from 'vue';
 import PageContainer from '@/components/PageContainer.vue';
-import { getAllPermissions, type Permission } from '@/api/permission';
-import { getMyMenus, type MenuNode } from '@/api/menu';
-import { getPermissionActionColor, getPermissionActionLabel } from '@/utils/permission';
-import Maintain from './Maintain.vue';
+import ProTable, { type ProTableColumn } from '@/components/ProTable.vue';
+import type { ProFormField } from '@/components/ProForm.vue';
+import { formatDateTime } from '@/utils/format';
+import { getPermissions, deletePermission, type Permission } from '@/api/permission';
+import Edit from './Edit.vue';
 
-// 表格行：菜单 + 其下操作权限（树形用 children）
-interface MenuRow {
-  id: number;
-  name: string;
-  path: string;
-  permissionCode: string;
-  operations: Permission[]; // 该菜单下的操作权限（button/api）
-  children?: MenuRow[];
+// ProTable 为泛型组件，InstanceType 取不到，直接声明暴露的方法类型
+const tableRef = ref<{ refresh: () => Promise<void>; search: () => Promise<void> }>();
+
+// 权限类型 → 标签配色
+const TYPE_META: Record<string, { label: string; type: 'primary' | 'success' | 'info' }> = {
+  menu: { label: '菜单', type: 'primary' },
+  button: { label: '按钮', type: 'success' },
+  api: { label: '接口', type: 'info' },
+};
+
+const columns: ProTableColumn[] = [
+  { prop: 'code', label: '权限编码', minWidth: 180 },
+  { prop: 'name', label: '权限名称', minWidth: 160 },
+  { prop: 'type', label: '类型', width: 100, slot: true },
+  { prop: 'description', label: '描述', minWidth: 180, slot: true },
+  { prop: 'createdAt', label: '创建时间', width: 180, slot: true },
+];
+
+const searchFields: ProFormField[] = [
+  { prop: 'keyword', label: '关键字', type: 'input', placeholder: '编码/名称' },
+];
+
+function fetchPermissions(params: Record<string, any>) {
+  return getPermissions(params);
 }
 
-const loading = ref(false);
-const menus = ref<MenuNode[]>([]);
-const permissions = ref<Permission[]>([]);
-
-// 按 menuId 聚合操作权限（排除 type=menu）
-const permByMenu = computed(() => {
-  const map = new Map<number, Permission[]>();
-  for (const p of permissions.value) {
-    if (p.menuId == null || p.type === 'menu') continue;
-    if (!map.has(p.menuId)) map.set(p.menuId, []);
-    map.get(p.menuId)!.push(p);
-  }
-  console.log(map)
-  return map;
-});
-
-// 菜单树 → 表格行
-const tableData = computed<MenuRow[]>(() => {
-  const build = (m: MenuNode): MenuRow => ({
-    id: m.id,
-    name: m.name,
-    path: m.path,
-    permissionCode: m.permissionCode,
-    operations: permByMenu.value.get(m.id) ?? [],
-    children: m.children?.length ? m.children.map(build) : undefined,
-  });
-  return menus.value.map(build);
-});
-
-async function fetchData() {
-  loading.value = true;
-  try {
-    const [menuRes, permRes] = await Promise.all([
-      getMyMenus(),
-      getAllPermissions(),
-    ]);
-    menus.value = menuRes;
-    permissions.value = permRes.list;
-    console.log('permissions', permissions.value);
-  } finally {
-    loading.value = false;
-  }
+function getTypeMeta(type: string) {
+  return TYPE_META[type] ?? { label: type || '-', type: 'info' as const };
 }
 
-// 维护弹窗
-const maintainVisible = ref(false);
-const currentMenu = ref<MenuRow | null>(null);
+const editVisible = ref(false);
+const editingRow = ref<Permission | null>(null);
 
-function openMaintain(row: MenuRow) {
-  currentMenu.value = row;
-  maintainVisible.value = true;
+function openCreate() {
+  editingRow.value = null;
+  editVisible.value = true;
 }
 
-onMounted(fetchData);
+function handleEdit(row: Permission) {
+  editingRow.value = row;
+  editVisible.value = true;
+}
+
+function deletePermissionRequest(row: Permission) {
+  return deletePermission(row.id);
+}
 </script>
 
 <template>
   <PageContainer title="权限管理">
-    <el-table
-      v-loading="loading"
-      :data="tableData"
-      row-key="id"
-      border
-      default-expand-all
-      :tree-props="{ children: 'children' }"
+    <ProTable
+      ref="tableRef"
+      :columns="columns"
+      :search-fields="searchFields"
+      :request="fetchPermissions"
+      :delete-request="deletePermissionRequest"
+      :show-view="false"
+      @edit="handleEdit"
     >
-      <el-table-column label="操作" width="140">
-        <template #default="{ row }">
-          <el-button link type="primary" @click="openMaintain(row)">
-            编辑
-          </el-button>
-        </template>
-      </el-table-column>
-      <el-table-column prop="name" label="菜单名称" min-width="180" />
-      <el-table-column prop="path" label="路由路径" min-width="140">
-        <template #default="{ row }">{{ row.path || '-' }}</template>
-      </el-table-column>
-      <el-table-column prop="permissionCode" label="菜单权限码" min-width="140">
-        <template #default="{ row }">
-          <el-tag v-if="row.permissionCode" size="small" type="success">
-            {{ row.permissionCode }}
-          </el-tag>
-          <span v-else>-</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="操作权限" min-width="240">
-        <template #default="{ row }">
-          <template v-if="row.operations.length">
-            <el-tag
-              v-for="op in row.operations"
-              :key="op.id"
-              size="small"
-              class="mr-xs"
-              :type="getPermissionActionColor(op.code)"
-            >
-              {{ getPermissionActionLabel(op.code) }}
-            </el-tag>
-          </template>
-          <span v-else class="text-secondary">-</span>
-        </template>
-      </el-table-column>
-      
-    </el-table>
+      <template #toolbar>
+        <el-button type="primary" @click="openCreate">新增权限</el-button>
+      </template>
 
-    <!-- 操作权限维护弹窗 -->
-    <Maintain
-      v-if="currentMenu"
-      v-model:visible="maintainVisible"
-      :menu-id="currentMenu.id"
-      :menu-name="currentMenu.name"
-      :permissions="currentMenu.operations"
-      @success="fetchData"
+      <!-- 类型列 -->
+      <template #column-type="{ row }">
+        <el-tag size="small" :type="getTypeMeta(row.type).type">
+          {{ getTypeMeta(row.type).label }}
+        </el-tag>
+      </template>
+
+      <!-- 描述列 -->
+      <template #column-description="{ row }">
+        {{ row.description || '-' }}
+      </template>
+
+      <!-- 创建时间列 -->
+      <template #column-createdAt="{ row }">
+        {{ formatDateTime(row.createdAt) }}
+      </template>
+    </ProTable>
+
+    <!-- 新增/编辑弹窗 -->
+    <Edit
+      v-model:visible="editVisible"
+      :row="editingRow"
+      @success="tableRef?.refresh()"
     />
   </PageContainer>
 </template>

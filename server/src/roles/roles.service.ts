@@ -51,9 +51,13 @@ export class RolesService {
     if (exist) {
       throw new ConflictException('角色编码已存在');
     }
-    const { permissionIds, ...rest } = dto;
+    const { permissionIds, permissionCodes, ...rest } = dto;
     const role = this.roleRepository.create(rest);
-    if (permissionIds) {
+    if (permissionCodes) {
+      role.permissions = await this.permissionsService.findOrCreateByCodes(
+        permissionCodes,
+      );
+    } else if (permissionIds) {
       role.permissions = await this.permissionsService.findByIds(permissionIds);
     }
     return this.roleRepository.save(role);
@@ -62,9 +66,13 @@ export class RolesService {
   /** 更新（permissionIds 传入时整体覆盖角色权限） */
   async update(id: number, dto: UpdateRoleDto) {
     const role = await this.findOne(id);
-    const { permissionIds, ...rest } = dto;
+    const { permissionIds, permissionCodes, ...rest } = dto;
     Object.assign(role, rest);
-    if (permissionIds) {
+    if (permissionCodes) {
+      role.permissions = await this.permissionsService.findOrCreateByCodes(
+        permissionCodes,
+      );
+    } else if (permissionIds) {
       role.permissions = await this.permissionsService.findByIds(permissionIds);
     }
     return this.roleRepository.save(role);

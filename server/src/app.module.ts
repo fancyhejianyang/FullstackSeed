@@ -7,7 +7,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
-import { ArticlesModule } from './articles/articles.module';
+import { DemoModule } from './demo/demo.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 import { RolesModule } from './roles/roles.module';
@@ -80,7 +80,7 @@ import { MenusModule } from './menus/menus.module';
     RolesModule,
     PermissionsModule,
     MenusModule,
-    ArticlesModule,
+    DemoModule,
   ],
   controllers: [AppController],
   providers: [
