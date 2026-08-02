@@ -9,6 +9,7 @@ import {
   updateUser,
   type UserItem,
   type UserForm,
+  type BoolNumber,
 } from '@/api/user';
 
 const props = defineProps<{
@@ -27,8 +28,8 @@ const form = reactive<UserForm>({
   username: '',
   password: '',
   nickname: '',
-  isActive: true,
-  isAdmin: false,
+  isActive: 1,
+  isAdmin: 0,
 });
 
 // 新增时显示密码与用户名，编辑时用户名禁改、密码留空不更新
@@ -75,16 +76,20 @@ function resetForm() {
   form.username = '';
   form.nickname = '';
   form.password = '';
-  form.isActive = true;
-  form.isAdmin = false;
+  form.isActive = 1;
+  form.isAdmin = 0;
 }
 
 function fillForm(data: UserItem) {
   form.username = data.username ?? '';
   form.nickname = data.nickname ?? '';
   form.password = '';
-  form.isActive = !!data.isActive;
-  form.isAdmin = !!data.isAdmin;
+  form.isActive = Number(data.isActive) ? 1 : 0;
+  form.isAdmin = Number(data.isAdmin) ? 1 : 0;
+}
+
+function toBoolNumber(value: UserForm['isActive']): BoolNumber {
+  return Number(value) ? 1 : 0;
 }
 
 // 打开时：编辑态强制走详情接口取最新数据，新增态取默认值
@@ -110,12 +115,12 @@ async function handleSubmit() {
   await formRef.value?.validate();
   submitting.value = true;
   try {
-    // isActive/isAdmin 在下拉里是 0/1，转布尔
+    // isActive/isAdmin 在下拉里统一使用 0/1，后端 DTO 会兼容并落库为 tinyint。
     const payload: UserForm = {
       username: form.username,
       nickname: form.nickname,
-      isActive: !!form.isActive,
-      isAdmin: !!form.isAdmin,
+      isActive: toBoolNumber(form.isActive),
+      isAdmin: toBoolNumber(form.isAdmin),
     };
     if (form.password) payload.password = form.password;
 

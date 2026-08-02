@@ -1,5 +1,7 @@
 import request from '@/utils/request';
 
+export type BoolNumber = 0 | 1;
+
 export interface UserRole {
   id: number;
   code: string;
@@ -10,8 +12,8 @@ export interface UserItem {
   id: number;
   username: string;
   nickname: string;
-  isActive: boolean;
-  isAdmin: boolean;
+  isActive: boolean | BoolNumber;
+  isAdmin: boolean | BoolNumber;
   roles: UserRole[];
   createdAt: string;
   updatedAt: string;
@@ -32,8 +34,8 @@ export interface UserForm {
   username: string;
   password?: string;
   nickname?: string;
-  isActive?: boolean;
-  isAdmin?: boolean;
+  isActive?: boolean | BoolNumber;
+  isAdmin?: boolean | BoolNumber;
   roleIds?: number[];
 }
 
