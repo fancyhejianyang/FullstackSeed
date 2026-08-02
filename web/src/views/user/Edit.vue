@@ -11,6 +11,7 @@ import {
   type UserForm,
   type BoolLike,
 } from '@/api/user';
+import { getRoles, type Role } from '@/api/role';
 
 const props = defineProps<{
   // 编辑对象；为 null 表示新增。这里只用它的 id 触发详情接口
@@ -23,13 +24,16 @@ const visible = defineModel<boolean>('visible', { required: true });
 
 const submitting = ref(false);
 const loading = ref(false);
+const rolesLoading = ref(false);
 const formRef = ref<InstanceType<typeof ProForm>>();
+const roleOptions = ref<Role[]>([]);
 const form = reactive<UserForm>({
   username: '',
   password: '',
   nickname: '',
   isActive: 1,
   isAdmin: 0,
+  roleIds: [],
 });
 
 // 新增时显示密码与用户名，编辑时用户名禁改、密码留空不更新
@@ -65,6 +69,7 @@ function buildFields() {
         { label: '是', value: 1 },
       ],
     },
+    { prop: 'roleIds', label: '角色', slot: true },
   ];
 }
 
@@ -74,12 +79,24 @@ const rules: FormRules = {
   isAdmin: [{ required: true, message: '请选择是否为超级管理员', trigger: 'change' }],
 };
 
+async function ensureRoles() {
+  if (roleOptions.value.length > 0) return;
+  rolesLoading.value = true;
+  try {
+    const res = await getRoles({ page: 1, pageSize: 1000 });
+    roleOptions.value = res.list.filter((role) => toBoolNumber(role.isActive) === 1);
+  } finally {
+    rolesLoading.value = false;
+  }
+}
+
 function resetForm() {
   form.username = '';
   form.nickname = '';
   form.password = '';
   form.isActive = 1;
   form.isAdmin = 0;
+  form.roleIds = [];
 }
 
 function fillForm(data: UserItem) {
@@ -88,6 +105,7 @@ function fillForm(data: UserItem) {
   form.password = '';
   form.isActive = toBoolNumber(data.isActive);
   form.isAdmin = toBoolNumber(data.isAdmin);
+  form.roleIds = data.roles?.map((role) => role.id) ?? [];
 }
 
 function toBoolNumber(value: BoolLike | undefined): 0 | 1 {
@@ -101,6 +119,7 @@ watch(visible, async (val) => {
   if (!val) return;
   isEdit.value = !!props.row;
   buildFields();
+  await ensureRoles();
 
   if (props.row?.id) {
     loading.value = true;
@@ -125,6 +144,7 @@ async function handleSubmit() {
       nickname: form.nickname,
       isActive: toBoolNumber(form.isActive),
       isAdmin: toBoolNumber(form.isAdmin),
+      roleIds: form.roleIds ?? [],
     };
     if (form.password) payload.password = form.password;
 
@@ -156,7 +176,33 @@ async function handleSubmit() {
         <template v-if="isEdit" #field-username>
           <el-input v-model="form.username" disabled />
         </template>
+        <template #field-roleIds>
+          <el-select
+            v-model="form.roleIds"
+            multiple
+            filterable
+            clearable
+            collapse-tags
+            collapse-tags-tooltip
+            :loading="rolesLoading"
+            placeholder="请选择角色"
+            class="user-edit__role-select"
+          >
+            <el-option
+              v-for="role in roleOptions"
+              :key="role.id"
+              :label="role.name"
+              :value="role.id"
+            />
+          </el-select>
+        </template>
       </ProForm>
     </div>
   </ProDialog>
 </template>
+
+<style scoped>
+.user-edit__role-select {
+  width: 100%;
+}
+</style>
