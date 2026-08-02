@@ -163,13 +163,6 @@ export const MODULE_MODEL_MAP: Record<string, ModuleModelMeta> = {
         required: true,
       },
       {
-        prop: 'description',
-        label: '描述',
-        type: 'string',
-        required: false,
-        defaultValue: '',
-      },
-      {
         prop: 'isActive',
         label: '是否启用',
         type: 'boolean',
@@ -224,20 +217,6 @@ export const MODULE_MODEL_MAP: Record<string, ModuleModelMeta> = {
         required: false,
         enumValues: ['menu', 'button', 'api'],
         defaultValue: 'api',
-      },
-      {
-        prop: 'description',
-        label: '描述',
-        type: 'string',
-        required: false,
-        defaultValue: '',
-      },
-      {
-        prop: 'menuId',
-        label: '归属菜单 ID',
-        type: 'number',
-        required: false,
-        nullable: true,
       },
       {
         prop: 'roles',

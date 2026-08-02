@@ -21,7 +21,6 @@ const columns: ProTableColumn[] = [
   { prop: 'code', label: '权限编码', minWidth: 180 },
   { prop: 'name', label: '权限名称', minWidth: 160 },
   { prop: 'type', label: '类型', width: 100, slot: true },
-  { prop: 'description', label: '描述', minWidth: 180, slot: true },
   { prop: 'createdAt', label: '创建时间', width: 180, slot: true },
 ];
 
@@ -75,11 +74,6 @@ function deletePermissionRequest(row: Permission) {
         <el-tag size="small" :type="getTypeMeta(row.type).type">
           {{ getTypeMeta(row.type).label }}
         </el-tag>
-      </template>
-
-      <!-- 描述列 -->
-      <template #column-description="{ row }">
-        {{ row.description || '-' }}
       </template>
 
       <!-- 创建时间列 -->

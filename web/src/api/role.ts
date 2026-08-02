@@ -6,8 +6,8 @@ export interface Role {
   id: number;
   code: string;
   name: string;
-  description: string;
   isActive: BoolLike;
+  permissionCodes?: string[] | null;
   permissions: Permission[];
   createdAt: string;
   updatedAt: string;
@@ -27,7 +27,6 @@ export interface QueryRoleParams {
 export interface RoleForm {
   code: string;
   name: string;
-  description?: string;
   isActive?: BoolLike;
   permissionIds?: number[];
   permissionCodes?: string[];

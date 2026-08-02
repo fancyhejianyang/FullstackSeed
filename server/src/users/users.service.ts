@@ -26,16 +26,10 @@ const STANDARD_ACTIONS = [
   ['batchDelete', '批量删除'],
 ] as const;
 
-const STANDARD_MODULES = [
-  ['Demo', '示例'],
-  ['User', '账号'],
-  ['Role', '角色'],
-  ['Permission', '权限'],
-  ['Menu', '菜单'],
-] as const;
+const ADMIN_PERMISSION_MODULES = ['Demo', 'User', 'Role', 'Permission', 'Menu'];
 
-// 内置权限点种子：保留纯动作目录，同时补齐当前框架内置模块的 Module.action 权限点。
-// 角色授权与 API 守卫以 Module.action 为主，纯动作码仅作为旧数据/抽象动作兼容。
+// 内置权限点种子：只保存基础动作目录。
+// 角色授权时由「菜单模块 × 基础动作」组合成完整权限码并存入 roles.permissionCodes。
 const SEED_PERMISSIONS: Array<{
   code: string;
   name: string;
@@ -46,13 +40,6 @@ const SEED_PERMISSIONS: Array<{
     name,
     type: 'button' as const,
   })),
-  ...STANDARD_MODULES.flatMap(([module, moduleName]) =>
-    STANDARD_ACTIONS.map(([action, actionName]) => ({
-      code: `${module}.${action}`,
-      name: `${actionName}${moduleName}`,
-      type: 'button' as const,
-    })),
-  ),
 ];
 
 // 系统内置保留账号用户名：禁止创建同名、禁止删除
@@ -77,22 +64,51 @@ export class UsersService implements OnModuleInit {
    * 3. 用户表为空时创建默认管理员并绑定 admin 角色
    */
   async onModuleInit() {
+    await this.migrateRolePermissionCodes();
     await this.cleanLegacyPermissions();
     const permissions = await this.ensurePermissions();
     const adminRole = await this.ensureAdminRole(permissions);
     await this.ensureDefaultAdmin(adminRole);
   }
 
+  private getDefaultAdminPermissionCodes(): string[] {
+    return ADMIN_PERMISSION_MODULES.flatMap((module) =>
+      STANDARD_ACTIONS.map(([action]) => `${module}.${action}`),
+    );
+  }
+
+  /**
+   * 旧版本曾把 Demo.read 这类完整权限写进 permissions 表并通过 role_permissions 关联。
+   * 新模型下完整权限归属角色字段，启动时先迁移到 roles.permissionCodes，再清理 permissions 表。
+   */
+  private async migrateRolePermissionCodes(): Promise<void> {
+    const roles = await this.roleRepository.find({
+      relations: { permissions: true },
+    });
+    const modulePermissionPattern = /^[A-Z][A-Za-z0-9]*\.[a-z][A-Za-z0-9]*$/;
+    for (const role of roles) {
+      const existing = role.permissionCodes ?? [];
+      const fromRelations = (role.permissions ?? [])
+        .map((permission) => permission.code)
+        .filter((code) => modulePermissionPattern.test(code));
+      const merged = Array.from(new Set([...existing, ...fromRelations]));
+      if (merged.length !== existing.length) {
+        role.permissionCodes = merged;
+        await this.roleRepository.save(role);
+      }
+    }
+  }
+
   /**
    * 清理不符合规范的旧权限点：
-   * 权限码支持纯动作标识（read / batchDelete）与模块动作码（Role.read）。
-   * `user:read` 等旧格式不合规，会被物理删除（同时级联清掉 role_permissions 关联）。
+   * 权限管理只保留基础动作标识（read / batchDelete）。
+   * `Role.read` / `user:read` 等旧格式不合规，会被物理删除（同时级联清掉 role_permissions 关联）。
    */
   private async cleanLegacyPermissions(): Promise<void> {
     const all = await this.permissionRepository.find({
       relations: { roles: true },
     });
-    const validPattern = /^([A-Z][A-Za-z0-9]*\.)?[a-z][A-Za-z0-9]*$/;
+    const validPattern = /^[a-z][A-Za-z0-9]*$/;
     const legacy = all.filter((p) => !validPattern.test(p.code));
     if (legacy.length === 0) return;
     // 先解除与角色的多对多关联，避免外键阻塞
@@ -135,6 +151,7 @@ export class UsersService implements OnModuleInit {
       });
     }
     role.permissions = permissions;
+    role.permissionCodes = this.getDefaultAdminPermissionCodes();
     return this.roleRepository.save(role);
   }
 

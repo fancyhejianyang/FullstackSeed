@@ -17,6 +17,11 @@ export class RolesService {
     private readonly permissionsService: PermissionsService,
   ) {}
 
+  private normalizePermissionCodes(codes: string[] | undefined): string[] {
+    if (!codes) return [];
+    return Array.from(new Set(codes.map((code) => code.trim()).filter(Boolean)));
+  }
+
   /** 分页查询（含关联权限） */
   async findAll(query: QueryRoleDto) {
     const page = query.page ?? 1;
@@ -54,9 +59,7 @@ export class RolesService {
     const { permissionIds, permissionCodes, ...rest } = dto;
     const role = this.roleRepository.create(rest);
     if (permissionCodes) {
-      role.permissions = await this.permissionsService.findOrCreateByCodes(
-        permissionCodes,
-      );
+      role.permissionCodes = this.normalizePermissionCodes(permissionCodes);
     } else if (permissionIds) {
       role.permissions = await this.permissionsService.findByIds(permissionIds);
     }
@@ -69,9 +72,7 @@ export class RolesService {
     const { permissionIds, permissionCodes, ...rest } = dto;
     Object.assign(role, rest);
     if (permissionCodes) {
-      role.permissions = await this.permissionsService.findOrCreateByCodes(
-        permissionCodes,
-      );
+      role.permissionCodes = this.normalizePermissionCodes(permissionCodes);
     } else if (permissionIds) {
       role.permissions = await this.permissionsService.findByIds(permissionIds);
     }

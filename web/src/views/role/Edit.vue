@@ -4,6 +4,7 @@ import { ElMessage, type FormRules } from 'element-plus';
 import ProForm, { type ProFormField } from '@/components/ProForm.vue';
 import ProDialog from '@/components/ProDialog.vue';
 import { getMenuTree, type MenuNode } from '@/api/menu';
+import { getAllPermissions, type Permission } from '@/api/permission';
 import {
   createRole,
   getRole,
@@ -23,6 +24,8 @@ const formRef = ref<InstanceType<typeof ProForm>>();
 const permissionTreeRef = ref();
 
 const menuTree = ref<MenuNode[]>([]);
+const basePermissions = ref<Permission[]>([]);
+const permissionsLoading = ref(false);
 
 interface PermissionTreeNode {
   id: string;
@@ -35,7 +38,6 @@ interface PermissionTreeNode {
 const form = reactive({
   code: '',
   name: '',
-  description: '',
   isActive: 1 as number,
   permissionCodes: [] as string[],
 });
@@ -52,7 +54,6 @@ const fields: ProFormField[] = [
       { label: '禁用', value: 0 },
     ],
   },
-  { prop: 'description', label: '描述', type: 'textarea', rows: 2 },
   { prop: 'permissionIds', label: '菜单权限', slot: true },
 ];
 
@@ -63,16 +64,27 @@ const rules: FormRules = {
 };
 
 onMounted(async () => {
-  menuTree.value = await getMenuTree();
+  const [menus] = await Promise.all([getMenuTree(), loadBasePermissions()]);
+  menuTree.value = menus;
 });
 
-const PERMISSION_LABEL_MAP: Record<string, string> = {
-  read: '查看',
-  create: '新增',
-  update: '编辑',
-  delete: '删除',
-  batchDelete: '批量删除',
-};
+async function loadBasePermissions() {
+  permissionsLoading.value = true;
+  try {
+    const res = await getAllPermissions();
+    const byCode = new Map<string, Permission>();
+    res.list.forEach((permission) => {
+      byCode.set(permission.code, permission);
+    });
+    basePermissions.value = Array.from(byCode.values());
+    await nextTick();
+    if (visible.value) {
+      syncPermissionTreeChecked();
+    }
+  } finally {
+    permissionsLoading.value = false;
+  }
+}
 
 function splitMenuPermissionCodes(code: string | undefined | null) {
   if (!code) return [];
@@ -109,15 +121,8 @@ function getMenuModule(menu: MenuNode) {
   return singular.charAt(0).toUpperCase() + singular.slice(1);
 }
 
-function normalizePermissionCode(menu: MenuNode, code: string) {
-  if (code.includes('.')) return code;
-  const moduleName = getMenuModule(menu);
-  return moduleName ? `${moduleName}.${code}` : code;
-}
-
-function getPermissionLabel(code: string) {
-  const action = code.includes('.') ? code.split('.').pop()! : code;
-  return PERMISSION_LABEL_MAP[action] ?? action;
+function getBaseActionLabel(permission: Permission) {
+  return `${permission.name}（${permission.code}）`;
 }
 
 function isTruthyValue(value: unknown) {
@@ -130,23 +135,26 @@ const permissionTreeData = computed<PermissionTreeNode[]>(() => {
       if (menu.isSystem) return [];
 
       const children = buildMenus(menu.children || []);
-      const permissions = splitMenuPermissionCodes(menu.permissionCode).map(
-        (rawCode) => {
-          const code = normalizePermissionCode(menu, rawCode);
-          return {
-            id: `permission-${code}`,
-            label: `${getPermissionLabel(code)}（${code.includes('.') ? code.split('.').pop() : code}）`,
-            type: 'permission' as const,
-            permissionCode: code,
-          };
-        },
-      );
-      return {
+      const moduleName = getMenuModule(menu);
+      const permissions = moduleName
+        ? basePermissions.value.map((permission) => {
+            const code = `${moduleName}.${permission.code}`;
+            return {
+              id: `permission-${code}`,
+              label: getBaseActionLabel(permission),
+              type: 'permission' as const,
+              permissionCode: code,
+            };
+          })
+        : [];
+
+      const node = {
         id: `menu-${menu.id}`,
         label: menu.name,
         type: 'menu' as const,
         children: [...children, ...permissions],
       };
+      return node.children.length ? [node] : [];
     });
 
   return buildMenus(menuTree.value);
@@ -170,7 +178,6 @@ function syncPermissionTreeChecked() {
 function resetForm() {
   form.code = '';
   form.name = '';
-  form.description = '';
   form.isActive = 1;
   form.permissionCodes = [];
 }
@@ -178,9 +185,13 @@ function resetForm() {
 function fillForm(data: Role) {
   form.code = data.code ?? '';
   form.name = data.name ?? '';
-  form.description = data.description ?? '';
   form.isActive = isTruthyValue(data.isActive) ? 1 : 0;
-  form.permissionCodes = data.permissions?.map((p) => p.code) ?? [];
+  const legacyRelationCodes = data.permissions
+    ?.map((permission) => permission.code)
+    .filter((code) => code.includes('.'));
+  form.permissionCodes = data.permissionCodes?.length
+    ? data.permissionCodes
+    : legacyRelationCodes ?? [];
 }
 
 // 打开时：编辑态强制走详情接口取最新数据
@@ -216,7 +227,6 @@ async function handleSubmit() {
     const payload: RoleForm = {
       code: form.code,
       name: form.name,
-      description: form.description,
       isActive: !!form.isActive,
       permissionCodes,
     };
@@ -253,6 +263,7 @@ async function handleSubmit() {
         <template #field-permissionIds>
           <el-tree
             ref="permissionTreeRef"
+            v-loading="permissionsLoading"
             :data="permissionTreeData"
             node-key="id"
             show-checkbox

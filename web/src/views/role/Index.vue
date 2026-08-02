@@ -65,7 +65,7 @@ function deleteRoleRequest(row: Role) {
       </template>
 
       <template #column-permissions="{ row }">
-        {{ row.permissions?.length || 0 }}
+        {{ row.permissionCodes?.length || 0 }}
       </template>
 
       <template #column-isActive="{ row }">

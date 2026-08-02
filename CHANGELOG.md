@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-08-02 调整权限模型为基础动作与角色完整授权分离
+- 新增：无
+- 修改：
+  - `server/src/users/users.service.ts`（内置权限 seed 改为基础动作集合；启动时迁移旧完整权限到 `roles.permissionCodes` 并清理旧权限表数据）
+  - `server/src/auth/auth.service.ts`、`server/src/auth/auth.module.ts`（登录/个人信息权限来源改为角色表 `permissionCodes`）
+  - `server/src/roles/*`、`server/src/permissions/*`（角色保存完整 `Module.action` 权限码；权限管理只接收基础动作码；描述字段退出 DTO）
+  - `server/src/module-models/module-models.map.ts`（模块元数据移除角色/权限描述字段和权限菜单归属字段）
+  - `web/src/views/role/*`、`web/src/views/permission/*`、`web/src/api/role.ts`、`web/src/api/permission.ts`（角色授权树按“菜单模块 × 基础权限动作”生成，权限管理移除描述字段）
+  - `web/src/stores/user.ts`、`web/src/components/ProTable.vue`、`web/src/views/menu/Index.vue`（前端权限判断改为只认完整权限码；菜单分配权限保存时按菜单模块组合完整码）
+- 删除：无
+- 说明：按“权限管理维护基础权限类型集合，角色负责菜单关联并保存完整权限”的模型重整 RBAC 数据流；描述字段在角色/权限业务表单与元数据中不再使用。已执行 `web` 的 `npm.cmd run type-check`、`npm.cmd run build`，以及 `server` 的 `npm.cmd run build`，均通过；前端构建仅有第三方库 Rollup 注释警告。
+
 ### 2026-08-02 系统配置新增日志记录和数据导入入口
 - 新增：
   - `web/src/api/moduleModel.ts`（封装模块模型列表、详情、字段列表接口）

@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsIn,
   IsInt,
+  Matches,
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -14,6 +15,9 @@ export type PermissionType = 'menu' | 'button' | 'api';
 export class CreatePermissionDto {
   @IsString()
   @IsNotEmpty()
+  @Matches(/^[a-z][A-Za-z0-9]*$/, {
+    message: '权限编码应为基础动作标识，如 read / batchDelete',
+  })
   code: string;
 
   @IsString()
@@ -24,15 +28,6 @@ export class CreatePermissionDto {
   @IsOptional()
   type?: PermissionType;
 
-  @IsString()
-  @IsOptional()
-  description?: string;
-
-  // 归属菜单 id（可空）
-  @Type(() => Number)
-  @IsInt()
-  @IsOptional()
-  menuId?: number | null;
 }
 
 export class UpdatePermissionDto extends PartialType(CreatePermissionDto) {}

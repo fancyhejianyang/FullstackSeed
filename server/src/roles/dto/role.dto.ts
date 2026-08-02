@@ -5,6 +5,7 @@ import {
   IsInt,
   IsArray,
   Min,
+  Matches,
   ValidateIf,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
@@ -20,10 +21,6 @@ export class CreateRoleDto {
   @IsNotEmpty()
   name: string;
 
-  @IsString()
-  @IsOptional()
-  description?: string;
-
   @Transform(({ value }) => toBoolLike(value))
   @ValidateIf((_, value) => value !== undefined && value !== null)
   @IsNotEmpty()
@@ -36,9 +33,13 @@ export class CreateRoleDto {
   @IsOptional()
   permissionIds?: number[];
 
-  // 关联的权限编码列表（如 Role.read / Role.update），用于菜单权限树提交
+  // 角色最终授权结果：菜单模块 + 基础权限动作组合后的完整权限码（如 Role.read / Role.update）。
   @IsArray()
   @IsString({ each: true })
+  @Matches(/^[A-Z][A-Za-z0-9]*\.[a-z][A-Za-z0-9]*$/, {
+    each: true,
+    message: '角色权限码应为 Module.action 格式，如 Role.read',
+  })
   @IsOptional()
   permissionCodes?: string[];
 }

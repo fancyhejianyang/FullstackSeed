@@ -7,8 +7,8 @@ export interface Permission {
   code: string;
   name: string;
   type: PermissionType;
-  description: string;
-  menuId: number | null;
+  description?: string;
+  menuId?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -28,8 +28,6 @@ export interface PermissionForm {
   code: string;
   name: string;
   type?: PermissionType;
-  description?: string;
-  menuId?: number | null;
 }
 
 /** 分页查询权限 */

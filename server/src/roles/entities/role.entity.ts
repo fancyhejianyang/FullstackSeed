@@ -3,7 +3,7 @@ import { BaseEntity } from '../../common/entities/base.entity';
 import { Permission } from '../../permissions/entities/permission.entity';
 
 /**
- * 角色实体：通过 role_permissions 关联权限点
+ * 角色实体：permissionCodes 存最终授权结果，role_permissions 保留基础动作关联兼容。
  */
 @Entity('roles')
 export class Role extends BaseEntity {
@@ -20,6 +20,10 @@ export class Role extends BaseEntity {
 
   @Column({ type: 'tinyint', default: true })
   isActive: boolean;
+
+  // 角色最终授权结果：完整权限码，如 Demo.read / User.update。
+  @Column({ type: 'simple-json', nullable: true })
+  permissionCodes: string[] | null;
 
   @ManyToMany(() => Permission, (permission) => permission.roles, {
     cascade: true,

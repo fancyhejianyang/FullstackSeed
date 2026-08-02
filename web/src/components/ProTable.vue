@@ -97,7 +97,7 @@ const userStore = useUserStore();
 function canDo(action: 'read' | 'create' | 'update' | 'delete' | 'batchDelete') {
   if (!props.permModule) return true;
   const mod = props.permModule.charAt(0).toUpperCase() + props.permModule.slice(1);
-  return userStore.hasPermission(`${mod}.${action}`) || userStore.hasPermission(action);
+  return userStore.hasPermission(`${mod}.${action}`);
 }
 const canView = computed(() => props.showView && canDo('read'));
 const canEdit = computed(() => props.showEdit && canDo('update'));

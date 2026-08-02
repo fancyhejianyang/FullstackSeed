@@ -28,12 +28,10 @@ const form = reactive<{
   code: string;
   name: string;
   type: PermissionType;
-  description: string;
 }>({
   code: '',
   name: '',
   type: 'api',
-  description: '',
 });
 
 const fields: ProFormField[] = [
@@ -49,7 +47,6 @@ const fields: ProFormField[] = [
       { label: '接口', value: 'api' },
     ],
   },
-  { prop: 'description', label: '描述', type: 'textarea', rows: 2 },
 ];
 
 // 权限码格式：纯动作标识（小写字母开头的驼峰，与模块无关），如 read / batchDelete
@@ -70,14 +67,12 @@ function resetForm() {
   form.code = '';
   form.name = '';
   form.type = 'api';
-  form.description = '';
 }
 
 function fillForm(data: Permission) {
   form.code = data.code ?? '';
   form.name = data.name ?? '';
   form.type = data.type ?? 'api';
-  form.description = data.description ?? '';
 }
 
 watch(visible, (val) => {
@@ -98,7 +93,6 @@ async function handleSubmit() {
       code: form.code,
       name: form.name,
       type: form.type,
-      description: form.description,
     };
     if (props.row) {
       await updatePermission(props.row.id, payload);

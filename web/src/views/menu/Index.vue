@@ -10,13 +10,9 @@ import { getPermissionActionLabel } from '@/utils/permission';
 import Edit from './Edit.vue';
 
 const userStore = useUserStore();
-function hasActionPermission(moduleCode: string, actionCode: string) {
-  return userStore.hasPermission(moduleCode) || userStore.hasPermission(actionCode);
-}
-
-const canCreate = computed(() => hasActionPermission('Menu.create', 'create'));
-const canUpdate = computed(() => hasActionPermission('Menu.update', 'update'));
-const canDelete = computed(() => hasActionPermission('Menu.delete', 'delete'));
+const canCreate = computed(() => userStore.hasPermission('Menu.create'));
+const canUpdate = computed(() => userStore.hasPermission('Menu.update'));
+const canDelete = computed(() => userStore.hasPermission('Menu.delete'));
 
 const loading = ref(false);
 const tree = ref<MenuNode[]>([]);
@@ -48,8 +44,40 @@ function splitPermissionCodes(code: string | undefined | null) {
     .filter(Boolean);
 }
 
+function toBaseAction(code: string) {
+  return code.includes('.') ? code.split('.').pop()! : code;
+}
+
+function getMenuModule(menu: MenuNode) {
+  const dotted = splitPermissionCodes(menu.permissionCode).find((code) =>
+    code.includes('.'),
+  );
+  if (dotted) return dotted.split('.')[0];
+
+  const segment = menu.path?.split('/').filter(Boolean)[0] ?? '';
+  const moduleMap: Record<string, string> = {
+    demo: 'Demo',
+    users: 'User',
+    roles: 'Role',
+    permissions: 'Permission',
+    menus: 'Menu',
+    'system-config': 'Menu',
+  };
+  if (moduleMap[segment]) return moduleMap[segment];
+  if (!segment) return '';
+
+  const normalized = segment.replace(/-([a-z])/g, (_, char: string) =>
+    char.toUpperCase(),
+  );
+  const singular = normalized.endsWith('s')
+    ? normalized.slice(0, -1)
+    : normalized;
+  return singular.charAt(0).toUpperCase() + singular.slice(1);
+}
+
 function getPermissionLabel(code: string) {
-  const matched = permissions.value.find((permission) => permission.code === code);
+  const action = toBaseAction(code);
+  const matched = permissions.value.find((permission) => permission.code === action);
   return matched?.name || getPermissionActionLabel(code) || code;
 }
 
@@ -90,6 +118,7 @@ async function openAssignPermission() {
   selectedPermissionCodes.value =
     selectedRows.value.length === 1
       ? splitPermissionCodes(selectedRows.value[0].permissionCode)
+          .map(toBaseAction)
       : [];
   assignVisible.value = true;
   await ensurePermissions();
@@ -130,11 +159,14 @@ async function handleDelete(row: MenuNode) {
 async function handleAssignPermission() {
   assigning.value = true;
   try {
-    const permissionCode = selectedPermissionCodes.value.join(',');
     await Promise.all(
-      selectedRows.value.map((row) =>
-        updateMenu(row.id, { permissionCode }),
-      ),
+      selectedRows.value.map((row) => {
+        const moduleName = getMenuModule(row);
+        const permissionCode = selectedPermissionCodes.value
+          .map((code) => (moduleName ? `${moduleName}.${toBaseAction(code)}` : code))
+          .join(',');
+        return updateMenu(row.id, { permissionCode });
+      }),
     );
     ElMessage.success('分配权限成功');
     assignVisible.value = false;
