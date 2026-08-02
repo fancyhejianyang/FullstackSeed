@@ -14,6 +14,14 @@
 - 说明：本次改动目的与验证情况
 -->
 
+### 2026-08-02 新增 AI 自动提交规则
+- 新增：无
+- 修改：
+  - `AGENTS.md`（Agent 工作规则新增“自动提交”：AI 完成代码或文档改动并通过约定验证后，默认仅暂存本次 AI 修改文件并创建 git commit；用户明确要求不提交时跳过）
+  - `CHANGELOG.md`（追加本次规则变更快照）
+- 删除：无
+- 说明：固化后续协作规则，避免自动提交混入工作区已有未提交改动。本次仅文档规则调整，未 build、未启动服务。
+
 ### 2026-06-26 AGENTS 文档以 articles demo 驱动 + 抽出组件契约文档
 - 新增：
   - `AGENTS-COMPONENTS.md`（通用组件与工具契约：PageContainer/ProTable/ProForm/ProDialog/MenuTree/请求封装/权限工具/user store 的 props/emits/插槽/用法一览）
