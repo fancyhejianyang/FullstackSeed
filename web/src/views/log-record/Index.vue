@@ -10,7 +10,9 @@ import {
   getLogModuleConfigs,
   getLogRecords,
   updateLogModuleConfigs,
+  type LogAction,
   type LogModuleConfigItem,
+  type LogModuleConfigPayload,
   type LogRecordItem,
   type QueryLogRecordParams,
 } from '@/api/logRecord';
@@ -21,7 +23,8 @@ const configVisible = ref(false);
 const configLoading = ref(false);
 const savingConfig = ref(false);
 const moduleConfigs = ref<LogModuleConfigItem[]>([]);
-const selectedModuleIds = ref<string[]>([]);
+const activeModulePanels = ref<string[]>([]);
+const selectedActionsMap = ref<Record<string, LogAction[]>>({});
 
 const moduleOptions = computed(() =>
   moduleConfigs.value.map((item) => ({
@@ -67,8 +70,11 @@ async function openConfig() {
   configLoading.value = true;
   try {
     await fetchModuleConfigs();
-    selectedModuleIds.value = moduleConfigs.value
-      .filter((item) => item.enabled)
+    selectedActionsMap.value = Object.fromEntries(
+      moduleConfigs.value.map((item) => [item.moduleId, item.enabledActions]),
+    );
+    activeModulePanels.value = moduleConfigs.value
+      .filter((item) => item.enabledActions.length > 0)
       .map((item) => item.moduleId);
   } finally {
     configLoading.value = false;
@@ -78,15 +84,48 @@ async function openConfig() {
 async function saveConfig() {
   savingConfig.value = true;
   try {
-    moduleConfigs.value = await updateLogModuleConfigs(selectedModuleIds.value);
-    selectedModuleIds.value = moduleConfigs.value
-      .filter((item) => item.enabled)
-      .map((item) => item.moduleId);
+    const configs: LogModuleConfigPayload[] = Object.entries(
+      selectedActionsMap.value,
+    ).map(([moduleId, actions]) => ({ moduleId, actions }));
+    moduleConfigs.value = await updateLogModuleConfigs(configs);
+    selectedActionsMap.value = Object.fromEntries(
+      moduleConfigs.value.map((item) => [item.moduleId, item.enabledActions]),
+    );
     configVisible.value = false;
     ElMessage.success('配置已保存');
     await tableRef.value?.refresh();
   } finally {
     savingConfig.value = false;
+  }
+}
+
+function getModuleActions(moduleId: string) {
+  return selectedActionsMap.value[moduleId] ?? [];
+}
+
+function setModuleActions(moduleId: string, actions: LogAction[]) {
+  selectedActionsMap.value = {
+    ...selectedActionsMap.value,
+    [moduleId]: actions,
+  };
+}
+
+function isModuleChecked(item: LogModuleConfigItem) {
+  return getModuleActions(item.moduleId).length === item.actions.length;
+}
+
+function isModuleIndeterminate(item: LogModuleConfigItem) {
+  const count = getModuleActions(item.moduleId).length;
+  return count > 0 && count < item.actions.length;
+}
+
+function handleModuleCheck(item: LogModuleConfigItem, checked: boolean) {
+  setModuleActions(
+    item.moduleId,
+    checked ? item.actions.map((api) => api.action) : [],
+  );
+  if (checked && !activeModulePanels.value.includes(item.moduleId)) {
+    activeModulePanels.value = [...activeModulePanels.value, item.moduleId];
   }
 }
 
@@ -121,28 +160,53 @@ onMounted(fetchModuleConfigs);
       @confirm="saveConfig"
     >
       <el-skeleton v-if="configLoading" :rows="5" animated />
-      <el-checkbox-group v-else v-model="selectedModuleIds">
-        <div class="log-record__config-grid">
-          <el-checkbox
-            v-for="item in moduleConfigs"
-            :key="item.moduleId"
-            :label="item.moduleId"
-            border
+      <el-collapse v-else v-model="activeModulePanels">
+        <el-collapse-item
+          v-for="item in moduleConfigs"
+          :key="item.moduleId"
+          :name="item.moduleId"
+        >
+          <template #title>
+            <div class="log-record__module-head" @click.stop>
+              <el-checkbox
+                :model-value="isModuleChecked(item)"
+                :indeterminate="isModuleIndeterminate(item)"
+                @change="(checked: boolean) => handleModuleCheck(item, checked)"
+              >
+                <span class="log-record__config-name">{{ item.moduleName }}</span>
+                <span class="log-record__config-meta">{{ item.tableName }}</span>
+              </el-checkbox>
+            </div>
+          </template>
+
+          <el-checkbox-group
+            :model-value="getModuleActions(item.moduleId)"
+            @update:model-value="(actions: LogAction[]) => setModuleActions(item.moduleId, actions)"
           >
-            <span class="log-record__config-name">{{ item.moduleName }}</span>
-            <span class="log-record__config-meta">{{ item.tableName }}</span>
-          </el-checkbox>
-        </div>
-      </el-checkbox-group>
+            <div class="log-record__api-list">
+              <el-checkbox
+                v-for="api in item.actions"
+                :key="api.action"
+                :label="api.action"
+                border
+              >
+                <span class="log-record__api-label">{{ api.label }}</span>
+                <el-tag size="small" effect="plain">{{ api.method }}</el-tag>
+                <span class="log-record__api-path">{{ api.path }}</span>
+              </el-checkbox>
+            </div>
+          </el-checkbox-group>
+        </el-collapse-item>
+      </el-collapse>
     </ProDialog>
   </PageContainer>
 </template>
 
 <style scoped>
-.log-record__config-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 12px;
+.log-record__module-head {
+  display: flex;
+  align-items: center;
+  width: 100%;
 }
 
 .log-record__config-name {
@@ -151,6 +215,25 @@ onMounted(fetchModuleConfigs);
 
 .log-record__config-meta {
   color: #909399;
+  font-size: 12px;
+}
+
+.log-record__api-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 0 6px 28px;
+}
+
+.log-record__api-label {
+  display: inline-block;
+  min-width: 72px;
+  font-weight: 500;
+}
+
+.log-record__api-path {
+  margin-left: 8px;
+  color: #606266;
   font-size: 12px;
 }
 </style>

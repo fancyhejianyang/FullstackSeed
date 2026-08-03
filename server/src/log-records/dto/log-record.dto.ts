@@ -2,10 +2,12 @@ import { Type } from 'class-transformer';
 import {
   ArrayUnique,
   IsArray,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
   Min,
+  ValidateNested,
 } from 'class-validator';
 
 export class QueryLogRecordDto {
@@ -34,9 +36,19 @@ export class QueryLogRecordDto {
   action?: string;
 }
 
-export class UpdateLogModuleConfigDto {
+export class LogModuleConfigDto {
+  @IsString()
+  moduleId: string;
+
   @IsArray()
   @ArrayUnique()
-  @IsString({ each: true })
-  moduleIds: string[];
+  @IsIn(['read', 'create', 'update', 'delete', 'batchDelete'], { each: true })
+  actions: string[];
+}
+
+export class UpdateLogModuleConfigDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => LogModuleConfigDto)
+  configs: LogModuleConfigDto[];
 }

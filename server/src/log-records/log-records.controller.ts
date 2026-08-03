@@ -31,6 +31,6 @@ export class LogRecordsController {
   @RequirePermissions('Menu.read')
   @ApiOperation({ summary: '保存日志统计模块配置' })
   updateModuleConfigs(@Body() dto: UpdateLogModuleConfigDto) {
-    return this.logRecordsService.updateModuleConfigs(dto.moduleIds);
+    return this.logRecordsService.updateModuleConfigs(dto.configs);
   }
 }

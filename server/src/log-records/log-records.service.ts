@@ -2,9 +2,22 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { MODULE_MODEL_MAP } from '../module-models/module-models.map';
-import { QueryLogRecordDto } from './dto/log-record.dto';
+import {
+  LogModuleConfigDto,
+  QueryLogRecordDto,
+} from './dto/log-record.dto';
 import { LogModuleConfig } from './entities/log-module-config.entity';
 import { LogRecord } from './entities/log-record.entity';
+
+type LogAction = 'read' | 'create' | 'update' | 'delete' | 'batchDelete';
+
+export interface LogModuleActionConfig {
+  action: LogAction;
+  label: string;
+  method: string;
+  path: string;
+  enabled: boolean;
+}
 
 export interface LogModuleConfigItem {
   moduleId: string;
@@ -12,6 +25,8 @@ export interface LogModuleConfigItem {
   modelName: string;
   tableName: string;
   enabled: boolean;
+  enabledActions: LogAction[];
+  actions: LogModuleActionConfig[];
 }
 
 interface LoggableRequest {
@@ -28,8 +43,6 @@ interface LoggableRequest {
   };
 }
 
-type LogAction = 'read' | 'create' | 'update' | 'delete' | 'batchDelete';
-
 const ACTION_LABEL_MAP: Record<LogAction, string> = {
   read: '查看',
   create: '新增',
@@ -37,6 +50,18 @@ const ACTION_LABEL_MAP: Record<LogAction, string> = {
   delete: '删除',
   batchDelete: '批量删除',
 };
+
+const LOG_ACTIONS: Array<{
+  action: LogAction;
+  method: string;
+  pathSuffix: string;
+}> = [
+  { action: 'read', method: 'GET', pathSuffix: '/:id' },
+  { action: 'create', method: 'POST', pathSuffix: '' },
+  { action: 'update', method: 'PATCH', pathSuffix: '/:id' },
+  { action: 'delete', method: 'DELETE', pathSuffix: '/:id' },
+  { action: 'batchDelete', method: 'POST', pathSuffix: '/batch-delete' },
+];
 
 @Injectable()
 export class LogRecordsService {
@@ -76,20 +101,36 @@ export class LogRecordsService {
   async findModuleConfigs(): Promise<LogModuleConfigItem[]> {
     const configs = await this.logModuleConfigRepository.find();
     const configMap = new Map(configs.map((item) => [item.moduleId, item]));
-    return Object.values(MODULE_MODEL_MAP).map((meta) => ({
-      moduleId: meta.moduleId,
-      moduleName: meta.moduleName,
-      modelName: meta.modelName,
-      tableName: meta.tableName,
-      enabled: !!configMap.get(meta.moduleId)?.enabled,
-    }));
+    return Object.values(MODULE_MODEL_MAP).map((meta) => {
+      const enabledActions = this.normalizeEnabledActions(
+        configMap.get(meta.moduleId),
+      );
+      return {
+        moduleId: meta.moduleId,
+        moduleName: meta.moduleName,
+        modelName: meta.modelName,
+        tableName: meta.tableName,
+        enabled: enabledActions.length > 0,
+        enabledActions,
+        actions: LOG_ACTIONS.map((item) => ({
+          action: item.action,
+          label: ACTION_LABEL_MAP[item.action],
+          method: item.method,
+          path: `${meta.routePath}${item.pathSuffix}`,
+          enabled: enabledActions.includes(item.action),
+        })),
+      };
+    });
   }
 
-  async updateModuleConfigs(moduleIds: string[]) {
-    const selected = new Set(
-      moduleIds.map((moduleId) => moduleId.trim().toLowerCase()),
+  async updateModuleConfigs(configs: LogModuleConfigDto[]) {
+    const configMap = new Map(
+      configs.map((config) => [
+        config.moduleId.trim().toLowerCase(),
+        this.normalizeActions(config.actions),
+      ]),
     );
-    const invalid = Array.from(selected).filter(
+    const invalid = Array.from(configMap.keys()).filter(
       (moduleId) => !MODULE_MODEL_MAP[moduleId],
     );
     if (invalid.length) {
@@ -97,7 +138,7 @@ export class LogRecordsService {
     }
 
     for (const meta of Object.values(MODULE_MODEL_MAP)) {
-      const enabled = selected.has(meta.moduleId);
+      const enabledActions = configMap.get(meta.moduleId) ?? [];
       const exist = await this.logModuleConfigRepository.findOne({
         where: { moduleId: meta.moduleId },
       });
@@ -106,7 +147,8 @@ export class LogRecordsService {
         moduleId: meta.moduleId,
         moduleName: meta.moduleName,
         modelName: meta.modelName,
-        enabled,
+        enabled: enabledActions.length > 0,
+        enabledActions,
       });
     }
 
@@ -120,7 +162,7 @@ export class LogRecordsService {
     const config = await this.logModuleConfigRepository.findOne({
       where: { moduleId: matched.meta.moduleId },
     });
-    if (!config?.enabled) return;
+    if (!this.isActionEnabled(config, matched.action)) return;
 
     await this.logRecordRepository.save(
       this.logRecordRepository.create({
@@ -216,5 +258,32 @@ export class LogRecordsService {
     const value = request.headers?.[key];
     if (Array.isArray(value)) return value.join('; ');
     return value;
+  }
+
+  private normalizeEnabledActions(config: LogModuleConfig | undefined) {
+    if (!config) return [];
+    return this.normalizeActions(
+      config.enabledActions?.length
+        ? config.enabledActions
+        : config.enabled
+          ? LOG_ACTIONS.map((item) => item.action)
+          : [],
+    );
+  }
+
+  private normalizeActions(actions: string[]): LogAction[] {
+    const validActions = new Set<LogAction>(
+      LOG_ACTIONS.map((item) => item.action),
+    );
+    return Array.from(new Set(actions)).filter((action): action is LogAction =>
+      validActions.has(action as LogAction),
+    );
+  }
+
+  private isActionEnabled(
+    config: LogModuleConfig | null,
+    action: LogAction,
+  ): boolean {
+    return this.normalizeEnabledActions(config ?? undefined).includes(action);
   }
 }

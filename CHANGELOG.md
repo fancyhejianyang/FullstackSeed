@@ -1,5 +1,18 @@
 # CHANGELOG
 
+### 2026-08-03 日志配置支持模块下 API 粒度
+- 新增：无
+- 修改：
+  - `server/src/log-records/entities/log-module-config.entity.ts`（新增 `enabledActions` 保存启用 API 动作）
+  - `server/src/log-records/dto/log-record.dto.ts`（日志配置保存入参改为模块与 actions 集合）
+  - `server/src/log-records/log-records.controller.ts`（保存接口对齐新入参）
+  - `server/src/log-records/log-records.service.ts`（配置返回模块下 API 列表，日志写入按动作判断）
+  - `web/src/api/logRecord.ts`（同步动作级配置类型与保存接口）
+  - `web/src/views/log-record/Index.vue`（配置弹窗改为竖向模块展开并勾选具体 API）
+  - `CHANGELOG.md`（追加本次功能快照）
+- 删除：无
+- 说明：日志统计配置从“只勾选模块”升级为“勾选模块下具体 API”，支持按查看/新增/编辑/删除/批量删除粒度决定是否纳入日志记录；兼容旧的模块启用配置，旧配置会默认启用该模块全部日志动作。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-03 补齐日志配置后的接口调用记录
 - 新增：
   - `server/src/log-records/log-records.interceptor.ts`（全局拦截成功响应后的业务接口调用并写入日志）

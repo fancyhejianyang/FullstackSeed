@@ -36,6 +36,23 @@ export interface LogModuleConfigItem {
   modelName: string;
   tableName: string;
   enabled: boolean;
+  enabledActions: LogAction[];
+  actions: LogModuleActionConfig[];
+}
+
+export type LogAction = 'read' | 'create' | 'update' | 'delete' | 'batchDelete';
+
+export interface LogModuleActionConfig {
+  action: LogAction;
+  label: string;
+  method: string;
+  path: string;
+  enabled: boolean;
+}
+
+export interface LogModuleConfigPayload {
+  moduleId: string;
+  actions: LogAction[];
 }
 
 export function getLogRecords(params: QueryLogRecordParams) {
@@ -48,9 +65,9 @@ export function getLogModuleConfigs() {
   );
 }
 
-export function updateLogModuleConfigs(moduleIds: string[]) {
+export function updateLogModuleConfigs(configs: LogModuleConfigPayload[]) {
   return request.put<unknown, LogModuleConfigItem[]>(
     '/log-records/module-configs',
-    { moduleIds },
+    { configs },
   );
 }
