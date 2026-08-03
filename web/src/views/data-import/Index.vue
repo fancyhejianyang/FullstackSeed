@@ -10,6 +10,7 @@ import {
   createDataImportConfig,
   downloadDataImportTemplate,
   getDataImportConfigs,
+  updateDataImportConfig,
   type DataImportConfigItem,
   type QueryDataImportConfigParams,
 } from '@/api/dataImport';
@@ -31,12 +32,18 @@ const tableRef = ref<{ refresh: () => Promise<void> }>();
 const configVisible = ref(false);
 const configLoading = ref(false);
 const savingConfig = ref(false);
+const editingConfig = ref<DataImportConfigItem | null>(null);
 const modules = ref<ModuleModelSummary[]>([]);
 const moduleFields = ref<ModuleModelFieldMeta[]>([]);
 const selectedModuleId = ref('');
 const selectedFieldProps = ref<string[]>([]);
 const uploadFiles = ref<UploadUserFile[]>([]);
 const templateFile = ref<File>();
+const existingTemplate = ref<{
+  id: number;
+  name: string;
+  size: number;
+}>();
 const fieldMappings = ref<ImportFieldMappingForm[]>([]);
 
 const moduleOptions = computed(() =>
@@ -67,8 +74,10 @@ const systemFieldOptions = computed(() =>
   })),
 );
 
+const hasTemplate = computed(() => !!templateFile.value || !!existingTemplate.value);
+
 const columns: ProTableColumn[] = [
-  { prop: 'moduleName', label: '模块', width: 140 },
+  { prop: 'moduleName', label: '模块', width: 140, slot: true },
   { prop: 'fieldLabels', label: '导入字段', minWidth: 260, slot: true },
   { prop: 'templateName', label: '模板文件', minWidth: 180, slot: true },
   { prop: 'templateSize', label: '文件大小', width: 120, slot: true },
@@ -101,17 +110,53 @@ async function fetchModules() {
 
 async function openConfig() {
   configVisible.value = true;
+  editingConfig.value = null;
   selectedModuleId.value = '';
   selectedFieldProps.value = [];
   moduleFields.value = [];
   uploadFiles.value = [];
   templateFile.value = undefined;
+  existingTemplate.value = undefined;
   fieldMappings.value = [];
   configLoading.value = true;
   try {
     if (!modules.value.length) {
       await fetchModules();
     }
+  } finally {
+    configLoading.value = false;
+  }
+}
+
+async function openEditConfig(row: DataImportConfigItem) {
+  configVisible.value = true;
+  editingConfig.value = row;
+  selectedModuleId.value = row.moduleId;
+  selectedFieldProps.value = [...row.fieldProps];
+  uploadFiles.value = [];
+  templateFile.value = undefined;
+  existingTemplate.value = {
+    id: row.id,
+    name: row.templateName,
+    size: row.templateSize,
+  };
+  configLoading.value = true;
+  try {
+    if (!modules.value.length) {
+      await fetchModules();
+    }
+    moduleFields.value = await getModuleModelFields(row.moduleId);
+    fieldMappings.value = row.fieldMappings?.length
+      ? row.fieldMappings.map((item) => ({
+          id: item.fieldProp,
+          templateField: item.templateField,
+          fieldProp: item.fieldProp,
+        }))
+      : row.fieldProps.map((fieldProp, index) => ({
+          id: fieldProp,
+          templateField: row.fieldLabels[index] ?? fieldProp,
+          fieldProp,
+        }));
   } finally {
     configLoading.value = false;
   }
@@ -134,6 +179,7 @@ function handleTemplateChange(file: UploadFile) {
 function handleTemplateRemove() {
   uploadFiles.value = [];
   templateFile.value = undefined;
+  existingTemplate.value = undefined;
   fieldMappings.value = [];
 }
 
@@ -152,7 +198,10 @@ function syncFieldMappings() {
 }
 
 function getSystemFieldLabel(fieldProp: string) {
-  return importableFields.value.find((field) => field.prop === fieldProp)?.label ?? fieldProp;
+  return (
+    importableFields.value.find((field) => field.prop === fieldProp)?.label ??
+    fieldProp
+  );
 }
 
 async function downloadTemplate(row: DataImportConfigItem) {
@@ -165,6 +214,14 @@ async function downloadTemplate(row: DataImportConfigItem) {
   URL.revokeObjectURL(url);
 }
 
+async function downloadExistingTemplate() {
+  if (!existingTemplate.value) return;
+  await downloadTemplate({
+    id: existingTemplate.value.id,
+    templateName: existingTemplate.value.name,
+  } as DataImportConfigItem);
+}
+
 async function saveConfig() {
   if (!selectedModuleId.value) {
     ElMessage.warning('请选择模块');
@@ -174,14 +231,14 @@ async function saveConfig() {
     ElMessage.warning('请选择需要导入的字段');
     return;
   }
-  if (!templateFile.value) {
+  if (!hasTemplate.value) {
     ElMessage.warning('请上传模板文件');
     return;
   }
 
   savingConfig.value = true;
   try {
-    await createDataImportConfig({
+    const payload = {
       moduleId: selectedModuleId.value,
       fieldProps: selectedFieldProps.value,
       fieldMappings: fieldMappings.value.map((item) => ({
@@ -189,7 +246,12 @@ async function saveConfig() {
         fieldProp: item.fieldProp,
       })),
       template: templateFile.value,
-    });
+    };
+    if (editingConfig.value) {
+      await updateDataImportConfig(editingConfig.value.id, payload);
+    } else {
+      await createDataImportConfig(payload);
+    }
     ElMessage.success('配置已保存');
     configVisible.value = false;
     await tableRef.value?.refresh();
@@ -252,6 +314,16 @@ onMounted(fetchModules);
         </el-select>
       </template>
 
+      <template #column-moduleName="{ row }">
+        <el-button
+          link
+          type="primary"
+          @click="openEditConfig(row as DataImportConfigItem)"
+        >
+          {{ (row as DataImportConfigItem).moduleName }}
+        </el-button>
+      </template>
+
       <template #column-fieldLabels="{ row }">
         <div class="data-import__field-tags">
           <el-tag
@@ -285,7 +357,7 @@ onMounted(fetchModules);
 
     <ProDialog
       v-model="configVisible"
-      title="数据导入配置"
+      :title="editingConfig ? '编辑数据导入配置' : '数据导入配置'"
       width="960px"
       body-max-height="72vh"
       confirm-text="保存配置"
@@ -354,7 +426,7 @@ onMounted(fetchModules);
         <section class="data-import__section">
           <div class="data-import__section-title">上传模板</div>
           <el-upload
-            v-if="!templateFile"
+            v-if="!hasTemplate"
             drag
             :auto-upload="false"
             :limit="1"
@@ -375,11 +447,24 @@ onMounted(fetchModules);
           </el-upload>
           <div v-else class="data-import__uploaded-file">
             <div>
-              <div class="data-import__uploaded-name">
-                {{ templateFile.name }}
+              <el-button
+                v-if="existingTemplate && !templateFile"
+                link
+                type="primary"
+                class="data-import__uploaded-name"
+                @click="downloadExistingTemplate"
+              >
+                {{ existingTemplate.name }}
+              </el-button>
+              <div v-else class="data-import__uploaded-name">
+                {{ templateFile?.name }}
               </div>
               <div class="data-import__uploaded-meta">
-                {{ formatFileSize(templateFile.size) }}
+                {{
+                  formatFileSize(
+                    templateFile?.size ?? existingTemplate?.size ?? 0,
+                  )
+                }}
               </div>
             </div>
             <el-button
@@ -392,7 +477,7 @@ onMounted(fetchModules);
           </div>
         </section>
 
-        <section v-if="templateFile" class="data-import__section">
+        <section v-if="hasTemplate" class="data-import__section">
           <div class="data-import__section-title">字段映射</div>
           <el-empty
             v-if="!fieldMappings.length"

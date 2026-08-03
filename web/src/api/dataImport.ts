@@ -38,7 +38,7 @@ export interface CreateDataImportConfigPayload {
   moduleId: string;
   fieldProps: string[];
   fieldMappings: Array<Pick<DataImportFieldMapping, 'templateField' | 'fieldProp'>>;
-  template: File;
+  template?: File;
 }
 
 export function getDataImportConfigs(params: QueryDataImportConfigParams) {
@@ -49,14 +49,19 @@ export function getDataImportConfigs(params: QueryDataImportConfigParams) {
 }
 
 export function createDataImportConfig(data: CreateDataImportConfigPayload) {
-  const formData = new FormData();
-  formData.append('moduleId', data.moduleId);
-  formData.append('fieldProps', JSON.stringify(data.fieldProps));
-  formData.append('fieldMappings', JSON.stringify(data.fieldMappings));
-  formData.append('template', data.template);
   return request.post<unknown, DataImportConfigItem>(
     '/data-import/configs',
-    formData,
+    buildDataImportConfigFormData(data),
+  );
+}
+
+export function updateDataImportConfig(
+  id: number,
+  data: CreateDataImportConfigPayload,
+) {
+  return request.patch<unknown, DataImportConfigItem>(
+    `/data-import/configs/${id}`,
+    buildDataImportConfigFormData(data),
   );
 }
 
@@ -64,4 +69,15 @@ export function downloadDataImportTemplate(id: number) {
   return request.get<unknown, Blob>(`/data-import/configs/${id}/template`, {
     responseType: 'blob',
   });
+}
+
+function buildDataImportConfigFormData(data: CreateDataImportConfigPayload) {
+  const formData = new FormData();
+  formData.append('moduleId', data.moduleId);
+  formData.append('fieldProps', JSON.stringify(data.fieldProps));
+  formData.append('fieldMappings', JSON.stringify(data.fieldMappings));
+  if (data.template) {
+    formData.append('template', data.template);
+  }
+  return formData;
 }

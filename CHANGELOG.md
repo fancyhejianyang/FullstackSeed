@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-08-03 数据导入列表支持模块编辑详情
+- 新增：无
+- 修改：
+  - `server/src/data-import/data-import.controller.ts`（新增数据导入配置更新接口）
+  - `server/src/data-import/data-import.service.ts`（支持编辑配置时保留或替换原模板文件）
+  - `web/src/api/dataImport.ts`（新增数据导入配置更新 API）
+  - `web/src/views/data-import/Index.vue`（模块列改为可点击打开编辑详情，弹窗内已有模板文件名支持下载）
+  - `CHANGELOG.md`（追加本次交互优化快照）
+- 删除：无
+- 说明：数据导入列表点击模块名可打开该配置详情并编辑模块字段映射；文件名列继续支持下载，编辑详情里的已有模板名也可下载。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-03 支持数据导入模板中文名称与下载
 - 新增：无
 - 修改：

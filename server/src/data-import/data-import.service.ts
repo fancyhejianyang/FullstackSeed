@@ -60,50 +60,36 @@ export class DataImportService {
     dto: CreateDataImportConfigDto,
     template: UploadedTemplateFile | undefined,
   ) {
-    if (!template) {
-      throw new BadRequestException('请上传模板文件');
-    }
-
-    const moduleId = dto.moduleId.trim().toLowerCase();
-    const meta = MODULE_MODEL_MAP[moduleId];
-    if (!meta) {
-      throw new BadRequestException('模块不存在');
-    }
-
-    const fieldProps = this.parseFieldProps(dto.fieldProps);
-    const importableFields = meta.fields.filter((field) => !field.readonly);
-    const fieldMap = new Map(importableFields.map((field) => [field.prop, field]));
-    const invalidFields = fieldProps.filter((prop) => !fieldMap.has(prop));
-    if (invalidFields.length) {
-      throw new BadRequestException(
-        `字段不存在或不可导入：${invalidFields.join(', ')}`,
-      );
-    }
-
-    const fieldLabels = fieldProps.map(
-      (prop) => fieldMap.get(prop)?.label ?? prop,
-    );
-    const fieldMappings = this.parseFieldMappings(
-      dto.fieldMappings,
-      fieldProps,
-      fieldMap,
-    );
-
     return this.dataImportConfigRepository.save(
-      this.dataImportConfigRepository.create({
-        moduleId: meta.moduleId,
-        moduleName: meta.moduleName,
-        modelName: meta.modelName,
-        tableName: meta.tableName,
-        fieldProps,
-        fieldLabels,
-        fieldMappings,
-        templateName: this.normalizeFileName(template.originalname),
-        templateSize: template.size,
-        templateMimeType: template.mimetype ?? '',
-        templateContent: template.buffer,
-      }),
+      this.dataImportConfigRepository.create(
+        this.buildConfigData(dto, template, true),
+      ),
     );
+  }
+
+  async updateConfig(
+    id: number,
+    dto: CreateDataImportConfigDto,
+    template: UploadedTemplateFile | undefined,
+  ) {
+    const exist = await this.dataImportConfigRepository.findOne({
+      where: { id },
+    });
+    if (!exist) {
+      throw new NotFoundException('模板配置不存在');
+    }
+
+    await this.dataImportConfigRepository.update(
+      id,
+      this.buildConfigData(dto, template, false),
+    );
+    const updated = await this.dataImportConfigRepository.findOne({
+      where: { id },
+    });
+    if (!updated) {
+      throw new NotFoundException('模板配置不存在');
+    }
+    return this.toListItem(updated);
   }
 
   async getTemplateFile(id: number) {
@@ -151,6 +137,60 @@ export class DataImportService {
       throw new BadRequestException('请至少选择一个导入字段');
     }
     return fieldProps;
+  }
+
+  private buildConfigData(
+    dto: CreateDataImportConfigDto,
+    template: UploadedTemplateFile | undefined,
+    requireTemplate: boolean,
+  ): Partial<DataImportConfig> {
+    if (!template && requireTemplate) {
+      throw new BadRequestException('请上传模板文件');
+    }
+
+    const moduleId = dto.moduleId.trim().toLowerCase();
+    const meta = MODULE_MODEL_MAP[moduleId];
+    if (!meta) {
+      throw new BadRequestException('模块不存在');
+    }
+
+    const fieldProps = this.parseFieldProps(dto.fieldProps);
+    const importableFields = meta.fields.filter((field) => !field.readonly);
+    const fieldMap = new Map(
+      importableFields.map((field) => [field.prop, field]),
+    );
+    const invalidFields = fieldProps.filter((prop) => !fieldMap.has(prop));
+    if (invalidFields.length) {
+      throw new BadRequestException(
+        `字段不存在或不可导入：${invalidFields.join(', ')}`,
+      );
+    }
+
+    const fieldLabels = fieldProps.map(
+      (prop) => fieldMap.get(prop)?.label ?? prop,
+    );
+    const data: Partial<DataImportConfig> = {
+      moduleId: meta.moduleId,
+      moduleName: meta.moduleName,
+      modelName: meta.modelName,
+      tableName: meta.tableName,
+      fieldProps,
+      fieldLabels,
+      fieldMappings: this.parseFieldMappings(
+        dto.fieldMappings,
+        fieldProps,
+        fieldMap,
+      ),
+    };
+
+    if (template) {
+      data.templateName = this.normalizeFileName(template.originalname);
+      data.templateSize = template.size;
+      data.templateMimeType = template.mimetype ?? '';
+      data.templateContent = template.buffer;
+    }
+
+    return data;
   }
 
   private parseFieldMappings(

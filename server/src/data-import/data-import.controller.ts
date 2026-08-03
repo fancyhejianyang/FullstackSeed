@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Query,
   Res,
@@ -45,6 +46,18 @@ export class DataImportController {
     @UploadedFile() template?: UploadedTemplateFile,
   ) {
     return this.dataImportService.createConfig(dto, template);
+  }
+
+  @Patch('configs/:id')
+  @RequirePermissions('Menu.read')
+  @UseInterceptors(FileInterceptor('template'))
+  @ApiOperation({ summary: '更新数据导入字段配置' })
+  updateConfig(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CreateDataImportConfigDto,
+    @UploadedFile() template?: UploadedTemplateFile,
+  ) {
+    return this.dataImportService.updateConfig(id, dto, template);
   }
 
   @Get('configs/:id/template')
