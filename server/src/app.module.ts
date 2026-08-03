@@ -15,6 +15,7 @@ import { PermissionsModule } from './permissions/permissions.module';
 import { MenusModule } from './menus/menus.module';
 import { ModuleModelsModule } from './module-models/module-models.module';
 import { LogRecordsModule } from './log-records/log-records.module';
+import { DataImportModule } from './data-import/data-import.module';
 
 @Module({
   imports: [
@@ -94,6 +95,7 @@ import { LogRecordsModule } from './log-records/log-records.module';
     MenusModule,
     ModuleModelsModule,
     LogRecordsModule,
+    DataImportModule,
     DemoModule,
   ],
   controllers: [AppController],

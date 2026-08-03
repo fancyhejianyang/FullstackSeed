@@ -1,5 +1,20 @@
 # CHANGELOG
 
+### 2026-08-03 数据导入支持列表与字段模板配置
+- 新增：
+  - `server/src/data-import/entities/data-import-config.entity.ts`（数据导入配置记录实体，保存模块、字段集合与模板文件元信息）
+  - `server/src/data-import/dto/data-import.dto.ts`（数据导入配置列表查询与保存 DTO）
+  - `server/src/data-import/data-import.service.ts`（数据导入配置分页查询、模块字段校验与模板元信息保存逻辑）
+  - `server/src/data-import/data-import.controller.ts`（新增 `GET /api/data-import/configs` 与 `POST /api/data-import/configs`）
+  - `server/src/data-import/data-import.module.ts`（数据导入模块）
+  - `web/src/api/dataImport.ts`（数据导入配置列表与上传保存接口封装）
+- 修改：
+  - `server/src/app.module.ts`（挂载 `DataImportModule`）
+  - `web/src/views/data-import/Index.vue`（改为列表页面，并新增大弹窗配置：选择模块、勾选导入字段、上传模板）
+  - `CHANGELOG.md`（追加本次功能快照）
+- 删除：无
+- 说明：数据导入页面从单按钮入口升级为配置记录列表；配置保存时使用模块模型字段元数据过滤只读字段，并通过 `FormData` 上传模板文件。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-03 修复日志记录模块筛选宽度
 - 新增：无
 - 修改：
