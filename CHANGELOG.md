@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-08-03 支持数据导入模板中文名称与下载
+- 新增：无
+- 修改：
+  - `server/src/data-import/entities/data-import-config.entity.ts`（新增模板文件二进制内容字段，列表默认不查询）
+  - `server/src/data-import/data-import.service.ts`（保存模板内容，修正中文文件名编码，提供模板文件读取）
+  - `server/src/data-import/data-import.controller.ts`（新增模板下载接口）
+  - `web/src/api/dataImport.ts`（新增模板下载 API）
+  - `web/src/views/data-import/Index.vue`（模板文件列改为可点击下载）
+  - `CHANGELOG.md`（追加本次功能快照）
+- 删除：无
+- 说明：修复中文模板文件名显示乱码问题，并支持从数据导入列表下载已上传模板。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-03 优化数据导入模板上传与字段映射确认
 - 新增：无
 - 修改：

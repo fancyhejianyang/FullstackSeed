@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Like, Repository } from 'typeorm';
 import { MODULE_MODEL_MAP } from '../module-models/module-models.map';
@@ -15,6 +19,7 @@ export interface UploadedTemplateFile {
   originalname: string;
   mimetype?: string;
   size: number;
+  buffer: Buffer;
 }
 
 @Injectable()
@@ -45,7 +50,10 @@ export class DataImportService {
       take: pageSize,
     });
 
-    return { list, total };
+    return {
+      list: list.map((item) => this.toListItem(item)),
+      total,
+    };
   }
 
   async createConfig(
@@ -90,11 +98,33 @@ export class DataImportService {
         fieldProps,
         fieldLabels,
         fieldMappings,
-        templateName: template.originalname,
+        templateName: this.normalizeFileName(template.originalname),
         templateSize: template.size,
         templateMimeType: template.mimetype ?? '',
+        templateContent: template.buffer,
       }),
     );
+  }
+
+  async getTemplateFile(id: number) {
+    const config = await this.dataImportConfigRepository
+      .createQueryBuilder('config')
+      .addSelect('config.templateContent')
+      .where('config.id = :id', { id })
+      .getOne();
+    if (!config) {
+      throw new NotFoundException('模板配置不存在');
+    }
+    if (!config.templateContent) {
+      throw new BadRequestException('模板文件内容不存在，请重新上传');
+    }
+    return {
+      filename: this.normalizeFileName(config.templateName),
+      mimeType:
+        config.templateMimeType ||
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      content: config.templateContent,
+    };
   }
 
   private parseFieldProps(value: string) {
@@ -174,5 +204,24 @@ export class DataImportService {
     }
 
     return mappings;
+  }
+
+  private toListItem(item: DataImportConfig) {
+    return {
+      ...item,
+      templateName: this.normalizeFileName(item.templateName),
+    };
+  }
+
+  private normalizeFileName(filename: string) {
+    try {
+      const decoded = Buffer.from(filename, 'latin1').toString('utf8');
+      if (!decoded.includes('�') && /[\u4e00-\u9fa5]/.test(decoded)) {
+        return decoded;
+      }
+    } catch {
+      return filename;
+    }
+    return filename;
   }
 }

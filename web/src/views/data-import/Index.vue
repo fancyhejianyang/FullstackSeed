@@ -8,6 +8,7 @@ import ProTable, { type ProTableColumn } from '@/components/ProTable.vue';
 import type { ProFormField } from '@/components/ProForm.vue';
 import {
   createDataImportConfig,
+  downloadDataImportTemplate,
   getDataImportConfigs,
   type DataImportConfigItem,
   type QueryDataImportConfigParams,
@@ -69,7 +70,7 @@ const systemFieldOptions = computed(() =>
 const columns: ProTableColumn[] = [
   { prop: 'moduleName', label: '模块', width: 140 },
   { prop: 'fieldLabels', label: '导入字段', minWidth: 260, slot: true },
-  { prop: 'templateName', label: '模板文件', minWidth: 180 },
+  { prop: 'templateName', label: '模板文件', minWidth: 180, slot: true },
   { prop: 'templateSize', label: '文件大小', width: 120, slot: true },
   { prop: 'createdAt', label: '上传时间', width: 180, slot: true },
 ];
@@ -152,6 +153,16 @@ function syncFieldMappings() {
 
 function getSystemFieldLabel(fieldProp: string) {
   return importableFields.value.find((field) => field.prop === fieldProp)?.label ?? fieldProp;
+}
+
+async function downloadTemplate(row: DataImportConfigItem) {
+  const blob = await downloadDataImportTemplate(row.id);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = row.templateName;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 async function saveConfig() {
@@ -251,6 +262,16 @@ onMounted(fetchModules);
             {{ field }}
           </el-tag>
         </div>
+      </template>
+
+      <template #column-templateName="{ row }">
+        <el-button
+          link
+          type="primary"
+          @click="downloadTemplate(row as DataImportConfigItem)"
+        >
+          {{ (row as DataImportConfigItem).templateName }}
+        </el-button>
       </template>
 
       <template #column-templateSize="{ row }">

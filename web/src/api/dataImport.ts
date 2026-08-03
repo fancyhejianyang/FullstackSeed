@@ -59,3 +59,9 @@ export function createDataImportConfig(data: CreateDataImportConfigPayload) {
     formData,
   );
 }
+
+export function downloadDataImportTemplate(id: number) {
+  return request.get<unknown, Blob>(`/data-import/configs/${id}/template`, {
+    responseType: 'blob',
+  });
+}

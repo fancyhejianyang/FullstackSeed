@@ -38,4 +38,7 @@ export class DataImportConfig extends BaseEntity {
 
   @Column({ length: 120, default: '' })
   templateMimeType: string;
+
+  @Column({ type: 'longblob', nullable: true, select: false })
+  templateContent: Buffer | null;
 }

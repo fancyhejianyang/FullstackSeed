@@ -2,13 +2,17 @@ import {
   Body,
   Controller,
   Get,
+  Param,
+  ParseIntPipe,
   Post,
   Query,
+  Res,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator';
 import {
   CreateDataImportConfigDto,
@@ -41,5 +45,21 @@ export class DataImportController {
     @UploadedFile() template?: UploadedTemplateFile,
   ) {
     return this.dataImportService.createConfig(dto, template);
+  }
+
+  @Get('configs/:id/template')
+  @RequirePermissions('Menu.read')
+  @ApiOperation({ summary: '下载数据导入模板文件' })
+  async downloadTemplate(
+    @Param('id', ParseIntPipe) id: number,
+    @Res() res: Response,
+  ) {
+    const template = await this.dataImportService.getTemplateFile(id);
+    res.setHeader('Content-Type', template.mimeType);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename*=UTF-8''${encodeURIComponent(template.filename)}`,
+    );
+    res.send(template.content);
   }
 }
