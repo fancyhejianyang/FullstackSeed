@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-08-03 补齐日志配置后的接口调用记录
+- 新增：
+  - `server/src/log-records/log-records.interceptor.ts`（全局拦截成功响应后的业务接口调用并写入日志）
+- 修改：
+  - `server/src/log-records/log-records.module.ts`（注册日志记录拦截器）
+  - `server/src/log-records/log-records.service.ts`（按模块配置判断是否写入日志，支持查看/新增/编辑/删除/批量删除动作识别）
+  - `CHANGELOG.md`（追加本次修复快照）
+- 删除：无
+- 说明：修复配置模块后调用对应模块查看/编辑接口仍查不到日志的问题；现在仅当模块已在日志配置中启用，且请求为详情查看或变更类操作时写入 `log_records`。已执行 `server` 的 `npm.cmd run build`，通过。
+
 ### 2026-08-03 日志记录接入日志表与模块统计配置
 - 新增：
   - `server/src/log-records/entities/log-record.entity.ts`（日志记录表实体）
