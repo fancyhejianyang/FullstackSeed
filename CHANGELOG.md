@@ -1,5 +1,21 @@
 # CHANGELOG
 
+### 2026-08-03 日志记录接入日志表与模块统计配置
+- 新增：
+  - `server/src/log-records/entities/log-record.entity.ts`（日志记录表实体）
+  - `server/src/log-records/entities/log-module-config.entity.ts`（纳入日志统计的模块配置实体）
+  - `server/src/log-records/dto/log-record.dto.ts`（日志查询与模块配置 DTO）
+  - `server/src/log-records/log-records.controller.ts`（日志记录列表与模块配置接口）
+  - `server/src/log-records/log-records.service.ts`（日志分页查询、配置读取与保存逻辑）
+  - `server/src/log-records/log-records.module.ts`（日志记录模块）
+  - `web/src/api/logRecord.ts`（日志记录列表与配置接口封装）
+- 修改：
+  - `server/src/app.module.ts`（挂载 `LogRecordsModule`）
+  - `web/src/views/log-record/Index.vue`（恢复日志表列表，并将“配置”改为模块勾选弹窗）
+  - `CHANGELOG.md`（追加本次功能快照）
+- 删除：无
+- 说明：日志记录页列表数据改为读取 `log_records` 表；配置弹窗保存被勾选模块到 `log_module_configs`，后续日志采集可按该配置判断是否纳入统计。已执行 `server` 的 `npm.cmd run build` 和 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-03 收敛日志记录和数据导入入口
 - 新增：无
 - 修改：

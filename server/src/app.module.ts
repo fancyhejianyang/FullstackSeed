@@ -14,6 +14,7 @@ import { RolesModule } from './roles/roles.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { MenusModule } from './menus/menus.module';
 import { ModuleModelsModule } from './module-models/module-models.module';
+import { LogRecordsModule } from './log-records/log-records.module';
 
 @Module({
   imports: [
@@ -92,6 +93,7 @@ import { ModuleModelsModule } from './module-models/module-models.module';
     PermissionsModule,
     MenusModule,
     ModuleModelsModule,
+    LogRecordsModule,
     DemoModule,
   ],
   controllers: [AppController],
