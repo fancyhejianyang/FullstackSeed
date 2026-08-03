@@ -48,6 +48,7 @@ const searchFields: ProFormField[] = [
     label: '模块',
     type: 'select',
     options: moduleOptions,
+    slot: true,
   },
   {
     prop: 'keyword',
@@ -147,6 +148,22 @@ onMounted(fetchModuleConfigs);
         </el-button>
       </template>
 
+      <template #search-moduleId="{ model }">
+        <el-select
+          v-model="model.moduleId"
+          class="log-record__module-filter"
+          clearable
+          placeholder="请选择模块"
+        >
+          <el-option
+            v-for="item in moduleOptions"
+            :key="item.value"
+            :label="item.label"
+            :value="item.value"
+          />
+        </el-select>
+      </template>
+
       <template #column-createdAt="{ row }">
         {{ formatDateTime((row as LogRecordItem).createdAt) }}
       </template>
@@ -207,6 +224,10 @@ onMounted(fetchModuleConfigs);
   display: flex;
   align-items: center;
   width: 100%;
+}
+
+.log-record__module-filter {
+  width: 180px;
 }
 
 .log-record__config-name {
