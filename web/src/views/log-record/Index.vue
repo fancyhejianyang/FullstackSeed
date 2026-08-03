@@ -188,7 +188,7 @@ onMounted(fetchModuleConfigs);
                 v-for="api in item.actions"
                 :key="api.action"
                 :label="api.action"
-                border
+                class="log-record__api-item"
               >
                 <span class="log-record__api-label">{{ api.label }}</span>
                 <el-tag size="small" effect="plain">{{ api.method }}</el-tag>
@@ -221,8 +221,12 @@ onMounted(fetchModuleConfigs);
 .log-record__api-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   padding: 4px 0 6px 28px;
+}
+
+.log-record__api-item {
+  height: 24px;
 }
 
 .log-record__api-label {
