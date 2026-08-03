@@ -6,7 +6,10 @@ import {
   CreateDataImportConfigDto,
   QueryDataImportConfigDto,
 } from './dto/data-import.dto';
-import { DataImportConfig } from './entities/data-import-config.entity';
+import {
+  DataImportConfig,
+  type DataImportFieldMapping,
+} from './entities/data-import-config.entity';
 
 export interface UploadedTemplateFile {
   originalname: string;
@@ -72,6 +75,11 @@ export class DataImportService {
     const fieldLabels = fieldProps.map(
       (prop) => fieldMap.get(prop)?.label ?? prop,
     );
+    const fieldMappings = this.parseFieldMappings(
+      dto.fieldMappings,
+      fieldProps,
+      fieldMap,
+    );
 
     return this.dataImportConfigRepository.save(
       this.dataImportConfigRepository.create({
@@ -81,6 +89,7 @@ export class DataImportService {
         tableName: meta.tableName,
         fieldProps,
         fieldLabels,
+        fieldMappings,
         templateName: template.originalname,
         templateSize: template.size,
         templateMimeType: template.mimetype ?? '',
@@ -112,5 +121,58 @@ export class DataImportService {
       throw new BadRequestException('请至少选择一个导入字段');
     }
     return fieldProps;
+  }
+
+  private parseFieldMappings(
+    value: string | undefined,
+    fieldProps: string[],
+    fieldMap: Map<string, { label: string }>,
+  ): DataImportFieldMapping[] {
+    if (!value) {
+      return fieldProps.map((fieldProp) => ({
+        templateField: fieldMap.get(fieldProp)?.label ?? fieldProp,
+        fieldProp,
+        fieldLabel: fieldMap.get(fieldProp)?.label ?? fieldProp,
+      }));
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      throw new BadRequestException('字段映射格式错误');
+    }
+
+    if (!Array.isArray(parsed)) {
+      throw new BadRequestException('字段映射必须是数组');
+    }
+
+    const selected = new Set(fieldProps);
+    const mappings = parsed
+      .map((item) => {
+        if (!item || typeof item !== 'object') return null;
+        const record = item as Record<string, unknown>;
+        const templateField =
+          typeof record.templateField === 'string'
+            ? record.templateField.trim()
+            : '';
+        const fieldProp =
+          typeof record.fieldProp === 'string' ? record.fieldProp.trim() : '';
+        if (!templateField || !fieldProp || !selected.has(fieldProp)) {
+          return null;
+        }
+        return {
+          templateField,
+          fieldProp,
+          fieldLabel: fieldMap.get(fieldProp)?.label ?? fieldProp,
+        };
+      })
+      .filter((item): item is DataImportFieldMapping => !!item);
+
+    if (!mappings.length) {
+      throw new BadRequestException('请至少配置一组字段映射');
+    }
+
+    return mappings;
   }
 }

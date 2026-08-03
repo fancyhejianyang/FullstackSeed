@@ -1,6 +1,12 @@
 import { Column, Entity } from 'typeorm';
 import { BaseEntity } from '../../common/entities/base.entity';
 
+export interface DataImportFieldMapping {
+  templateField: string;
+  fieldProp: string;
+  fieldLabel: string;
+}
+
 @Entity('data_import_configs')
 export class DataImportConfig extends BaseEntity {
   @Column({ length: 80 })
@@ -20,6 +26,9 @@ export class DataImportConfig extends BaseEntity {
 
   @Column({ type: 'simple-json' })
   fieldLabels: string[];
+
+  @Column({ type: 'simple-json', nullable: true })
+  fieldMappings: DataImportFieldMapping[] | null;
 
   @Column({ length: 255 })
   templateName: string;

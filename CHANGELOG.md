@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-08-03 优化数据导入模板上传与字段映射确认
+- 新增：无
+- 修改：
+  - `server/src/data-import/entities/data-import-config.entity.ts`（新增 `fieldMappings` 保存模板字段与系统字段映射）
+  - `server/src/data-import/dto/data-import.dto.ts`（配置保存入参支持字段映射 JSON）
+  - `server/src/data-import/data-import.service.ts`（保存数据导入配置时解析并校验字段映射）
+  - `web/src/api/dataImport.ts`（配置上传接口同步提交字段映射）
+  - `web/src/views/data-import/Index.vue`（上传模板后隐藏拖拽区，展示文件移除入口和可编辑字段映射表）
+  - `CHANGELOG.md`（追加本次交互优化快照）
+- 删除：无
+- 说明：模板文件选择后只展示已选文件，点击移除后恢复拖拽上传；上传后自动按已勾选导入字段生成“模板字段 → 系统字段”映射，支持保存前调整。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-03 数据导入支持列表与字段模板配置
 - 新增：
   - `server/src/data-import/entities/data-import-config.entity.ts`（数据导入配置记录实体，保存模块、字段集合与模板文件元信息）

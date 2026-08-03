@@ -8,11 +8,18 @@ export interface DataImportConfigItem {
   tableName: string;
   fieldProps: string[];
   fieldLabels: string[];
+  fieldMappings: DataImportFieldMapping[] | null;
   templateName: string;
   templateSize: number;
   templateMimeType: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface DataImportFieldMapping {
+  templateField: string;
+  fieldProp: string;
+  fieldLabel: string;
 }
 
 export interface DataImportConfigListResult {
@@ -30,6 +37,7 @@ export interface QueryDataImportConfigParams {
 export interface CreateDataImportConfigPayload {
   moduleId: string;
   fieldProps: string[];
+  fieldMappings: Array<Pick<DataImportFieldMapping, 'templateField' | 'fieldProp'>>;
   template: File;
 }
 
@@ -44,6 +52,7 @@ export function createDataImportConfig(data: CreateDataImportConfigPayload) {
   const formData = new FormData();
   formData.append('moduleId', data.moduleId);
   formData.append('fieldProps', JSON.stringify(data.fieldProps));
+  formData.append('fieldMappings', JSON.stringify(data.fieldMappings));
   formData.append('template', data.template);
   return request.post<unknown, DataImportConfigItem>(
     '/data-import/configs',

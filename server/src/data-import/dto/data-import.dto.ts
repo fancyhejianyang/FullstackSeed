@@ -29,4 +29,8 @@ export class CreateDataImportConfigDto {
 
   @IsString()
   fieldProps: string;
+
+  @IsString()
+  @IsOptional()
+  fieldMappings?: string;
 }

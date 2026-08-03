@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { ElMessage, type UploadFile, type UploadUserFile } from 'element-plus';
-import { Setting, UploadFilled } from '@element-plus/icons-vue';
+import { Close, Setting, UploadFilled } from '@element-plus/icons-vue';
 import PageContainer from '@/components/PageContainer.vue';
 import ProDialog from '@/components/ProDialog.vue';
 import ProTable, { type ProTableColumn } from '@/components/ProTable.vue';
@@ -20,6 +20,12 @@ import {
 } from '@/api/moduleModel';
 import { formatDateTime } from '@/utils/format';
 
+interface ImportFieldMappingForm {
+  id: string;
+  templateField: string;
+  fieldProp: string;
+}
+
 const tableRef = ref<{ refresh: () => Promise<void> }>();
 const configVisible = ref(false);
 const configLoading = ref(false);
@@ -30,6 +36,7 @@ const selectedModuleId = ref('');
 const selectedFieldProps = ref<string[]>([]);
 const uploadFiles = ref<UploadUserFile[]>([]);
 const templateFile = ref<File>();
+const fieldMappings = ref<ImportFieldMappingForm[]>([]);
 
 const moduleOptions = computed(() =>
   modules.value.map((item) => ({
@@ -44,6 +51,19 @@ const selectedModule = computed(() =>
 
 const importableFields = computed(() =>
   moduleFields.value.filter((field) => !field.readonly),
+);
+
+const selectedFieldMetas = computed(() =>
+  selectedFieldProps.value
+    .map((prop) => importableFields.value.find((field) => field.prop === prop))
+    .filter((field): field is ModuleModelFieldMeta => !!field),
+);
+
+const systemFieldOptions = computed(() =>
+  selectedFieldMetas.value.map((field) => ({
+    label: field.label,
+    value: field.prop,
+  })),
 );
 
 const columns: ProTableColumn[] = [
@@ -85,6 +105,7 @@ async function openConfig() {
   moduleFields.value = [];
   uploadFiles.value = [];
   templateFile.value = undefined;
+  fieldMappings.value = [];
   configLoading.value = true;
   try {
     if (!modules.value.length) {
@@ -98,6 +119,7 @@ async function openConfig() {
 async function handleModuleChange(moduleId: string) {
   selectedFieldProps.value = [];
   moduleFields.value = [];
+  fieldMappings.value = [];
   if (!moduleId) return;
   moduleFields.value = await getModuleModelFields(moduleId);
 }
@@ -105,11 +127,31 @@ async function handleModuleChange(moduleId: string) {
 function handleTemplateChange(file: UploadFile) {
   uploadFiles.value = [file];
   templateFile.value = file.raw as File | undefined;
+  syncFieldMappings();
 }
 
 function handleTemplateRemove() {
   uploadFiles.value = [];
   templateFile.value = undefined;
+  fieldMappings.value = [];
+}
+
+function syncFieldMappings() {
+  const existing = new Map(
+    fieldMappings.value.map((item) => [item.fieldProp, item]),
+  );
+  fieldMappings.value = selectedFieldMetas.value.map((field) => {
+    const current = existing.get(field.prop);
+    return {
+      id: field.prop,
+      templateField: current?.templateField || field.label,
+      fieldProp: field.prop,
+    };
+  });
+}
+
+function getSystemFieldLabel(fieldProp: string) {
+  return importableFields.value.find((field) => field.prop === fieldProp)?.label ?? fieldProp;
 }
 
 async function saveConfig() {
@@ -131,6 +173,10 @@ async function saveConfig() {
     await createDataImportConfig({
       moduleId: selectedModuleId.value,
       fieldProps: selectedFieldProps.value,
+      fieldMappings: fieldMappings.value.map((item) => ({
+        templateField: item.templateField,
+        fieldProp: item.fieldProp,
+      })),
       template: templateFile.value,
     });
     ElMessage.success('配置已保存');
@@ -259,7 +305,11 @@ onMounted(fetchModules);
             v-else-if="!importableFields.length"
             description="当前模块暂无可导入字段"
           />
-          <el-checkbox-group v-else v-model="selectedFieldProps">
+          <el-checkbox-group
+            v-else
+            v-model="selectedFieldProps"
+            @change="syncFieldMappings"
+          >
             <div class="data-import__field-list">
               <el-checkbox
                 v-for="field in importableFields"
@@ -283,6 +333,7 @@ onMounted(fetchModules);
         <section class="data-import__section">
           <div class="data-import__section-title">上传模板</div>
           <el-upload
+            v-if="!templateFile"
             drag
             :auto-upload="false"
             :limit="1"
@@ -301,6 +352,69 @@ onMounted(fetchModules);
               </div>
             </template>
           </el-upload>
+          <div v-else class="data-import__uploaded-file">
+            <div>
+              <div class="data-import__uploaded-name">
+                {{ templateFile.name }}
+              </div>
+              <div class="data-import__uploaded-meta">
+                {{ formatFileSize(templateFile.size) }}
+              </div>
+            </div>
+            <el-button
+              circle
+              text
+              :icon="Close"
+              aria-label="移除模板文件"
+              @click="handleTemplateRemove"
+            />
+          </div>
+        </section>
+
+        <section v-if="templateFile" class="data-import__section">
+          <div class="data-import__section-title">字段映射</div>
+          <el-empty
+            v-if="!fieldMappings.length"
+            description="请选择导入字段后确认映射关系"
+          />
+          <el-table v-else :data="fieldMappings" border>
+            <el-table-column label="模板字段" min-width="220">
+              <template #default="{ row }">
+                <el-input
+                  v-model="row.templateField"
+                  placeholder="模板中的字段名"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column label="系统字段" min-width="220">
+              <template #default="{ row }">
+                <el-select
+                  v-model="row.fieldProp"
+                  class="data-import__mapping-select"
+                  placeholder="请选择系统字段"
+                >
+                  <el-option
+                    v-for="field in systemFieldOptions"
+                    :key="field.value"
+                    :label="field.label"
+                    :value="field.value"
+                  />
+                </el-select>
+              </template>
+            </el-table-column>
+            <el-table-column label="字段标识" min-width="180">
+              <template #default="{ row }">
+                <span class="data-import__field-prop">
+                  {{ row.fieldProp }}
+                </span>
+              </template>
+            </el-table-column>
+            <el-table-column label="确认" width="120">
+              <template #default="{ row }">
+                {{ row.templateField }} → {{ getSystemFieldLabel(row.fieldProp) }}
+              </template>
+            </el-table-column>
+          </el-table>
         </section>
       </div>
     </ProDialog>
@@ -365,5 +479,32 @@ onMounted(fetchModules);
   margin-right: 8px;
   color: #909399;
   font-size: 12px;
+}
+
+.data-import__uploaded-file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 64px;
+  padding: 12px 16px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  background: #fafafa;
+}
+
+.data-import__uploaded-name {
+  color: #303133;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.data-import__uploaded-meta {
+  margin-top: 4px;
+  color: #909399;
+  font-size: 12px;
+}
+
+.data-import__mapping-select {
+  width: 100%;
 }
 </style>
