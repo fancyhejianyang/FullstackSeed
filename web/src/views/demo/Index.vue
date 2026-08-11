@@ -32,6 +32,7 @@ const columns: TableColumn[] = [
   { prop: 'status', label: '状态', width: 100, slot: true },
   { prop: 'category', label: '分类', width: 120, slot: true },
   { prop: 'contactPhone', label: '联系电话', width: 140 },
+  { prop: 'email', label: '邮箱', minWidth: 180 },
   { prop: 'quantity', label: '数量', width: 90 },
   { prop: 'unitPrice', label: '单价', width: 120, slot: true },
   { prop: 'budgetAmount', label: '预算金额', width: 120, slot: true },

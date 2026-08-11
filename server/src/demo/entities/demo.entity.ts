@@ -24,6 +24,9 @@ export class Demo extends BaseEntity {
   @Column({ length: 20, default: '' })
   contactPhone: string;
 
+  @Column({ length: 120, default: '' })
+  email: string;
+
   @Column({ type: 'int', default: 0 })
   quantity: number;
 

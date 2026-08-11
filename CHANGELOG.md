@@ -1,5 +1,23 @@
 # CHANGELOG
 
+### 2026-08-11 demo 新增邮箱字段与邮箱输入组件
+- 新增：
+  - `web/src/components/InputEmail.vue`（邮箱输入组件，内置邮箱格式校验，支持关闭或覆盖规则）
+- 修改：
+  - `web/src/components/inputRules.ts`（新增邮箱校验规则）
+  - `web/src/components/Component.d.ts`（注册 `InputEmail` 组件名称和 props 类型）
+  - `web/src/components/componentRegistry.ts`（注册 `InputEmail` 运行时映射）
+  - `server/src/demo/entities/demo.entity.ts`（新增邮箱字段）
+  - `server/src/demo/dto/demo.dto.ts`（新增邮箱字段校验）
+  - `server/src/module-models/module-models.map.ts`（同步 demo 模块邮箱字段元数据）
+  - `web/src/api/demo.ts`（同步 demo 类型与表单字段）
+  - `web/src/views/demo/Edit.vue`（邮箱字段实践 `InputEmail`）
+  - `web/src/views/demo/Index.vue` / `web/src/views/demo/View.vue`（列表与详情展示邮箱）
+  - `AGENTS-COMPONENTS.md`（补充 `InputEmail` 组件契约）
+  - `CHANGELOG.md`（追加本次 demo 字段与组件快照）
+- 删除：无
+- 说明：邮箱作为差异化输入类型独立封装，demo 页面继续优先实践封装组件；已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-11 新增单选与多选 Select 封装组件
 - 新增：
   - `web/src/components/Select.vue`（单选下拉，支持搜索防抖、虚拟滚动、键盘上下/Enter、缺失值 `#id` 回显）

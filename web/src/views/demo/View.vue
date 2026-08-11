@@ -91,6 +91,10 @@ watch(visible, async (val) => {
           {{ rowData?.contactPhone || '-' }}
         </el-descriptions-item>
 
+        <el-descriptions-item label="邮箱">
+          {{ rowData?.email || '-' }}
+        </el-descriptions-item>
+
         <el-descriptions-item label="数量">
           {{ rowData?.quantity ?? '-' }}
         </el-descriptions-item>

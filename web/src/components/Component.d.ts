@@ -1,12 +1,13 @@
 import type { InputAmountMode } from './InputAmount.vue';
+import type { InputValidator } from './inputRules';
 import type { InputMode } from './Input.vue';
 import type { InputNumberMode } from './InputNumber.vue';
-import type { InputValidator } from './inputRules';
 import type { SelectOption } from './Select.vue';
 
 export type ComponentName =
   | 'Input'
   | 'InputAmount'
+  | 'InputEmail'
   | 'InputNumber'
   | 'InputPhone'
   | 'Select'
@@ -52,6 +53,13 @@ export interface ComponentPropsMap {
     required?: boolean;
     rulesEnabled?: boolean;
     rules?: InputValidator<number | null>[];
+  };
+  InputEmail: {
+    placeholder?: string;
+    clearable?: boolean;
+    required?: boolean;
+    rulesEnabled?: boolean;
+    rules?: InputValidator<string | null>[];
   };
   InputPhone: {
     placeholder?: string;

@@ -1,5 +1,6 @@
 import InputAmount from './InputAmount.vue';
 import Input from './Input.vue';
+import InputEmail from './InputEmail.vue';
 import InputNumber from './InputNumber.vue';
 import InputPhone from './InputPhone.vue';
 import Select from './Select.vue';
@@ -9,6 +10,7 @@ import type { ComponentName } from './Component';
 export const FORM_COMPONENT_MAP = {
   Input,
   InputAmount,
+  InputEmail,
   InputNumber,
   InputPhone,
   Select,

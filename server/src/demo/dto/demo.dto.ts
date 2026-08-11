@@ -7,6 +7,7 @@ import {
   IsNumber,
   IsArray,
   IsBoolean,
+  IsEmail,
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -38,6 +39,10 @@ export class CreateDemoDto {
   @IsString()
   @IsOptional()
   contactPhone?: string;
+
+  @IsEmail()
+  @IsOptional()
+  email?: string;
 
   @Type(() => Number)
   @IsInt()

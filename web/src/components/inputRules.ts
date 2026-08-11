@@ -23,6 +23,13 @@ export function phoneRule(message = '请输入正确的手机号') {
   };
 }
 
+export function emailRule(message = '请输入正确的邮箱') {
+  return (value: string | null) => {
+    if (!value) return true;
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) || message;
+  };
+}
+
 export function numberRangeRule(
   min?: number,
   max?: number,

@@ -38,6 +38,7 @@ const form = reactive<DemoForm>({
   status: 'draft',
   category: '',
   contactPhone: '',
+  email: '',
   quantity: 0,
   unitPrice: 0,
   budgetAmount: 0,
@@ -85,6 +86,12 @@ const fields: FormField[] = [
     prop: 'contactPhone',
     label: '联系电话',
     component: 'InputPhone',
+    componentProps: { required: false },
+  },
+  {
+    prop: 'email',
+    label: '邮箱',
+    component: 'InputEmail',
     componentProps: { required: false },
   },
   {
@@ -138,6 +145,7 @@ function resetForm() {
   form.category = '';
   form.status = 'draft';
   form.contactPhone = '';
+  form.email = '';
   form.quantity = 0;
   form.unitPrice = 0;
   form.budgetAmount = 0;
@@ -156,6 +164,7 @@ function fillForm(data: Demo) {
   form.category = data.category ?? '';
   form.status = data.status ?? 'draft';
   form.contactPhone = data.contactPhone ?? '';
+  form.email = data.email ?? '';
   form.quantity = data.quantity ?? 0;
   form.unitPrice = data.unitPrice ?? 0;
   form.budgetAmount = data.budgetAmount ?? 0;

@@ -15,6 +15,7 @@ export interface Demo {
   category: DemoCategory;
   status: DemoStatus;
   contactPhone: string;
+  email: string;
   quantity: number;
   unitPrice: number;
   budgetAmount: number;
@@ -44,6 +45,7 @@ export interface DemoForm {
   category?: DemoCategory;
   status?: DemoStatus;
   contactPhone?: string;
+  email?: string;
   quantity?: number;
   unitPrice?: number;
   budgetAmount?: number;

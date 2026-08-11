@@ -353,6 +353,15 @@ export const MODULE_MODEL_MAP: Record<string, ModuleModelMeta> = {
         description: 'demo 页面使用 InputPhone',
       },
       {
+        prop: 'email',
+        label: '邮箱',
+        type: 'string',
+        required: false,
+        length: 120,
+        defaultValue: '',
+        description: 'demo 页面使用 InputEmail',
+      },
+      {
         prop: 'quantity',
         label: '数量',
         type: 'number',
