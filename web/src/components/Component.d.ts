@@ -1,7 +1,11 @@
 import type { InputMode } from './Input.vue';
+import type { InputNumberMode } from './InputNumber.vue';
+import type { InputValidator } from './inputRules';
 
 export type ComponentName =
-  | 'Input';
+  | 'Input'
+  | 'InputNumber'
+  | 'InputPhone';
 
 export interface ComponentPropsMap {
   Input: {
@@ -16,6 +20,26 @@ export interface ComponentPropsMap {
     maxlength?: number;
     prefixText?: string;
     suffixText?: string;
+  };
+  InputNumber: {
+    mode?: InputNumberMode;
+    placeholder?: string;
+    clearable?: boolean;
+    precision?: number;
+    min?: number;
+    max?: number;
+    required?: boolean;
+    rulesEnabled?: boolean;
+    rules?: InputValidator<number | null>[];
+    prefixText?: string;
+    suffixText?: string;
+  };
+  InputPhone: {
+    placeholder?: string;
+    clearable?: boolean;
+    required?: boolean;
+    rulesEnabled?: boolean;
+    rules?: InputValidator<string | null>[];
   };
 }
 

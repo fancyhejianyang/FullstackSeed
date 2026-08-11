@@ -1,5 +1,19 @@
 # CHANGELOG
 
+### 2026-08-11 拆分专用输入组件并内置可配置校验
+- 新增：
+  - `web/src/components/InputNumber.vue`（数值输入组件，支持 number/integer/money 模式与范围校验）
+  - `web/src/components/InputPhone.vue`（手机号输入组件，内置手机号格式校验）
+  - `web/src/components/inputRules.ts`（输入组件通用校验规则工具）
+- 修改：
+  - `web/src/components/Input.vue`（回归文本/多行/密码/搜索等文本类输入职责）
+  - `web/src/components/Component.d.ts`（补充 `InputNumber` / `InputPhone` 组件名称和 props 类型）
+  - `web/src/components/componentRegistry.ts`（注册专用输入组件运行时映射）
+  - `web/src/components/ProForm.vue`（限制默认 `inputMode` 为文本类模式，差异输入走组件名称）
+  - `CHANGELOG.md`（追加本次公共组件快照）
+- 删除：无
+- 说明：差异较大的输入类型拆分为独立组件；专用组件提供内置校验，并支持 `rulesEnabled` 关闭或 `rules` 覆盖。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
 ### 2026-08-11 新增项目 Input 组件与组件名称声明
 - 新增：
   - `web/src/components/Input.vue`（基于 Element Plus 的项目输入组件，支持 text/textarea/password/integer/number/money/search 模式）

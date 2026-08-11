@@ -15,7 +15,7 @@ export interface ProFormField {
   type?: 'input' | 'textarea' | 'select';
   component?: ComponentName;
   componentProps?: Record<string, unknown>;
-  inputMode?: InputMode;
+  inputMode?: Extract<InputMode, 'text' | 'password' | 'search'>;
   placeholder?: string;
   options?: { label: string; value: DicValue }[] | Ref<{ label: string; value: DicValue }[]>;
   rows?: number;
