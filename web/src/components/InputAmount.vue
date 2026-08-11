@@ -65,6 +65,12 @@ const canUsePercent = computed(
 const singleEditingValue = computed(() =>
   activeMode.value === 'percent' ? percentEditing.value : amountEditing.value,
 );
+const mainEditingValue = computed(() => singleEditingValue.value);
+const tailText = computed(() =>
+  activeMode.value === 'amount'
+    ? `占 ${formatPercentDisplay()}%`
+    : formatAmountDisplay(),
+);
 
 watch(
   () => props.mode,
@@ -214,6 +220,30 @@ function handleModeToggle() {
   emit('modeChange', activeMode.value);
 }
 
+function handleMainInput(value: string | number) {
+  if (activeMode.value === 'percent') {
+    handlePercentInput(value);
+    return;
+  }
+  handleAmountInput(value);
+}
+
+function handleMainChange(value: string | number) {
+  if (activeMode.value === 'percent') {
+    handlePercentChange(value);
+    return;
+  }
+  handleAmountChange(value);
+}
+
+function handleMainBlur(event: FocusEvent) {
+  if (activeMode.value === 'percent') {
+    handlePercentBlur(event);
+    return;
+  }
+  handleAmountBlur(event);
+}
+
 function handleSingleInput(value: string | number) {
   if (activeMode.value === 'percent') {
     handlePercentInput(value);
@@ -281,6 +311,24 @@ function trimNumber(value: number, precision: number) {
   return roundNumber(value, precision).toString();
 }
 
+function formatAmountDisplay() {
+  const amount = model.value ?? 0;
+  return `￥${roundNumber(amount, props.precision).toLocaleString('en-US', {
+    minimumFractionDigits: props.precision,
+    maximumFractionDigits: props.precision,
+  })}`;
+}
+
+function formatPercentDisplay() {
+  if (!canUsePercent.value || model.value === null || model.value === undefined) {
+    return roundNumber(0, props.percentPrecision).toFixed(props.percentPrecision);
+  }
+  return roundNumber(
+    (model.value / Number(props.totalAmount)) * 100,
+    props.percentPrecision,
+  ).toFixed(props.percentPrecision);
+}
+
 function getRules() {
   if (!props.rulesEnabled) return [];
   if (props.rules) return props.rules;
@@ -308,51 +356,37 @@ defineExpose({ validate });
     <div v-if="props.switchable" class="input-amount__group">
       <el-input
         v-bind="$attrs"
-        class="input-amount__input input-amount__input--amount"
-        :model-value="amountEditing"
-        :placeholder="props.placeholder || '请输入金额'"
+        class="input-amount__main"
+        :model-value="mainEditingValue"
+        :placeholder="
+          props.placeholder || (activeMode === 'percent' ? '请输入百分比' : '请输入金额')
+        "
         :clearable="props.clearable"
-        @update:model-value="handleAmountInput"
-        @change="handleAmountChange"
+        @update:model-value="handleMainInput"
+        @change="handleMainChange"
         @focus="emit('focus', $event)"
-        @blur="handleAmountBlur"
+        @blur="handleMainBlur"
         @clear="handleClear"
         @keyup.enter="emit('enter', model)"
       >
-        <template #prefix>
-          <span>¥</span>
+        <template v-if="activeMode === 'amount'" #prefix>
+          <span>￥</span>
         </template>
-      </el-input>
-
-      <el-button
-        class="input-amount__switch"
-        :class="{ 'is-active': activeMode === 'percent' }"
-        :disabled="!canUsePercent"
-        @click="handleModeToggle"
-      >
-        <el-icon><Sort /></el-icon>
-      </el-button>
-
-      <el-input
-        class="input-amount__input input-amount__input--percent"
-        :model-value="percentEditing"
-        placeholder="占比"
-        :clearable="props.clearable"
-        :disabled="!canUsePercent"
-        @update:model-value="handlePercentInput"
-        @change="handlePercentChange"
-        @focus="emit('focus', $event)"
-        @blur="handlePercentBlur"
-        @clear="handleClear"
-        @keyup.enter="emit('enter', model)"
-      >
-        <template #prefix>
-          <span>占</span>
-        </template>
-        <template #suffix>
+        <template v-else #suffix>
           <span>%</span>
         </template>
       </el-input>
+
+      <div class="input-amount__tail">
+        <el-button
+          class="input-amount__switch"
+          :disabled="!canUsePercent"
+          @click="handleModeToggle"
+        >
+          <el-icon><Sort /></el-icon>
+        </el-button>
+        <span class="input-amount__tail-text">{{ tailText }}</span>
+      </div>
     </div>
 
     <el-input
@@ -390,40 +424,54 @@ defineExpose({ validate });
   align-items: stretch;
 }
 
-.input-amount__input {
+.input-amount__main {
   flex: 1 1 0;
   min-width: 0;
 }
 
-.input-amount__switch {
-  position: relative;
-  z-index: 1;
-  flex: 0 0 38px;
-  width: 38px;
-  padding: 0;
-  border-radius: 0;
-  margin: 0 -1px;
-  color: #409eff;
+.input-amount__tail {
+  display: flex;
+  flex: 0 0 150px;
+  width: 150px;
+  min-width: 150px;
+  height: 32px;
+  margin-left: -1px;
+  overflow: hidden;
+  border: 1px solid #dcdfe6;
+  border-radius: 0 4px 4px 0;
+  background-color: #ffffff;
 }
 
-.input-amount__switch.is-active {
-  color: #ffffff;
-  background-color: #409eff;
-  border-color: #409eff;
+.input-amount__switch {
+  flex: 0 0 38px;
+  width: 38px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-right: 1px solid #dcdfe6;
+  border-radius: 0;
+  color: #409eff;
+  background-color: transparent;
+}
+
+.input-amount__tail-text {
+  flex: 1;
+  min-width: 0;
+  padding: 0 10px;
+  color: #303133;
+  font-size: 14px;
+  line-height: 30px;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .input-amount :deep(.el-input) {
   width: 100%;
 }
 
-.input-amount :deep(.input-amount__input--amount .el-input__wrapper) {
+.input-amount :deep(.input-amount__main .el-input__wrapper) {
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
-}
-
-.input-amount :deep(.input-amount__input--percent .el-input__wrapper) {
-  border-top-left-radius: 0;
-  border-bottom-left-radius: 0;
 }
 
 .input-amount__error {
