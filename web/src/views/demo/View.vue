@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import ProButton from '@/components/ProButton.vue';
 import ProDialog from '@/components/ProDialog.vue';
 import { formatDateTime } from '@/utils/format';
 import { getDemo, type Demo } from '@/api/demo';
@@ -129,14 +130,15 @@ watch(visible, async (val) => {
         </el-descriptions-item>
 
         <el-descriptions-item label="附件文件">
-          <el-button
+          <ProButton
             v-if="rowData?.attachmentUrl"
             link
             type="primary"
+            icon="Download"
             @click="downloadAttachment"
           >
             {{ rowData.attachmentName || '下载附件' }}
-          </el-button>
+          </ProButton>
           <span v-else>-</span>
         </el-descriptions-item>
 
@@ -155,7 +157,7 @@ watch(visible, async (val) => {
     </div>
 
     <template #footer>
-      <el-button @click="visible = false">关闭</el-button>
+      <ProButton @click="visible = false">关闭</ProButton>
     </template>
   </ProDialog>
 </template>

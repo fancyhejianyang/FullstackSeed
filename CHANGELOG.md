@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-08-11 demo 页面实践封装按钮组件
+- 新增：无
+- 修改：
+  - `web/src/views/demo/Index.vue`（工具栏新增/批量删除、附件下载按钮改用 `ProButton`）
+  - `web/src/views/demo/View.vue`（附件下载与关闭按钮改用 `ProButton`）
+  - `CHANGELOG.md`（追加本次 demo 组件实践快照）
+- 删除：无
+- 说明：demo 页面继续作为新增业务模块模板，优先实践项目封装组件；批量删除按钮关闭 `ProButton` 自带确认，继续交给 `ProTable` 原流程处理。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
 ### 2026-08-11 修正金额组件切换布局与联动行为
 - 新增：无
 - 修改：

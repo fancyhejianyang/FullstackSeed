@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 import PageContainer from '@/components/PageContainer.vue';
+import ProButton from '@/components/ProButton.vue';
 import ProTable, { type ProTableColumn } from '@/components/ProTable.vue';
 import type { ProFormField } from '@/components/ProForm.vue';
 import { formatDateTime } from '@/utils/format';
 import { getDemos, deleteDemo, batchDeleteDemos, type Demo } from '@/api/demo';
-import { useUserStore } from '@/stores/user';
 import { DicService } from '@/dic/service';
 import { DEMO_CATEGORY, DEMO_STATUS, DEMO_TAG } from '@/dic';
 import Edit from './Edit.vue';
@@ -17,9 +17,6 @@ const tableRef = ref<{
   search: () => Promise<void>;
   runBatchDelete: () => Promise<void>;
 }>();
-const userStore = useUserStore();
-const canCreate = computed(() => userStore.hasPermission('Demo.create'));
-const canBatchDelete = computed(() => userStore.hasPermission('Demo.batchDelete'));
 
 // 状态字典（用于列渲染）
 const statusDic = ref<{ label: string; value: string }[]>([]);
@@ -128,10 +125,14 @@ async function batchDeleteDemoRequest(payload: { ids: Array<string | number> }) 
       @edit="handleEdit"
     >
       <template #toolbar>
-        <el-button v-if="canCreate" type="primary" @click="openCreate">新增示例</el-button>
-        <el-button v-if="canBatchDelete" type="danger" @click="tableRef?.runBatchDelete()">
+        <ProButton perm="Demo.create" @click="openCreate">新增示例</ProButton>
+        <ProButton
+          perm="Demo.batchDelete"
+          :confirm="false"
+          @click="tableRef?.runBatchDelete()"
+        >
           批量删除
-        </el-button>
+        </ProButton>
       </template>
 
       <!-- 状态列 -->
@@ -170,14 +171,15 @@ async function batchDeleteDemoRequest(payload: { ids: Array<string | number> }) 
       </template>
 
       <template #column-attachmentName="{ row }">
-        <el-button
+        <ProButton
           v-if="row.attachmentUrl"
           link
           type="primary"
+          icon="Download"
           @click="downloadAttachment(row)"
         >
           {{ row.attachmentName || '下载附件' }}
-        </el-button>
+        </ProButton>
         <span v-else>-</span>
       </template>
 
