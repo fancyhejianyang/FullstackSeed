@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import {
   ElMessage,
   type FormRules,
@@ -18,6 +18,7 @@ import {
 } from '@/api/demo';
 import { DicService, type DicItem } from '@/dic/service';
 import { DEMO_CATEGORY, DEMO_STATUS, DEMO_TAG } from '@/dic';
+import type { SelectOption } from '@/components/Select.vue';
 
 const props = defineProps<{
   // 编辑对象；为 null 表示新增
@@ -57,11 +58,29 @@ DicService.init(DEMO_STATUS, statusDic);
 DicService.init(DEMO_TAG, tagDic);
 
 const demoTotalAmount = 10000;
+const toSelectOptions = (items: DicItem[]): SelectOption[] =>
+  items.map((item) => ({
+    value: String(item.value),
+    text: item.label,
+  }));
+const categoryOptions = computed(() => toSelectOptions(categoryDic.value));
+const statusOptions = computed(() => toSelectOptions(statusDic.value));
+const tagOptions = computed(() => toSelectOptions(tagDic.value));
 
 const fields: FormField[] = [
   { prop: 'title', label: '标题', type: 'input' },
-  { prop: 'category', label: '分类', type: 'select', options: categoryDic },
-  { prop: 'status', label: '状态', type: 'select', options: statusDic },
+  {
+    prop: 'category',
+    label: '分类',
+    component: 'Select',
+    componentProps: { options: categoryOptions, debounce: 250 },
+  },
+  {
+    prop: 'status',
+    label: '状态',
+    component: 'Select',
+    componentProps: { options: statusOptions, debounce: 250 },
+  },
   {
     prop: 'contactPhone',
     label: '联系电话',
@@ -92,7 +111,16 @@ const fields: FormField[] = [
     },
   },
   { prop: 'isFeatured', label: '推荐', slot: true },
-  { prop: 'tags', label: '标签', slot: true },
+  {
+    prop: 'tags',
+    label: '标签',
+    component: 'SelectMultiple',
+    componentProps: {
+      options: tagOptions,
+      debounce: 250,
+      maxTagCount: 2,
+    },
+  },
   { prop: 'imageUrl', label: '封面图片', slot: true },
   { prop: 'attachmentUrl', label: '附件文件', slot: true },
   { prop: 'content', label: '内容', type: 'textarea', rows: 4 },
@@ -227,18 +255,6 @@ function readFileAsDataUrl(file: UploadFile) {
       <Form ref="formRef" v-model="form" :fields="fields" :rules="rules">
         <template #field-isFeatured>
           <el-checkbox v-model="form.isFeatured">推荐到首页</el-checkbox>
-        </template>
-
-        <template #field-tags>
-          <el-checkbox-group v-model="form.tags">
-            <el-checkbox
-              v-for="item in tagDic"
-              :key="item.value"
-              :label="item.value"
-            >
-              {{ item.label }}
-            </el-checkbox>
-          </el-checkbox-group>
         </template>
 
         <template #field-imageUrl>

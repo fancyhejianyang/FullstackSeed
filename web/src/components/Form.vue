@@ -62,6 +62,13 @@ function getDynamicComponent(field: FormField) {
   return field.component ? getFormComponent(field.component) : null;
 }
 
+function getDynamicComponentProps(field: FormField) {
+  const componentProps = field.componentProps ?? {};
+  return Object.fromEntries(
+    Object.entries(componentProps).map(([key, value]) => [key, unref(value)]),
+  );
+}
+
 defineExpose({ validate, resetFields });
 </script>
 
@@ -85,7 +92,7 @@ defineExpose({ validate, resetFields });
         :is="getDynamicComponent(field)"
         v-else-if="field.component && field.component in FORM_COMPONENT_MAP"
         v-model="model[field.prop]"
-        v-bind="field.componentProps"
+        v-bind="getDynamicComponentProps(field)"
         :placeholder="field.placeholder"
       />
       <!-- 下拉 -->

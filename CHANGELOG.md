@@ -1,5 +1,19 @@
 # CHANGELOG
 
+### 2026-08-11 新增单选与多选 Select 封装组件
+- 新增：
+  - `web/src/components/Select.vue`（单选下拉，支持搜索防抖、虚拟滚动、键盘上下/Enter、缺失值 `#id` 回显）
+  - `web/src/components/SelectMultiple.vue`（多选下拉，绑定值为 `string[]`，支持搜索防抖、虚拟滚动、键盘选择、tag 折叠与缺失值回显）
+- 修改：
+  - `web/src/components/Component.d.ts`（注册 `Select` / `SelectMultiple` 组件名称和 props 类型）
+  - `web/src/components/componentRegistry.ts`（注册运行时组件映射）
+  - `web/src/components/Form.vue`（动态组件 props 支持 `ref/computed` 自动解包）
+  - `web/src/views/demo/Edit.vue`（分类/状态实践 `Select`，标签实践 `SelectMultiple`）
+  - `AGENTS-COMPONENTS.md`（补充 Select 组件契约）
+  - `CHANGELOG.md`（追加本次组件封装快照）
+- 删除：无
+- 说明：Select 组件不内置 API 查询，统一使用 `[{ value: string, text: string }]` 数据格式；多选严格按字符串数组绑定。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
 ### 2026-08-11 封装组件去除 Pro 前缀
 - 新增：
   - `web/src/components/Button.vue`（原 `ProButton.vue`）

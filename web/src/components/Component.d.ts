@@ -2,12 +2,15 @@ import type { InputAmountMode } from './InputAmount.vue';
 import type { InputMode } from './Input.vue';
 import type { InputNumberMode } from './InputNumber.vue';
 import type { InputValidator } from './inputRules';
+import type { SelectOption } from './Select.vue';
 
 export type ComponentName =
   | 'Input'
   | 'InputAmount'
   | 'InputNumber'
-  | 'InputPhone';
+  | 'InputPhone'
+  | 'Select'
+  | 'SelectMultiple';
 
 export interface ComponentPropsMap {
   Input: {
@@ -56,6 +59,31 @@ export interface ComponentPropsMap {
     required?: boolean;
     rulesEnabled?: boolean;
     rules?: InputValidator<string | null>[];
+  };
+  Select: {
+    options?: SelectOption[];
+    placeholder?: string;
+    disabled?: boolean;
+    clearable?: boolean;
+    filterable?: boolean;
+    debounce?: number;
+    virtual?: boolean;
+    itemHeight?: number;
+    visibleCount?: number;
+    notFoundText?: string;
+  };
+  SelectMultiple: {
+    options?: SelectOption[];
+    placeholder?: string;
+    disabled?: boolean;
+    clearable?: boolean;
+    filterable?: boolean;
+    debounce?: number;
+    virtual?: boolean;
+    itemHeight?: number;
+    visibleCount?: number;
+    maxTagCount?: number;
+    notFoundText?: string;
   };
 }
 

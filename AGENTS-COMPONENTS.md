@@ -13,6 +13,8 @@
 | `Form` | 配置驱动表单 + 插槽兜底 | 编辑弹窗 / 搜索栏内部使用 |
 | `Dialog` | 弹窗外壳（预设宽度/滚动/确定取消） | `Edit.vue` / `View.vue` 都用它包一层 |
 | `Button` | 按钮二次封装（权限码驱动 + 自动配色 + 无权限隐藏） | 业务页自定义操作按钮统一用它，禁止裸写 `el-button` + 硬编码 `type` |
+| `Select` | 单选下拉（搜索防抖 + 虚拟滚动 + 键盘选择） | 表单单选字段，数据格式 `[{ value, text }]` |
+| `SelectMultiple` | 多选下拉（字符串数组 + tag 折叠 + 搜索防抖 + 虚拟滚动） | 表单多选字段，`v-model` 固定为 `string[]` |
 | `MenuTree` | 递归渲染菜单树 | `MainLayout` 侧边栏用 |
 
 ## 工具速览（`web/src/utils/`）
@@ -124,6 +126,50 @@
 ### `FormField.type`
 
 - `input` / `textarea` / `select`（其它类型请用 `slot: true` + `#field-<prop>` 插槽自定义）
+- 推荐通过 `component: 'Select' | 'SelectMultiple'` 使用项目封装下拉，动态组件 props 支持 `ref/computed` 自动解包
+
+---
+
+## Select / SelectMultiple
+
+**契约**：下拉组件不内置接口查询，只接收 `options: { value: string; text: string }[]`。业务字段建议使用稳定编码，不建议直接用数字 ID；组件会把传入值统一按字符串处理。
+
+### 共同能力
+
+- 搜索：内置防抖，默认 `250ms`
+- 大数据：默认开启虚拟滚动，`itemHeight` / `visibleCount` 可调
+- 键盘：支持上下选择，`Enter` 确认，`Esc` 关闭
+- 回显：`options` 变化时只做一次全量 `Map` 映射；搜索和回显都基于该映射处理
+- 缺失值：如果绑定值在 `options` 中找不到，回显为 `#<value>`
+
+### Select
+
+- v-model：`string | null`
+- 常用 props：`options` / `placeholder` / `clearable` / `filterable` / `debounce` / `virtual`
+
+```ts
+{
+  prop: 'category',
+  label: '分类',
+  component: 'Select',
+  componentProps: { options: categoryOptions },
+}
+```
+
+### SelectMultiple
+
+- v-model：`string[]`
+- 常用 props：`options` / `maxTagCount` / `placeholder` / `clearable` / `filterable` / `debounce` / `virtual`
+- tag 超过 `maxTagCount` 后显示「显示更多 +N」，点击后换行展开，再点「收起」
+
+```ts
+{
+  prop: 'tags',
+  label: '标签',
+  component: 'SelectMultiple',
+  componentProps: { options: tagOptions, maxTagCount: 2 },
+}
+```
 
 ---
 
