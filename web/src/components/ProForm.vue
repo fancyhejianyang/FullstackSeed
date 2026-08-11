@@ -1,12 +1,21 @@
 <script setup lang="ts">
 import { ref, computed, unref, type Ref } from 'vue';
 import type { FormInstance, FormRules } from 'element-plus';
+import Input, { type InputMode } from './Input.vue';
+import {
+  FORM_COMPONENT_MAP,
+  getFormComponent,
+} from './componentRegistry';
+import type { ComponentName } from './Component';
 type DicValue = string | number | boolean | null;
 
 export interface ProFormField {
   prop: string;
   label: string;
   type?: 'input' | 'textarea' | 'select';
+  component?: ComponentName;
+  componentProps?: Record<string, unknown>;
+  inputMode?: InputMode;
   placeholder?: string;
   options?: { label: string; value: DicValue }[] | Ref<{ label: string; value: DicValue }[]>;
   rows?: number;
@@ -49,6 +58,10 @@ function resetFields() {
   formRef.value?.resetFields();
 }
 
+function getDynamicComponent(field: ProFormField) {
+  return field.component ? getFormComponent(field.component) : null;
+}
+
 defineExpose({ validate, resetFields });
 </script>
 
@@ -68,6 +81,13 @@ defineExpose({ validate, resetFields });
     >
       <!-- 具名插槽兜底：#field-[prop] -->
       <slot v-if="field.slot" :name="`field-${field.prop}`" :model="model" />
+      <component
+        :is="getDynamicComponent(field)"
+        v-else-if="field.component && field.component in FORM_COMPONENT_MAP"
+        v-model="model[field.prop]"
+        v-bind="field.componentProps"
+        :placeholder="field.placeholder"
+      />
       <!-- 下拉 -->
       <el-select
         v-else-if="field.type === 'select'"
@@ -83,20 +103,21 @@ defineExpose({ validate, resetFields });
         />
       </el-select>
       <!-- 多行文本 -->
-      <el-input
+      <Input
         v-else-if="field.type === 'textarea'"
         v-model="model[field.prop]"
-        type="textarea"
+        mode="textarea"
         :rows="field.rows || 4"
         :placeholder="field.placeholder || `请输入${field.label}`"
       />
       <!-- 默认单行输入 -->
-      <el-input
+      <Input
         v-else
         v-model="model[field.prop]"
+        :mode="field.inputMode || 'text'"
         :placeholder="field.placeholder || `请输入${field.label}`"
         clearable
-        @keyup.enter="$emit('enter')"
+        @enter="$emit('enter')"
       />
     </el-form-item>
     <!-- 额外操作区（如搜索栏的查询/重置按钮） -->

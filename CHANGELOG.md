@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-08-11 新增项目 Input 组件与组件名称声明
+- 新增：
+  - `web/src/components/Input.vue`（基于 Element Plus 的项目输入组件，支持 text/textarea/password/integer/number/money/search 模式）
+  - `web/src/components/Component.d.ts`（声明项目封装组件名称与组件 props 类型映射）
+  - `web/src/components/componentRegistry.ts`（提供表单组件名称到运行时组件的映射）
+- 修改：
+  - `web/src/components/ProForm.vue`（默认输入和多行文本接入项目 `Input`，并预留按组件名称动态渲染能力）
+  - `CHANGELOG.md`（追加本次公共组件快照）
+- 删除：无
+- 说明：为后续表单 schema 根据组件名称匹配封装组件做基础设施准备。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
 ### 2026-08-11 扩展示例模块字段类型
 - 新增：无
 - 修改：
