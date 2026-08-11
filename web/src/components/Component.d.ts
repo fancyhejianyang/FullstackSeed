@@ -1,9 +1,11 @@
+import type { InputAmountMode } from './InputAmount.vue';
 import type { InputMode } from './Input.vue';
 import type { InputNumberMode } from './InputNumber.vue';
 import type { InputValidator } from './inputRules';
 
 export type ComponentName =
   | 'Input'
+  | 'InputAmount'
   | 'InputNumber'
   | 'InputPhone';
 
@@ -33,6 +35,20 @@ export interface ComponentPropsMap {
     rules?: InputValidator<number | null>[];
     prefixText?: string;
     suffixText?: string;
+  };
+  InputAmount: {
+    mode?: InputAmountMode;
+    switchable?: boolean;
+    totalAmount?: number | null;
+    placeholder?: string;
+    clearable?: boolean;
+    precision?: number;
+    percentPrecision?: number;
+    min?: number;
+    max?: number;
+    required?: boolean;
+    rulesEnabled?: boolean;
+    rules?: InputValidator<number | null>[];
   };
   InputPhone: {
     placeholder?: string;

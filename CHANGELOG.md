@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-08-11 新增金额与百分比切换输入组件
+- 新增：
+  - `web/src/components/InputAmount.vue`（金额输入组件，支持金额/百分比模式切换，并按总金额换算实际金额）
+- 修改：
+  - `web/src/components/Component.d.ts`（注册 `InputAmount` 组件名称和 props 类型）
+  - `web/src/components/componentRegistry.ts`（注册 `InputAmount` 运行时组件映射）
+  - `CHANGELOG.md`（追加本次公共组件快照）
+- 删除：无
+- 说明：`InputAmount` 的 `v-model` 始终保存金额值；百分比模式依赖 `totalAmount` 换算，支持内置校验关闭或通过 `rules` 覆盖。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
 ### 2026-08-11 拆分专用输入组件并内置可配置校验
 - 新增：
   - `web/src/components/InputNumber.vue`（数值输入组件，支持 number/integer/money 模式与范围校验）
