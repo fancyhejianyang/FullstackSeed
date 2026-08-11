@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-08-11 优化封装输入组件宽度与金额占比输入
+- 新增：无
+- 修改：
+  - `web/src/components/Input.vue`（默认输入组件宽度撑满父容器）
+  - `web/src/components/InputNumber.vue`（数值输入组件宽度撑满父容器）
+  - `web/src/components/InputPhone.vue`（手机号输入组件宽度撑满父容器）
+  - `web/src/components/InputAmount.vue`（金额组件改为金额/占比左右联动输入，中间按钮切换输入侧）
+  - `CHANGELOG.md`（追加本次组件交互优化快照）
+- 删除：无
+- 说明：demo 页面引用这些组件后会自动撑满 ProForm 分配的宽度；`InputAmount` 的 `v-model` 仍保存金额值，右侧占比按 `totalAmount` 联动换算。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
 ### 2026-08-11 在 demo 页面实践专用输入组件
 - 新增：无
 - 修改：

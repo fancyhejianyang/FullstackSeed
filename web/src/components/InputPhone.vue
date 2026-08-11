@@ -100,6 +100,11 @@ defineExpose({ validate });
 </template>
 
 <style scoped>
+.input-phone,
+.input-phone :deep(.el-input) {
+  width: 100%;
+}
+
 .input-phone__error {
   margin-top: 4px;
   color: #f56c6c;

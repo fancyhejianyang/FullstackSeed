@@ -159,6 +159,11 @@ defineExpose({ validate });
 </template>
 
 <style scoped>
+.input-number,
+.input-number :deep(.el-input) {
+  width: 100%;
+}
+
 .input-number__error {
   margin-top: 4px;
   color: #f56c6c;

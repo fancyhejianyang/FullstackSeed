@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { Sort } from '@element-plus/icons-vue';
 import {
   numberRangeRule,
   requiredRule,
@@ -41,8 +42,10 @@ const props = withDefaults(
 
 const model = defineModel<number | null>({ default: null });
 const activeMode = ref<InputAmountMode>(props.mode);
-const editingValue = ref('');
+const amountEditing = ref('');
+const percentEditing = ref('');
 const error = ref('');
+let editingSource: InputAmountMode | null = null;
 
 const emit = defineEmits<{
   input: [value: number | null];
@@ -59,87 +62,180 @@ const suffixText = computed(() => (activeMode.value === 'percent' ? '%' : '元')
 const canUsePercent = computed(
   () => typeof props.totalAmount === 'number' && props.totalAmount > 0,
 );
+const singleEditingValue = computed(() =>
+  activeMode.value === 'percent' ? percentEditing.value : amountEditing.value,
+);
 
 watch(
   () => props.mode,
   (mode) => {
     activeMode.value = mode;
-    syncEditingValue();
+    syncEditingValues();
   },
 );
 
 watch(
   () => model.value,
-  () => syncEditingValue(),
+  () => {
+    if (editingSource === 'amount') {
+      syncPercentValue();
+    } else if (editingSource === 'percent') {
+      syncAmountValue();
+    } else {
+      syncEditingValues();
+    }
+    editingSource = null;
+  },
 );
 
 watch(
   () => props.totalAmount,
   () => {
-    if (activeMode.value === 'percent') syncEditingValue();
+    syncPercentValue();
   },
 );
 
-syncEditingValue();
+syncEditingValues();
 
-function syncEditingValue() {
-  if (model.value === null || model.value === undefined) {
-    editingValue.value = '';
-    return;
-  }
-  if (activeMode.value === 'percent') {
-    editingValue.value = canUsePercent.value
-      ? trimNumber((model.value / Number(props.totalAmount)) * 100, props.percentPrecision)
-      : '';
-    return;
-  }
-  editingValue.value = trimNumber(model.value, props.precision);
+function syncEditingValues() {
+  syncAmountValue();
+  syncPercentValue();
 }
 
-function handleInput(value: string | number) {
+function syncAmountValue() {
+  if (model.value === null || model.value === undefined) {
+    amountEditing.value = '';
+    return;
+  }
+  amountEditing.value = trimNumber(model.value, props.precision);
+}
+
+function syncPercentValue() {
+  if (
+    model.value === null ||
+    model.value === undefined ||
+    !canUsePercent.value
+  ) {
+    percentEditing.value = '';
+    return;
+  }
+  percentEditing.value = trimNumber(
+    (model.value / Number(props.totalAmount)) * 100,
+    props.percentPrecision,
+  );
+}
+
+function handleAmountInput(value: string | number) {
+  activeMode.value = 'amount';
   const normalized = normalizeDecimal(
     String(value),
-    activeMode.value === 'percent' ? props.percentPrecision : props.precision,
+    props.precision,
   );
-  editingValue.value = normalized;
+  amountEditing.value = normalized;
+  editingSource = 'amount';
   model.value = toAmountValue(normalized, false);
+  syncPercentValue();
   emit('input', model.value);
 }
 
-function handleChange(value: string | number) {
+function handleAmountChange(value: string | number) {
+  activeMode.value = 'amount';
   const normalized = normalizeDecimal(
     String(value),
-    activeMode.value === 'percent' ? props.percentPrecision : props.precision,
+    props.precision,
   );
+  editingSource = null;
   model.value = toAmountValue(normalized, true);
-  syncEditingValue();
+  syncEditingValues();
   validate();
   emit('change', model.value);
 }
 
-function handleBlur(event: FocusEvent) {
-  model.value = toAmountValue(editingValue.value, true);
-  syncEditingValue();
+function handleAmountBlur(event: FocusEvent) {
+  activeMode.value = 'amount';
+  editingSource = null;
+  model.value = toAmountValue(amountEditing.value, true);
+  syncEditingValues();
+  validate();
+  emit('blur', event);
+}
+
+function handlePercentInput(value: string | number) {
+  if (!canUsePercent.value) {
+    error.value = '请先提供总金额';
+    return;
+  }
+  activeMode.value = 'percent';
+  const normalized = normalizeDecimal(String(value), props.percentPrecision);
+  percentEditing.value = normalized;
+  editingSource = 'percent';
+  model.value = toPercentAmountValue(normalized, false);
+  syncAmountValue();
+  emit('input', model.value);
+}
+
+function handlePercentChange(value: string | number) {
+  if (!canUsePercent.value) {
+    error.value = '请先提供总金额';
+    return;
+  }
+  activeMode.value = 'percent';
+  const normalized = normalizeDecimal(String(value), props.percentPrecision);
+  editingSource = null;
+  model.value = toPercentAmountValue(normalized, true);
+  syncEditingValues();
+  validate();
+  emit('change', model.value);
+}
+
+function handlePercentBlur(event: FocusEvent) {
+  activeMode.value = 'percent';
+  editingSource = null;
+  model.value = toPercentAmountValue(percentEditing.value, true);
+  syncEditingValues();
   validate();
   emit('blur', event);
 }
 
 function handleClear() {
-  editingValue.value = '';
+  amountEditing.value = '';
+  percentEditing.value = '';
   model.value = null;
   error.value = '';
   emit('clear');
 }
 
-function handleModeChange(mode: InputAmountMode) {
-  if (mode === 'percent' && !canUsePercent.value) {
-    activeMode.value = 'amount';
+function handleModeToggle() {
+  if (!canUsePercent.value) {
     error.value = '请先提供总金额';
     return;
   }
-  activeMode.value = mode;
-  syncEditingValue();
-  emit('modeChange', mode);
+  activeMode.value = activeMode.value === 'amount' ? 'percent' : 'amount';
+  emit('modeChange', activeMode.value);
+}
+
+function handleSingleInput(value: string | number) {
+  if (activeMode.value === 'percent') {
+    handlePercentInput(value);
+    return;
+  }
+  handleAmountInput(value);
+}
+
+function handleSingleChange(value: string | number) {
+  if (activeMode.value === 'percent') {
+    handlePercentChange(value);
+    return;
+  }
+  handleAmountChange(value);
+}
+
+function handleSingleBlur(event: FocusEvent) {
+  if (activeMode.value === 'percent') {
+    handlePercentBlur(event);
+    return;
+  }
+  handleAmountBlur(event);
 }
 
 function toAmountValue(value: string, final: boolean) {
@@ -147,10 +243,16 @@ function toAmountValue(value: string, final: boolean) {
   const numeric = Number(value);
   if (Number.isNaN(numeric)) return null;
 
-  const amount =
-    activeMode.value === 'percent'
-      ? (Number(props.totalAmount) * numeric) / 100
-      : numeric;
+  return clampAmount(roundNumber(numeric, props.precision));
+}
+
+function toPercentAmountValue(value: string, final: boolean) {
+  if (value === '' || value === '-' || value === '.') return final ? null : model.value;
+  if (!canUsePercent.value) return model.value;
+  const numeric = Number(value);
+  if (Number.isNaN(numeric)) return null;
+
+  const amount = (Number(props.totalAmount) * numeric) / 100;
   return clampAmount(roundNumber(amount, props.precision));
 }
 
@@ -203,49 +305,131 @@ defineExpose({ validate });
 
 <template>
   <div class="input-amount">
+    <div v-if="props.switchable" class="input-amount__group">
+      <el-input
+        v-bind="$attrs"
+        class="input-amount__input input-amount__input--amount"
+        :model-value="amountEditing"
+        :placeholder="props.placeholder || '请输入金额'"
+        :clearable="props.clearable"
+        @update:model-value="handleAmountInput"
+        @change="handleAmountChange"
+        @focus="emit('focus', $event)"
+        @blur="handleAmountBlur"
+        @clear="handleClear"
+        @keyup.enter="emit('enter', model)"
+      >
+        <template #prefix>
+          <span>¥</span>
+        </template>
+      </el-input>
+
+      <el-button
+        class="input-amount__switch"
+        :class="{ 'is-active': activeMode === 'percent' }"
+        :disabled="!canUsePercent"
+        @click="handleModeToggle"
+      >
+        <el-icon><Sort /></el-icon>
+      </el-button>
+
+      <el-input
+        class="input-amount__input input-amount__input--percent"
+        :model-value="percentEditing"
+        placeholder="占比"
+        :clearable="props.clearable"
+        :disabled="!canUsePercent"
+        @update:model-value="handlePercentInput"
+        @change="handlePercentChange"
+        @focus="emit('focus', $event)"
+        @blur="handlePercentBlur"
+        @clear="handleClear"
+        @keyup.enter="emit('enter', model)"
+      >
+        <template #prefix>
+          <span>占</span>
+        </template>
+        <template #suffix>
+          <span>%</span>
+        </template>
+      </el-input>
+    </div>
+
     <el-input
+      v-else
       v-bind="$attrs"
-      :model-value="editingValue"
+      class="input-amount__single"
+      :model-value="singleEditingValue"
       :placeholder="props.placeholder"
       :clearable="props.clearable"
-      @update:model-value="handleInput"
-      @change="handleChange"
+      @update:model-value="handleSingleInput"
+      @change="handleSingleChange"
       @focus="emit('focus', $event)"
-      @blur="handleBlur"
+      @blur="handleSingleBlur"
       @clear="handleClear"
       @keyup.enter="emit('enter', model)"
     >
-      <template #prepend v-if="props.switchable">
-        <el-segmented
-          v-model="activeMode"
-          :options="[
-            { label: '金额', value: 'amount' },
-            { label: '百分比', value: 'percent', disabled: !canUsePercent },
-          ]"
-          @change="handleModeChange"
-        />
-      </template>
       <template #suffix>
         <span>{{ suffixText }}</span>
       </template>
     </el-input>
-    <div v-if="activeMode === 'percent' && canUsePercent" class="input-amount__hint">
-      总金额 {{ trimNumber(Number(props.totalAmount), props.precision) }} 元
-    </div>
+
     <div v-if="error" class="input-amount__error">{{ error }}</div>
   </div>
 </template>
 
 <style scoped>
-.input-amount__hint,
+.input-amount,
+.input-amount__group,
+.input-amount__single {
+  width: 100%;
+}
+
+.input-amount__group {
+  display: flex;
+  align-items: stretch;
+}
+
+.input-amount__input {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.input-amount__switch {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 38px;
+  width: 38px;
+  padding: 0;
+  border-radius: 0;
+  margin: 0 -1px;
+  color: #409eff;
+}
+
+.input-amount__switch.is-active {
+  color: #ffffff;
+  background-color: #409eff;
+  border-color: #409eff;
+}
+
+.input-amount :deep(.el-input) {
+  width: 100%;
+}
+
+.input-amount :deep(.input-amount__input--amount .el-input__wrapper) {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.input-amount :deep(.input-amount__input--percent .el-input__wrapper) {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
 .input-amount__error {
   margin-top: 4px;
   font-size: 12px;
   line-height: 1.2;
-}
-
-.input-amount__hint {
-  color: #909399;
 }
 
 .input-amount__error {

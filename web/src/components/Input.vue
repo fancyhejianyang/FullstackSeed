@@ -88,6 +88,7 @@ function parseValue(value: string, final: boolean) {
 
 <template>
   <el-input
+    class="input"
     v-bind="$attrs"
     :model-value="displayValue"
     :type="inputType"
@@ -111,3 +112,9 @@ function parseValue(value: string, final: boolean) {
     </template>
   </el-input>
 </template>
+
+<style scoped>
+.input {
+  width: 100%;
+}
+</style>
