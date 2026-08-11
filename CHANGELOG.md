@@ -1,5 +1,20 @@
 # CHANGELOG
 
+### 2026-08-11 扩展示例模块字段类型
+- 新增：无
+- 修改：
+  - `server/src/demo/entities/demo.entity.ts`（新增推荐、标签、封面图片、附件名称与附件文件字段）
+  - `server/src/demo/dto/demo.dto.ts`（同步新增字段校验）
+  - `server/src/module-models/module-models.map.ts`（补充 demo 模块字段元数据，并修正分类/状态枚举）
+  - `web/src/api/demo.ts`（同步 demo 类型与表单字段）
+  - `web/src/dic/index.ts`（新增示例标签字典）
+  - `web/src/views/demo/Edit.vue`（通过插槽展示 checkbox、图片上传、文件上传等字段控件）
+  - `web/src/views/demo/Index.vue`（列表展示推荐、标签、附件下载）
+  - `web/src/views/demo/View.vue`（详情展示新增字段、图片预览与附件下载）
+  - `CHANGELOG.md`（追加本次功能快照）
+- 删除：无
+- 说明：demo 模块现在覆盖输入框、文本域、下拉、单 checkbox、checkbox 组、图片上传、文件上传等多种字段类型，便于新增业务模块时复制参考。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-03 数据导入列表支持模块编辑详情
 - 新增：无
 - 修改：

@@ -27,6 +27,17 @@ export const DEMO_STATUS = {
     ],
 } satisfies DicDefinition
 
+// ========== 示例标签 ==========
+export const DEMO_TAG = {
+    isStatic: true,
+    items: [
+        { label: '前端', value: 'frontend' },
+        { label: '后端', value: 'backend' },
+        { label: '运维', value: 'ops' },
+        { label: '设计', value: 'design' },
+    ],
+} satisfies DicDefinition
+
 // ========== API字典 ==========
 export const ROLES = {
     isStatic: false,

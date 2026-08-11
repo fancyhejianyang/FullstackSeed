@@ -15,4 +15,19 @@ export class Demo extends BaseEntity {
 
   @Column({ type: 'varchar', length: 20, default: 'draft' })
   status: DemoStatus;
+
+  @Column({ type: 'tinyint', default: false })
+  isFeatured: boolean;
+
+  @Column({ type: 'simple-json', nullable: true })
+  tags: string[] | null;
+
+  @Column({ type: 'text', nullable: true })
+  imageUrl: string | null;
+
+  @Column({ length: 255, default: '' })
+  attachmentName: string;
+
+  @Column({ type: 'text', nullable: true })
+  attachmentUrl: string | null;
 }

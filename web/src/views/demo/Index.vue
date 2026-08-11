@@ -7,7 +7,7 @@ import { formatDateTime } from '@/utils/format';
 import { getDemos, deleteDemo, batchDeleteDemos, type Demo } from '@/api/demo';
 import { useUserStore } from '@/stores/user';
 import { DicService } from '@/dic/service';
-import { DEMO_CATEGORY, DEMO_STATUS } from '@/dic';
+import { DEMO_CATEGORY, DEMO_STATUS, DEMO_TAG } from '@/dic';
 import Edit from './Edit.vue';
 import View from './View.vue';
 
@@ -24,14 +24,19 @@ const canBatchDelete = computed(() => userStore.hasPermission('Demo.batchDelete'
 // 状态字典（用于列渲染）
 const statusDic = ref<{ label: string; value: string }[]>([]);
 const categoryDic = ref<{ label: string; value: string }[]>([]);
+const tagDic = ref<{ label: string; value: string }[]>([]);
 DicService.init(DEMO_CATEGORY, categoryDic);
 DicService.init(DEMO_STATUS, statusDic);
+DicService.init(DEMO_TAG, tagDic);
 
 // 列配置（特殊列用具名插槽 #column-[prop]）
 const columns: ProTableColumn[] = [
   { prop: 'title', label: '标题', minWidth: 180 },
   { prop: 'status', label: '状态', width: 100, slot: true },
   { prop: 'category', label: '分类', width: 120, slot: true },
+  { prop: 'isFeatured', label: '推荐', width: 90, slot: true },
+  { prop: 'tags', label: '标签', minWidth: 180, slot: true },
+  { prop: 'attachmentName', label: '附件', minWidth: 160, slot: true },
   { prop: 'createdAt', label: '创建时间', width: 180, slot: true },
 ];
 
@@ -51,6 +56,18 @@ function getStatusLabel(value: string) {
 
 function getCategoryLabel(value: string) {
   return categoryDic.value.find((item) => item.value === value)?.label ?? value;
+}
+
+function getTagLabel(value: string) {
+  return tagDic.value.find((item) => item.value === value)?.label ?? value;
+}
+
+function downloadAttachment(row: Demo) {
+  if (!row.attachmentUrl) return;
+  const link = document.createElement('a');
+  link.href = row.attachmentUrl;
+  link.download = row.attachmentName || '附件文件';
+  link.click();
 }
 
 // 编辑弹窗
@@ -119,6 +136,33 @@ async function batchDeleteDemoRequest(payload: { ids: Array<string | number> }) 
         {{ getCategoryLabel(row.category) }}
       </template>
 
+      <template #column-isFeatured="{ row }">
+        <el-tag :type="row.isFeatured ? 'success' : 'info'">
+          {{ row.isFeatured ? '是' : '否' }}
+        </el-tag>
+      </template>
+
+      <template #column-tags="{ row }">
+        <div class="demo-index__tags">
+          <el-tag v-for="tag in row.tags || []" :key="tag" type="info">
+            {{ getTagLabel(tag) }}
+          </el-tag>
+          <span v-if="!row.tags?.length">-</span>
+        </div>
+      </template>
+
+      <template #column-attachmentName="{ row }">
+        <el-button
+          v-if="row.attachmentUrl"
+          link
+          type="primary"
+          @click="downloadAttachment(row)"
+        >
+          {{ row.attachmentName || '下载附件' }}
+        </el-button>
+        <span v-else>-</span>
+      </template>
+
       <!-- 创建时间列 -->
       <template #column-createdAt="{ row }">
         {{ formatDateTime(row.createdAt) }}
@@ -136,3 +180,11 @@ async function batchDeleteDemoRequest(payload: { ids: Array<string | number> }) 
     <View v-model:visible="viewVisible" :row="viewingRow" />
   </PageContainer>
 </template>
+
+<style scoped>
+.demo-index__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+</style>

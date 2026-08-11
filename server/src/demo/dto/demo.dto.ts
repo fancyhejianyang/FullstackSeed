@@ -5,6 +5,7 @@ import {
   IsIn,
   IsInt,
   IsArray,
+  IsBoolean,
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -32,6 +33,27 @@ export class CreateDemoDto {
   @IsIn(DEMO_STATUSES)
   @IsOptional()
   status?: DemoStatus;
+
+  @IsBoolean()
+  @IsOptional()
+  isFeatured?: boolean;
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  tags?: string[];
+
+  @IsString()
+  @IsOptional()
+  imageUrl?: string;
+
+  @IsString()
+  @IsOptional()
+  attachmentName?: string;
+
+  @IsString()
+  @IsOptional()
+  attachmentUrl?: string;
 }
 
 export class UpdateDemoDto extends PartialType(CreateDemoDto) {}

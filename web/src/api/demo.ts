@@ -1,11 +1,12 @@
 import request from '@/utils/request';
-import { DEMO_CATEGORY, DEMO_STATUS } from '@/dic';
+import { DEMO_CATEGORY, DEMO_STATUS, DEMO_TAG } from '@/dic';
 
 /** 示例分类值（与后端 demo.constants.ts 保持一致） */
 export type DemoCategory = (typeof DEMO_CATEGORY.items)[number]['value'];
 
 /** 示例状态值（与后端 demo.constants.ts 保持一致） */
 export type DemoStatus = (typeof DEMO_STATUS.items)[number]['value'];
+export type DemoTag = (typeof DEMO_TAG.items)[number]['value'];
 
 export interface Demo {
   id: number;
@@ -13,6 +14,11 @@ export interface Demo {
   content: string;
   category: DemoCategory;
   status: DemoStatus;
+  isFeatured: boolean;
+  tags: DemoTag[];
+  imageUrl: string;
+  attachmentName: string;
+  attachmentUrl: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -33,6 +39,11 @@ export interface DemoForm {
   content?: string;
   category?: DemoCategory;
   status?: DemoStatus;
+  isFeatured?: boolean;
+  tags?: DemoTag[];
+  imageUrl?: string;
+  attachmentName?: string;
+  attachmentUrl?: string;
 }
 
 /** 分页查询示例 */
