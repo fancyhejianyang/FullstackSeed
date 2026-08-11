@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import {
   emailRule,
   requiredRule,
@@ -12,13 +12,26 @@ defineOptions({ inheritAttrs: false });
 const props = withDefaults(
   defineProps<{
     placeholder?: string;
+    domainPlaceholder?: string;
+    domains?: string[];
     clearable?: boolean;
     required?: boolean;
     rulesEnabled?: boolean;
     rules?: InputValidator<string | null>[];
   }>(),
   {
-    placeholder: '请输入邮箱',
+    placeholder: '请输入邮箱账号',
+    domainPlaceholder: '请选择或输入后缀',
+    domains: () => [
+      'qq.com',
+      '163.com',
+      '126.com',
+      'gmail.com',
+      'outlook.com',
+      'hotmail.com',
+      'foxmail.com',
+      'icloud.com',
+    ],
     clearable: true,
     required: false,
     rulesEnabled: true,
@@ -27,6 +40,9 @@ const props = withDefaults(
 
 const model = defineModel<string | null>({ default: '' });
 const error = ref('');
+const account = ref('');
+const domain = ref('');
+let syncing = false;
 
 const emit = defineEmits<{
   input: [value: string | null];
@@ -38,32 +54,93 @@ const emit = defineEmits<{
   validate: [result: true | string];
 }>();
 
-function normalize(value: string | number) {
-  return String(value).trim();
+watch(
+  () => model.value,
+  (value) => {
+    if (syncing) return;
+    syncPartsFromModel(value);
+  },
+  { immediate: true },
+);
+
+function normalize(value: string | number | null) {
+  return String(value ?? '').trim();
 }
 
-function handleInput(value: string | number) {
+function syncPartsFromModel(value: string | null | undefined) {
   const next = normalize(value);
-  model.value = next;
-  emit('input', next);
+  if (!next) {
+    account.value = '';
+    domain.value = '';
+    return;
+  }
+
+  const atIndex = next.indexOf('@');
+  if (atIndex >= 0) {
+    account.value = next.slice(0, atIndex);
+    domain.value = next.slice(atIndex + 1);
+    return;
+  }
+  account.value = next;
+  domain.value = '';
 }
 
-function handleChange(value: string | number) {
-  model.value = normalize(value);
-  validate();
-  emit('change', model.value);
+function composeValue() {
+  const nextAccount = normalize(account.value);
+  const nextDomain = normalize(domain.value).replace(/^@+/, '');
+  if (!nextAccount) return '';
+  return nextDomain ? `${nextAccount}@${nextDomain}` : `${nextAccount}@`;
+}
+
+function updateModel(shouldValidate = false) {
+  const next = composeValue();
+  syncing = true;
+  model.value = next;
+  syncing = false;
+  emit('input', next);
+  if (shouldValidate) {
+    validate();
+    emit('change', model.value);
+  }
+}
+
+function handleAccountInput(value: string | number) {
+  const next = normalize(value);
+  const atIndex = next.indexOf('@');
+  if (atIndex >= 0) {
+    account.value = next.slice(0, atIndex);
+    domain.value = next.slice(atIndex + 1);
+  } else {
+    account.value = next;
+  }
+  updateModel();
+}
+
+function handleAccountChange(value: string | number) {
+  handleAccountInput(value);
+  updateModel(true);
+}
+
+function handleDomainChange(value: string | number) {
+  domain.value = normalize(value).replace(/^@+/, '');
+  updateModel(true);
 }
 
 function handleBlur(event: FocusEvent) {
-  model.value = normalize(model.value ?? '');
+  account.value = normalize(account.value);
+  domain.value = normalize(domain.value).replace(/^@+/, '');
+  updateModel();
   validate();
   emit('blur', event);
 }
 
 function handleClear() {
+  account.value = '';
+  domain.value = '';
   model.value = '';
   error.value = '';
   emit('clear');
+  emit('change', '');
 }
 
 function getRules() {
@@ -87,28 +164,88 @@ defineExpose({ validate });
 
 <template>
   <div class="input-email">
-    <el-input
-      v-bind="$attrs"
-      :model-value="model"
-      :placeholder="props.placeholder"
-      :clearable="props.clearable"
-      autocomplete="email"
-      inputmode="email"
-      @update:model-value="handleInput"
-      @change="handleChange"
-      @focus="emit('focus', $event)"
-      @blur="handleBlur"
-      @clear="handleClear"
-      @keyup.enter="emit('enter', model)"
-    />
+    <div class="input-email__group">
+      <el-input
+        v-bind="$attrs"
+        class="input-email__account"
+        :model-value="account"
+        :placeholder="props.placeholder"
+        :clearable="props.clearable"
+        autocomplete="email"
+        inputmode="email"
+        @update:model-value="handleAccountInput"
+        @change="handleAccountChange"
+        @focus="emit('focus', $event)"
+        @blur="handleBlur"
+        @clear="handleClear"
+        @keyup.enter="emit('enter', model)"
+      />
+      <span class="input-email__at">@</span>
+      <el-select
+        class="input-email__domain"
+        v-model="domain"
+        filterable
+        allow-create
+        default-first-option
+        :reserve-keyword="false"
+        :placeholder="props.domainPlaceholder"
+        @change="handleDomainChange"
+        @blur="handleBlur"
+      >
+        <el-option
+          v-for="item in props.domains"
+          :key="item"
+          :label="item"
+          :value="item"
+        />
+      </el-select>
+    </div>
     <div v-if="error" class="input-email__error">{{ error }}</div>
   </div>
 </template>
 
 <style scoped>
-.input-email,
-.input-email :deep(.el-input) {
+.input-email {
   width: 100%;
+}
+
+.input-email__group {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+}
+
+.input-email__account {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.input-email__at {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 34px;
+  height: 32px;
+  margin: 0 -1px;
+  border: 1px solid #dcdfe6;
+  color: #606266;
+  background-color: #f5f7fa;
+}
+
+.input-email__domain {
+  flex: 0 0 180px;
+  width: 180px;
+}
+
+.input-email :deep(.input-email__account .el-input__wrapper) {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.input-email :deep(.input-email__domain .el-select__wrapper) {
+  min-height: 32px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
 }
 
 .input-email__error {

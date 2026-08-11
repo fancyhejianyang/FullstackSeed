@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-08-11 优化邮箱输入后缀选择体验
+- 新增：无
+- 修改：
+  - `web/src/components/InputEmail.vue`（邮箱输入改为账号 + 固定 `@` + 后缀下拉/可手输结构，支持粘贴完整邮箱自动拆分）
+  - `web/src/components/Component.d.ts`（补充 `InputEmail` 的后缀列表与后缀占位 props）
+  - `AGENTS-COMPONENTS.md`（更新 `InputEmail` 组件说明）
+  - `CHANGELOG.md`（追加本次邮箱输入交互优化快照）
+- 删除：无
+- 说明：用户输入账号部分时 `@` 自动展示，邮箱后缀可从常见域名下拉选择，也可手动输入；最终 `v-model` 仍保存完整邮箱字符串。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
 ### 2026-08-11 demo 新增邮箱字段与邮箱输入组件
 - 新增：
   - `web/src/components/InputEmail.vue`（邮箱输入组件，内置邮箱格式校验，支持关闭或覆盖规则）

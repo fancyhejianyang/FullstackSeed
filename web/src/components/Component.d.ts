@@ -56,6 +56,8 @@ export interface ComponentPropsMap {
   };
   InputEmail: {
     placeholder?: string;
+    domainPlaceholder?: string;
+    domains?: string[];
     clearable?: boolean;
     required?: boolean;
     rulesEnabled?: boolean;
