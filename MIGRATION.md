@@ -92,6 +92,6 @@ eslint prettier 等工具链
 
 新项目若同时迁前端，配套迁移：
 - 基建：`utils/request.ts`（Axios 封装，响应拆包 + token 注入）、`stores/user.ts`（登录态 + `hasPermission`/`isAdmin`）、`router/`（守卫）、`layouts/MainLayout.vue`、`styles/`（SCSS token/工具类）
-- 通用组件：`components/`（`ProTable` / `ProForm` / `ProDialog` / `PageContainer`）
-- 业务页面规范：`views/<module>/` 下 `Index.vue` + `Edit.vue`（详情 `View.vue`），列表用 ProTable 传 `perm-module`
+- 通用组件：`components/`（`Table` / `Form` / `Dialog` / `PageContainer`）
+- 业务页面规范：`views/<module>/` 下 `Index.vue` + `Edit.vue`（详情 `View.vue`），列表用 Table 传 `perm-module`
 - 默认登录：`root / root123`

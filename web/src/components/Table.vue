@@ -2,11 +2,11 @@
 import { computed, onMounted, reactive, ref, shallowRef } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { TableInstance } from 'element-plus';
-import type { ProFormField } from './ProForm.vue';
-import ProForm from './ProForm.vue';
+import type { FormField } from './Form.vue';
+import Form from './Form.vue';
 import { useUserStore } from '@/stores/user';
 
-export interface ProTableColumn {
+export interface TableColumn {
   prop?: string;
   label: string;
   width?: string | number;
@@ -16,7 +16,7 @@ export interface ProTableColumn {
   slot?: boolean;
 }
 
-export interface ProTableResult<R> {
+export interface TableResult<R> {
   list: R[];
   total: number;
 }
@@ -25,11 +25,11 @@ type RowId = string | number;
 
 const props = withDefaults(
   defineProps<{
-    columns: ProTableColumn[];
+    columns: TableColumn[];
     // 数据请求函数：接收分页与搜索参数，返回 { list, total }
-    request: (params: Record<string, any>) => Promise<ProTableResult<T>>;
+    request: (params: Record<string, any>) => Promise<TableResult<T>>;
     // 搜索栏字段配置（不传则不显示搜索栏）
-    searchFields?: ProFormField[];
+    searchFields?: FormField[];
     pageSizes?: number[];
     // 权限模块名（如 'demo'），内部按动作码拼 `Module.action` 校验
     permModule?: string;
@@ -282,7 +282,7 @@ onMounted(fetchData);
 <template>
   <div class="pro-table">
     <!-- 搜索栏 -->
-    <ProForm
+    <Form
       v-if="props.searchFields.length"
       v-model="searchModel"
       :fields="props.searchFields"
@@ -303,7 +303,7 @@ onMounted(fetchData);
           <el-button @click="handleReset">重置</el-button>
         </el-form-item>
       </template>
-    </ProForm>
+    </Form>
 
     <!-- 工具栏（右上按钮区） -->
     <div v-if="$slots.toolbar" class="pro-table__toolbar">

@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import PageContainer from '@/components/PageContainer.vue';
-import ProDialog from '@/components/ProDialog.vue';
+import Dialog from '@/components/Dialog.vue';
 import { getMenuTree, deleteMenu, updateMenu, type MenuNode } from '@/api/menu';
 import { getAllPermissions, type Permission } from '@/api/permission';
 import { useUserStore } from '@/stores/user';
@@ -256,7 +256,7 @@ onMounted(async () => {
       @success="refreshAfterChange"
     />
 
-    <ProDialog
+    <Dialog
       v-model="assignVisible"
       title="分配权限"
       width="560px"
@@ -290,7 +290,7 @@ onMounted(async () => {
           可勾选多个权限；不勾选直接确定，将清空为登录可见。
         </div>
       </div>
-    </ProDialog>
+    </Dialog>
   </PageContainer>
 </template>
 

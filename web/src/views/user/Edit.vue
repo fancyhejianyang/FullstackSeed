@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { reactive, ref, watch } from 'vue';
 import { ElMessage, type FormRules } from 'element-plus';
-import ProForm, { type ProFormField } from '@/components/ProForm.vue';
-import ProDialog from '@/components/ProDialog.vue';
+import Form, { type FormField } from '@/components/Form.vue';
+import Dialog from '@/components/Dialog.vue';
 import {
   createUser,
   getUser,
@@ -25,7 +25,7 @@ const visible = defineModel<boolean>('visible', { required: true });
 const submitting = ref(false);
 const loading = ref(false);
 const rolesLoading = ref(false);
-const formRef = ref<InstanceType<typeof ProForm>>();
+const formRef = ref<InstanceType<typeof Form>>();
 const roleOptions = ref<Role[]>([]);
 const form = reactive<UserForm>({
   username: '',
@@ -39,7 +39,7 @@ const form = reactive<UserForm>({
 // 新增时显示密码与用户名，编辑时用户名禁改、密码留空不更新
 const isEdit = ref(false);
 
-const fields = ref<ProFormField[]>([]);
+const fields = ref<FormField[]>([]);
 
 function buildFields() {
   fields.value = [
@@ -164,14 +164,14 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <ProDialog
+  <Dialog
     v-model="visible"
     :title="props.row ? '编辑用户' : '新增用户'"
     :confirm-loading="submitting"
     @confirm="handleSubmit"
   >
     <div v-loading="loading">
-      <ProForm ref="formRef" v-model="form" :fields="fields" :rules="rules" label-width="120px">
+      <Form ref="formRef" v-model="form" :fields="fields" :rules="rules" label-width="120px">
         <!-- 编辑态用户名禁改 -->
         <template v-if="isEdit" #field-username>
           <el-input v-model="form.username" disabled />
@@ -196,9 +196,9 @@ async function handleSubmit() {
             />
           </el-select>
         </template>
-      </ProForm>
+      </Form>
     </div>
-  </ProDialog>
+  </Dialog>
 </template>
 
 <style scoped>

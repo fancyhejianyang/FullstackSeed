@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import PageContainer from '@/components/PageContainer.vue';
-import ProTable, { type ProTableColumn } from '@/components/ProTable.vue';
-import type { ProFormField } from '@/components/ProForm.vue';
+import Table, { type TableColumn } from '@/components/Table.vue';
+import type { FormField } from '@/components/Form.vue';
 import { formatDateTime } from '@/utils/format';
 import { getPermissions, deletePermission, type Permission } from '@/api/permission';
 import Edit from './Edit.vue';
 
-// ProTable 为泛型组件，InstanceType 取不到，直接声明暴露的方法类型
+// Table 为泛型组件，InstanceType 取不到，直接声明暴露的方法类型
 const tableRef = ref<{ refresh: () => Promise<void>; search: () => Promise<void> }>();
 
 // 权限类型 → 标签配色
@@ -17,14 +17,14 @@ const TYPE_META: Record<string, { label: string; type: 'primary' | 'success' | '
   api: { label: '接口', type: 'info' },
 };
 
-const columns: ProTableColumn[] = [
+const columns: TableColumn[] = [
   { prop: 'code', label: '权限编码', minWidth: 180 },
   { prop: 'name', label: '权限名称', minWidth: 160 },
   { prop: 'type', label: '类型', width: 100, slot: true },
   { prop: 'createdAt', label: '创建时间', width: 180, slot: true },
 ];
 
-const searchFields: ProFormField[] = [
+const searchFields: FormField[] = [
   { prop: 'keyword', label: '关键字', type: 'input', placeholder: '编码/名称' },
 ];
 
@@ -56,7 +56,7 @@ function deletePermissionRequest(row: Permission) {
 
 <template>
   <PageContainer title="权限管理">
-    <ProTable
+    <Table
       ref="tableRef"
       :columns="columns"
       :search-fields="searchFields"
@@ -80,7 +80,7 @@ function deletePermissionRequest(row: Permission) {
       <template #column-createdAt="{ row }">
         {{ formatDateTime(row.createdAt) }}
       </template>
-    </ProTable>
+    </Table>
 
     <!-- 新增/编辑弹窗 -->
     <Edit

@@ -20,7 +20,7 @@ FullstackSeed 是一个全栈项目种子（模板），采用前后端分离结
 
 - **后端** → 参考 `server/src/demo/`（Entity/DTO/Service/Controller/Module 五件套）
 - **前端** → 参考 `web/src/views/demo/`（`Index.vue` / `Edit.vue` / `View.vue`）+ `web/src/api/demo.ts`
-- **组件用法** → 见 [`AGENTS-COMPONENTS.md`](AGENTS-COMPONENTS.md)，页面文档不重复描述 ProTable/ProForm/ProDialog 等的 props/emits
+- **组件用法** → 见 [`AGENTS-COMPONENTS.md`](AGENTS-COMPONENTS.md)，页面文档不重复描述 Table/Form/Dialog 等的 props/emits
 
 具体复制步骤：后端 6 步见 [`AGENTS-BACKEND.md`](AGENTS-BACKEND.md#新增业务模块后端-6-步)；前端 5 步见 [`AGENTS-FRONTEND.md`](AGENTS-FRONTEND.md#新增业务模块前端-5-步)。
 
@@ -29,7 +29,7 @@ FullstackSeed 是一个全栈项目种子（模板），采用前后端分离结
 - `AGENTS.md` — 本文件，项目导航与跨端规则（保持精简，不存放历史快照明细）
 - `AGENTS-BACKEND.md` — 后端专属规则（以 `demo/` 为 demo；新模块 6 步/易踩坑）
 - `AGENTS-FRONTEND.md` — 前端专属规则（以 `views/demo/` 为 demo；新页面 5 步/功能清单）
-- `AGENTS-COMPONENTS.md` — 通用组件与工具契约（ProTable/ProForm/ProDialog/PageContainer/MenuTree/utils）
+- `AGENTS-COMPONENTS.md` — 通用组件与工具契约（Table/Form/Dialog/PageContainer/MenuTree/utils）
 - `.design-spec.md` — 设计规范（配色/字体/图标/操作按钮 & Tag 配色标准）
 - `MIGRATION.md` — 后端标准模块迁移文档（项目复刻参考）
 - `CHANGELOG.md` — 项目变更快照归档（最新在上）
@@ -92,7 +92,7 @@ FullstackSeed 是一个全栈项目种子（模板），采用前后端分离结
 
 - **后端 6 步** → 见 [`AGENTS-BACKEND.md`](AGENTS-BACKEND.md#新增业务模块后端-6-步)：复制 `demo/` → 改字段 → 改权限码 → 挂根模块 → SEED 权限点 → SEED 菜单
 - **前端 5 步** → 见 [`AGENTS-FRONTEND.md`](AGENTS-FRONTEND.md#新增业务模块前端-5-步)：复制 `views/demo/` → 改类型 & API → 改列表页 → 改弹窗 → 加路由（侧边栏动态自动接管）
-- **组件用法** → 见 [`AGENTS-COMPONENTS.md`](AGENTS-COMPONENTS.md)：不要在业务页里重造 ProTable/ProForm/ProDialog 的能力
+- **组件用法** → 见 [`AGENTS-COMPONENTS.md`](AGENTS-COMPONENTS.md)：不要在业务页里重造 Table/Form/Dialog 的能力
 - **跨端字段对齐** → 前端 `Foo` 类型 = 后端 DTO = 实体字段名（camelCase 一字不差）；权限码 `Module.action`；分页 `{list,total}`
 
 ## 专题文档列表

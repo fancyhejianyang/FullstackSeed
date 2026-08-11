@@ -9,7 +9,7 @@ import {
 import type { ComponentName } from './Component';
 type DicValue = string | number | boolean | null;
 
-export interface ProFormField {
+export interface FormField {
   prop: string;
   label: string;
   type?: 'input' | 'textarea' | 'select';
@@ -25,7 +25,7 @@ export interface ProFormField {
 
 const props = withDefaults(
   defineProps<{
-    fields: ProFormField[];
+    fields: FormField[];
     rules?: FormRules;
     labelWidth?: string;
     inline?: boolean;
@@ -58,7 +58,7 @@ function resetFields() {
   formRef.value?.resetFields();
 }
 
-function getDynamicComponent(field: ProFormField) {
+function getDynamicComponent(field: FormField) {
   return field.component ? getFormComponent(field.component) : null;
 }
 

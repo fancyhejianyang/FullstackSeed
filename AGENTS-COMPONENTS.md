@@ -9,10 +9,10 @@
 | 组件 | 定位 | 页面里用来做什么 |
 | --- | --- | --- |
 | `PageContainer` | 页面外壳（标题 + 内容卡片） | 每个 `Index.vue` 都用它包一层 |
-| `ProTable` | 搜索 + 表格 + 分页 + 权限操作列 + 批量操作 | 列表页主体 |
-| `ProForm` | 配置驱动表单 + 插槽兜底 | 编辑弹窗 / 搜索栏内部使用 |
-| `ProDialog` | 弹窗外壳（预设宽度/滚动/确定取消） | `Edit.vue` / `View.vue` 都用它包一层 |
-| `ProButton` | 按钮二次封装（权限码驱动 + 自动配色 + 无权限隐藏） | 业务页自定义操作按钮统一用它，禁止裸写 `el-button` + 硬编码 `type` |
+| `Table` | 搜索 + 表格 + 分页 + 权限操作列 + 批量操作 | 列表页主体 |
+| `Form` | 配置驱动表单 + 插槽兜底 | 编辑弹窗 / 搜索栏内部使用 |
+| `Dialog` | 弹窗外壳（预设宽度/滚动/确定取消） | `Edit.vue` / `View.vue` 都用它包一层 |
+| `Button` | 按钮二次封装（权限码驱动 + 自动配色 + 无权限隐藏） | 业务页自定义操作按钮统一用它，禁止裸写 `el-button` + 硬编码 `type` |
 | `MenuTree` | 递归渲染菜单树 | `MainLayout` 侧边栏用 |
 
 ## 工具速览（`web/src/utils/`）
@@ -37,7 +37,7 @@
 
 ```vue
 <PageContainer title="账号管理">
-  <!-- 页面主体（一般是 ProTable） -->
+  <!-- 页面主体（一般是 Table） -->
 </PageContainer>
 ```
 
@@ -46,7 +46,7 @@
 
 ---
 
-## ProTable
+## Table
 
 **契约**：一站式列表页组件。**页面只需要提供**「列配置 / 搜索字段 / 请求函数 / 权限模块名 / 删除请求」——**其它都由组件托管**。
 
@@ -54,9 +54,9 @@
 
 | Prop | 类型 | 默认 | 说明 |
 | --- | --- | --- | --- |
-| `columns` | `ProTableColumn[]` | 必填 | 列配置（`prop/label/width/minWidth/fixed/slot`），特殊列用 `slot:true` 后写 `#column-<prop>` 插槽 |
+| `columns` | `TableColumn[]` | 必填 | 列配置（`prop/label/width/minWidth/fixed/slot`），特殊列用 `slot:true` 后写 `#column-<prop>` 插槽 |
 | `request` | `(params) => Promise<{list,total}>` | 必填 | 数据请求函数，接收分页与搜索参数 |
-| `searchFields` | `ProFormField[]` | `[]` | 搜索栏字段配置（不传则不显示搜索栏） |
+| `searchFields` | `FormField[]` | `[]` | 搜索栏字段配置（不传则不显示搜索栏） |
 | `pageSizes` | `number[]` | `[10,20,50]` | 分页大小选项 |
 | `permModule` | `string` | `''` | 权限模块名小写（如 `'article'`）；组件内部自动拼 `Article.read/update/delete` 校验 |
 | `showActions` | `boolean` | `true` | 是否显示内置操作列（**排在首位、固定左侧**） |
@@ -90,7 +90,7 @@
 
 ### 权限动作映射
 
-- ProTable 内部会把按钮语义映射为动作码：`view→read`、`edit→update`、`delete→delete`
+- Table 内部会把按钮语义映射为动作码：`view→read`、`edit→update`、`delete→delete`
 - 页面**只传模块名小写** `perm-module="article"`，无需拼动作
 - 超管 `isAdmin` 放行一切；非超管无对应权限则该按钮自动隐藏
 
@@ -100,7 +100,7 @@
 
 ---
 
-## ProForm
+## Form
 
 **契约**：配置驱动的表单。字段用 `fields` 配置一次性描述，需要自定义控件时开 `slot: true` 并用 `#field-<prop>` 插槽兜底。
 
@@ -108,7 +108,7 @@
 
 | Prop | 类型 | 默认 | 说明 |
 | --- | --- | --- | --- |
-| `fields` | `ProFormField[]` | 必填 | 字段配置：`prop/label/type/placeholder/options/rows/slot` |
+| `fields` | `FormField[]` | 必填 | 字段配置：`prop/label/type/placeholder/options/rows/slot` |
 | `rules` | `FormRules` | — | Element Plus 校验规则 |
 | `labelWidth` | `string` | `'80px'` | 标签宽度 |
 | `inline` | `boolean` | `false` | 是否行内布局（搜索栏用） |
@@ -121,13 +121,13 @@
 
 - `validate()` / `resetFields()`
 
-### `ProFormField.type`
+### `FormField.type`
 
 - `input` / `textarea` / `select`（其它类型请用 `slot: true` + `#field-<prop>` 插槽自定义）
 
 ---
 
-## ProDialog
+## Dialog
 
 **契约**：弹窗外壳，预设宽度 / 内容区滚动 / 确定取消按钮 / 挂到 body / 关闭销毁。
 
@@ -148,7 +148,7 @@
 
 ---
 
-## ProButton
+## Button
 
 **契约**：基于 `el-button` 二次封装。传 `perm` 权限码后，**自动校验权限 + 自动配色 + 无权限降级**（超管放行）。破坏性操作默认开启**二次确认**，确认期间**自动 loading + 防重复点击**。映射表统一维护在 `utils/permission.ts`，新增动作只改一处。其余 props/attrs/events 透传给 `el-button`，用法与原生一致。
 
@@ -185,27 +185,27 @@
 
 ```vue
 <!-- 权限码驱动：自动 type + 自动图标 + 无权限隐藏 -->
-<ProButton perm="User.create" @click="openCreate">新增用户</ProButton>
+<Button perm="User.create" @click="openCreate">新增用户</Button>
 
 <!-- 删除：confirm='auto' 默认开启，自动文案"确认删除该记录？" -->
-<ProButton perm="User.delete" auto-label link @click="handleDelete" />
+<Button perm="User.delete" auto-label link @click="handleDelete" />
 
 <!-- 无权限降级为 disabled + tooltip（避免列宽抖动） -->
-<ProButton perm="User.delete" auto-label link fallback="disable" @click="handleDelete" />
+<Button perm="User.delete" auto-label link fallback="disable" @click="handleDelete" />
 
 <!-- 覆盖图标 -->
-<ProButton perm="User.read" icon="Search" @click="handleSearch">查询</ProButton>
+<Button perm="User.read" icon="Search" @click="handleSearch">查询</Button>
 
 <!-- 强制开启二次确认 + 自定义文案 -->
-<ProButton perm="Order.audit" confirm confirm-title="审核确认" confirm-text="确认通过审核？">
+<Button perm="Order.audit" confirm confirm-title="审核确认" confirm-text="确认通过审核？">
   审核
-</ProButton>
+</Button>
 
 <!-- 批量删除：自动开启二次确认 + 并发保护（自动 loading） -->
-<ProButton perm="User.batchDelete" auto-label :disabled="!canBatch" @click="handleBatchDelete" />
+<Button perm="User.batchDelete" auto-label :disabled="!canBatch" @click="handleBatchDelete" />
 
 <!-- 强制关闭二次确认 -->
-<ProButton perm="User.delete" :confirm="false" auto-label link @click="handleDelete" />
+<Button perm="User.delete" :confirm="false" auto-label link @click="handleDelete" />
 ```
 
 ---

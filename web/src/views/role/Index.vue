@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import PageContainer from '@/components/PageContainer.vue';
-import ProTable, { type ProTableColumn } from '@/components/ProTable.vue';
-import type { ProFormField } from '@/components/ProForm.vue';
+import Table, { type TableColumn } from '@/components/Table.vue';
+import type { FormField } from '@/components/Form.vue';
 import { formatDateTime } from '@/utils/format';
 import { getRoles, deleteRole, type Role } from '@/api/role';
 import { useUserStore } from '@/stores/user';
@@ -12,7 +12,7 @@ const tableRef = ref<{ refresh: () => Promise<void>; search: () => Promise<void>
 const userStore = useUserStore();
 const canCreate = computed(() => userStore.hasPermission('Role.create'));
 
-const columns: ProTableColumn[] = [
+const columns: TableColumn[] = [
   { prop: 'code', label: '角色编码', minWidth: 120 },
   { prop: 'name', label: '角色名称', minWidth: 120 },
   { prop: 'permissions', label: '权限数', width: 100, slot: true },
@@ -20,7 +20,7 @@ const columns: ProTableColumn[] = [
   { prop: 'createdAt', label: '创建时间', width: 180, slot: true },
 ];
 
-const searchFields: ProFormField[] = [
+const searchFields: FormField[] = [
   { prop: 'keyword', label: '关键字', type: 'input', placeholder: '角色名称' },
 ];
 
@@ -50,7 +50,7 @@ function deleteRoleRequest(row: Role) {
 
 <template>
   <PageContainer title="角色管理">
-    <ProTable
+    <Table
       ref="tableRef"
       :columns="columns"
       :search-fields="searchFields"
@@ -77,7 +77,7 @@ function deleteRoleRequest(row: Role) {
       <template #column-createdAt="{ row }">
         {{ formatDateTime(row.createdAt) }}
       </template>
-    </ProTable>
+    </Table>
 
     <Edit
       v-model:visible="editVisible"

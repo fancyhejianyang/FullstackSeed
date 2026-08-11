@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import PageContainer from '@/components/PageContainer.vue';
-import ProButton from '@/components/ProButton.vue';
-import ProTable, { type ProTableColumn } from '@/components/ProTable.vue';
-import type { ProFormField } from '@/components/ProForm.vue';
+import Button from '@/components/Button.vue';
+import Table, { type TableColumn } from '@/components/Table.vue';
+import type { FormField } from '@/components/Form.vue';
 import { formatDateTime } from '@/utils/format';
 import { getDemos, deleteDemo, batchDeleteDemos, type Demo } from '@/api/demo';
 import { DicService } from '@/dic/service';
@@ -11,7 +11,7 @@ import { DEMO_CATEGORY, DEMO_STATUS, DEMO_TAG } from '@/dic';
 import Edit from './Edit.vue';
 import View from './View.vue';
 
-// ProTable 为泛型组件，InstanceType 取不到，直接声明暴露的方法类型
+// Table 为泛型组件，InstanceType 取不到，直接声明暴露的方法类型
 const tableRef = ref<{
   refresh: () => Promise<void>;
   search: () => Promise<void>;
@@ -27,7 +27,7 @@ DicService.init(DEMO_STATUS, statusDic);
 DicService.init(DEMO_TAG, tagDic);
 
 // 列配置（特殊列用具名插槽 #column-[prop]）
-const columns: ProTableColumn[] = [
+const columns: TableColumn[] = [
   { prop: 'title', label: '标题', minWidth: 180 },
   { prop: 'status', label: '状态', width: 100, slot: true },
   { prop: 'category', label: '分类', width: 120, slot: true },
@@ -42,11 +42,11 @@ const columns: ProTableColumn[] = [
 ];
 
 // 搜索栏配置
-const searchFields: ProFormField[] = [
+const searchFields: FormField[] = [
   { prop: 'keyword', label: '标题', type: 'input', placeholder: '按标题搜索' },
 ];
 
-// 列表请求函数（ProTable 内部调用）
+// 列表请求函数（Table 内部调用）
 function fetchDemos(params: Record<string, any>) {
   return getDemos(params);
 }
@@ -112,7 +112,7 @@ async function batchDeleteDemoRequest(payload: { ids: Array<string | number> }) 
 
 <template>
   <PageContainer title="示例管理">
-    <ProTable
+    <Table
       ref="tableRef"
       :columns="columns"
       :search-fields="searchFields"
@@ -125,14 +125,14 @@ async function batchDeleteDemoRequest(payload: { ids: Array<string | number> }) 
       @edit="handleEdit"
     >
       <template #toolbar>
-        <ProButton perm="Demo.create" @click="openCreate">新增示例</ProButton>
-        <ProButton
+        <Button perm="Demo.create" @click="openCreate">新增示例</Button>
+        <Button
           perm="Demo.batchDelete"
           :confirm="false"
           @click="tableRef?.runBatchDelete()"
         >
           批量删除
-        </ProButton>
+        </Button>
       </template>
 
       <!-- 状态列 -->
@@ -171,7 +171,7 @@ async function batchDeleteDemoRequest(payload: { ids: Array<string | number> }) 
       </template>
 
       <template #column-attachmentName="{ row }">
-        <ProButton
+        <Button
           v-if="row.attachmentUrl"
           link
           type="primary"
@@ -179,7 +179,7 @@ async function batchDeleteDemoRequest(payload: { ids: Array<string | number> }) 
           @click="downloadAttachment(row)"
         >
           {{ row.attachmentName || '下载附件' }}
-        </ProButton>
+        </Button>
         <span v-else>-</span>
       </template>
 
@@ -187,7 +187,7 @@ async function batchDeleteDemoRequest(payload: { ids: Array<string | number> }) 
       <template #column-createdAt="{ row }">
         {{ formatDateTime(row.createdAt) }}
       </template>
-    </ProTable>
+    </Table>
 
     <!-- 新增/编辑弹窗 -->
     <Edit

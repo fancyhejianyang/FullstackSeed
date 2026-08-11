@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { reactive, ref, watch } from 'vue';
 import { ElMessage, type FormRules } from 'element-plus';
-import ProForm, { type ProFormField } from '@/components/ProForm.vue';
-import ProDialog from '@/components/ProDialog.vue';
+import Form, { type FormField } from '@/components/Form.vue';
+import Dialog from '@/components/Dialog.vue';
 import {
   createPermission,
   updatePermission,
@@ -22,7 +22,7 @@ const visible = defineModel<boolean>('visible', { required: true });
 
 const submitting = ref(false);
 const isEdit = ref(false);
-const formRef = ref<InstanceType<typeof ProForm>>();
+const formRef = ref<InstanceType<typeof Form>>();
 
 const form = reactive<{
   code: string;
@@ -34,7 +34,7 @@ const form = reactive<{
   type: 'api',
 });
 
-const fields: ProFormField[] = [
+const fields: FormField[] = [
   { prop: 'code', label: '权限编码', slot: true },
   { prop: 'name', label: '权限名称', type: 'input' },
   {
@@ -110,13 +110,13 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <ProDialog
+  <Dialog
     v-model="visible"
     :title="isEdit ? '编辑权限' : '新增权限'"
     :confirm-loading="submitting"
     @confirm="handleSubmit"
   >
-    <ProForm ref="formRef" v-model="form" :fields="fields" :rules="rules" label-width="90px">
+    <Form ref="formRef" v-model="form" :fields="fields" :rules="rules" label-width="90px">
       <!-- 编辑态编码禁改（编码是权限的唯一标识） -->
       <template #field-code>
         <el-input
@@ -125,6 +125,6 @@ async function handleSubmit() {
           placeholder="如 read、batchDelete"
         />
       </template>
-    </ProForm>
-  </ProDialog>
+    </Form>
+  </Dialog>
 </template>

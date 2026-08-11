@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * ProButton — 基于 el-button 的二次封装。
+ * Button — 基于 el-button 的二次封装。
  *
  * 核心能力：
  * - **权限码驱动**：传 `perm`（如 `'User.create'`），自动校验权限；无权限按 `fallback` 策略处理（默认隐藏，可选 disable）

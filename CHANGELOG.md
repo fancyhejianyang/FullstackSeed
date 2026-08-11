@@ -1,5 +1,23 @@
 # CHANGELOG
 
+### 2026-08-11 封装组件去除 Pro 前缀
+- 新增：
+  - `web/src/components/Button.vue`（原 `ProButton.vue`）
+  - `web/src/components/Dialog.vue`（原 `ProDialog.vue`）
+  - `web/src/components/Form.vue`（原 `ProForm.vue`）
+  - `web/src/components/Table.vue`（原 `ProTable.vue`）
+- 修改：
+  - `web/src/**/*.vue` / `web/src/**/*.ts`（同步组件导入、模板标签与 `FormField` / `TableColumn` 类型名）
+  - `web/components.d.ts`（同步自动组件声明中的语义化组件名）
+  - `AGENTS.md` / `AGENTS-FRONTEND.md` / `AGENTS-COMPONENTS.md` / `.design-spec.md` / `MIGRATION.md`（同步组件契约文档）
+  - `CHANGELOG.md`（追加本次命名调整快照）
+- 删除：
+  - `web/src/components/ProButton.vue`
+  - `web/src/components/ProDialog.vue`
+  - `web/src/components/ProForm.vue`
+  - `web/src/components/ProTable.vue`
+- 说明：封装组件文件名与使用名称去除 `Pro` 前缀，保留 `Button` / `Dialog` / `Form` / `Table` 等纯语义名称；已执行 `web` 的 `npm.cmd run type-check`，通过。
+
 ### 2026-08-11 demo 页面实践封装按钮组件
 - 新增：无
 - 修改：

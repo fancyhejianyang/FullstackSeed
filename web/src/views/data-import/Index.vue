@@ -3,9 +3,9 @@ import { computed, onMounted, ref } from 'vue';
 import { ElMessage, type UploadFile, type UploadUserFile } from 'element-plus';
 import { Close, Setting, UploadFilled } from '@element-plus/icons-vue';
 import PageContainer from '@/components/PageContainer.vue';
-import ProDialog from '@/components/ProDialog.vue';
-import ProTable, { type ProTableColumn } from '@/components/ProTable.vue';
-import type { ProFormField } from '@/components/ProForm.vue';
+import Dialog from '@/components/Dialog.vue';
+import Table, { type TableColumn } from '@/components/Table.vue';
+import type { FormField } from '@/components/Form.vue';
 import {
   createDataImportConfig,
   downloadDataImportTemplate,
@@ -76,7 +76,7 @@ const systemFieldOptions = computed(() =>
 
 const hasTemplate = computed(() => !!templateFile.value || !!existingTemplate.value);
 
-const columns: ProTableColumn[] = [
+const columns: TableColumn[] = [
   { prop: 'moduleName', label: '模块', width: 140, slot: true },
   { prop: 'fieldLabels', label: '导入字段', minWidth: 260, slot: true },
   { prop: 'templateName', label: '模板文件', minWidth: 180, slot: true },
@@ -84,7 +84,7 @@ const columns: ProTableColumn[] = [
   { prop: 'createdAt', label: '上传时间', width: 180, slot: true },
 ];
 
-const searchFields: ProFormField[] = [
+const searchFields: FormField[] = [
   {
     prop: 'moduleId',
     label: '模块',
@@ -285,7 +285,7 @@ onMounted(fetchModules);
 
 <template>
   <PageContainer title="数据导入">
-    <ProTable
+    <Table
       ref="tableRef"
       :columns="columns"
       :search-fields="searchFields"
@@ -353,9 +353,9 @@ onMounted(fetchModules);
       <template #column-createdAt="{ row }">
         {{ formatDateTime((row as DataImportConfigItem).createdAt) }}
       </template>
-    </ProTable>
+    </Table>
 
-    <ProDialog
+    <Dialog
       v-model="configVisible"
       :title="editingConfig ? '编辑数据导入配置' : '数据导入配置'"
       width="960px"
@@ -523,7 +523,7 @@ onMounted(fetchModules);
           </el-table>
         </section>
       </div>
-    </ProDialog>
+    </Dialog>
   </PageContainer>
 </template>
 

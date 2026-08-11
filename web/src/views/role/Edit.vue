@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, type FormRules } from 'element-plus';
-import ProForm, { type ProFormField } from '@/components/ProForm.vue';
-import ProDialog from '@/components/ProDialog.vue';
+import Form, { type FormField } from '@/components/Form.vue';
+import Dialog from '@/components/Dialog.vue';
 import { getMenuTree, type MenuNode } from '@/api/menu';
 import { getAllPermissions, type Permission } from '@/api/permission';
 import {
@@ -20,7 +20,7 @@ const visible = defineModel<boolean>('visible', { required: true });
 const submitting = ref(false);
 const loading = ref(false);
 const isEdit = ref(false);
-const formRef = ref<InstanceType<typeof ProForm>>();
+const formRef = ref<InstanceType<typeof Form>>();
 const permissionTreeRef = ref();
 
 const menuTree = ref<MenuNode[]>([]);
@@ -42,7 +42,7 @@ const form = reactive({
   permissionCodes: [] as string[],
 });
 
-const fields: ProFormField[] = [
+const fields: FormField[] = [
   { prop: 'code', label: '角色编码', type: 'input', placeholder: '如 editor' },
   { prop: 'name', label: '角色名称', type: 'input' },
   {
@@ -246,14 +246,14 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <ProDialog
+  <Dialog
     v-model="visible"
     :title="props.row ? '编辑角色' : '新增角色'"
     :confirm-loading="submitting"
     @confirm="handleSubmit"
   >
     <div v-loading="loading">
-      <ProForm ref="formRef" v-model="form" :fields="fields" :rules="rules">
+      <Form ref="formRef" v-model="form" :fields="fields" :rules="rules">
         <!-- 编辑态编码禁改 -->
         <template v-if="isEdit" #field-code>
           <el-input v-model="form.code" disabled />
@@ -272,9 +272,9 @@ async function handleSubmit() {
             class="perm-tree"
           />
         </template>
-      </ProForm>
+      </Form>
     </div>
-  </ProDialog>
+  </Dialog>
 </template>
 
 <style scoped lang="scss">

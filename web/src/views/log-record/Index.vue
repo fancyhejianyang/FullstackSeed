@@ -3,9 +3,9 @@ import { computed, onMounted, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Setting } from '@element-plus/icons-vue';
 import PageContainer from '@/components/PageContainer.vue';
-import ProDialog from '@/components/ProDialog.vue';
-import ProTable, { type ProTableColumn } from '@/components/ProTable.vue';
-import type { ProFormField } from '@/components/ProForm.vue';
+import Dialog from '@/components/Dialog.vue';
+import Table, { type TableColumn } from '@/components/Table.vue';
+import type { FormField } from '@/components/Form.vue';
 import {
   getLogModuleConfigs,
   getLogRecords,
@@ -33,7 +33,7 @@ const moduleOptions = computed(() =>
   })),
 );
 
-const columns: ProTableColumn[] = [
+const columns: TableColumn[] = [
   { prop: 'moduleName', label: '模块', width: 140 },
   { prop: 'action', label: '操作', width: 120 },
   { prop: 'recordId', label: '记录ID', width: 120 },
@@ -42,7 +42,7 @@ const columns: ProTableColumn[] = [
   { prop: 'createdAt', label: '操作时间', width: 180, slot: true },
 ];
 
-const searchFields: ProFormField[] = [
+const searchFields: FormField[] = [
   {
     prop: 'moduleId',
     label: '模块',
@@ -135,7 +135,7 @@ onMounted(fetchModuleConfigs);
 
 <template>
   <PageContainer title="日志记录">
-    <ProTable
+    <Table
       ref="tableRef"
       :columns="columns"
       :search-fields="searchFields"
@@ -167,9 +167,9 @@ onMounted(fetchModuleConfigs);
       <template #column-createdAt="{ row }">
         {{ formatDateTime((row as LogRecordItem).createdAt) }}
       </template>
-    </ProTable>
+    </Table>
 
-    <ProDialog
+    <Dialog
       v-model="configVisible"
       title="日志统计配置"
       width="720px"
@@ -215,7 +215,7 @@ onMounted(fetchModuleConfigs);
           </el-checkbox-group>
         </el-collapse-item>
       </el-collapse>
-    </ProDialog>
+    </Dialog>
   </PageContainer>
 </template>
 

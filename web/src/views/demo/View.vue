@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import ProButton from '@/components/ProButton.vue';
-import ProDialog from '@/components/ProDialog.vue';
+import Button from '@/components/Button.vue';
+import Dialog from '@/components/Dialog.vue';
 import { formatDateTime } from '@/utils/format';
 import { getDemo, type Demo } from '@/api/demo';
 import { DicService } from '@/dic/service';
@@ -72,7 +72,7 @@ watch(visible, async (val) => {
 </script>
 
 <template>
-  <ProDialog v-model="visible" title="查看示例" width="860px" :show-footer="false">
+  <Dialog v-model="visible" title="查看示例" width="860px" :show-footer="false">
     <div v-loading="loading">
       <el-descriptions :column="1" border>
         <el-descriptions-item label="标题">
@@ -130,7 +130,7 @@ watch(visible, async (val) => {
         </el-descriptions-item>
 
         <el-descriptions-item label="附件文件">
-          <ProButton
+          <Button
             v-if="rowData?.attachmentUrl"
             link
             type="primary"
@@ -138,7 +138,7 @@ watch(visible, async (val) => {
             @click="downloadAttachment"
           >
             {{ rowData.attachmentName || '下载附件' }}
-          </ProButton>
+          </Button>
           <span v-else>-</span>
         </el-descriptions-item>
 
@@ -157,9 +157,9 @@ watch(visible, async (val) => {
     </div>
 
     <template #footer>
-      <ProButton @click="visible = false">关闭</ProButton>
+      <Button @click="visible = false">关闭</Button>
     </template>
-  </ProDialog>
+  </Dialog>
 </template>
 
 <style scoped lang="scss">

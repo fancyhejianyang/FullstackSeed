@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
 import { ElMessage, type FormRules } from 'element-plus';
-import ProForm, { type ProFormField } from '@/components/ProForm.vue';
-import ProDialog from '@/components/ProDialog.vue';
+import Form, { type FormField } from '@/components/Form.vue';
+import Dialog from '@/components/Dialog.vue';
 import {
   createMenu,
   updateMenu,
@@ -26,7 +26,7 @@ const visible = defineModel<boolean>('visible', { required: true });
 const submitting = ref(false);
 const isEdit = computed(() => !!props.row);
 
-const formRef = ref<InstanceType<typeof ProForm>>();
+const formRef = ref<InstanceType<typeof Form>>();
 const form = reactive<{
   parentId: number | null;
   name: string;
@@ -60,7 +60,7 @@ const parentOptions = computed<MenuNode[]>(() => {
   return prune(props.treeData);
 });
 
-const fields: ProFormField[] = [
+const fields: FormField[] = [
   { prop: 'parentId', label: '上级菜单', slot: true },
   { prop: 'name', label: '菜单名称', type: 'input' },
   {
@@ -153,13 +153,13 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <ProDialog
+  <Dialog
     v-model="visible"
     :title="isEdit ? '编辑菜单' : '新增菜单'"
     :confirm-loading="submitting"
     @confirm="handleSubmit"
   >
-    <ProForm ref="formRef" v-model="form" :fields="fields" :rules="rules">
+    <Form ref="formRef" v-model="form" :fields="fields" :rules="rules">
       <!-- 上级菜单树选择 -->
       <template #field-parentId>
         <el-tree-select
@@ -196,8 +196,8 @@ async function handleSubmit() {
           inactive-text="禁用"
         />
       </template>
-    </ProForm>
-  </ProDialog>
+    </Form>
+  </Dialog>
 </template>
 
 <style scoped>

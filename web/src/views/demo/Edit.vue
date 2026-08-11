@@ -7,8 +7,8 @@ import {
   type UploadUserFile,
 } from 'element-plus';
 import { UploadFilled } from '@element-plus/icons-vue';
-import ProForm, { type ProFormField } from '@/components/ProForm.vue';
-import ProDialog from '@/components/ProDialog.vue';
+import Form, { type FormField } from '@/components/Form.vue';
+import Dialog from '@/components/Dialog.vue';
 import {
   createDemo,
   getDemo,
@@ -30,7 +30,7 @@ const visible = defineModel<boolean>('visible', { required: true });
 
 const submitting = ref(false);
 const loading = ref(false);
-const formRef = ref<InstanceType<typeof ProForm>>();
+const formRef = ref<InstanceType<typeof Form>>();
 const form = reactive<DemoForm>({
   title: '',
   content: '',
@@ -58,7 +58,7 @@ DicService.init(DEMO_TAG, tagDic);
 
 const demoTotalAmount = 10000;
 
-const fields: ProFormField[] = [
+const fields: FormField[] = [
   { prop: 'title', label: '标题', type: 'input' },
   { prop: 'category', label: '分类', type: 'select', options: categoryDic },
   { prop: 'status', label: '状态', type: 'select', options: statusDic },
@@ -216,7 +216,7 @@ function readFileAsDataUrl(file: UploadFile) {
 </script>
 
 <template>
-  <ProDialog
+  <Dialog
     v-model="visible"
     :title="props.row ? '编辑示例' : '新增示例'"
     width="860px"
@@ -224,7 +224,7 @@ function readFileAsDataUrl(file: UploadFile) {
     @confirm="handleSubmit"
   >
     <div v-loading="loading">
-      <ProForm ref="formRef" v-model="form" :fields="fields" :rules="rules">
+      <Form ref="formRef" v-model="form" :fields="fields" :rules="rules">
         <template #field-isFeatured>
           <el-checkbox v-model="form.isFeatured">推荐到首页</el-checkbox>
         </template>
@@ -270,7 +270,7 @@ function readFileAsDataUrl(file: UploadFile) {
             </div>
           </el-upload>
         </template>
-      </ProForm>
+      </Form>
     </div>
-  </ProDialog>
+  </Dialog>
 </template>
