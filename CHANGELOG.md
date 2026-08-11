@@ -1,5 +1,23 @@
 # CHANGELOG
 
+### 2026-08-11 补充日期上传与布尔类封装组件
+- 新增：
+  - `web/src/components/DatePicker.vue`（日期/日期时间选择）
+  - `web/src/components/DateRange.vue`（日期区间/日期时间区间选择）
+  - `web/src/components/Checkbox.vue`（单 checkbox）
+  - `web/src/components/CheckboxGroup.vue`（字符串数组 checkbox 组）
+  - `web/src/components/Switch.vue`（布尔开关）
+  - `web/src/components/UploadImage.vue`（图片上传与回显）
+  - `web/src/components/UploadFile.vue`（文件上传、回显、下载与移除）
+- 修改：
+  - `web/src/components/Component.d.ts` / `web/src/components/componentRegistry.ts`（注册新增组件）
+  - `server/src/demo/entities/demo.entity.ts` / `server/src/demo/dto/demo.dto.ts` / `server/src/module-models/module-models.map.ts`（新增 demo 日期、有效期、允许评论、发布渠道字段）
+  - `web/src/api/demo.ts` / `web/src/views/demo/Edit.vue` / `web/src/views/demo/Index.vue` / `web/src/views/demo/View.vue`（demo 优先实践新增组件）
+  - `AGENTS-COMPONENTS.md`（补充组件契约速览）
+  - `CHANGELOG.md`（追加本次组件封装快照）
+- 删除：无
+- 说明：demo 现在覆盖日期、日期范围、switch、checkbox、checkbox 组、图片上传和文件上传等常见表单控件实践。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-11 优化邮箱输入后缀选择体验
 - 新增：无
 - 修改：

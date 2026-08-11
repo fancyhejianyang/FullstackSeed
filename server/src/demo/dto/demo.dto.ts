@@ -8,6 +8,7 @@ import {
   IsArray,
   IsBoolean,
   IsEmail,
+  IsDateString,
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -35,6 +36,15 @@ export class CreateDemoDto {
   @IsIn(DEMO_STATUSES)
   @IsOptional()
   status?: DemoStatus;
+
+  @IsDateString()
+  @IsOptional()
+  publishedAt?: string;
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  activeRange?: string[];
 
   @IsString()
   @IsOptional()
@@ -66,10 +76,19 @@ export class CreateDemoDto {
   @IsOptional()
   isFeatured?: boolean;
 
+  @IsBoolean()
+  @IsOptional()
+  allowComment?: boolean;
+
   @IsArray()
   @IsString({ each: true })
   @IsOptional()
   tags?: string[];
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  channels?: string[];
 
   @IsString()
   @IsOptional()

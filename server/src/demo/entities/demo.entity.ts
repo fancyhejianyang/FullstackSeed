@@ -21,6 +21,12 @@ export class Demo extends BaseEntity {
   @Column({ type: 'varchar', length: 20, default: 'draft' })
   status: DemoStatus;
 
+  @Column({ type: 'datetime', nullable: true })
+  publishedAt: Date | null;
+
+  @Column({ type: 'simple-json', nullable: true })
+  activeRange: string[] | null;
+
   @Column({ length: 20, default: '' })
   contactPhone: string;
 
@@ -51,8 +57,14 @@ export class Demo extends BaseEntity {
   @Column({ type: 'tinyint', default: false })
   isFeatured: boolean;
 
+  @Column({ type: 'tinyint', default: true })
+  allowComment: boolean;
+
   @Column({ type: 'simple-json', nullable: true })
   tags: string[] | null;
+
+  @Column({ type: 'simple-json', nullable: true })
+  channels: string[] | null;
 
   @Column({ type: 'text', nullable: true })
   imageUrl: string | null;

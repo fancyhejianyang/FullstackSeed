@@ -1,19 +1,53 @@
 import type { InputAmountMode } from './InputAmount.vue';
 import type { InputValidator } from './inputRules';
+import type { CheckboxOption } from './CheckboxGroup.vue';
 import type { InputMode } from './Input.vue';
 import type { InputNumberMode } from './InputNumber.vue';
 import type { SelectOption } from './Select.vue';
 
 export type ComponentName =
+  | 'Checkbox'
+  | 'CheckboxGroup'
+  | 'DatePicker'
+  | 'DateRange'
   | 'Input'
   | 'InputAmount'
   | 'InputEmail'
   | 'InputNumber'
   | 'InputPhone'
   | 'Select'
-  | 'SelectMultiple';
+  | 'SelectMultiple'
+  | 'Switch'
+  | 'UploadFile'
+  | 'UploadImage';
 
 export interface ComponentPropsMap {
+  Checkbox: {
+    label?: string;
+    disabled?: boolean;
+  };
+  CheckboxGroup: {
+    options?: CheckboxOption[];
+    disabled?: boolean;
+  };
+  DatePicker: {
+    type?: 'date' | 'datetime';
+    placeholder?: string;
+    clearable?: boolean;
+    format?: string;
+    valueFormat?: string;
+    disabled?: boolean;
+  };
+  DateRange: {
+    type?: 'daterange' | 'datetimerange';
+    startPlaceholder?: string;
+    endPlaceholder?: string;
+    rangeSeparator?: string;
+    clearable?: boolean;
+    format?: string;
+    valueFormat?: string;
+    disabled?: boolean;
+  };
   Input: {
     mode?: InputMode;
     placeholder?: string;
@@ -94,6 +128,22 @@ export interface ComponentPropsMap {
     visibleCount?: number;
     maxTagCount?: number;
     notFoundText?: string;
+  };
+  Switch: {
+    activeText?: string;
+    inactiveText?: string;
+    disabled?: boolean;
+  };
+  UploadFile: {
+    accept?: string;
+    maxSizeMb?: number;
+    disabled?: boolean;
+    dragText?: string;
+  };
+  UploadImage: {
+    accept?: string;
+    maxSizeMb?: number;
+    disabled?: boolean;
   };
 }
 

@@ -25,19 +25,27 @@ const tagDic = ref<{ label: string; value: string }[]>([]);
 DicService.init(DEMO_CATEGORY, categoryDic);
 DicService.init(DEMO_STATUS, statusDic);
 DicService.init(DEMO_TAG, tagDic);
+const channelMap: Record<string, string> = {
+  web: 'Web',
+  app: 'App',
+  mini: '小程序',
+};
 
 // 列配置（特殊列用具名插槽 #column-[prop]）
 const columns: TableColumn[] = [
   { prop: 'title', label: '标题', minWidth: 180 },
   { prop: 'status', label: '状态', width: 100, slot: true },
   { prop: 'category', label: '分类', width: 120, slot: true },
+  { prop: 'publishedAt', label: '发布日期', width: 130, slot: true },
   { prop: 'contactPhone', label: '联系电话', width: 140 },
   { prop: 'email', label: '邮箱', minWidth: 180 },
   { prop: 'quantity', label: '数量', width: 90 },
   { prop: 'unitPrice', label: '单价', width: 120, slot: true },
   { prop: 'budgetAmount', label: '预算金额', width: 120, slot: true },
   { prop: 'isFeatured', label: '推荐', width: 90, slot: true },
+  { prop: 'allowComment', label: '评论', width: 90, slot: true },
   { prop: 'tags', label: '标签', minWidth: 180, slot: true },
+  { prop: 'channels', label: '渠道', minWidth: 160, slot: true },
   { prop: 'attachmentName', label: '附件', minWidth: 160, slot: true },
   { prop: 'createdAt', label: '创建时间', width: 180, slot: true },
 ];
@@ -62,6 +70,10 @@ function getCategoryLabel(value: string) {
 
 function getTagLabel(value: string) {
   return tagDic.value.find((item) => item.value === value)?.label ?? value;
+}
+
+function getChannelLabel(value: string) {
+  return channelMap[value] ?? value;
 }
 
 function formatMoney(value?: number | string | null) {
@@ -148,6 +160,10 @@ async function batchDeleteDemoRequest(payload: { ids: Array<string | number> }) 
         {{ getCategoryLabel(row.category) }}
       </template>
 
+      <template #column-publishedAt="{ row }">
+        {{ row.publishedAt || '-' }}
+      </template>
+
       <template #column-unitPrice="{ row }">
         {{ formatMoney(row.unitPrice) }}
       </template>
@@ -162,12 +178,27 @@ async function batchDeleteDemoRequest(payload: { ids: Array<string | number> }) 
         </el-tag>
       </template>
 
+      <template #column-allowComment="{ row }">
+        <el-tag :type="row.allowComment ? 'success' : 'info'">
+          {{ row.allowComment ? '允许' : '关闭' }}
+        </el-tag>
+      </template>
+
       <template #column-tags="{ row }">
         <div class="demo-index__tags">
           <el-tag v-for="tag in row.tags || []" :key="tag" type="info">
             {{ getTagLabel(tag) }}
           </el-tag>
           <span v-if="!row.tags?.length">-</span>
+        </div>
+      </template>
+
+      <template #column-channels="{ row }">
+        <div class="demo-index__tags">
+          <el-tag v-for="channel in row.channels || []" :key="channel" type="info">
+            {{ getChannelLabel(channel) }}
+          </el-tag>
+          <span v-if="!row.channels?.length">-</span>
         </div>
       </template>
 

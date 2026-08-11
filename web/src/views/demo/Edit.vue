@@ -1,14 +1,9 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
-import {
-  ElMessage,
-  type FormRules,
-  type UploadFile,
-  type UploadUserFile,
-} from 'element-plus';
-import { UploadFilled } from '@element-plus/icons-vue';
+import { ElMessage, type FormRules } from 'element-plus';
 import Form, { type FormField } from '@/components/Form.vue';
 import Dialog from '@/components/Dialog.vue';
+import UploadFile from '@/components/UploadFile.vue';
 import {
   createDemo,
   getDemo,
@@ -37,19 +32,21 @@ const form = reactive<DemoForm>({
   content: '',
   status: 'draft',
   category: '',
+  publishedAt: '',
+  activeRange: [],
   contactPhone: '',
   email: '',
   quantity: 0,
   unitPrice: 0,
   budgetAmount: 0,
   isFeatured: false,
+  allowComment: true,
   tags: [],
+  channels: [],
   imageUrl: '',
   attachmentName: '',
   attachmentUrl: '',
 });
-const imageFiles = ref<UploadUserFile[]>([]);
-const attachmentFiles = ref<UploadUserFile[]>([]);
 
 const categoryDic = ref<DicItem[]>([]);
 const statusDic = ref<DicItem[]>([]);
@@ -67,6 +64,11 @@ const toSelectOptions = (items: DicItem[]): SelectOption[] =>
 const categoryOptions = computed(() => toSelectOptions(categoryDic.value));
 const statusOptions = computed(() => toSelectOptions(statusDic.value));
 const tagOptions = computed(() => toSelectOptions(tagDic.value));
+const channelOptions = [
+  { value: 'web', text: 'Web' },
+  { value: 'app', text: 'App' },
+  { value: 'mini', text: '小程序' },
+];
 
 const fields: FormField[] = [
   { prop: 'title', label: '标题', type: 'input' },
@@ -81,6 +83,17 @@ const fields: FormField[] = [
     label: '状态',
     component: 'Select',
     componentProps: { options: statusOptions, debounce: 250 },
+  },
+  {
+    prop: 'publishedAt',
+    label: '发布日期',
+    component: 'DatePicker',
+    componentProps: { placeholder: '请选择发布日期' },
+  },
+  {
+    prop: 'activeRange',
+    label: '有效期',
+    component: 'DateRange',
   },
   {
     prop: 'contactPhone',
@@ -117,7 +130,18 @@ const fields: FormField[] = [
       max: demoTotalAmount,
     },
   },
-  { prop: 'isFeatured', label: '推荐', slot: true },
+  {
+    prop: 'isFeatured',
+    label: '推荐',
+    component: 'Switch',
+    componentProps: { activeText: '推荐', inactiveText: '普通' },
+  },
+  {
+    prop: 'allowComment',
+    label: '允许评论',
+    component: 'Checkbox',
+    componentProps: { label: '允许用户评论' },
+  },
   {
     prop: 'tags',
     label: '标签',
@@ -128,7 +152,18 @@ const fields: FormField[] = [
       maxTagCount: 2,
     },
   },
-  { prop: 'imageUrl', label: '封面图片', slot: true },
+  {
+    prop: 'channels',
+    label: '发布渠道',
+    component: 'CheckboxGroup',
+    componentProps: { options: channelOptions },
+  },
+  {
+    prop: 'imageUrl',
+    label: '封面图片',
+    component: 'UploadImage',
+    componentProps: { maxSizeMb: 5 },
+  },
   { prop: 'attachmentUrl', label: '附件文件', slot: true },
   { prop: 'content', label: '内容', type: 'textarea', rows: 4 },
 ];
@@ -144,18 +179,20 @@ function resetForm() {
   form.content = '';
   form.category = '';
   form.status = 'draft';
+  form.publishedAt = '';
+  form.activeRange = [];
   form.contactPhone = '';
   form.email = '';
   form.quantity = 0;
   form.unitPrice = 0;
   form.budgetAmount = 0;
   form.isFeatured = false;
+  form.allowComment = true;
   form.tags = [];
+  form.channels = [];
   form.imageUrl = '';
   form.attachmentName = '';
   form.attachmentUrl = '';
-  imageFiles.value = [];
-  attachmentFiles.value = [];
 }
 
 function fillForm(data: Demo) {
@@ -163,22 +200,20 @@ function fillForm(data: Demo) {
   form.content = data.content ?? '';
   form.category = data.category ?? '';
   form.status = data.status ?? 'draft';
+  form.publishedAt = data.publishedAt ?? '';
+  form.activeRange = data.activeRange ?? [];
   form.contactPhone = data.contactPhone ?? '';
   form.email = data.email ?? '';
   form.quantity = data.quantity ?? 0;
   form.unitPrice = data.unitPrice ?? 0;
   form.budgetAmount = data.budgetAmount ?? 0;
   form.isFeatured = !!data.isFeatured;
+  form.allowComment = data.allowComment ?? true;
   form.tags = data.tags ?? [];
+  form.channels = data.channels ?? [];
   form.imageUrl = data.imageUrl ?? '';
   form.attachmentName = data.attachmentName ?? '';
   form.attachmentUrl = data.attachmentUrl ?? '';
-  imageFiles.value = form.imageUrl
-    ? [{ name: '封面图片', url: form.imageUrl }]
-    : [];
-  attachmentFiles.value = form.attachmentUrl
-    ? [{ name: form.attachmentName || '附件文件', url: form.attachmentUrl }]
-    : [];
 }
 
 watch(visible, async (val) => {
@@ -214,42 +249,6 @@ async function handleSubmit() {
   }
 }
 
-async function handleImageChange(file: UploadFile) {
-  const url = await readFileAsDataUrl(file);
-  form.imageUrl = url;
-  imageFiles.value = [{ name: file.name, url }];
-}
-
-function handleImageRemove() {
-  form.imageUrl = '';
-  imageFiles.value = [];
-}
-
-async function handleAttachmentChange(file: UploadFile) {
-  const url = await readFileAsDataUrl(file);
-  form.attachmentName = file.name;
-  form.attachmentUrl = url;
-  attachmentFiles.value = [{ name: file.name, url }];
-}
-
-function handleAttachmentRemove() {
-  form.attachmentName = '';
-  form.attachmentUrl = '';
-  attachmentFiles.value = [];
-}
-
-function readFileAsDataUrl(file: UploadFile) {
-  return new Promise<string>((resolve, reject) => {
-    if (!file.raw) {
-      resolve('');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = reject;
-    reader.readAsDataURL(file.raw);
-  });
-}
 </script>
 
 <template>
@@ -262,38 +261,11 @@ function readFileAsDataUrl(file: UploadFile) {
   >
     <div v-loading="loading">
       <Form ref="formRef" v-model="form" :fields="fields" :rules="rules">
-        <template #field-isFeatured>
-          <el-checkbox v-model="form.isFeatured">推荐到首页</el-checkbox>
-        </template>
-
-        <template #field-imageUrl>
-          <el-upload
-            list-type="picture-card"
-            :auto-upload="false"
-            :limit="1"
-            :file-list="imageFiles"
-            accept="image/*"
-            :on-change="handleImageChange"
-            :on-remove="handleImageRemove"
-          >
-            <el-icon><UploadFilled /></el-icon>
-          </el-upload>
-        </template>
-
         <template #field-attachmentUrl>
-          <el-upload
-            drag
-            :auto-upload="false"
-            :limit="1"
-            :file-list="attachmentFiles"
-            :on-change="handleAttachmentChange"
-            :on-remove="handleAttachmentRemove"
-          >
-            <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
-            <div class="el-upload__text">
-              将文件拖到此处，或点击上传
-            </div>
-          </el-upload>
+          <UploadFile
+            v-model="form.attachmentUrl"
+            v-model:name="form.attachmentName"
+          />
         </template>
       </Form>
     </div>

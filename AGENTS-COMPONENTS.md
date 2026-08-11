@@ -13,9 +13,13 @@
 | `Form` | 配置驱动表单 + 插槽兜底 | 编辑弹窗 / 搜索栏内部使用 |
 | `Dialog` | 弹窗外壳（预设宽度/滚动/确定取消） | `Edit.vue` / `View.vue` 都用它包一层 |
 | `Button` | 按钮二次封装（权限码驱动 + 自动配色 + 无权限隐藏） | 业务页自定义操作按钮统一用它，禁止裸写 `el-button` + 硬编码 `type` |
+| `DatePicker` / `DateRange` | 日期和日期区间选择 | 日期字段、有效期字段 |
+| `Checkbox` / `CheckboxGroup` | 单选勾选和多选勾选组 | 布尔字段、少量多选枚举 |
 | `InputEmail` | 邮箱输入（自动补 `@` + 后缀下拉/手输 + 内置校验） | 邮箱字段 |
 | `Select` | 单选下拉（搜索防抖 + 虚拟滚动 + 键盘选择） | 表单单选字段，数据格式 `[{ value, text }]` |
 | `SelectMultiple` | 多选下拉（字符串数组 + tag 折叠 + 搜索防抖 + 虚拟滚动） | 表单多选字段，`v-model` 固定为 `string[]` |
+| `Switch` | 开关切换 | 启用/禁用、推荐/普通等布尔状态 |
+| `UploadImage` / `UploadFile` | 图片/文件上传回显 | 图片 URL、附件 URL + 文件名 |
 | `MenuTree` | 递归渲染菜单树 | `MainLayout` 侧边栏用 |
 
 ## 工具速览（`web/src/utils/`）

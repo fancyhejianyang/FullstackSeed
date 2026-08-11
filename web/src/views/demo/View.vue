@@ -23,6 +23,11 @@ const tagDic = ref<{ label: string; value: string }[]>([]);
 DicService.init(DEMO_CATEGORY, categoryDic);
 DicService.init(DEMO_STATUS, statusDic);
 DicService.init(DEMO_TAG, tagDic);
+const channelMap: Record<string, string> = {
+  web: 'Web',
+  app: 'App',
+  mini: '小程序',
+};
 
 function getCategoryLabel(value?: string) {
   if (!value) return '-';
@@ -36,6 +41,10 @@ function getStatusLabel(value?: string) {
 
 function getTagLabel(value: string) {
   return tagDic.value.find((item) => item.value === value)?.label ?? value;
+}
+
+function getChannelLabel(value: string) {
+  return channelMap[value] ?? value;
 }
 
 function formatMoney(value?: number | string | null) {
@@ -87,6 +96,17 @@ watch(visible, async (val) => {
           <el-tag :type="statusTagType">{{ getStatusLabel(rowData?.status) }}</el-tag>
         </el-descriptions-item>
 
+        <el-descriptions-item label="发布日期">
+          {{ rowData?.publishedAt || '-' }}
+        </el-descriptions-item>
+
+        <el-descriptions-item label="有效期">
+          <span v-if="rowData?.activeRange?.length">
+            {{ rowData.activeRange.join(' 至 ') }}
+          </span>
+          <span v-else>-</span>
+        </el-descriptions-item>
+
         <el-descriptions-item label="联系电话">
           {{ rowData?.contactPhone || '-' }}
         </el-descriptions-item>
@@ -113,10 +133,25 @@ watch(visible, async (val) => {
           </el-tag>
         </el-descriptions-item>
 
+        <el-descriptions-item label="允许评论">
+          <el-tag :type="rowData?.allowComment ? 'success' : 'info'">
+            {{ rowData?.allowComment ? '允许' : '关闭' }}
+          </el-tag>
+        </el-descriptions-item>
+
         <el-descriptions-item label="标签">
           <div v-if="rowData?.tags?.length" class="demo-view__tags">
             <el-tag v-for="tag in rowData.tags" :key="tag" type="info">
               {{ getTagLabel(tag) }}
+            </el-tag>
+          </div>
+          <span v-else>-</span>
+        </el-descriptions-item>
+
+        <el-descriptions-item label="发布渠道">
+          <div v-if="rowData?.channels?.length" class="demo-view__tags">
+            <el-tag v-for="channel in rowData.channels" :key="channel" type="info">
+              {{ getChannelLabel(channel) }}
             </el-tag>
           </div>
           <span v-else>-</span>
