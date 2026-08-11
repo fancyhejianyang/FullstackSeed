@@ -37,6 +37,12 @@ function getTagLabel(value: string) {
   return tagDic.value.find((item) => item.value === value)?.label ?? value;
 }
 
+function formatMoney(value?: number | string | null) {
+  if (value === null || value === undefined || value === '') return '-';
+  const amount = Number(value);
+  return Number.isNaN(amount) ? '-' : `${amount.toFixed(2)} 元`;
+}
+
 function downloadAttachment() {
   if (!rowData.value?.attachmentUrl) return;
   const link = document.createElement('a');
@@ -78,6 +84,22 @@ watch(visible, async (val) => {
 
         <el-descriptions-item label="状态">
           <el-tag :type="statusTagType">{{ getStatusLabel(rowData?.status) }}</el-tag>
+        </el-descriptions-item>
+
+        <el-descriptions-item label="联系电话">
+          {{ rowData?.contactPhone || '-' }}
+        </el-descriptions-item>
+
+        <el-descriptions-item label="数量">
+          {{ rowData?.quantity ?? '-' }}
+        </el-descriptions-item>
+
+        <el-descriptions-item label="单价">
+          {{ formatMoney(rowData?.unitPrice) }}
+        </el-descriptions-item>
+
+        <el-descriptions-item label="预算金额">
+          {{ formatMoney(rowData?.budgetAmount) }}
         </el-descriptions-item>
 
         <el-descriptions-item label="推荐">

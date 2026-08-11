@@ -36,6 +36,10 @@ const form = reactive<DemoForm>({
   content: '',
   status: 'draft',
   category: '',
+  contactPhone: '',
+  quantity: 0,
+  unitPrice: 0,
+  budgetAmount: 0,
   isFeatured: false,
   tags: [],
   imageUrl: '',
@@ -52,10 +56,41 @@ DicService.init(DEMO_CATEGORY, categoryDic);
 DicService.init(DEMO_STATUS, statusDic);
 DicService.init(DEMO_TAG, tagDic);
 
+const demoTotalAmount = 10000;
+
 const fields: ProFormField[] = [
   { prop: 'title', label: '标题', type: 'input' },
   { prop: 'category', label: '分类', type: 'select', options: categoryDic },
   { prop: 'status', label: '状态', type: 'select', options: statusDic },
+  {
+    prop: 'contactPhone',
+    label: '联系电话',
+    component: 'InputPhone',
+    componentProps: { required: false },
+  },
+  {
+    prop: 'quantity',
+    label: '数量',
+    component: 'InputNumber',
+    componentProps: { mode: 'integer', min: 0, precision: 0 },
+  },
+  {
+    prop: 'unitPrice',
+    label: '单价',
+    component: 'InputNumber',
+    componentProps: { mode: 'money', min: 0, suffixText: '元' },
+  },
+  {
+    prop: 'budgetAmount',
+    label: '预算金额',
+    component: 'InputAmount',
+    componentProps: {
+      totalAmount: demoTotalAmount,
+      switchable: true,
+      min: 0,
+      max: demoTotalAmount,
+    },
+  },
   { prop: 'isFeatured', label: '推荐', slot: true },
   { prop: 'tags', label: '标签', slot: true },
   { prop: 'imageUrl', label: '封面图片', slot: true },
@@ -74,6 +109,10 @@ function resetForm() {
   form.content = '';
   form.category = '';
   form.status = 'draft';
+  form.contactPhone = '';
+  form.quantity = 0;
+  form.unitPrice = 0;
+  form.budgetAmount = 0;
   form.isFeatured = false;
   form.tags = [];
   form.imageUrl = '';
@@ -88,6 +127,10 @@ function fillForm(data: Demo) {
   form.content = data.content ?? '';
   form.category = data.category ?? '';
   form.status = data.status ?? 'draft';
+  form.contactPhone = data.contactPhone ?? '';
+  form.quantity = data.quantity ?? 0;
+  form.unitPrice = data.unitPrice ?? 0;
+  form.budgetAmount = data.budgetAmount ?? 0;
   form.isFeatured = !!data.isFeatured;
   form.tags = data.tags ?? [];
   form.imageUrl = data.imageUrl ?? '';

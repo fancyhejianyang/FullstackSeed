@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsIn,
   IsInt,
+  IsNumber,
   IsArray,
   IsBoolean,
   Min,
@@ -33,6 +34,28 @@ export class CreateDemoDto {
   @IsIn(DEMO_STATUSES)
   @IsOptional()
   status?: DemoStatus;
+
+  @IsString()
+  @IsOptional()
+  contactPhone?: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  quantity?: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  unitPrice?: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  budgetAmount?: number;
 
   @IsBoolean()
   @IsOptional()

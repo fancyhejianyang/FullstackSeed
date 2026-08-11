@@ -34,6 +34,10 @@ const columns: ProTableColumn[] = [
   { prop: 'title', label: '标题', minWidth: 180 },
   { prop: 'status', label: '状态', width: 100, slot: true },
   { prop: 'category', label: '分类', width: 120, slot: true },
+  { prop: 'contactPhone', label: '联系电话', width: 140 },
+  { prop: 'quantity', label: '数量', width: 90 },
+  { prop: 'unitPrice', label: '单价', width: 120, slot: true },
+  { prop: 'budgetAmount', label: '预算金额', width: 120, slot: true },
   { prop: 'isFeatured', label: '推荐', width: 90, slot: true },
   { prop: 'tags', label: '标签', minWidth: 180, slot: true },
   { prop: 'attachmentName', label: '附件', minWidth: 160, slot: true },
@@ -60,6 +64,12 @@ function getCategoryLabel(value: string) {
 
 function getTagLabel(value: string) {
   return tagDic.value.find((item) => item.value === value)?.label ?? value;
+}
+
+function formatMoney(value?: number | string | null) {
+  if (value === null || value === undefined || value === '') return '-';
+  const amount = Number(value);
+  return Number.isNaN(amount) ? '-' : `${amount.toFixed(2)} 元`;
 }
 
 function downloadAttachment(row: Demo) {
@@ -134,6 +144,14 @@ async function batchDeleteDemoRequest(payload: { ids: Array<string | number> }) 
       <!-- 分类列 -->
       <template #column-category="{ row }">
         {{ getCategoryLabel(row.category) }}
+      </template>
+
+      <template #column-unitPrice="{ row }">
+        {{ formatMoney(row.unitPrice) }}
+      </template>
+
+      <template #column-budgetAmount="{ row }">
+        {{ formatMoney(row.budgetAmount) }}
       </template>
 
       <template #column-isFeatured="{ row }">

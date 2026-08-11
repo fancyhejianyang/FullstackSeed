@@ -1,5 +1,19 @@
 # CHANGELOG
 
+### 2026-08-11 在 demo 页面实践专用输入组件
+- 新增：无
+- 修改：
+  - `server/src/demo/entities/demo.entity.ts`（新增联系电话、数量、单价与预算金额字段）
+  - `server/src/demo/dto/demo.dto.ts`（同步新增字段校验）
+  - `server/src/module-models/module-models.map.ts`（补充 demo 模块字段元数据，标记对应输入组件实践）
+  - `web/src/api/demo.ts`（同步 demo 类型与表单字段）
+  - `web/src/views/demo/Edit.vue`（优先使用 `InputPhone`、`InputNumber`、`InputAmount` 实践专用输入组件）
+  - `web/src/views/demo/Index.vue`（列表展示电话、数量、单价与预算金额）
+  - `web/src/views/demo/View.vue`（详情展示电话、数量、单价与预算金额）
+  - `CHANGELOG.md`（追加本次 demo 实践快照）
+- 删除：无
+- 说明：demo 模块现在覆盖文本、下拉、checkbox、上传图片、上传文件、电话、数字、金额以及金额/百分比切换等输入实践。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-11 新增金额与百分比切换输入组件
 - 新增：
   - `web/src/components/InputAmount.vue`（金额输入组件，支持金额/百分比模式切换，并按总金额换算实际金额）

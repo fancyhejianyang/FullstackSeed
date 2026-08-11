@@ -14,6 +14,10 @@ export interface Demo {
   content: string;
   category: DemoCategory;
   status: DemoStatus;
+  contactPhone: string;
+  quantity: number;
+  unitPrice: number;
+  budgetAmount: number;
   isFeatured: boolean;
   tags: DemoTag[];
   imageUrl: string;
@@ -39,6 +43,10 @@ export interface DemoForm {
   content?: string;
   category?: DemoCategory;
   status?: DemoStatus;
+  contactPhone?: string;
+  quantity?: number;
+  unitPrice?: number;
+  budgetAmount?: number;
   isFeatured?: boolean;
   tags?: DemoTag[];
   imageUrl?: string;
