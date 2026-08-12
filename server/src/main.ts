@@ -3,6 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
+import { join } from 'node:path';
 import { AppModule } from './app.module';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -23,6 +24,9 @@ async function bootstrap() {
 
   // 全局 API 前缀
   app.setGlobalPrefix('api');
+
+  // 上传文件静态访问地址。业务表只保存 /uploads/... URL，底层存储未来可替换为 OSS。
+  app.use('/uploads', require('express').static(join(process.cwd(), 'uploads')));
 
   // 全局校验管道
   app.useGlobalPipes(

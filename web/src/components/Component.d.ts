@@ -4,6 +4,7 @@ import type { CheckboxOption } from './CheckboxGroup.vue';
 import type { InputMode } from './Input.vue';
 import type { InputNumberMode } from './InputNumber.vue';
 import type { SelectOption } from './Select.vue';
+import type { UploadResult } from '@/api/upload';
 
 /**
  * 项目封装组件名称登记表。
@@ -147,11 +148,13 @@ export interface ComponentPropsMap {
     maxSizeMb?: number;
     disabled?: boolean;
     dragText?: string;
+    uploadRequest?: (file: File) => Promise<UploadResult>;
   };
   UploadImage: {
     accept?: string;
     maxSizeMb?: number;
     disabled?: boolean;
+    uploadRequest?: (file: File) => Promise<UploadResult>;
   };
 }
 

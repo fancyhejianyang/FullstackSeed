@@ -19,7 +19,7 @@
 | `Select` | 单选下拉（搜索防抖 + 虚拟滚动 + 键盘选择） | 表单单选字段，数据格式 `[{ value, text }]` |
 | `SelectMultiple` | 多选下拉（字符串数组 + tag 折叠 + 搜索防抖 + 虚拟滚动） | 表单多选字段，`v-model` 固定为 `string[]` |
 | `Switch` | 开关切换 | 启用/禁用、推荐/普通等布尔状态 |
-| `UploadImage` / `UploadFile` | 图片/文件上传回显 | 图片 URL、附件 URL + 文件名 |
+| `UploadImage` / `UploadFile` | 图片/文件上传回显 | 调统一上传接口，业务字段保存图片/附件 URL |
 | `MenuTree` | 递归渲染菜单树 | `MainLayout` 侧边栏用 |
 
 ## 工具速览（`web/src/utils/`）
@@ -178,6 +178,17 @@
   componentProps: { options: tagOptions, maxTagCount: 2 },
 }
 ```
+
+---
+
+## UploadImage / UploadFile
+
+**契约**：上传组件默认调用统一后端接口 `POST /api/uploads`，后端返回前端可直接预览/下载的 `url`。业务模块只保存这个地址；文件原名如需展示，用 `UploadFile` 的 `v-model:name` 额外保存。
+
+- `UploadImage`：v-model 为图片 URL，默认 `accept='image/*'`
+- `UploadFile`：v-model 为文件 URL，`v-model:name` 为文件名，已上传后隐藏拖拽区并显示可下载文件名
+- `uploadRequest(file)`：可覆盖默认上传实现，未来直传 OSS 或特殊业务上传时仍保持组件契约不变
+- 后端本地存储默认暴露 `/uploads/...`；未来 OSS/CDN 只调整上传服务或 `UPLOAD_PUBLIC_BASE_URL`
 
 ---
 

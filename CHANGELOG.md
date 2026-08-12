@@ -1,5 +1,19 @@
 # CHANGELOG
 
+### 2026-08-12 新增统一文件上传接口
+- 新增：
+  - `server/src/uploads/uploads.module.ts` / `uploads.controller.ts` / `uploads.service.ts`（统一文件上传模块，默认本地存储并返回可访问 URL）
+  - `web/src/api/upload.ts`（前端通用上传 API）
+- 修改：
+  - `server/src/app.module.ts` / `server/src/main.ts`（挂载上传模块，暴露 `/uploads` 静态访问路径，支持 `UPLOAD_PUBLIC_BASE_URL`）
+  - `server/.env.example` / `server/.gitignore`（补充上传公开域名配置与本地上传目录忽略）
+  - `web/src/components/UploadImage.vue` / `UploadFile.vue`（默认调用统一上传接口，业务字段保存 URL；支持自定义 `uploadRequest`）
+  - `web/src/components/Component.d.ts` / `web/vite.config.ts`（补充上传组件 props 类型与开发代理）
+  - `AGENTS-COMPONENTS.md`（补充上传组件契约）
+  - `CHANGELOG.md`（追加本次统一上传快照）
+- 删除：无
+- 说明：文件底层当前存服务器本地，未来切 OSS/CDN 只需调整上传服务或公开域名配置；业务模块继续只保存文件 URL。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-12 Form 默认接入封装 Select
 - 新增：无
 - 修改：

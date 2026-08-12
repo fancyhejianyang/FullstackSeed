@@ -4,6 +4,7 @@
 # 构建产物
 /dist
 /coverage
+/uploads
 
 # 环境变量（包含敏感信息，不提交）
 .env

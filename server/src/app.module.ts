@@ -16,6 +16,7 @@ import { MenusModule } from './menus/menus.module';
 import { ModuleModelsModule } from './module-models/module-models.module';
 import { LogRecordsModule } from './log-records/log-records.module';
 import { DataImportModule } from './data-import/data-import.module';
+import { UploadsModule } from './uploads/uploads.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { DataImportModule } from './data-import/data-import.module';
         }),
         JWT_EXPIRES_IN: Joi.string().default('7d'),
         BCRYPT_SALT_ROUNDS: Joi.number().integer().min(4).max(15).default(10),
+        UPLOAD_PUBLIC_BASE_URL: Joi.string().allow('').default(''),
         ADMIN_PASSWORD: Joi.when('NODE_ENV', {
           is: 'production',
           then: Joi.string().min(8).required(),
@@ -96,6 +98,7 @@ import { DataImportModule } from './data-import/data-import.module';
     ModuleModelsModule,
     LogRecordsModule,
     DataImportModule,
+    UploadsModule,
     DemoModule,
   ],
   controllers: [AppController],
