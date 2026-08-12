@@ -31,6 +31,7 @@ const SEED_MENUS: SeedMenu[] = [
   { name: '微信 / 小程序', path: '/system-config/wechat', icon: 'ChatDotRound', sort: 30, permissionCode: 'Menu.read', isSystem: true, parentPath: '/system-config' },
   { name: '日志记录', path: '/system-config/log-record', icon: 'Tickets', sort: 40, permissionCode: 'Menu.read', isSystem: true, parentPath: '/system-config' },
   { name: '数据导入', path: '/system-config/data-import', icon: 'UploadFilled', sort: 50, permissionCode: 'Menu.read', isSystem: true, parentPath: '/system-config' },
+  { name: 'OSS/CDN 配置', path: '/system-config/storage', icon: 'FolderOpened', sort: 60, permissionCode: 'Menu.read', isSystem: true, parentPath: '/system-config' },
 ];
 
 // 锁定菜单路径：前端不限制操作，后端 API 对此类菜单统一做管理员身份校验

@@ -17,6 +17,7 @@ import { ModuleModelsModule } from './module-models/module-models.module';
 import { LogRecordsModule } from './log-records/log-records.module';
 import { DataImportModule } from './data-import/data-import.module';
 import { UploadsModule } from './uploads/uploads.module';
+import { StorageConfigModule } from './storage-config/storage-config.module';
 
 @Module({
   imports: [
@@ -98,6 +99,7 @@ import { UploadsModule } from './uploads/uploads.module';
     ModuleModelsModule,
     LogRecordsModule,
     DataImportModule,
+    StorageConfigModule,
     UploadsModule,
     DemoModule,
   ],

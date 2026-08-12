@@ -87,6 +87,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '数据导入', permission: 'Menu.read' },
       },
       {
+        path: 'system-config/storage',
+        name: 'system-config-storage',
+        component: () => import('@/views/storage-config/Index.vue'),
+        meta: { title: 'OSS/CDN 配置', permission: 'Menu.read' },
+      },
+      {
         // 布局内兜底 404（保留侧边栏）
         path: ':pathMatch(.*)*',
         name: 'not-found',

@@ -1,8 +1,11 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import { extname, join } from 'node:path';
+import {
+  StorageConfigService,
+  type StorageConfig,
+} from '../storage-config/storage-config.service';
 
 export interface UploadedStorageFile {
   originalname: string;
@@ -23,13 +26,42 @@ export interface UploadResult {
 export class UploadsService {
   private readonly uploadRoot = join(process.cwd(), 'uploads');
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly storageConfigService: StorageConfigService) {}
 
   async saveFile(file: UploadedStorageFile): Promise<UploadResult> {
     if (!file.buffer?.length) {
       throw new BadRequestException('文件内容为空');
     }
 
+    const storageConfig = await this.storageConfigService.getConfig();
+    if (storageConfig.enabled && storageConfig.provider !== 'local') {
+      return this.saveFileToOss(file, storageConfig);
+    }
+
+    return this.saveFileAsLocal(file, storageConfig);
+  }
+
+  private async saveFileToOss(
+    file: UploadedStorageFile,
+    storageConfig: StorageConfig,
+  ): Promise<UploadResult> {
+    /**
+     * OSS/CDN 伪代码连接点：
+     * 1. 根据 storageConfig.provider 创建对应 SDK Client
+     * 2. 使用 bucket / region / endpoint / accessKeyId / accessKeySecret 初始化
+     * 3. const objectKey = `${storageConfig.uploadDir}/${dateDir}/${fileName}`
+     * 4. await client.putObject(objectKey, file.buffer, { contentType: file.mimetype })
+     * 5. return { url: `${storageConfig.publicBaseUrl}/${objectKey}`, ... }
+     *
+     * 当前种子项目未绑定具体云厂商 SDK，因此先回退本地存储，保证接口契约可用。
+     */
+    return this.saveFileAsLocal(file, storageConfig);
+  }
+
+  private async saveFileAsLocal(
+    file: UploadedStorageFile,
+    storageConfig: StorageConfig,
+  ): Promise<UploadResult> {
     const fileName = `${randomUUID()}${this.getSafeExt(file.originalname)}`;
     const now = new Date();
     const dateDir = [
@@ -42,7 +74,7 @@ export class UploadsService {
     await fs.writeFile(join(targetDir, fileName), file.buffer);
 
     return {
-      url: this.buildPublicUrl(`/uploads/${dateDir}/${fileName}`),
+      url: this.buildPublicUrl(`/uploads/${dateDir}/${fileName}`, storageConfig),
       fileName,
       originalName: this.normalizeFileName(file.originalname),
       mimeType: file.mimetype ?? 'application/octet-stream',
@@ -50,12 +82,10 @@ export class UploadsService {
     };
   }
 
-  private buildPublicUrl(pathname: string) {
-    const publicBaseUrl = this.configService
-      .get<string>('UPLOAD_PUBLIC_BASE_URL', '')
-      .trim()
-      .replace(/\/+$/, '');
-    return publicBaseUrl ? `${publicBaseUrl}${pathname}` : pathname;
+  private buildPublicUrl(pathname: string, storageConfig: StorageConfig) {
+    return storageConfig.publicBaseUrl
+      ? `${storageConfig.publicBaseUrl}${pathname}`
+      : pathname;
   }
 
   private getSafeExt(filename: string) {

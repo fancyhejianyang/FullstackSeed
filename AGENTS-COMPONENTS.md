@@ -189,6 +189,7 @@
 - `UploadFile`：v-model 为文件 URL，`v-model:name` 为文件名，已上传后隐藏拖拽区并显示可下载文件名
 - `uploadRequest(file)`：可覆盖默认上传实现，未来直传 OSS 或特殊业务上传时仍保持组件契约不变
 - 后端本地存储默认暴露 `/uploads/...`；未来 OSS/CDN 只调整上传服务或 `UPLOAD_PUBLIC_BASE_URL`
+- 系统配置下的「OSS/CDN 配置」页面会保存上传存储开关和云厂商参数；上传接口读取该配置决定本地或 OSS 分支
 
 ---
 

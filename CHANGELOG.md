@@ -1,5 +1,19 @@
 # CHANGELOG
 
+### 2026-08-12 新增 OSS/CDN 存储配置页面
+- 新增：
+  - `server/src/storage-config/`（OSS/CDN 存储配置读取与保存接口，当前用 `storage/storage-config.json` 持久化）
+  - `web/src/api/storageConfig.ts`（前端存储配置 API）
+  - `web/src/views/storage-config/Index.vue`（系统配置下的 OSS/CDN 配置页面）
+- 修改：
+  - `server/src/uploads/uploads.service.ts` / `uploads.module.ts`（上传接口读取存储配置，OSS 分支预留伪代码连接点，未接 SDK 时回退本地存储）
+  - `server/src/app.module.ts` / `server/src/menus/menus.service.ts` / `server/.gitignore`（挂载配置模块，新增系统配置子菜单，忽略本地配置文件）
+  - `web/src/router/index.ts`（新增 `/system-config/storage` 路由）
+  - `AGENTS-COMPONENTS.md`（同步上传配置契约说明）
+  - `CHANGELOG.md`（追加本次存储配置快照）
+- 删除：无
+- 说明：后台已具备 OSS/CDN 配置表单和 API，上传接口已与配置开关建立连接；真实云 SDK 接入位置已在服务内用伪代码标注。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-12 新增统一文件上传接口
 - 新增：
   - `server/src/uploads/uploads.module.ts` / `uploads.controller.ts` / `uploads.service.ts`（统一文件上传模块，默认本地存储并返回可访问 URL）
