@@ -1,4 +1,12 @@
 <script setup lang="ts">
+/**
+ * DatePicker — 单日期/日期时间选择组件。
+ *
+ * 核心能力：
+ * - 基于 el-date-picker，统一默认 format/valueFormat 为 `YYYY-MM-DD`
+ * - v-model 固定使用 string | null，便于与后端 DTO 的日期字符串对齐
+ * - attrs 透传给 el-date-picker，宽度默认撑满父级表单空间
+ */
 defineOptions({ inheritAttrs: false });
 
 const props = withDefaults(

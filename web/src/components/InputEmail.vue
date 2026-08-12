@@ -1,4 +1,13 @@
 <script setup lang="ts">
+/**
+ * InputEmail — 邮箱输入组件。
+ *
+ * 核心能力：
+ * - v-model 保存完整邮箱字符串，UI 上拆成账号 + 固定 `@` + 后缀下拉
+ * - 账号里输入 `@` 时会自动拆分到后缀；后缀支持预设下拉，也支持手动创建
+ * - 内置邮箱格式校验，可通过 `rulesEnabled=false` 关闭，或通过 `rules` 覆盖
+ * - 宽度默认撑满父级，后缀区保持固定宽度，避免表单布局抖动
+ */
 import { ref, watch } from 'vue';
 import {
   emailRule,
@@ -57,6 +66,7 @@ const emit = defineEmits<{
 watch(
   () => model.value,
   (value) => {
+    // 内部组合邮箱时会写回 model；用 syncing 防止 watch 反向拆分导致输入光标跳动。
     if (syncing) return;
     syncPartsFromModel(value);
   },
@@ -89,6 +99,7 @@ function composeValue() {
   const nextAccount = normalize(account.value);
   const nextDomain = normalize(domain.value).replace(/^@+/, '');
   if (!nextAccount) return '';
+  // 有账号但没后缀时保留尾部 @，让用户明确看到组件已自动补齐分隔符。
   return nextDomain ? `${nextAccount}@${nextDomain}` : `${nextAccount}@`;
 }
 

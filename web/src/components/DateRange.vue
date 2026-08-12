@@ -1,4 +1,12 @@
 <script setup lang="ts">
+/**
+ * DateRange — 日期区间/日期时间区间选择组件。
+ *
+ * 核心能力：
+ * - 基于 el-date-picker 的 range 模式，统一默认文案和日期格式
+ * - v-model 固定为 string[]，clear/change 空值时回落为空数组
+ * - attrs 透传给 el-date-picker，宽度默认撑满父级表单空间
+ */
 defineOptions({ inheritAttrs: false });
 
 const props = withDefaults(

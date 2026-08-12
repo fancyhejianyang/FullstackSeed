@@ -1,4 +1,12 @@
 <script setup lang="ts">
+/**
+ * CheckboxGroup — 多选勾选组组件。
+ *
+ * 核心能力：
+ * - options 使用 `{ value: string; text: string }[]`，与 Select/SelectMultiple 保持同一字典结构
+ * - v-model 固定为 string[]，外部误传数字会自动转字符串
+ * - 适合少量、全部可见的多选项；大量选项建议使用 SelectMultiple
+ */
 import { watch } from 'vue';
 
 defineOptions({ inheritAttrs: false });
@@ -29,6 +37,7 @@ defineEmits<{
 watch(
   () => model.value,
   (value) => {
+    // 与多选下拉保持一致：绑定值统一规范为 string[]。
     const next = Array.isArray(value) ? value.map((item) => String(item)) : [];
     if (next.length !== value.length || next.some((item, index) => item !== value[index])) {
       model.value = next;

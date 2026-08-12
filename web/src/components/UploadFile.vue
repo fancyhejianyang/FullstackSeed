@@ -1,4 +1,13 @@
 <script setup lang="ts">
+/**
+ * UploadFile — 单文件上传/下载回显组件。
+ *
+ * 核心能力：
+ * - 默认未上传时显示拖拽上传区，上传后隐藏拖拽区，仅展示文件名与移除按钮
+ * - v-model 保存文件 dataURL，`v-model:name` 保存原始文件名
+ * - 文件名按钮内置下载能力，直接下载当前 dataURL
+ * - 不内置后端上传 API；如需真实上传，可在 change 事件里接 file.raw 后自行调用业务接口
+ */
 import type { UploadFile } from 'element-plus';
 import { Document, UploadFilled } from '@element-plus/icons-vue';
 
@@ -45,6 +54,7 @@ function handleRemove() {
 
 function downloadFile() {
   if (!model.value) return;
+  // dataURL 可直接作为 href 下载；真实远程 URL 也可复用同一入口。
   const link = document.createElement('a');
   link.href = model.value;
   link.download = name.value || '附件文件';
@@ -52,6 +62,7 @@ function downloadFile() {
 }
 
 function readFileAsDataUrl(file: UploadFile) {
+  // 当前组件只负责本地预览/下载值；真实文件存储不在通用组件内耦合 API。
   return new Promise<string>((resolve, reject) => {
     if (!file.raw) {
       resolve('');

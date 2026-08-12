@@ -1,5 +1,18 @@
 # CHANGELOG
 
+### 2026-08-12 优化二次封装组件源码说明
+- 新增：无
+- 修改：
+  - `web/src/components/Input.vue` / `InputNumber.vue` / `InputPhone.vue` / `InputEmail.vue` / `InputAmount.vue`（补充组件定位、props/功能契约与输入同步说明）
+  - `web/src/components/Select.vue` / `SelectMultiple.vue`（补充单选/多选下拉契约、Map 回显、虚拟滚动、搜索防抖与缺失值兜底说明）
+  - `web/src/components/DatePicker.vue` / `DateRange.vue` / `Checkbox.vue` / `CheckboxGroup.vue` / `Switch.vue`（补充基础表单组件说明）
+  - `web/src/components/UploadImage.vue` / `UploadFile.vue`（补充上传回显、dataURL、下载与不内置 API 的说明）
+  - `web/src/components/Form.vue` / `Table.vue` / `Dialog.vue` / `MenuTree.vue` / `PageContainer.vue`（补充通用容器、表单、列表和弹窗组件源码说明）
+  - `web/src/components/Component.d.ts` / `componentRegistry.ts`（补充动态组件名称登记与注册表用途说明）
+  - `CHANGELOG.md`（追加本次组件源码注释优化快照）
+- 删除：无
+- 说明：本次仅优化二次封装组件源码可读性和维护说明，不调整组件 props、事件、样式类名或交互逻辑。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
 ### 2026-08-11 补充日期上传与布尔类封装组件
 - 新增：
   - `web/src/components/DatePicker.vue`（日期/日期时间选择）

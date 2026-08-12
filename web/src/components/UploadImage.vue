@@ -1,4 +1,13 @@
 <script setup lang="ts">
+/**
+ * UploadImage — 单图片上传回显组件。
+ *
+ * 核心能力：
+ * - v-model 保存图片 dataURL，适合当前种子项目的本地预览/表单回显场景
+ * - 默认限制单图、图片类型和大小；不内置后端上传 API
+ * - 如需真实上传，可在 change 事件里接 file.raw 后自行调用业务接口
+ * - el-upload attrs 透传，保留 Element Plus 原生扩展空间
+ */
 import { computed, ref } from 'vue';
 import type { UploadFile, UploadUserFile } from 'element-plus';
 import { UploadFilled } from '@element-plus/icons-vue';
@@ -53,6 +62,7 @@ function handleRemove() {
 }
 
 function readFileAsDataUrl(file: UploadFile) {
+  // 当前组件只负责本地预览值；真实文件上传交给业务接口，不在通用组件内耦合 API。
   return new Promise<string>((resolve, reject) => {
     if (!file.raw) {
       resolve('');

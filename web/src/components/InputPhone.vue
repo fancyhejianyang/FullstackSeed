@@ -1,4 +1,13 @@
 <script setup lang="ts">
+/**
+ * InputPhone — 手机号输入组件。
+ *
+ * 核心能力：
+ * - v-model 固定输出 string | null，输入时自动过滤非数字并限制 11 位
+ * - 内置手机号格式校验，可关闭或用 `rules` 覆盖
+ * - 保留 el-input attrs 透传，适合在 Form 动态组件里直接撑满使用
+ * - 暴露 `validate()`，方便提交前统一校验
+ */
 import { ref } from 'vue';
 import {
   phoneRule,

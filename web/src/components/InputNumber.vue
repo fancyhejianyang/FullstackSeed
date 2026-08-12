@@ -1,4 +1,14 @@
 <script setup lang="ts">
+/**
+ * InputNumber — 数字输入组件。
+ *
+ * 核心能力：
+ * - v-model 固定输出 number | null，输入过程允许短暂保留 `-` / `.` 这类未完成状态
+ * - `mode` 支持 number / integer / money；money 按 `precision` 限制小数位
+ * - 内置 required/range 校验，可通过 `rulesEnabled=false` 关闭，或通过 `rules` 完全覆盖
+ * - `prefixText` / `suffixText` 用于单位、币种等轻量展示，宽度默认撑满
+ * - 暴露 `validate()`，业务表单可在提交前主动触发组件内置校验
+ */
 import { computed, ref } from 'vue';
 import {
   numberRangeRule,
@@ -81,6 +91,7 @@ function handleEnter() {
 }
 
 function parseValue(value: string, final: boolean) {
+  // 输入中保留未完成的数字形态，最终确认时再落成 null，避免用户无法输入负数/小数。
   const normalized =
     props.mode === 'integer'
       ? normalizeInteger(value)

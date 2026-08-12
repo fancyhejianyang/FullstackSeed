@@ -5,6 +5,14 @@ import type { InputMode } from './Input.vue';
 import type { InputNumberMode } from './InputNumber.vue';
 import type { SelectOption } from './Select.vue';
 
+/**
+ * 项目封装组件名称登记表。
+ *
+ * 用途：
+ * - 动态表单只允许从这里匹配组件名，避免业务配置写错组件名后运行期才爆错
+ * - ComponentPropsMap 记录每个组件可配置的 props，方便后续做表单设计器/字段配置时复用
+ * - 新增二次封装组件时，需要同步补充 ComponentName、ComponentPropsMap 和 componentRegistry.ts
+ */
 export type ComponentName =
   | 'Checkbox'
   | 'CheckboxGroup'

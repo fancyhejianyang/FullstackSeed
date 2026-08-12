@@ -1,4 +1,14 @@
 <script setup lang="ts">
+/**
+ * InputAmount — 金额/百分比切换输入组件。
+ *
+ * 核心能力：
+ * - v-model 始终保存“金额值”，百分比只是一种输入视图
+ * - `totalAmount` 提供百分比换算基准：百分比 = 当前金额 / 总金额 * 100
+ * - `switchable=true` 时使用主输入 + 固定尾部换算区，切换按钮固定在尾部避免 50% 分割
+ * - 内置 required/range 校验，可关闭或覆盖；无总金额时会阻止百分比模式并提示
+ * - 暴露 `validate()`，适合在业务表单提交前统一触发
+ */
 import { computed, ref, watch } from 'vue';
 import { Sort } from '@element-plus/icons-vue';
 import {
@@ -83,6 +93,7 @@ watch(
 watch(
   () => model.value,
   () => {
+    // 用户正在编辑某一侧时，只同步另一侧，避免当前输入框被格式化后造成光标跳动。
     if (editingSource === 'amount') {
       syncPercentValue();
     } else if (editingSource === 'percent') {
@@ -282,6 +293,7 @@ function toPercentAmountValue(value: string, final: boolean) {
   const numeric = Number(value);
   if (Number.isNaN(numeric)) return null;
 
+  // 组件对外仍输出金额，百分比输入只在这里按 totalAmount 折算一次。
   const amount = (Number(props.totalAmount) * numeric) / 100;
   return clampAmount(roundNumber(amount, props.precision));
 }

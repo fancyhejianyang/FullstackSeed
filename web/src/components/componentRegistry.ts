@@ -14,6 +14,12 @@ import UploadFile from './UploadFile.vue';
 import UploadImage from './UploadImage.vue';
 import type { ComponentName } from './Component';
 
+/**
+ * 动态表单组件注册表。
+ *
+ * Form.vue 只通过 ComponentName 找这里的组件，不直接从业务配置里解析任意字符串。
+ * 这样后续字段配置、导入配置、日志配置需要按组件名匹配时，可以共用同一份白名单。
+ */
 export const FORM_COMPONENT_MAP = {
   Checkbox,
   CheckboxGroup,

@@ -1,5 +1,12 @@
 <script setup lang="ts">
-// 递归渲染菜单树：有 children 用 el-sub-menu，叶子用 el-menu-item
+/**
+ * MenuTree — 侧边栏菜单树组件。
+ *
+ * 核心能力：
+ * - 递归渲染后端下发的 MenuNode 树
+ * - 有 children 渲染 el-sub-menu，叶子节点渲染 el-menu-item
+ * - 只负责展示结构；路由跳转由外层 el-menu 的 router 属性接管
+ */
 import type { MenuNode } from '@/api/menu';
 
 defineProps<{ items: MenuNode[] }>();

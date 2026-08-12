@@ -1,4 +1,14 @@
 <script setup lang="ts">
+/**
+ * Input — 通用文本输入组件。
+ *
+ * 核心能力：
+ * - v-model 支持 string / number / null，内部展示时统一兜底为空字符串
+ * - `mode` 覆盖 text / textarea / password / search，搜索模式回车会额外触发 `search`
+ * - `trim` 只在 change/blur 这类最终确认节点生效，避免输入过程中光标跳动
+ * - `prefixText` / `suffixText` 提供轻量前后缀；复杂组合建议拆成独立 Input 组件
+ * - 其余 attrs 透传给 el-input，宽度默认撑满父级表单栅格
+ */
 import { computed } from 'vue';
 
 defineOptions({ inheritAttrs: false });
@@ -81,6 +91,7 @@ function handleEnter() {
 }
 
 function parseValue(value: string, final: boolean) {
+  // trim 放在最终确认阶段，输入阶段保持原样，避免中文输入法和光标位置被打断。
   let next = props.trim && final ? value.trim() : value;
   return next;
 }

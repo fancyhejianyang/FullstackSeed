@@ -1,4 +1,15 @@
 <script setup lang="ts">
+/**
+ * Select — 单选下拉组件。
+ *
+ * 核心能力：
+ * - 不内置 API，只接收 `options: { value: string; text: string }[]`
+ * - v-model 固定按 string/null 处理；传入数字会自动转字符串，业务侧建议直接使用稳定编码
+ * - 支持本地搜索、防抖、键盘上下选择与 Enter 确认
+ * - 大数据默认启用虚拟滚动，只渲染可视窗口
+ * - options 变化时重建一次 Map；搜索、回显、缺失值兜底都复用该 Map
+ * - 回显找不到值时显示 `#id`，方便定位字典数据是否缺失
+ */
 import {
   computed,
   nextTick,
@@ -70,6 +81,7 @@ const selectedOption = computed(() =>
 
 const selectedText = computed(() => {
   if (!normalizedValue.value) return '';
+  // 字典缺失时直接暴露 #value，业务人员可据此回查字典表。
   return selectedOption.value?.text ?? `#${normalizedValue.value}`;
 });
 
@@ -111,6 +123,7 @@ const offsetTop = computed(() => visibleStart.value * props.itemHeight);
 watch(
   () => props.options,
   (options) => {
+    // options 变化属于特殊路径：只在这里全量建 Map，后续搜索/回显都走 Map 查询。
     const next = new Map<string, SelectOption>();
     options.forEach((option) => {
       next.set(String(option.value), {
@@ -135,6 +148,7 @@ watch(
 watch(searchInput, (value) => {
   window.clearTimeout(searchTimer);
   searchTimer = window.setTimeout(() => {
+    // 搜索只影响内部过滤和 search 事件，不触发任何内置远程请求。
     keyword.value = value;
     highlightedIndex.value = getInitialHighlightIndex();
     scrollTop.value = 0;
@@ -232,6 +246,7 @@ function moveHighlight(step: number) {
 }
 
 function scrollHighlightedIntoView() {
+  // 键盘移动高亮项时，虚拟列表要同步滚动，保证高亮项始终可见。
   if (!menuRef.value || !shouldVirtual.value) return;
   const top = highlightedIndex.value * props.itemHeight;
   const bottom = top + props.itemHeight;

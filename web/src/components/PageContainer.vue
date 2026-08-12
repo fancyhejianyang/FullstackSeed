@@ -1,7 +1,11 @@
 <script setup lang="ts">
 /**
- * PageContainer 页面容器（二次封装示例）
- * 统一业务页面内容卡片与内边距；页面标题由 MainLayout 顶部横条承载。
+ * PageContainer — 页面内容容器。
+ *
+ * 核心能力：
+ * - 统一业务页面白底、圆角和内边距
+ * - 默认 slot 承载页面主体，`#extra` 放置页面级右上角工具区
+ * - 标题主要由 MainLayout 顶部横条承载，title 保留给兼容和未来扩展
  */
 defineProps<{
   title?: string;

@@ -1,4 +1,14 @@
 <script setup lang="ts">
+/**
+ * Form — 配置驱动表单组件。
+ *
+ * 核心能力：
+ * - 用 `fields` 描述字段，统一渲染输入、下拉、动态组件和具名插槽兜底
+ * - `component` 只允许使用 Component.d.ts 中登记的封装组件名，避免业务页随意拼组件
+ * - `componentProps` 支持 ref/computed，内部会在渲染前统一 unref
+ * - 暴露 `validate()` / `resetFields()`，页面提交和重置时可直接调用
+ * - 复杂字段可设置 `slot: true` 并使用 `#field-字段名` 自定义渲染
+ */
 import { ref, computed, unref, type Ref } from 'vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import Input, { type InputMode } from './Input.vue';
@@ -64,6 +74,7 @@ function getDynamicComponent(field: FormField) {
 
 function getDynamicComponentProps(field: FormField) {
   const componentProps = field.componentProps ?? {};
+  // 动态表单常把 options/disabled 写成 computed；这里统一解包，模板无需关心来源。
   return Object.fromEntries(
     Object.entries(componentProps).map(([key, value]) => [key, unref(value)]),
   );

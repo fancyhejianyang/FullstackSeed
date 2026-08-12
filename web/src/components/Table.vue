@@ -1,4 +1,15 @@
 <script setup lang="ts" generic="T extends Record<string, any>">
+/**
+ * Table — 列表页一站式组件。
+ *
+ * 核心能力：
+ * - 托管搜索表单、数据请求、分页、loading、内置操作列和勾选列
+ * - `request` 统一接收分页 + 搜索参数，返回 `{ list, total }`
+ * - `permModule` 只传模块名，内部按 `Module.action` 拼权限码并控制查看/编辑/删除/批量删除
+ * - 传入 deleteRequest/batchDeleteRequest 时，组件内置确认、执行、提示和刷新
+ * - 通过 `#toolbar` / `#column-字段名` / `#actions` 保留业务扩展入口
+ * - 暴露 refresh/search/clearSelection/getSelectedRows/runBatchDelete 等方法给页面 ref 调用
+ */
 import { computed, onMounted, reactive, ref, shallowRef } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { TableInstance } from 'element-plus';

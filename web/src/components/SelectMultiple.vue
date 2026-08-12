@@ -1,4 +1,16 @@
 <script setup lang="ts">
+/**
+ * SelectMultiple — 多选下拉组件。
+ *
+ * 核心能力：
+ * - 不内置 API，只接收 `options: { value: string; text: string }[]`
+ * - v-model 固定为 string[]，传入非字符串会在组件内转成字符串
+ * - 支持本地搜索、防抖、键盘上下选择与 Enter 勾选/取消
+ * - 大数据默认启用虚拟滚动，只渲染可视窗口
+ * - options 变化时重建一次 Map；tag 回显和缺失值兜底都复用该 Map
+ * - tag 默认按 `maxTagCount` 折叠，点击“显示更多”后换行展开
+ * - 回显找不到值时显示 `#id`，方便定位字典数据是否缺失
+ */
 import {
   computed,
   nextTick,
@@ -65,6 +77,7 @@ const selectedSet = computed(() => new Set(selectedValues.value));
 const selectedTags = computed(() =>
   selectedValues.value.map((value) => ({
     value,
+    // 字典缺失时直接暴露 #value，避免静默显示空白。
     text: optionMap.value.get(value)?.text ?? `#${value}`,
   })),
 );
@@ -111,6 +124,7 @@ const offsetTop = computed(() => visibleStart.value * props.itemHeight);
 watch(
   () => props.options,
   (options) => {
+    // options 变化属于特殊路径：只在这里全量建 Map，tag 回显不再重复扫描数组。
     const next = new Map<string, SelectOption>();
     options.forEach((option) => {
       next.set(String(option.value), {
@@ -127,6 +141,7 @@ watch(
 watch(
   () => model.value,
   (value) => {
+    // 多选值契约严格保持 string[]，兼容外部误传数字但会立即规范化。
     const next = Array.isArray(value) ? value.map((item) => String(item)) : [];
     if (next.length !== value.length || next.some((item, index) => item !== value[index])) {
       model.value = next;
@@ -137,6 +152,7 @@ watch(
 watch(searchInput, (value) => {
   window.clearTimeout(searchTimer);
   searchTimer = window.setTimeout(() => {
+    // 搜索只影响内部过滤和 search 事件，不触发任何内置远程请求。
     keyword.value = value;
     highlightedIndex.value = filteredOptions.value.length ? 0 : -1;
     scrollTop.value = 0;
@@ -248,6 +264,7 @@ function moveHighlight(step: number) {
 }
 
 function scrollHighlightedIntoView() {
+  // 键盘移动高亮项时，虚拟列表要同步滚动，保证高亮项始终可见。
   if (!menuRef.value || !shouldVirtual.value) return;
   const top = highlightedIndex.value * props.itemHeight;
   const bottom = top + props.itemHeight;
