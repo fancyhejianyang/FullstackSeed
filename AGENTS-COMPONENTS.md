@@ -111,6 +111,8 @@
 
 **契约**：配置驱动的表单。字段用 `fields` 配置一次性描述，需要自定义控件时开 `slot: true` 并用 `#field-<prop>` 插槽兜底。
 
+默认 `type: 'select'` / `type: 'selectMultiple'` 已接入项目封装的 `Select` / `SelectMultiple`，业务页不用再裸写 `el-select`。历史字段里的 `options: [{ label, value }]` 会在 Form 内部转换为封装下拉需要的 `{ text, value }`；单选写回表单时会恢复原始 `value` 类型，多选按封装契约固定写回 `string[]`。需要调整 `debounce`、`virtual`、`clearable` 等封装下拉 props 时，可继续写在 `componentProps`。
+
 ### Props
 
 | Prop | 类型 | 默认 | 说明 |
@@ -130,8 +132,9 @@
 
 ### `FormField.type`
 
-- `input` / `textarea` / `select`（其它类型请用 `slot: true` + `#field-<prop>` 插槽自定义）
-- 推荐通过 `component: 'Select' | 'SelectMultiple'` 使用项目封装下拉，动态组件 props 支持 `ref/computed` 自动解包
+- `input` / `textarea` / `select` / `selectMultiple`
+- `select` 默认使用项目封装 `Select`；`selectMultiple` 默认使用项目封装 `SelectMultiple`
+- 更复杂的封装组件建议通过 `component: ComponentName` 使用，动态组件 props 支持 `ref/computed` 自动解包
 
 ---
 

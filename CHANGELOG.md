@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-08-12 Form 默认接入封装 Select
+- 新增：无
+- 修改：
+  - `web/src/components/Form.vue`（`type: 'select'` 默认使用封装 `Select`，新增 `type: 'selectMultiple'` 使用封装 `SelectMultiple`，兼容旧 `{ label, value }` options 并保留单选原始 value 类型）
+  - `AGENTS-COMPONENTS.md`（同步 Form 下拉字段契约说明）
+  - `CHANGELOG.md`（追加本次 Form 下拉接入快照）
+- 删除：无
+- 说明：Form 不再裸渲染 `el-select`，默认复用项目二次封装下拉能力；已执行 `web` 的 `npm.cmd run type-check`，通过。
+
 ### 2026-08-12 优化二次封装组件源码说明
 - 新增：无
 - 修改：
