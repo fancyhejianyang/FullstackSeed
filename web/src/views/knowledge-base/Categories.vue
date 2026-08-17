@@ -15,17 +15,12 @@ import {
 } from '@/api/knowledgeBase';
 
 const categoryTree = ref<KnowledgeBaseCategoryTreeNode[]>([]);
-const selectedCategoryId = ref<number>();
 const keyword = ref('');
 const loadingCategories = ref(false);
 const saving = ref(false);
 const visible = ref(false);
 const editingRow = ref<KnowledgeBaseCategoryTreeNode | null>(null);
 const formRef = ref<InstanceType<typeof Form>>();
-
-const selectedCategory = computed(() =>
-  findCategoryById(categoryTree.value, selectedCategoryId.value),
-);
 
 const parentOptions = computed(() => [
   { label: '顶级分类', value: '' },
@@ -71,13 +66,11 @@ async function fetchCategories() {
 }
 
 async function handleSearch() {
-  selectedCategoryId.value = undefined;
   await fetchCategories();
 }
 
 async function handleReset() {
   keyword.value = '';
-  selectedCategoryId.value = undefined;
   await fetchCategories();
 }
 
@@ -91,23 +84,10 @@ function flattenCategoryOptions(
   ]);
 }
 
-function findCategoryById(
-  nodes: KnowledgeBaseCategoryTreeNode[],
-  id?: number,
-): KnowledgeBaseCategoryTreeNode | null {
-  if (!id) return null;
-  for (const node of nodes) {
-    if (node.id === id) return node;
-    const child = findCategoryById(node.children ?? [], id);
-    if (child) return child;
-  }
-  return null;
-}
-
 function openCreate() {
   editingRow.value = null;
   Object.assign(form, {
-    parentId: selectedCategoryId.value ?? '',
+    parentId: '',
     name: '',
     code: '',
     description: '',
@@ -116,12 +96,19 @@ function openCreate() {
   visible.value = true;
 }
 
-function openEdit() {
-  const row = selectedCategory.value;
-  if (!row) {
-    ElMessage.warning('请先选择分类');
-    return;
-  }
+function openCreateChild(row: KnowledgeBaseCategoryTreeNode) {
+  editingRow.value = null;
+  Object.assign(form, {
+    parentId: row.id,
+    name: '',
+    code: '',
+    description: '',
+    sort: 0,
+  });
+  visible.value = true;
+}
+
+function openEdit(row: KnowledgeBaseCategoryTreeNode) {
   editingRow.value = row;
   Object.assign(form, {
     parentId: row.parentId ?? '',
@@ -144,10 +131,11 @@ async function save() {
       description: form.description,
       sort: form.sort,
     };
-    const saved = editingRow.value
-      ? await updateKnowledgeBaseCategory(editingRow.value.id, payload)
-      : await createKnowledgeBaseCategory(payload);
-    selectedCategoryId.value = saved.id;
+    if (editingRow.value) {
+      await updateKnowledgeBaseCategory(editingRow.value.id, payload);
+    } else {
+      await createKnowledgeBaseCategory(payload);
+    }
     visible.value = false;
     await fetchCategories();
     ElMessage.success('保存成功');
@@ -156,28 +144,15 @@ async function save() {
   }
 }
 
-async function removeSelected() {
-  if (!selectedCategoryId.value) {
-    ElMessage.warning('请先选择分类');
-    return;
-  }
+async function removeRow(row: KnowledgeBaseCategoryTreeNode) {
   await ElMessageBox.confirm(
     '确认删除该分类及其下级分类？若分类下已有知识库，后端会阻止删除。',
     '提示',
     { type: 'warning' },
   );
-  await deleteKnowledgeBaseCategory(selectedCategoryId.value);
-  selectedCategoryId.value = undefined;
+  await deleteKnowledgeBaseCategory(row.id);
   await fetchCategories();
   ElMessage.success('删除成功');
-}
-
-function handleNodeClick(row: KnowledgeBaseCategoryTreeNode) {
-  selectedCategoryId.value = row.id;
-}
-
-function handleCurrentChange(row?: KnowledgeBaseCategoryTreeNode) {
-  selectedCategoryId.value = row?.id;
 }
 
 onMounted(fetchCategories);
@@ -203,26 +178,6 @@ onMounted(fetchCategories);
         <Button perm="KnowledgeBase.create" icon="Plus" @click="openCreate">
           新增分类
         </Button>
-        <Button
-          perm="KnowledgeBase.update"
-          icon="Edit"
-          :disabled="!selectedCategoryId"
-          @click="openEdit"
-        >
-          编辑分类
-        </Button>
-        <Button
-          perm="KnowledgeBase.delete"
-          icon="Delete"
-          :disabled="!selectedCategoryId"
-          @click="removeSelected"
-        >
-          删除分类
-        </Button>
-      </div>
-
-      <div class="knowledge-category__meta">
-        当前分类：{{ selectedCategory?.name || '-' }}
       </div>
 
       <el-table
@@ -233,11 +188,39 @@ onMounted(fetchCategories);
         border
         stripe
         :tree-props="{ children: 'children' }"
-        highlight-current
         default-expand-all
-        @row-click="handleNodeClick"
-        @current-change="handleCurrentChange"
       >
+        <el-table-column label="操作" width="220" fixed="left">
+          <template #default="{ row }">
+            <Button
+              link
+              perm="KnowledgeBase.create"
+              icon="Plus"
+              :confirm="false"
+              @click="openCreateChild(row)"
+            >
+              子分类
+            </Button>
+            <Button
+              link
+              perm="KnowledgeBase.update"
+              icon="Edit"
+              :confirm="false"
+              @click="openEdit(row)"
+            >
+              编辑
+            </Button>
+            <Button
+              link
+              perm="KnowledgeBase.delete"
+              icon="Delete"
+              :confirm="false"
+              @click="removeRow(row)"
+            >
+              删除
+            </Button>
+          </template>
+        </el-table-column>
         <el-table-column prop="name" label="名称" min-width="180" />
         <el-table-column prop="code" label="编码" min-width="140" />
         <el-table-column prop="description" label="描述" min-width="220" />
@@ -293,12 +276,6 @@ onMounted(fetchCategories);
 
 .knowledge-category__keyword {
   width: 240px;
-}
-
-.knowledge-category__meta {
-  margin-bottom: 12px;
-  color: #909399;
-  font-size: 13px;
 }
 
 .knowledge-category__table {

@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-08-17 调整知识库分类页行内操作
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/Categories.vue`（移除 `当前分类` 提示，顶部操作区只保留新增分类；编辑、删除与新增子分类改为列表行内操作）
+  - `CHANGELOG.md`（追加本次分类页 UI 调整快照）
+- 删除：无
+- 说明：分类页交互更贴近 demo 列表结构，不再依赖选中行状态触发编辑/删除。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
 ### 2026-08-17 新增 MinerU 文档解析配置与知识库解析接口
 - 新增：
   - `server/src/mineru-configs/`（MinerU 配置实体、DTO、CRUD 接口与服务端调用封装）
