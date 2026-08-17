@@ -37,6 +37,7 @@ const SEED_MENUS: SeedMenu[] = [
   { name: '日志记录', path: '/system-config/log-record', icon: 'Tickets', sort: 60, permissionCode: 'Menu.read', isSystem: true, parentPath: '/system-config' },
   { name: '数据导入', path: '/system-config/data-import', icon: 'UploadFilled', sort: 70, permissionCode: 'Menu.read', isSystem: true, parentPath: '/system-config' },
   { name: 'OSS/CDN 配置', path: '/system-config/storage', icon: 'FolderOpened', sort: 80, permissionCode: 'Menu.read', isSystem: true, parentPath: '/system-config' },
+  { name: 'MinerU 解析配置', path: '/system-config/mineru', icon: 'DocumentChecked', sort: 90, permissionCode: 'Menu.read', isSystem: true, parentPath: '/system-config' },
 ];
 
 // 锁定菜单路径：前端不限制操作，后端 API 对此类菜单统一做管理员身份校验

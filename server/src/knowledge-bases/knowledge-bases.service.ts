@@ -6,7 +6,9 @@ import {
   CreateKnowledgeBaseCategoryDto,
   CreateKnowledgeBaseChunkDto,
   CreateKnowledgeBaseDocumentDto,
+  CreateKnowledgeBaseMineruTaskDto,
   CreateKnowledgeBaseDto,
+  ParseKnowledgeBaseDocumentDto,
   QueryKnowledgeBaseCategoryDto,
   QueryKnowledgeBaseChunkDto,
   QueryKnowledgeBaseDocumentDto,
@@ -20,6 +22,7 @@ import { KnowledgeBaseCategory } from './entities/knowledge-base-category.entity
 import { KnowledgeBaseChunk } from './entities/knowledge-base-chunk.entity';
 import { KnowledgeBaseDocument } from './entities/knowledge-base-document.entity';
 import { KnowledgeBase } from './entities/knowledge-base.entity';
+import { MineruConfigsService } from '../mineru-configs/mineru-configs.service';
 
 export interface KnowledgeBaseCategoryTreeNode extends KnowledgeBaseCategory {
   children: KnowledgeBaseCategoryTreeNode[];
@@ -36,6 +39,7 @@ export class KnowledgeBasesService {
     private readonly documentRepository: Repository<KnowledgeBaseDocument>,
     @InjectRepository(KnowledgeBaseChunk)
     private readonly chunkRepository: Repository<KnowledgeBaseChunk>,
+    private readonly mineruConfigsService: MineruConfigsService,
   ) {}
 
   async findBases(query: QueryKnowledgeBaseDto) {
@@ -256,6 +260,67 @@ export class KnowledgeBasesService {
     );
   }
 
+  async createMineruTask(id: number, dto: CreateKnowledgeBaseMineruTaskDto) {
+    await this.findDocument(id);
+    this.assertSupportedDocumentFile(dto.fileUrl, dto.fileName);
+    return this.mineruConfigsService.createParseTask(
+      dto.fileUrl.trim(),
+      dto.fileName?.trim(),
+    );
+  }
+
+  async queryMineruTask(id: number, taskId: string) {
+    const document = await this.findDocument(id);
+    const result = await this.mineruConfigsService.queryParseTask(taskId);
+    if (!this.mineruConfigsService.isSuccessStatus(result.status)) {
+      return {
+        ...result,
+        isCompleted: false,
+        documentId: id,
+        chunkCount: 0,
+      };
+    }
+    const saved = await this.applyMineruMarkdown(document, result.markdown);
+    return {
+      ...result,
+      isCompleted: true,
+      documentId: id,
+      chunkCount: saved.chunkCount,
+    };
+  }
+
+  async parseDocumentWithMineru(
+    id: number,
+    dto: ParseKnowledgeBaseDocumentDto,
+  ) {
+    const document = await this.findDocument(id);
+    this.assertSupportedDocumentFile(dto.fileUrl, dto.fileName);
+    const task = await this.mineruConfigsService.createParseTask(
+      dto.fileUrl.trim(),
+      dto.fileName?.trim(),
+    );
+    if (dto.waitForResult === false) {
+      return {
+        ...task,
+        documentId: id,
+        isCompleted: false,
+        chunkCount: 0,
+      };
+    }
+    const result = await this.mineruConfigsService.waitForSuccess(task.taskId);
+    const saved = await this.applyMineruMarkdown(
+      document,
+      result.markdown,
+      dto.fileName || this.resolveFileName(dto.fileUrl),
+    );
+    return {
+      ...result,
+      documentId: id,
+      isCompleted: true,
+      chunkCount: saved.chunkCount,
+    };
+  }
+
   async updateDocument(id: number, dto: UpdateKnowledgeBaseDocumentDto) {
     const document = await this.findDocument(id);
     const knowledgeBaseId = dto.knowledgeBaseId ?? document.knowledgeBaseId;
@@ -386,6 +451,85 @@ export class KnowledgeBasesService {
       }
     });
     return roots;
+  }
+
+  private async applyMineruMarkdown(
+    document: KnowledgeBaseDocument,
+    markdown: string,
+    fileName?: string,
+  ) {
+    const content = markdown.trim();
+    if (!content) {
+      throw new BadRequestException('MinerU 解析结果缺少 Markdown 正文');
+    }
+    document.content = content;
+    document.status = 'parsed';
+    document.sourceType = 'mineru';
+    if (fileName) document.sourceName = fileName;
+    const saved = await this.documentRepository.save(document);
+    await this.chunkRepository.softDelete({ documentId: saved.id });
+    const chunks = this.splitMarkdown(content);
+    if (chunks.length) {
+      await this.chunkRepository.save(
+        chunks.map((chunk, index) =>
+          this.chunkRepository.create({
+            knowledgeBaseId: saved.knowledgeBaseId,
+            categoryId: saved.categoryId,
+            documentId: saved.id,
+            chunkIndex: index,
+            title: `${saved.title} #${index + 1}`,
+            content: chunk,
+            tokenCount: chunk.length,
+            sort: index,
+          }),
+        ),
+      );
+    }
+    return { document: saved, chunkCount: chunks.length };
+  }
+
+  private splitMarkdown(content: string, chunkSize = 1200, overlap = 120) {
+    const text = content.trim();
+    if (!text) return [];
+    const chunks: string[] = [];
+    let start = 0;
+    while (start < text.length) {
+      const end = Math.min(start + chunkSize, text.length);
+      chunks.push(text.slice(start, end).trim());
+      if (end >= text.length) break;
+      start = Math.max(end - overlap, start + 1);
+    }
+    return chunks.filter(Boolean);
+  }
+
+  private assertSupportedDocumentFile(fileUrl: string, fileName?: string) {
+    const supported = new Set([
+      '.pdf',
+      '.doc',
+      '.docx',
+      '.xls',
+      '.xlsx',
+      '.ppt',
+      '.pptx',
+      '.txt',
+      '.md',
+    ]);
+    const name = (fileName || this.resolveFileName(fileUrl)).toLowerCase();
+    const ext = name.includes('.') ? name.slice(name.lastIndexOf('.')) : '';
+    if (!supported.has(ext)) {
+      throw new BadRequestException(
+        'MinerU 仅支持 .pdf .doc .docx .xls .xlsx .ppt .pptx .txt .md',
+      );
+    }
+  }
+
+  private resolveFileName(fileUrl: string) {
+    try {
+      const pathname = new URL(fileUrl).pathname;
+      return decodeURIComponent(pathname.split('/').pop() || '');
+    } catch {
+      return fileUrl.split('/').pop() || '';
+    }
   }
 
   private collectDescendantIds(list: KnowledgeBaseCategory[], parentId: number) {

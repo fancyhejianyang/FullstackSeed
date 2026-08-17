@@ -6,9 +6,11 @@ import { KnowledgeBaseDocument } from './entities/knowledge-base-document.entity
 import { KnowledgeBase } from './entities/knowledge-base.entity';
 import { KnowledgeBasesController } from './knowledge-bases.controller';
 import { KnowledgeBasesService } from './knowledge-bases.service';
+import { MineruConfigsModule } from '../mineru-configs/mineru-configs.module';
 
 @Module({
   imports: [
+    MineruConfigsModule,
     TypeOrmModule.forFeature([
       KnowledgeBase,
       KnowledgeBaseCategory,

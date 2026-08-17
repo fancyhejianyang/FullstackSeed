@@ -21,6 +21,7 @@ import { StorageConfigModule } from './storage-config/storage-config.module';
 import { KnowledgeAiProvidersModule } from './knowledge-ai-providers/knowledge-ai-providers.module';
 import { KnowledgeAiChatModule } from './knowledge-ai-chat/knowledge-ai-chat.module';
 import { KnowledgeBasesModule } from './knowledge-bases/knowledge-bases.module';
+import { MineruConfigsModule } from './mineru-configs/mineru-configs.module';
 
 @Module({
   imports: [
@@ -106,6 +107,7 @@ import { KnowledgeBasesModule } from './knowledge-bases/knowledge-bases.module';
     UploadsModule,
     KnowledgeAiProvidersModule,
     KnowledgeAiChatModule,
+    MineruConfigsModule,
     KnowledgeBasesModule,
     DemoModule,
   ],

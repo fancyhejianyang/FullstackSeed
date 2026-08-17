@@ -6,6 +6,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUrl,
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -270,4 +271,19 @@ export class BatchDeleteKnowledgeBaseDto {
   @IsInt({ each: true })
   @Min(1, { each: true })
   ids: number[];
+}
+
+export class CreateKnowledgeBaseMineruTaskDto {
+  @IsUrl({ require_tld: false })
+  fileUrl: string;
+
+  @IsString()
+  @IsOptional()
+  fileName?: string;
+}
+
+export class ParseKnowledgeBaseDocumentDto extends CreateKnowledgeBaseMineruTaskDto {
+  @IsBoolean()
+  @IsOptional()
+  waitForResult?: boolean;
 }

@@ -123,6 +123,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'OSS/CDN 配置', permission: 'Menu.read' },
       },
       {
+        path: 'system-config/mineru',
+        name: 'system-config-mineru',
+        component: () => import('@/views/mineru-config/Index.vue'),
+        meta: { title: 'MinerU 解析配置', permission: 'Menu.read' },
+      },
+      {
         // 布局内兜底 404（保留侧边栏）
         path: ':pathMatch(.*)*',
         name: 'not-found',

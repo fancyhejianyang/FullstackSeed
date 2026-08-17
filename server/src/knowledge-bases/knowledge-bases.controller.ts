@@ -13,10 +13,12 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator';
 import {
   BatchDeleteKnowledgeBaseDto,
+  CreateKnowledgeBaseMineruTaskDto,
   CreateKnowledgeBaseCategoryDto,
   CreateKnowledgeBaseChunkDto,
   CreateKnowledgeBaseDocumentDto,
   CreateKnowledgeBaseDto,
+  ParseKnowledgeBaseDocumentDto,
   QueryKnowledgeBaseCategoryDto,
   QueryKnowledgeBaseChunkDto,
   QueryKnowledgeBaseDocumentDto,
@@ -109,6 +111,36 @@ export class KnowledgeBasesController {
   @ApiOperation({ summary: '创建知识库文档' })
   createDocument(@Body() dto: CreateKnowledgeBaseDocumentDto) {
     return this.knowledgeBasesService.createDocument(dto);
+  }
+
+  @Post('documents/:id/mineru-tasks')
+  @RequirePermissions('KnowledgeBase.update')
+  @ApiOperation({ summary: '创建知识库文档 MinerU 解析任务' })
+  createMineruTask(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CreateKnowledgeBaseMineruTaskDto,
+  ) {
+    return this.knowledgeBasesService.createMineruTask(id, dto);
+  }
+
+  @Get('documents/:id/mineru-tasks/:taskId')
+  @RequirePermissions('KnowledgeBase.update')
+  @ApiOperation({ summary: '查询 MinerU 解析任务并在成功时写入分片' })
+  queryMineruTask(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('taskId') taskId: string,
+  ) {
+    return this.knowledgeBasesService.queryMineruTask(id, taskId);
+  }
+
+  @Post('documents/:id/mineru-parse')
+  @RequirePermissions('KnowledgeBase.update')
+  @ApiOperation({ summary: '发起 MinerU 解析并按配置等待写入分片' })
+  parseDocumentWithMineru(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ParseKnowledgeBaseDocumentDto,
+  ) {
+    return this.knowledgeBasesService.parseDocumentWithMineru(id, dto);
   }
 
   @Post('chunks')

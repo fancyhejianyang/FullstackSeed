@@ -1,5 +1,20 @@
 # CHANGELOG
 
+### 2026-08-17 新增 MinerU 文档解析配置与知识库解析接口
+- 新增：
+  - `server/src/mineru-configs/`（MinerU 配置实体、DTO、CRUD 接口与服务端调用封装）
+  - `web/src/api/mineruConfig.ts`（MinerU 配置前端 API）
+  - `web/src/views/mineru-config/`（MinerU 解析配置列表与编辑弹窗）
+- 修改：
+  - `server/src/app.module.ts`（挂载 MinerU 配置模块）
+  - `server/src/menus/menus.service.ts`（系统配置下新增 `MinerU 解析配置` 菜单）
+  - `server/src/knowledge-bases/dto/knowledge-base.dto.ts` / `knowledge-bases.controller.ts` / `knowledge-bases.module.ts` / `knowledge-bases.service.ts`（新增知识库文档 MinerU 创建任务、查询任务、等待解析并落 Markdown 与分片接口）
+  - `web/src/api/knowledgeBase.ts`（补充知识库文档 MinerU 解析相关 API 类型与请求函数）
+  - `web/src/router/index.ts`（新增 `/system-config/mineru` 路由）
+  - `CHANGELOG.md`（追加本次 MinerU 解析能力快照）
+- 删除：无
+- 说明：系统同时仅允许一个 MinerU 配置启用；知识库文档解析成功后会保存 Markdown 正文，并按约 1200 字符、120 字符重叠重建分片。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-17 调整知识库分类归属关系
 - 新增：无
 - 修改：

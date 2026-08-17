@@ -59,6 +59,29 @@ export interface KnowledgeBaseChunk {
   updatedAt: string;
 }
 
+export interface KnowledgeBaseMineruTaskPayload {
+  fileUrl: string;
+  fileName?: string;
+}
+
+export interface KnowledgeBaseMineruParsePayload
+  extends KnowledgeBaseMineruTaskPayload {
+  waitForResult?: boolean;
+}
+
+export interface KnowledgeBaseMineruTaskResult {
+  taskId: string;
+  documentId?: number;
+  status?: string;
+  progress?: number | null;
+  message?: string;
+  markdown?: string;
+  isCompleted?: boolean;
+  chunkCount?: number;
+  pollIntervalSeconds?: number;
+  timeoutMinutes?: number;
+}
+
 export interface ListResult<T> {
   list: T[];
   total: number;
@@ -217,6 +240,32 @@ export function updateKnowledgeBaseDocument(
 export function deleteKnowledgeBaseDocument(id: number) {
   return request.delete<unknown, { id: number }>(
     `/knowledge-bases/documents/${id}`,
+  );
+}
+
+export function createKnowledgeBaseMineruTask(
+  documentId: number,
+  data: KnowledgeBaseMineruTaskPayload,
+) {
+  return request.post<unknown, KnowledgeBaseMineruTaskResult>(
+    `/knowledge-bases/documents/${documentId}/mineru-tasks`,
+    data,
+  );
+}
+
+export function getKnowledgeBaseMineruTask(documentId: number, taskId: string) {
+  return request.get<unknown, KnowledgeBaseMineruTaskResult>(
+    `/knowledge-bases/documents/${documentId}/mineru-tasks/${taskId}`,
+  );
+}
+
+export function parseKnowledgeBaseDocumentWithMineru(
+  documentId: number,
+  data: KnowledgeBaseMineruParsePayload,
+) {
+  return request.post<unknown, KnowledgeBaseMineruTaskResult>(
+    `/knowledge-bases/documents/${documentId}/mineru-parse`,
+    data,
   );
 }
 
