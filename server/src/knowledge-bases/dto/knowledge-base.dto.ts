@@ -36,10 +36,6 @@ export class CreateKnowledgeBaseDto {
   @IsOptional()
   allowFileUpload?: boolean;
 
-  @IsString()
-  @IsOptional()
-  allowedFileTypes?: string;
-
   @IsBoolean()
   @IsOptional()
   isEnabled?: boolean;

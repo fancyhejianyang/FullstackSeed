@@ -27,7 +27,6 @@ const form = reactive({
   contentType: 'text' as KnowledgeBase['contentType'],
   containsImages: false,
   allowFileUpload: false,
-  allowedFileTypes: '',
   isEnabled: true,
   sort: 0,
 });
@@ -76,12 +75,6 @@ const contentFields = computed<FormField[]>(() => [
     component: 'Switch',
     componentProps: { activeText: '允许', inactiveText: '不允许' },
   },
-  {
-    prop: 'allowedFileTypes',
-    label: '文件类型',
-    type: 'input',
-    placeholder: '例如：pdf,docx,txt,md；留空表示暂不限制',
-  },
 ]);
 
 const rules: FormRules = {
@@ -97,7 +90,6 @@ function resetForm() {
     contentType: 'text',
     containsImages: false,
     allowFileUpload: false,
-    allowedFileTypes: '',
     isEnabled: true,
     sort: 0,
   });
@@ -111,7 +103,6 @@ function fillForm(row: KnowledgeBase) {
     contentType: row.contentType ?? 'text',
     containsImages: !!row.containsImages,
     allowFileUpload: !!row.allowFileUpload,
-    allowedFileTypes: row.allowedFileTypes ?? '',
     isEnabled: !!row.isEnabled,
     sort: row.sort ?? 0,
   });
@@ -131,7 +122,6 @@ watch(
   (value) => {
     if (value === 'text') {
       form.allowFileUpload = false;
-      form.allowedFileTypes = '';
       return;
     }
     form.allowFileUpload = true;

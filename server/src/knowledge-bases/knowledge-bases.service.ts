@@ -74,7 +74,6 @@ export class KnowledgeBasesService {
         allowFileUpload:
           dto.allowFileUpload ??
           (dto.contentType === 'file' || dto.contentType === 'mixed'),
-        allowedFileTypes: dto.allowedFileTypes?.trim() ?? '',
         isEnabled: dto.isEnabled ?? true,
         sort: dto.sort ?? 0,
       }),
@@ -94,9 +93,6 @@ export class KnowledgeBasesService {
     }
     if (dto.allowFileUpload !== undefined) {
       base.allowFileUpload = dto.allowFileUpload;
-    }
-    if (dto.allowedFileTypes !== undefined) {
-      base.allowedFileTypes = dto.allowedFileTypes.trim();
     }
     if (dto.isEnabled !== undefined) base.isEnabled = dto.isEnabled;
     if (dto.sort !== undefined) base.sort = dto.sort;

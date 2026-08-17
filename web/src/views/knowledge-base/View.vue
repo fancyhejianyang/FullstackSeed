@@ -49,9 +49,6 @@ function getContentTypeLabel(value?: KnowledgeBase['contentType']) {
           {{ rowData?.allowFileUpload ? '允许' : '不允许' }}
         </el-tag>
       </el-descriptions-item>
-      <el-descriptions-item label="文件类型">
-        {{ rowData?.allowedFileTypes || '-' }}
-      </el-descriptions-item>
       <el-descriptions-item label="排序">
         {{ rowData?.sort ?? '-' }}
       </el-descriptions-item>

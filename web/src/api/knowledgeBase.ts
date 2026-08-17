@@ -8,7 +8,6 @@ export interface KnowledgeBase {
   contentType: 'text' | 'file' | 'mixed';
   containsImages: boolean;
   allowFileUpload: boolean;
-  allowedFileTypes: string;
   isEnabled: boolean;
   sort: number;
   createdAt: string;
@@ -101,7 +100,6 @@ export type KnowledgeBaseForm = Pick<
   | 'contentType'
   | 'containsImages'
   | 'allowFileUpload'
-  | 'allowedFileTypes'
   | 'isEnabled'
   | 'sort'
 >;

@@ -21,9 +21,6 @@ export class KnowledgeBase extends BaseEntity {
   @Column({ type: 'tinyint', default: false })
   allowFileUpload: boolean;
 
-  @Column({ length: 255, default: '' })
-  allowedFileTypes: string;
-
   @Column({ type: 'tinyint', default: true })
   isEnabled: boolean;
 
