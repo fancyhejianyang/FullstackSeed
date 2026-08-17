@@ -49,8 +49,8 @@ export interface QueryKnowledgeAiChatSessionParams {
 }
 
 export interface AskKnowledgeAiPayload {
-  providerId: number;
-  model: string;
+  providerId?: number;
+  model?: string;
   question: string;
   sessionId?: number;
   systemPrompt?: string;

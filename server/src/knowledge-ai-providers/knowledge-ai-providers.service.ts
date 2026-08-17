@@ -23,8 +23,8 @@ interface ChatCompletionResponse {
 }
 
 export interface KnowledgeAiChatCallPayload {
-  id: number;
-  model: string;
+  id?: number;
+  model?: string;
   question: string;
   systemPrompt?: string;
 }
@@ -117,10 +117,13 @@ export class KnowledgeAiProvidersService {
     payload: KnowledgeAiChatCallPayload,
   ): Promise<KnowledgeAiChatCallResult> {
     const startedAt = Date.now();
-    let providerId = payload.id;
+    let providerId = payload.id ?? 0;
     let providerName = '';
+    let model = payload.model ?? '';
     try {
-      const provider = await this.findEntity(payload.id);
+      const provider = payload.id
+        ? await this.findEntity(payload.id)
+        : await this.findEnabledEntity();
       providerId = provider.id;
       providerName = provider.name;
       if (!provider.isEnabled) {
@@ -130,7 +133,7 @@ export class KnowledgeAiProvidersService {
         throw new BadRequestException('该大模型账号未配置密钥');
       }
 
-      const model = this.resolveModel(provider.models, payload.model);
+      model = this.resolveModel(provider.models, payload.model);
       const response = await fetch(this.buildChatUrl(provider), {
         method: 'POST',
         headers: {
@@ -181,7 +184,7 @@ export class KnowledgeAiProvidersService {
         isSuccess: false,
         providerId,
         providerName,
-        model: payload.model,
+        model,
         answer: '',
         errorMessage:
           error instanceof Error ? error.message : '模型接口调用失败',
@@ -196,6 +199,20 @@ export class KnowledgeAiProvidersService {
       throw new NotFoundException('大模型账号不存在');
     }
     return provider;
+  }
+
+  private async findEnabledEntity() {
+    const providers = await this.providerRepository.find({
+      where: { isEnabled: true },
+      order: { id: 'DESC' },
+    });
+    if (!providers.length) {
+      throw new BadRequestException('未找到已启用的大模型账号');
+    }
+    if (providers.length > 1) {
+      throw new BadRequestException('当前存在多个已启用的大模型账号，请仅保留一个启用');
+    }
+    return providers[0];
   }
 
   private toEntityPayload(
@@ -247,11 +264,12 @@ export class KnowledgeAiProvidersService {
     ).replace(/^\/+/, '')}`;
   }
 
-  private resolveModel(models: string | null, requested: string) {
+  private resolveModel(models: string | null, requested?: string) {
     const available = this.parseModels(models);
-    if (!available.length) return requested;
+    if (!available.length) return requested || 'qwen-plus';
+    if (!requested) return available[0].code;
     if (available.some((item) => item.code === requested)) return requested;
-    throw new BadRequestException('测试模型不在该账号模型列表中');
+    throw new BadRequestException('调用模型不在该账号模型列表中');
   }
 
   private parseModels(models: string | null) {

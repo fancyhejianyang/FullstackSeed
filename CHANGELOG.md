@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-08-17 优化 AI 问答测试表单
+- 新增：无
+- 修改：
+  - `server/src/knowledge-ai-chat/dto/knowledge-ai-chat.dto.ts` / `knowledge-ai-chat.service.ts`（问答接口的 `providerId`、`model` 改为可选，由服务端自动匹配启用的大模型账号与默认模型）
+  - `server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`（`callChat` 支持未指定账号时自动查找唯一启用账号，多账号启用时返回配置错误）
+  - `web/src/api/knowledgeAiChat.ts`（同步问答请求参数可选化）
+  - `web/src/views/knowledge-ai-chat/Index.vue`（移除账号/模型下拉和右侧结果区，改为整页测试聊天表单）
+  - `CHANGELOG.md`（追加本次优化快照）
+- 删除：无
+- 说明：AI 问答测试页现在只提交系统提示与问题，模型账号由后端配置自动匹配；已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-17 新增 AI 问答与问题记录模块
 - 新增：
   - `server/src/knowledge-ai-chat/`（问答会话、问答消息实体，发送问题、会话列表、会话详情、删除与批量删除接口）

@@ -12,11 +12,13 @@ export class AskKnowledgeAiDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  providerId: number;
+  @IsOptional()
+  providerId?: number;
 
   @IsString()
   @IsNotEmpty()
-  model: string;
+  @IsOptional()
+  model?: string;
 
   @IsString()
   @IsNotEmpty()

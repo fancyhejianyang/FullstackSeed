@@ -61,12 +61,12 @@ export class KnowledgeAiChatService {
 
     const session = dto.sessionId
       ? await this.findSessionEntity(dto.sessionId)
-      : await this.createSession(dto, result.providerName);
+      : await this.createSession(dto, result);
 
     const message = await this.messageRepository.save(
       this.messageRepository.create({
         sessionId: session.id,
-        providerId: dto.providerId,
+        providerId: result.providerId,
         providerName: result.providerName || session.providerName,
         model: result.model,
         systemPrompt: dto.systemPrompt?.trim() || null,
@@ -78,7 +78,7 @@ export class KnowledgeAiChatService {
       }),
     );
 
-    session.providerId = dto.providerId;
+    session.providerId = result.providerId;
     session.providerName = result.providerName || session.providerName;
     session.model = result.model;
     session.messageCount += 1;
@@ -124,13 +124,16 @@ export class KnowledgeAiChatService {
     return session;
   }
 
-  private createSession(dto: AskKnowledgeAiDto, providerName: string) {
+  private createSession(
+    dto: AskKnowledgeAiDto,
+    result: { providerId: number; providerName: string; model: string },
+  ) {
     return this.sessionRepository.save(
       this.sessionRepository.create({
         title: this.buildTitle(dto),
-        providerId: dto.providerId,
-        providerName,
-        model: dto.model,
+        providerId: result.providerId,
+        providerName: result.providerName,
+        model: result.model,
         messageCount: 0,
         lastQuestion: null,
         lastAnswer: null,
