@@ -22,6 +22,9 @@ const tableRef = ref<{
 const columns: TableColumn[] = [
   { prop: 'name', label: '名称', minWidth: 180 },
   { prop: 'code', label: '编码', minWidth: 140 },
+  { prop: 'contentType', label: '内容类型', width: 110, slot: true },
+  { prop: 'containsImages', label: '图片', width: 90, slot: true },
+  { prop: 'allowFileUpload', label: '文件', width: 90, slot: true },
   { prop: 'isEnabled', label: '状态', width: 90, slot: true },
   { prop: 'sort', label: '排序', width: 90 },
   { prop: 'description', label: '描述', minWidth: 220 },
@@ -63,6 +66,15 @@ function deleteRequest(row: KnowledgeBase) {
 async function batchDeleteRequest(payload: { ids: Array<string | number> }) {
   await batchDeleteKnowledgeBases(payload.ids);
 }
+
+function getContentTypeLabel(value: KnowledgeBase['contentType']) {
+  const map: Record<KnowledgeBase['contentType'], string> = {
+    text: '文本',
+    file: '文件',
+    mixed: '混合',
+  };
+  return map[value] ?? value;
+}
 </script>
 
 <template>
@@ -95,6 +107,22 @@ async function batchDeleteRequest(payload: { ids: Array<string | number> }) {
       <template #column-isEnabled="{ row }">
         <el-tag :type="row.isEnabled ? 'success' : 'info'">
           {{ row.isEnabled ? '启用' : '停用' }}
+        </el-tag>
+      </template>
+
+      <template #column-contentType="{ row }">
+        <el-tag type="info">{{ getContentTypeLabel(row.contentType) }}</el-tag>
+      </template>
+
+      <template #column-containsImages="{ row }">
+        <el-tag :type="row.containsImages ? 'success' : 'info'">
+          {{ row.containsImages ? '包含' : '不含' }}
+        </el-tag>
+      </template>
+
+      <template #column-allowFileUpload="{ row }">
+        <el-tag :type="row.allowFileUpload ? 'success' : 'info'">
+          {{ row.allowFileUpload ? '允许' : '不允许' }}
         </el-tag>
       </template>
 

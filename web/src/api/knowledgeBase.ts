@@ -5,6 +5,10 @@ export interface KnowledgeBase {
   name: string;
   code: string;
   description: string | null;
+  contentType: 'text' | 'file' | 'mixed';
+  containsImages: boolean;
+  allowFileUpload: boolean;
+  allowedFileTypes: string;
   isEnabled: boolean;
   sort: number;
   createdAt: string;
@@ -91,7 +95,15 @@ export interface QueryKnowledgeBaseChunkParams {
 
 export type KnowledgeBaseForm = Pick<
   KnowledgeBase,
-  'name' | 'code' | 'description' | 'isEnabled' | 'sort'
+  | 'name'
+  | 'code'
+  | 'description'
+  | 'contentType'
+  | 'containsImages'
+  | 'allowFileUpload'
+  | 'allowedFileTypes'
+  | 'isEnabled'
+  | 'sort'
 >;
 
 export type KnowledgeBaseCategoryForm = Pick<

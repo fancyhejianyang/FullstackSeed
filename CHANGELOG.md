@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-08-17 优化知识库内容配置表单
+- 新增：无
+- 修改：
+  - `server/src/knowledge-bases/entities/knowledge-base.entity.ts` / `dto/knowledge-base.dto.ts` / `knowledge-bases.service.ts`（知识库新增内容类型、是否包含图片、是否允许文件上传、允许文件类型配置）
+  - `web/src/api/knowledgeBase.ts`（同步知识库内容配置字段类型）
+  - `web/src/views/knowledge-base/Edit.vue`（知识库新增/编辑表单重设为“基础信息 + 内容配置”两段）
+  - `web/src/views/knowledge-base/Index.vue` / `View.vue`（列表与详情展示内容类型、图片和文件配置）
+  - `CHANGELOG.md`（追加本次表单设计快照）
+- 删除：无
+- 说明：知识库创建时可选择文本、文件或混合内容类型，并配置是否包含图片、是否允许文件上传和文件类型限制；已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-17 整理知识库分类页
 - 新增：无
 - 修改：

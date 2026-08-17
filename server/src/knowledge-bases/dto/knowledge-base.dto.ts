@@ -1,6 +1,7 @@
 import {
   IsArray,
   IsBoolean,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -22,6 +23,22 @@ export class CreateKnowledgeBaseDto {
   @IsString()
   @IsOptional()
   description?: string;
+
+  @IsIn(['text', 'file', 'mixed'])
+  @IsOptional()
+  contentType?: 'text' | 'file' | 'mixed';
+
+  @IsBoolean()
+  @IsOptional()
+  containsImages?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  allowFileUpload?: boolean;
+
+  @IsString()
+  @IsOptional()
+  allowedFileTypes?: string;
 
   @IsBoolean()
   @IsOptional()

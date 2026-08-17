@@ -11,6 +11,15 @@ const props = defineProps<{
 
 const visible = defineModel<boolean>('visible', { required: true });
 const rowData = computed(() => props.row);
+
+function getContentTypeLabel(value?: KnowledgeBase['contentType']) {
+  const map: Record<KnowledgeBase['contentType'], string> = {
+    text: '文本',
+    file: '文件',
+    mixed: '混合',
+  };
+  return value ? map[value] ?? value : '-';
+}
 </script>
 
 <template>
@@ -26,6 +35,22 @@ const rowData = computed(() => props.row);
         <el-tag :type="rowData?.isEnabled ? 'success' : 'info'">
           {{ rowData?.isEnabled ? '启用' : '停用' }}
         </el-tag>
+      </el-descriptions-item>
+      <el-descriptions-item label="内容类型">
+        {{ getContentTypeLabel(rowData?.contentType) }}
+      </el-descriptions-item>
+      <el-descriptions-item label="包含图片">
+        <el-tag :type="rowData?.containsImages ? 'success' : 'info'">
+          {{ rowData?.containsImages ? '包含' : '不含' }}
+        </el-tag>
+      </el-descriptions-item>
+      <el-descriptions-item label="文件上传">
+        <el-tag :type="rowData?.allowFileUpload ? 'success' : 'info'">
+          {{ rowData?.allowFileUpload ? '允许' : '不允许' }}
+        </el-tag>
+      </el-descriptions-item>
+      <el-descriptions-item label="文件类型">
+        {{ rowData?.allowedFileTypes || '-' }}
       </el-descriptions-item>
       <el-descriptions-item label="排序">
         {{ rowData?.sort ?? '-' }}

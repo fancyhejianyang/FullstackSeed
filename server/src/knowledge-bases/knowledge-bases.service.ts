@@ -69,6 +69,12 @@ export class KnowledgeBasesService {
         name: dto.name.trim(),
         code: dto.code?.trim() ?? '',
         description: dto.description?.trim() || null,
+        contentType: dto.contentType ?? 'text',
+        containsImages: dto.containsImages ?? false,
+        allowFileUpload:
+          dto.allowFileUpload ??
+          (dto.contentType === 'file' || dto.contentType === 'mixed'),
+        allowedFileTypes: dto.allowedFileTypes?.trim() ?? '',
         isEnabled: dto.isEnabled ?? true,
         sort: dto.sort ?? 0,
       }),
@@ -81,6 +87,16 @@ export class KnowledgeBasesService {
     if (dto.code !== undefined) base.code = dto.code.trim();
     if (dto.description !== undefined) {
       base.description = dto.description.trim() || null;
+    }
+    if (dto.contentType !== undefined) base.contentType = dto.contentType;
+    if (dto.containsImages !== undefined) {
+      base.containsImages = dto.containsImages;
+    }
+    if (dto.allowFileUpload !== undefined) {
+      base.allowFileUpload = dto.allowFileUpload;
+    }
+    if (dto.allowedFileTypes !== undefined) {
+      base.allowedFileTypes = dto.allowedFileTypes.trim();
     }
     if (dto.isEnabled !== undefined) base.isEnabled = dto.isEnabled;
     if (dto.sort !== undefined) base.sort = dto.sort;
