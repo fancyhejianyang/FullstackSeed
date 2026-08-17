@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-08-17 新增 AI 大模型账号模块
+- 新增：
+  - `server/src/knowledge-ai-providers/`（大模型供应商配置 CRUD、批量删除、测试调用接口）
+  - `web/src/api/knowledgeAiProvider.ts`（前端大模型账号 API）
+  - `web/src/views/knowledge-ai-provider/Index.vue` / `Edit.vue`（系统配置下的大模型账号列表与编辑弹窗）
+- 修改：
+  - `server/src/app.module.ts`（挂载大模型账号模块）
+  - `web/src/router/index.ts`（`/system-config/ai` 改为大模型账号列表页）
+  - `CHANGELOG.md`（追加本次模块快照）
+- 删除：无
+- 说明：配置字段按文档落地，密钥更新时留空不修改；测试接口按 OpenAI 兼容 Chat Completions 调用并读取 `choices[0].message.content`。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-12 新增 OSS/CDN 存储配置页面
 - 新增：
   - `server/src/storage-config/`（OSS/CDN 存储配置读取与保存接口，当前用 `storage/storage-config.json` 持久化）

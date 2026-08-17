@@ -65,7 +65,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'system-config/ai',
         name: 'system-config-ai',
-        component: () => import('@/views/system/AiModel.vue'),
+        component: () => import('@/views/knowledge-ai-provider/Index.vue'),
         meta: { title: 'AI 大模型账号', permission: 'Menu.read' },
       },
       {

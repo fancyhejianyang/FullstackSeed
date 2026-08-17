@@ -18,6 +18,7 @@ import { LogRecordsModule } from './log-records/log-records.module';
 import { DataImportModule } from './data-import/data-import.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { StorageConfigModule } from './storage-config/storage-config.module';
+import { KnowledgeAiProvidersModule } from './knowledge-ai-providers/knowledge-ai-providers.module';
 
 @Module({
   imports: [
@@ -101,6 +102,7 @@ import { StorageConfigModule } from './storage-config/storage-config.module';
     DataImportModule,
     StorageConfigModule,
     UploadsModule,
+    KnowledgeAiProvidersModule,
     DemoModule,
   ],
   controllers: [AppController],
