@@ -5,6 +5,7 @@ import PageContainer from '@/components/PageContainer.vue';
 import Button from '@/components/Button.vue';
 import Dialog from '@/components/Dialog.vue';
 import Form, { type FormField } from '@/components/Form.vue';
+import { formatDateTime } from '@/utils/format';
 import {
   createKnowledgeBaseCategory,
   deleteKnowledgeBaseCategory,
@@ -19,6 +20,7 @@ const bases = ref<KnowledgeBase[]>([]);
 const categoryTree = ref<KnowledgeBaseCategoryTreeNode[]>([]);
 const selectedBaseId = ref<number>();
 const selectedCategoryId = ref<number>();
+const keyword = ref('');
 const loadingBases = ref(false);
 const loadingCategories = ref(false);
 const saving = ref(false);
@@ -29,6 +31,12 @@ const formRef = ref<InstanceType<typeof Form>>();
 const selectedBase = computed(() =>
   bases.value.find((item) => item.id === selectedBaseId.value),
 );
+
+const selectedCategory = computed(() =>
+  findCategoryById(categoryTree.value, selectedCategoryId.value),
+);
+
+const tableData = computed(() => filterCategoryTree(categoryTree.value, keyword.value));
 
 const parentOptions = computed(() => [
   { label: '顶级分类', value: '' },
@@ -89,10 +97,22 @@ async function fetchCategories() {
   try {
     categoryTree.value = await getKnowledgeBaseCategoryTree({
       knowledgeBaseId: selectedBaseId.value,
+      keyword: keyword.value,
     });
   } finally {
     loadingCategories.value = false;
   }
+}
+
+async function handleSearch() {
+  selectedCategoryId.value = undefined;
+  await fetchCategories();
+}
+
+async function handleReset() {
+  keyword.value = '';
+  selectedCategoryId.value = undefined;
+  await fetchCategories();
 }
 
 function flattenCategoryOptions(
@@ -118,6 +138,26 @@ function findCategoryById(
   return null;
 }
 
+function filterCategoryTree(
+  nodes: KnowledgeBaseCategoryTreeNode[],
+  keywordText: string,
+): KnowledgeBaseCategoryTreeNode[] {
+  const text = keywordText.trim();
+  if (!text) return nodes;
+  return nodes
+    .map((node) => {
+      const children = filterCategoryTree(node.children ?? [], text);
+      const matched =
+        node.name.includes(text) ||
+        node.code.includes(text) ||
+        (node.description ?? '').includes(text);
+      return matched || children.length
+        ? { ...node, children }
+        : null;
+    })
+    .filter((node): node is KnowledgeBaseCategoryTreeNode => !!node);
+}
+
 function openCreate() {
   if (!selectedBaseId.value) {
     ElMessage.warning('请先选择知识库');
@@ -135,7 +175,7 @@ function openCreate() {
 }
 
 function openEdit() {
-  const row = findCategoryById(categoryTree.value, selectedCategoryId.value);
+  const row = selectedCategory.value;
   if (!row) {
     ElMessage.warning('请先选择分类');
     return;
@@ -194,6 +234,10 @@ function handleNodeClick(row: KnowledgeBaseCategoryTreeNode) {
   selectedCategoryId.value = row.id;
 }
 
+function handleCurrentChange(row?: KnowledgeBaseCategoryTreeNode) {
+  selectedCategoryId.value = row?.id;
+}
+
 onMounted(async () => {
   await fetchBases();
   await fetchCategories();
@@ -203,7 +247,8 @@ onMounted(async () => {
 <template>
   <PageContainer title="知识库分类">
     <div class="knowledge-category">
-      <div class="knowledge-category__toolbar">
+      <div class="knowledge-category__search">
+        <span class="knowledge-category__label">知识库</span>
         <el-select
           v-model="selectedBaseId"
           v-loading="loadingBases"
@@ -217,6 +262,19 @@ onMounted(async () => {
             :value="item.id"
           />
         </el-select>
+        <span class="knowledge-category__label">关键词</span>
+        <el-input
+          v-model="keyword"
+          class="knowledge-category__keyword"
+          clearable
+          placeholder="名称/编码/描述"
+          @keyup.enter="handleSearch"
+        />
+        <Button type="primary" icon="Search" @click="handleSearch">查询</Button>
+        <Button icon="RefreshLeft" @click="handleReset">重置</Button>
+      </div>
+
+      <div class="knowledge-category__toolbar">
         <Button perm="KnowledgeBase.create" icon="Plus" :disabled="!selectedBaseId" @click="openCreate">
           新增分类
         </Button>
@@ -240,18 +298,34 @@ onMounted(async () => {
 
       <div class="knowledge-category__meta">
         当前知识库：{{ selectedBase?.name || '-' }}
+        <span v-if="selectedCategory" class="knowledge-category__selected">
+          当前分类：{{ selectedCategory.name }}
+        </span>
       </div>
 
-      <el-tree
+      <el-table
         v-loading="loadingCategories"
-        class="knowledge-category__tree"
-        :data="categoryTree"
-        node-key="id"
-        :props="{ label: 'name', children: 'children' }"
+        class="knowledge-category__table"
+        :data="tableData"
+        row-key="id"
+        border
+        stripe
+        :tree-props="{ children: 'children' }"
         highlight-current
         default-expand-all
-        @node-click="handleNodeClick"
-      />
+        @row-click="handleNodeClick"
+        @current-change="handleCurrentChange"
+      >
+        <el-table-column prop="name" label="名称" min-width="180" />
+        <el-table-column prop="code" label="编码" min-width="140" />
+        <el-table-column prop="description" label="描述" min-width="220" />
+        <el-table-column prop="sort" label="排序" width="90" />
+        <el-table-column prop="updatedAt" label="更新时间" width="180">
+          <template #default="{ row }">
+            {{ row.updatedAt ? formatDateTime(row.updatedAt) : '-' }}
+          </template>
+        </el-table-column>
+      </el-table>
     </div>
 
     <Dialog
@@ -277,6 +351,7 @@ onMounted(async () => {
   min-height: 460px;
 }
 
+.knowledge-category__search,
 .knowledge-category__toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -285,8 +360,21 @@ onMounted(async () => {
   margin-bottom: 12px;
 }
 
+.knowledge-category__toolbar {
+  margin-bottom: 14px;
+}
+
+.knowledge-category__label {
+  color: #303133;
+  font-size: 14px;
+}
+
 .knowledge-category__select {
   width: 280px;
+}
+
+.knowledge-category__keyword {
+  width: 240px;
 }
 
 .knowledge-category__meta {
@@ -295,7 +383,11 @@ onMounted(async () => {
   font-size: 13px;
 }
 
-.knowledge-category__tree {
-  max-width: 720px;
+.knowledge-category__selected {
+  margin-left: 16px;
+}
+
+.knowledge-category__table {
+  width: 100%;
 }
 </style>

@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-08-17 整理知识库分类页
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/Categories.vue`（调整为搜索行、操作行、树形表格三段结构；无数据时保留 table 表头与骨架）
+  - `CHANGELOG.md`（追加本次分类页整理快照）
+- 删除：无
+- 说明：分类页不再只展示树空状态，按列表页习惯保留查询、重置、操作按钮和表格骨架。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
 ### 2026-08-17 整理知识库列表页
 - 新增：
   - `web/src/views/knowledge-base/Edit.vue`（知识库新增/编辑弹窗）
