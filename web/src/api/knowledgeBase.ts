@@ -2,6 +2,7 @@ import request from '@/utils/request';
 
 export interface KnowledgeBase {
   id: number;
+  categoryId: number | null;
   name: string;
   code: string;
   description: string | null;
@@ -16,7 +17,6 @@ export interface KnowledgeBase {
 
 export interface KnowledgeBaseCategory {
   id: number;
-  knowledgeBaseId: number;
   parentId: number | null;
   name: string;
   code: string;
@@ -68,10 +68,10 @@ export interface QueryKnowledgeBaseParams {
   page?: number;
   pageSize?: number;
   keyword?: string;
+  categoryId?: number;
 }
 
 export interface QueryKnowledgeBaseCategoryParams {
-  knowledgeBaseId?: number;
   parentId?: number;
   keyword?: string;
 }
@@ -94,6 +94,7 @@ export interface QueryKnowledgeBaseChunkParams {
 
 export type KnowledgeBaseForm = Pick<
   KnowledgeBase,
+  | 'categoryId'
   | 'name'
   | 'code'
   | 'description'
@@ -106,7 +107,7 @@ export type KnowledgeBaseForm = Pick<
 
 export type KnowledgeBaseCategoryForm = Pick<
   KnowledgeBaseCategory,
-  'knowledgeBaseId' | 'parentId' | 'name' | 'code' | 'description' | 'sort'
+  'parentId' | 'name' | 'code' | 'description' | 'sort'
 >;
 
 export type KnowledgeBaseDocumentForm = Pick<

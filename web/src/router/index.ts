@@ -29,7 +29,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'knowledge-bases',
         name: 'knowledge-bases',
-        redirect: '/knowledge-bases/list',
+        redirect: '/knowledge-bases/categories',
         meta: { title: '知识库管理', permission: 'KnowledgeBase.read' },
       },
       {

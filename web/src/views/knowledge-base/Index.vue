@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import PageContainer from '@/components/PageContainer.vue';
 import Button from '@/components/Button.vue';
 import Table, { type TableColumn } from '@/components/Table.vue';
@@ -8,8 +8,10 @@ import { formatDateTime } from '@/utils/format';
 import {
   batchDeleteKnowledgeBases,
   deleteKnowledgeBase,
+  getKnowledgeBaseCategoryTree,
   getKnowledgeBases,
   type KnowledgeBase,
+  type KnowledgeBaseCategoryTreeNode,
 } from '@/api/knowledgeBase';
 import Edit from './Edit.vue';
 import View from './View.vue';
@@ -18,9 +20,11 @@ const tableRef = ref<{
   refresh: () => Promise<void>;
   runBatchDelete: () => Promise<void>;
 }>();
+const categoryTree = ref<KnowledgeBaseCategoryTreeNode[]>([]);
 
 const columns: TableColumn[] = [
   { prop: 'name', label: '名称', minWidth: 180 },
+  { prop: 'categoryId', label: '所属分类', minWidth: 140, slot: true },
   { prop: 'code', label: '编码', minWidth: 140 },
   { prop: 'contentType', label: '内容类型', width: 110, slot: true },
   { prop: 'containsImages', label: '图片', width: 90, slot: true },
@@ -39,9 +43,26 @@ const editVisible = ref(false);
 const viewVisible = ref(false);
 const editingRow = ref<KnowledgeBase | null>(null);
 const viewingRow = ref<KnowledgeBase | null>(null);
+const categoryNameMap = computed(() => {
+  const map = new Map<number, string>();
+  flattenCategories(categoryTree.value).forEach((item) => {
+    map.set(item.id, item.name);
+  });
+  return map;
+});
 
 function fetchKnowledgeBases(params: Record<string, unknown>) {
   return getKnowledgeBases(params);
+}
+
+function flattenCategories(
+  nodes: KnowledgeBaseCategoryTreeNode[],
+): KnowledgeBaseCategoryTreeNode[] {
+  return nodes.flatMap((node) => [node, ...flattenCategories(node.children ?? [])]);
+}
+
+async function fetchCategories() {
+  categoryTree.value = await getKnowledgeBaseCategoryTree({});
 }
 
 function openCreate() {
@@ -75,6 +96,13 @@ function getContentTypeLabel(value: KnowledgeBase['contentType']) {
   };
   return map[value] ?? value;
 }
+
+function getCategoryName(categoryId?: number | null) {
+  if (!categoryId) return '-';
+  return categoryNameMap.value.get(categoryId) ?? `#${categoryId}`;
+}
+
+onMounted(fetchCategories);
 </script>
 
 <template>
@@ -110,6 +138,10 @@ function getContentTypeLabel(value: KnowledgeBase['contentType']) {
         </el-tag>
       </template>
 
+      <template #column-categoryId="{ row }">
+        {{ getCategoryName(row.categoryId) }}
+      </template>
+
       <template #column-contentType="{ row }">
         <el-tag type="info">{{ getContentTypeLabel(row.contentType) }}</el-tag>
       </template>
@@ -134,9 +166,13 @@ function getContentTypeLabel(value: KnowledgeBase['contentType']) {
     <Edit
       v-model:visible="editVisible"
       :row="editingRow"
-      @success="tableRef?.refresh()"
+      @success="tableRef?.refresh(); fetchCategories()"
     />
 
-    <View v-model:visible="viewVisible" :row="viewingRow" />
+    <View
+      v-model:visible="viewVisible"
+      :row="viewingRow"
+      :category-name="getCategoryName(viewingRow?.categoryId)"
+    />
   </PageContainer>
 </template>

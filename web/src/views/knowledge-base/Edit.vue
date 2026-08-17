@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, type FormRules } from 'element-plus';
 import Dialog from '@/components/Dialog.vue';
 import Form, { type FormField } from '@/components/Form.vue';
 import {
   createKnowledgeBase,
+  getKnowledgeBaseCategoryTree,
   updateKnowledgeBase,
   type KnowledgeBase,
+  type KnowledgeBaseCategoryTreeNode,
 } from '@/api/knowledgeBase';
 
 const props = defineProps<{
@@ -19,8 +21,10 @@ const visible = defineModel<boolean>('visible', { required: true });
 const submitting = ref(false);
 const baseFormRef = ref<InstanceType<typeof Form>>();
 const contentFormRef = ref<InstanceType<typeof Form>>();
+const categoryTree = ref<KnowledgeBaseCategoryTreeNode[]>([]);
 
 const form = reactive({
+  categoryId: '' as string | number,
   name: '',
   code: '',
   description: '',
@@ -37,7 +41,16 @@ const contentTypeOptions = [
   { label: '混合', value: 'mixed' },
 ];
 
-const baseFields: FormField[] = [
+const categoryOptions = computed(() => flattenCategoryOptions(categoryTree.value));
+
+const baseFields = computed<FormField[]>(() => [
+  {
+    prop: 'categoryId',
+    label: '所属分类',
+    type: 'select',
+    options: categoryOptions.value,
+    placeholder: '请选择所属分类',
+  },
   { prop: 'name', label: '名称', type: 'input' },
   { prop: 'code', label: '编码', type: 'input' },
   {
@@ -53,7 +66,7 @@ const baseFields: FormField[] = [
     componentProps: { mode: 'integer', min: 0, precision: 0 },
   },
   { prop: 'description', label: '描述', type: 'textarea', rows: 4 },
-];
+]);
 
 const contentFields = computed<FormField[]>(() => [
   {
@@ -78,12 +91,28 @@ const contentFields = computed<FormField[]>(() => [
 ]);
 
 const rules: FormRules = {
+  categoryId: [{ required: true, message: '请选择所属分类', trigger: 'change' }],
   name: [{ required: true, message: '请输入知识库名称', trigger: 'blur' }],
   contentType: [{ required: true, message: '请选择内容类型', trigger: 'change' }],
 };
 
+function flattenCategoryOptions(
+  nodes: KnowledgeBaseCategoryTreeNode[],
+  level = 0,
+): Array<{ label: string; value: number }> {
+  return nodes.flatMap((node) => [
+    { label: `${'　'.repeat(level)}${node.name}`, value: node.id },
+    ...flattenCategoryOptions(node.children ?? [], level + 1),
+  ]);
+}
+
+async function fetchCategories() {
+  categoryTree.value = await getKnowledgeBaseCategoryTree({});
+}
+
 function resetForm() {
   Object.assign(form, {
+    categoryId: '',
     name: '',
     code: '',
     description: '',
@@ -97,6 +126,7 @@ function resetForm() {
 
 function fillForm(row: KnowledgeBase) {
   Object.assign(form, {
+    categoryId: row.categoryId ?? '',
     name: row.name ?? '',
     code: row.code ?? '',
     description: row.description ?? '',
@@ -110,6 +140,7 @@ function fillForm(row: KnowledgeBase) {
 
 watch(visible, (val) => {
   if (!val) return;
+  void fetchCategories();
   if (props.row) {
     fillForm(props.row);
   } else {
@@ -133,11 +164,15 @@ async function handleSubmit() {
   await contentFormRef.value?.validate();
   submitting.value = true;
   try {
+    const payload = {
+      ...form,
+      categoryId: Number(form.categoryId),
+    };
     if (props.row) {
-      await updateKnowledgeBase(props.row.id, { ...form });
+      await updateKnowledgeBase(props.row.id, payload);
       ElMessage.success('更新成功');
     } else {
-      await createKnowledgeBase({ ...form });
+      await createKnowledgeBase(payload);
       ElMessage.success('创建成功');
     }
     visible.value = false;
@@ -146,6 +181,8 @@ async function handleSubmit() {
     submitting.value = false;
   }
 }
+
+onMounted(fetchCategories);
 </script>
 
 <template>

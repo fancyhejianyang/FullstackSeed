@@ -4,10 +4,6 @@ import { BaseEntity } from '../../common/entities/base.entity';
 @Entity('knowledge_base_categories')
 export class KnowledgeBaseCategory extends BaseEntity {
   @Index()
-  @Column({ type: 'int' })
-  knowledgeBaseId: number;
-
-  @Index()
   @Column({ type: 'int', nullable: true })
   parentId: number | null;
 

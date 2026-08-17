@@ -7,6 +7,7 @@ import type { KnowledgeBase } from '@/api/knowledgeBase';
 
 const props = defineProps<{
   row?: KnowledgeBase | null;
+  categoryName?: string;
 }>();
 
 const visible = defineModel<boolean>('visible', { required: true });
@@ -27,6 +28,9 @@ function getContentTypeLabel(value?: KnowledgeBase['contentType']) {
     <el-descriptions :column="1" border>
       <el-descriptions-item label="名称">
         {{ rowData?.name || '-' }}
+      </el-descriptions-item>
+      <el-descriptions-item label="所属分类">
+        {{ props.categoryName || '-' }}
       </el-descriptions-item>
       <el-descriptions-item label="编码">
         {{ rowData?.code || '-' }}

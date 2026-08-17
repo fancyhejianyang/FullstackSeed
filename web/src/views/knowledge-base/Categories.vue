@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox, type FormRules } from 'element-plus';
 import PageContainer from '@/components/PageContainer.vue';
 import Button from '@/components/Button.vue';
@@ -10,33 +10,22 @@ import {
   createKnowledgeBaseCategory,
   deleteKnowledgeBaseCategory,
   getKnowledgeBaseCategoryTree,
-  getKnowledgeBases,
   updateKnowledgeBaseCategory,
-  type KnowledgeBase,
   type KnowledgeBaseCategoryTreeNode,
 } from '@/api/knowledgeBase';
 
-const bases = ref<KnowledgeBase[]>([]);
 const categoryTree = ref<KnowledgeBaseCategoryTreeNode[]>([]);
-const selectedBaseId = ref<number>();
 const selectedCategoryId = ref<number>();
 const keyword = ref('');
-const loadingBases = ref(false);
 const loadingCategories = ref(false);
 const saving = ref(false);
 const visible = ref(false);
 const editingRow = ref<KnowledgeBaseCategoryTreeNode | null>(null);
 const formRef = ref<InstanceType<typeof Form>>();
 
-const selectedBase = computed(() =>
-  bases.value.find((item) => item.id === selectedBaseId.value),
-);
-
 const selectedCategory = computed(() =>
   findCategoryById(categoryTree.value, selectedCategoryId.value),
 );
-
-const tableData = computed(() => filterCategoryTree(categoryTree.value, keyword.value));
 
 const parentOptions = computed(() => [
   { label: '顶级分类', value: '' },
@@ -70,33 +59,10 @@ const rules: FormRules = {
   name: [{ required: true, message: '请输入分类名称', trigger: 'blur' }],
 };
 
-watch(selectedBaseId, async () => {
-  selectedCategoryId.value = undefined;
-  await fetchCategories();
-});
-
-async function fetchBases() {
-  loadingBases.value = true;
-  try {
-    const res = await getKnowledgeBases({ page: 1, pageSize: 1000 });
-    bases.value = res.list;
-    if (!selectedBaseId.value && bases.value.length) {
-      selectedBaseId.value = bases.value[0].id;
-    }
-  } finally {
-    loadingBases.value = false;
-  }
-}
-
 async function fetchCategories() {
-  if (!selectedBaseId.value) {
-    categoryTree.value = [];
-    return;
-  }
   loadingCategories.value = true;
   try {
     categoryTree.value = await getKnowledgeBaseCategoryTree({
-      knowledgeBaseId: selectedBaseId.value,
       keyword: keyword.value,
     });
   } finally {
@@ -138,31 +104,7 @@ function findCategoryById(
   return null;
 }
 
-function filterCategoryTree(
-  nodes: KnowledgeBaseCategoryTreeNode[],
-  keywordText: string,
-): KnowledgeBaseCategoryTreeNode[] {
-  const text = keywordText.trim();
-  if (!text) return nodes;
-  return nodes
-    .map((node) => {
-      const children = filterCategoryTree(node.children ?? [], text);
-      const matched =
-        node.name.includes(text) ||
-        node.code.includes(text) ||
-        (node.description ?? '').includes(text);
-      return matched || children.length
-        ? { ...node, children }
-        : null;
-    })
-    .filter((node): node is KnowledgeBaseCategoryTreeNode => !!node);
-}
-
 function openCreate() {
-  if (!selectedBaseId.value) {
-    ElMessage.warning('请先选择知识库');
-    return;
-  }
   editingRow.value = null;
   Object.assign(form, {
     parentId: selectedCategoryId.value ?? '',
@@ -192,12 +134,10 @@ function openEdit() {
 }
 
 async function save() {
-  if (!selectedBaseId.value) return;
   await formRef.value?.validate();
   saving.value = true;
   try {
     const payload = {
-      knowledgeBaseId: selectedBaseId.value,
       parentId: form.parentId ? Number(form.parentId) : null,
       name: form.name,
       code: form.code,
@@ -221,9 +161,11 @@ async function removeSelected() {
     ElMessage.warning('请先选择分类');
     return;
   }
-  await ElMessageBox.confirm('确认删除该分类及其下级分类、文档、分片？', '提示', {
-    type: 'warning',
-  });
+  await ElMessageBox.confirm(
+    '确认删除该分类及其下级分类？若分类下已有知识库，后端会阻止删除。',
+    '提示',
+    { type: 'warning' },
+  );
   await deleteKnowledgeBaseCategory(selectedCategoryId.value);
   selectedCategoryId.value = undefined;
   await fetchCategories();
@@ -238,30 +180,13 @@ function handleCurrentChange(row?: KnowledgeBaseCategoryTreeNode) {
   selectedCategoryId.value = row?.id;
 }
 
-onMounted(async () => {
-  await fetchBases();
-  await fetchCategories();
-});
+onMounted(fetchCategories);
 </script>
 
 <template>
   <PageContainer title="知识库分类">
     <div class="knowledge-category">
       <div class="knowledge-category__search">
-        <span class="knowledge-category__label">知识库</span>
-        <el-select
-          v-model="selectedBaseId"
-          v-loading="loadingBases"
-          class="knowledge-category__select"
-          placeholder="请选择知识库"
-        >
-          <el-option
-            v-for="item in bases"
-            :key="item.id"
-            :label="item.name"
-            :value="item.id"
-          />
-        </el-select>
         <span class="knowledge-category__label">关键词</span>
         <el-input
           v-model="keyword"
@@ -275,7 +200,7 @@ onMounted(async () => {
       </div>
 
       <div class="knowledge-category__toolbar">
-        <Button perm="KnowledgeBase.create" icon="Plus" :disabled="!selectedBaseId" @click="openCreate">
+        <Button perm="KnowledgeBase.create" icon="Plus" @click="openCreate">
           新增分类
         </Button>
         <Button
@@ -297,16 +222,13 @@ onMounted(async () => {
       </div>
 
       <div class="knowledge-category__meta">
-        当前知识库：{{ selectedBase?.name || '-' }}
-        <span v-if="selectedCategory" class="knowledge-category__selected">
-          当前分类：{{ selectedCategory.name }}
-        </span>
+        当前分类：{{ selectedCategory?.name || '-' }}
       </div>
 
       <el-table
         v-loading="loadingCategories"
         class="knowledge-category__table"
-        :data="tableData"
+        :data="categoryTree"
         row-key="id"
         border
         stripe
@@ -369,10 +291,6 @@ onMounted(async () => {
   font-size: 14px;
 }
 
-.knowledge-category__select {
-  width: 280px;
-}
-
 .knowledge-category__keyword {
   width: 240px;
 }
@@ -381,10 +299,6 @@ onMounted(async () => {
   margin-bottom: 12px;
   color: #909399;
   font-size: 13px;
-}
-
-.knowledge-category__selected {
-  margin-left: 16px;
 }
 
 .knowledge-category__table {

@@ -12,6 +12,11 @@ import { Type } from 'class-transformer';
 import { PartialType } from '@nestjs/swagger';
 
 export class CreateKnowledgeBaseDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  categoryId: number;
+
   @IsString()
   @IsNotEmpty()
   name: string;
@@ -65,14 +70,15 @@ export class QueryKnowledgeBaseDto {
   @IsString()
   @IsOptional()
   keyword?: string;
-}
 
-export class CreateKnowledgeBaseCategoryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  knowledgeBaseId: number;
+  @IsOptional()
+  categoryId?: number;
+}
 
+export class CreateKnowledgeBaseCategoryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
@@ -103,12 +109,6 @@ export class UpdateKnowledgeBaseCategoryDto extends PartialType(
 ) {}
 
 export class QueryKnowledgeBaseCategoryDto {
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @IsOptional()
-  knowledgeBaseId?: number;
-
   @Type(() => Number)
   @IsInt()
   @Min(1)

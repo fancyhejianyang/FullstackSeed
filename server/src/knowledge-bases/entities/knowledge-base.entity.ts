@@ -1,8 +1,12 @@
-import { Column, Entity } from 'typeorm';
+import { Column, Entity, Index } from 'typeorm';
 import { BaseEntity } from '../../common/entities/base.entity';
 
 @Entity('knowledge_bases')
 export class KnowledgeBase extends BaseEntity {
+  @Index()
+  @Column({ type: 'int', nullable: true })
+  categoryId: number | null;
+
   @Column({ length: 120 })
   name: string;
 

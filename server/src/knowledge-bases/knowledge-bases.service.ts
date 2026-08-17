@@ -53,6 +53,11 @@ export class KnowledgeBasesService {
         { keyword: `%${query.keyword.trim()}%` },
       );
     }
+    if (query.categoryId) {
+      qb.andWhere('base.categoryId = :categoryId', {
+        categoryId: query.categoryId,
+      });
+    }
     const [list, total] = await qb.getManyAndCount();
     return { list, total };
   }
@@ -63,9 +68,11 @@ export class KnowledgeBasesService {
     return base;
   }
 
-  createBase(dto: CreateKnowledgeBaseDto) {
+  async createBase(dto: CreateKnowledgeBaseDto) {
+    await this.assertRequiredCategory(dto.categoryId);
     return this.baseRepository.save(
       this.baseRepository.create({
+        categoryId: dto.categoryId,
         name: dto.name.trim(),
         code: dto.code?.trim() ?? '',
         description: dto.description?.trim() || null,
@@ -82,6 +89,10 @@ export class KnowledgeBasesService {
 
   async updateBase(id: number, dto: UpdateKnowledgeBaseDto) {
     const base = await this.findBase(id);
+    if (dto.categoryId !== undefined) {
+      await this.assertRequiredCategory(dto.categoryId);
+      base.categoryId = dto.categoryId;
+    }
     if (dto.name !== undefined) base.name = dto.name.trim();
     if (dto.code !== undefined) base.code = dto.code.trim();
     if (dto.description !== undefined) {
@@ -103,7 +114,6 @@ export class KnowledgeBasesService {
     await this.findBase(id);
     await this.chunkRepository.softDelete({ knowledgeBaseId: id });
     await this.documentRepository.softDelete({ knowledgeBaseId: id });
-    await this.categoryRepository.softDelete({ knowledgeBaseId: id });
     await this.baseRepository.softDelete(id);
     return { id };
   }
@@ -115,7 +125,6 @@ export class KnowledgeBasesService {
     if (count !== ids.length) throw new NotFoundException('部分知识库不存在');
     await this.chunkRepository.softDelete({ knowledgeBaseId: In(ids) });
     await this.documentRepository.softDelete({ knowledgeBaseId: In(ids) });
-    await this.categoryRepository.softDelete({ knowledgeBaseId: In(ids) });
     await this.baseRepository.softDelete(ids);
     return { ids };
   }
@@ -125,11 +134,6 @@ export class KnowledgeBasesService {
       .createQueryBuilder('category')
       .orderBy('category.sort', 'ASC')
       .addOrderBy('category.id', 'ASC');
-    if (query.knowledgeBaseId) {
-      qb.andWhere('category.knowledgeBaseId = :knowledgeBaseId', {
-        knowledgeBaseId: query.knowledgeBaseId,
-      });
-    }
     if (query.parentId) {
       qb.andWhere('category.parentId = :parentId', { parentId: query.parentId });
     }
@@ -144,7 +148,6 @@ export class KnowledgeBasesService {
 
   async findCategoryTree(query: QueryKnowledgeBaseCategoryDto) {
     const categories = await this.findCategories({
-      knowledgeBaseId: query.knowledgeBaseId,
       keyword: query.keyword,
     });
     return this.buildCategoryTree(categories);
@@ -157,11 +160,9 @@ export class KnowledgeBasesService {
   }
 
   async createCategory(dto: CreateKnowledgeBaseCategoryDto) {
-    await this.findBase(dto.knowledgeBaseId);
-    await this.assertParentCategory(dto.knowledgeBaseId, dto.parentId);
+    await this.assertParentCategory(dto.parentId);
     return this.categoryRepository.save(
       this.categoryRepository.create({
-        knowledgeBaseId: dto.knowledgeBaseId,
         parentId: dto.parentId ?? null,
         name: dto.name.trim(),
         code: dto.code?.trim() ?? '',
@@ -173,10 +174,7 @@ export class KnowledgeBasesService {
 
   async updateCategory(id: number, dto: UpdateKnowledgeBaseCategoryDto) {
     const category = await this.findCategory(id);
-    const knowledgeBaseId = dto.knowledgeBaseId ?? category.knowledgeBaseId;
-    await this.findBase(knowledgeBaseId);
-    await this.assertParentCategory(knowledgeBaseId, dto.parentId, id);
-    if (dto.knowledgeBaseId !== undefined) category.knowledgeBaseId = dto.knowledgeBaseId;
+    await this.assertParentCategory(dto.parentId, id);
     if (dto.parentId !== undefined) category.parentId = dto.parentId ?? null;
     if (dto.name !== undefined) category.name = dto.name.trim();
     if (dto.code !== undefined) category.code = dto.code.trim();
@@ -188,20 +186,18 @@ export class KnowledgeBasesService {
   }
 
   async removeCategory(id: number) {
-    const category = await this.findCategory(id);
-    const categories = await this.categoryRepository.find({
-      where: { knowledgeBaseId: category.knowledgeBaseId },
-    });
+    await this.findCategory(id);
+    const categories = await this.categoryRepository.find();
     const categoryIds = [id, ...this.collectDescendantIds(categories, id)];
-    const documents = await this.documentRepository.find({
+    const usedCount = await this.baseRepository.count({
       where: { categoryId: In(categoryIds) },
     });
-    const documentIds = documents.map((item) => item.id);
-    if (documentIds.length) {
-      await this.chunkRepository.softDelete({ documentId: In(documentIds) });
+    const documentCount = await this.documentRepository.count({
+      where: { categoryId: In(categoryIds) },
+    });
+    if (usedCount > 0 || documentCount > 0) {
+      throw new BadRequestException('该分类下存在知识库或文档，不能删除');
     }
-    await this.chunkRepository.softDelete({ categoryId: In(categoryIds) });
-    await this.documentRepository.softDelete({ categoryId: In(categoryIds) });
     await this.categoryRepository.softDelete(categoryIds);
     return { id, ids: categoryIds };
   }
@@ -242,12 +238,13 @@ export class KnowledgeBasesService {
   }
 
   async createDocument(dto: CreateKnowledgeBaseDocumentDto) {
-    await this.findBase(dto.knowledgeBaseId);
-    await this.assertCategory(dto.knowledgeBaseId, dto.categoryId);
+    const base = await this.findBase(dto.knowledgeBaseId);
+    const categoryId = dto.categoryId ?? base.categoryId;
+    await this.assertCategoryExists(categoryId);
     return this.documentRepository.save(
       this.documentRepository.create({
         knowledgeBaseId: dto.knowledgeBaseId,
-        categoryId: dto.categoryId ?? null,
+        categoryId,
         title: dto.title.trim(),
         sourceType: dto.sourceType?.trim() || 'manual',
         sourceName: dto.sourceName?.trim() ?? '',
@@ -262,10 +259,18 @@ export class KnowledgeBasesService {
   async updateDocument(id: number, dto: UpdateKnowledgeBaseDocumentDto) {
     const document = await this.findDocument(id);
     const knowledgeBaseId = dto.knowledgeBaseId ?? document.knowledgeBaseId;
-    await this.findBase(knowledgeBaseId);
-    await this.assertCategory(knowledgeBaseId, dto.categoryId);
+    const base = await this.findBase(knowledgeBaseId);
+    const categoryId =
+      dto.categoryId !== undefined
+        ? dto.categoryId
+        : dto.knowledgeBaseId !== undefined
+          ? base.categoryId
+          : document.categoryId;
+    await this.assertCategoryExists(categoryId);
     if (dto.knowledgeBaseId !== undefined) document.knowledgeBaseId = dto.knowledgeBaseId;
-    if (dto.categoryId !== undefined) document.categoryId = dto.categoryId ?? null;
+    if (dto.knowledgeBaseId !== undefined || dto.categoryId !== undefined) {
+      document.categoryId = categoryId ?? null;
+    }
     if (dto.title !== undefined) document.title = dto.title.trim();
     if (dto.sourceType !== undefined) document.sourceType = dto.sourceType.trim() || 'manual';
     if (dto.sourceName !== undefined) document.sourceName = dto.sourceName.trim();
@@ -401,19 +406,19 @@ export class KnowledgeBasesService {
     return ids;
   }
 
-  private async assertCategory(
-    knowledgeBaseId: number,
-    categoryId?: number | null,
-  ) {
+  private async assertCategoryExists(categoryId?: number | null) {
     if (!categoryId) return;
-    const category = await this.findCategory(categoryId);
-    if (category.knowledgeBaseId !== knowledgeBaseId) {
-      throw new BadRequestException('分类不属于当前知识库');
+    await this.findCategory(categoryId);
+  }
+
+  private async assertRequiredCategory(categoryId?: number | null) {
+    if (!categoryId) {
+      throw new BadRequestException('请选择知识库分类');
     }
+    await this.assertCategoryExists(categoryId);
   }
 
   private async assertParentCategory(
-    knowledgeBaseId: number,
     parentId?: number | null,
     currentId?: number,
   ) {
@@ -421,9 +426,6 @@ export class KnowledgeBasesService {
     if (currentId && parentId === currentId) {
       throw new BadRequestException('上级分类不能选择自己');
     }
-    const parent = await this.findCategory(parentId);
-    if (parent.knowledgeBaseId !== knowledgeBaseId) {
-      throw new BadRequestException('上级分类不属于当前知识库');
-    }
+    await this.findCategory(parentId);
   }
 }

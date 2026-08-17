@@ -1,5 +1,18 @@
 # CHANGELOG
 
+### 2026-08-17 调整知识库分类归属关系
+- 新增：无
+- 修改：
+  - `server/src/knowledge-bases/entities/knowledge-base.entity.ts` / `knowledge-base-category.entity.ts`（分类改为独立目录，知识库新增所属分类字段）
+  - `server/src/knowledge-bases/dto/knowledge-base.dto.ts` / `knowledge-bases.service.ts`（分类 CRUD 去除知识库依赖，新增/编辑知识库强制校验分类，删除分类时保护已引用数据）
+  - `web/src/api/knowledgeBase.ts`（同步知识库与分类字段契约）
+  - `web/src/views/knowledge-base/Categories.vue`（分类页移除知识库选择，保留独立搜索、操作与树形表格）
+  - `web/src/views/knowledge-base/Edit.vue` / `Index.vue` / `View.vue`（知识库表单、列表、详情补充所属分类）
+  - `web/src/router/index.ts`（知识库管理默认进入分类页）
+  - `CHANGELOG.md`（追加本次关系调整快照）
+- 删除：无
+- 说明：知识库分类现在是独立上层目录；新建或编辑知识库时先选择分类，点击一级知识库管理默认进入分类维护页。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-17 优化知识库内容配置表单
 - 新增：无
 - 修改：
