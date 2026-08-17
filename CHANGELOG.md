@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-08-17 整理知识库列表页
+- 新增：
+  - `web/src/views/knowledge-base/Edit.vue`（知识库新增/编辑弹窗）
+  - `web/src/views/knowledge-base/View.vue`（知识库查看弹窗）
+- 修改：
+  - `web/src/views/knowledge-base/Index.vue`（按 demo 列表页格式重构，仅保留知识库列表 CRUD，移除分类、文档、分片混合 UI）
+  - `CHANGELOG.md`（追加本次列表页整理快照）
+- 删除：无
+- 说明：知识库列表页现在只负责知识库本身；分类维护继续放在 `知识库分类` 菜单中。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
 ### 2026-08-17 调整知识库菜单层级
 - 新增：
   - `web/src/views/knowledge-base/Categories.vue`（知识库分类/目录维护页）
