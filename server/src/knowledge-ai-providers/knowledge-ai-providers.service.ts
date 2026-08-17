@@ -146,7 +146,7 @@ export class KnowledgeAiProvidersService {
             {
               role: 'system',
               content: payload.systemPrompt?.trim()
-                || '你是洗车小程序客服助手。只能根据给定知识库文档回答，回答要简洁、准确、面向用户。',
+                || '你是通用测试助手。请用简洁、准确的中文回答用户问题。',
             },
             {
               role: 'user',

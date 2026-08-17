@@ -47,7 +47,7 @@ const testResult = ref<TestKnowledgeAiProviderResult | null>(null);
 const testForm = reactive({
   id: 0,
   model: '',
-  question: '如何充值？',
+  question: '请用一句话说明当前模型已经可以正常响应。',
 });
 const testFormRef = ref<InstanceType<typeof Form>>();
 
@@ -63,8 +63,7 @@ const testFields = computed<FormField[]>(() => [
     label: '问题',
     type: 'textarea',
     rows: 5,
-    placeholder:
-      '用户问题：如何充值？\n\n知识库文档：\n用户可以在小程序余额页面进行充值。',
+    placeholder: '请输入用于验证模型连通性的测试问题',
   },
 ]);
 
@@ -117,8 +116,7 @@ function openTest(row: KnowledgeAiProvider) {
   const options = getModelOptions(row.models || 'qwen-plus');
   testForm.id = row.id;
   testForm.model = String(options[0]?.value ?? 'qwen-plus');
-  testForm.question =
-    '用户问题：如何充值？\n\n知识库文档：\n用户可以在小程序余额页面进行充值。';
+  testForm.question = '请用一句话说明当前模型已经可以正常响应。';
   testResult.value = null;
   testVisible.value = true;
 }

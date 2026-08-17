@@ -16,9 +16,8 @@ const formRef = ref<InstanceType<typeof Form>>();
 
 const form = reactive({
   systemPrompt:
-    '你是洗车小程序客服助手。只能根据给定知识库文档回答，回答要简洁、准确、面向用户。',
-  question:
-    '用户问题：如何充值？\n\n知识库文档：\n用户可以在小程序余额页面进行充值。',
+    '你是通用测试助手。请用简洁、准确的中文回答用户问题。',
+  question: '请用一句话说明当前模型已经可以正常响应。',
 });
 
 const fields = computed<FormField[]>(() => [

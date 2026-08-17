@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-08-17 去除 AI 测试默认业务提示
+- 新增：无
+- 修改：
+  - `server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`（默认系统提示改为通用测试助手，不绑定业务场景）
+  - `web/src/views/knowledge-ai-chat/Index.vue`（问答测试默认系统提示与问题改为通用连通性验证）
+  - `web/src/views/knowledge-ai-provider/Index.vue`（大模型账号测试默认问题与占位提示改为通用连通性验证）
+  - `CHANGELOG.md`（追加本次文案修正快照）
+- 删除：无
+- 说明：已移除“洗车/充值/知识库”等业务干扰提示，测试表单只用于验证模型是否正常响应；已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-17 优化 AI 问答测试表单
 - 新增：无
 - 修改：
