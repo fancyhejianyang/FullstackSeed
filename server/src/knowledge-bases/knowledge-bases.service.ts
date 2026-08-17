@@ -81,10 +81,16 @@ export class KnowledgeBasesService {
         code: dto.code?.trim() ?? '',
         description: dto.description?.trim() || null,
         contentType: dto.contentType ?? 'text',
-        containsImages: dto.containsImages ?? false,
-        allowFileUpload:
-          dto.allowFileUpload ??
-          (dto.contentType === 'file' || dto.contentType === 'mixed'),
+        contentText:
+          (dto.contentType ?? 'text') === 'text'
+            ? dto.contentText?.trim() || null
+            : null,
+        fileName:
+          (dto.contentType ?? 'text') === 'text' ? '' : dto.fileName?.trim() ?? '',
+        fileUrl:
+          (dto.contentType ?? 'text') === 'text' ? '' : dto.fileUrl?.trim() ?? '',
+        containsImages: false,
+        allowFileUpload: (dto.contentType ?? 'text') !== 'text',
         isEnabled: dto.isEnabled ?? true,
         sort: dto.sort ?? 0,
       }),
@@ -103,6 +109,21 @@ export class KnowledgeBasesService {
       base.description = dto.description.trim() || null;
     }
     if (dto.contentType !== undefined) base.contentType = dto.contentType;
+    if (dto.contentText !== undefined) {
+      base.contentText = dto.contentText.trim() || null;
+    }
+    if (dto.fileName !== undefined) base.fileName = dto.fileName.trim();
+    if (dto.fileUrl !== undefined) base.fileUrl = dto.fileUrl.trim();
+    if (dto.contentType !== undefined) {
+      if (dto.contentType === 'text') {
+        base.fileName = '';
+        base.fileUrl = '';
+        base.allowFileUpload = false;
+      } else {
+        base.contentText = null;
+        base.allowFileUpload = true;
+      }
+    }
     if (dto.containsImages !== undefined) {
       base.containsImages = dto.containsImages;
     }

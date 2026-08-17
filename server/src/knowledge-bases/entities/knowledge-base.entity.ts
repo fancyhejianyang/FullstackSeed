@@ -19,6 +19,15 @@ export class KnowledgeBase extends BaseEntity {
   @Column({ length: 20, default: 'text' })
   contentType: string;
 
+  @Column({ type: 'longtext', nullable: true })
+  contentText: string | null;
+
+  @Column({ length: 255, default: '' })
+  fileName: string;
+
+  @Column({ length: 500, default: '' })
+  fileUrl: string;
+
   @Column({ type: 'tinyint', default: false })
   containsImages: boolean;
 

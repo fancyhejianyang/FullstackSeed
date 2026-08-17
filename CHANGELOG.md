@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-08-17 调整知识库内容配置输入
+- 新增：无
+- 修改：
+  - `server/src/knowledge-bases/entities/knowledge-base.entity.ts` / `dto/knowledge-base.dto.ts` / `knowledge-bases.service.ts`（知识库内容类型调整为文本、PDF、Word，并新增文本内容与文件名称/地址字段保存）
+  - `web/src/api/knowledgeBase.ts`（同步知识库内容字段类型）
+  - `web/src/views/knowledge-base/Edit.vue`（新增/编辑表单移除排序、描述；内容配置按文本/PDF/Word 动态展示文本域或文件上传）
+  - `web/src/views/knowledge-base/Index.vue` / `View.vue`（列表与详情移除排序、描述、图片/文件开关旧展示，改为展示内容类型与文件/文本内容）
+  - `CHANGELOG.md`（追加本次知识库内容配置调整快照）
+- 删除：无
+- 说明：文本类型可直接录入正文；PDF 类型只允许上传 PDF；Word 类型只允许上传 `.doc/.docx`。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-17 调整知识库分类页行内操作
 - 新增：无
 - 修改：

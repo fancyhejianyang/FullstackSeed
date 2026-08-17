@@ -6,7 +6,10 @@ export interface KnowledgeBase {
   name: string;
   code: string;
   description: string | null;
-  contentType: 'text' | 'file' | 'mixed';
+  contentType: 'text' | 'pdf' | 'word';
+  contentText: string | null;
+  fileName: string;
+  fileUrl: string;
   containsImages: boolean;
   allowFileUpload: boolean;
   isEnabled: boolean;
@@ -122,8 +125,9 @@ export type KnowledgeBaseForm = Pick<
   | 'code'
   | 'description'
   | 'contentType'
-  | 'containsImages'
-  | 'allowFileUpload'
+  | 'contentText'
+  | 'fileName'
+  | 'fileUrl'
   | 'isEnabled'
   | 'sort'
 >;

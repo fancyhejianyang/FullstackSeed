@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, type FormRules } from 'element-plus';
 import Dialog from '@/components/Dialog.vue';
 import Form, { type FormField } from '@/components/Form.vue';
+import UploadFile from '@/components/UploadFile.vue';
 import {
   createKnowledgeBase,
   getKnowledgeBaseCategoryTree,
@@ -27,18 +28,18 @@ const form = reactive({
   categoryId: '' as string | number,
   name: '',
   code: '',
-  description: '',
   contentType: 'text' as KnowledgeBase['contentType'],
-  containsImages: false,
-  allowFileUpload: false,
+  contentText: '',
+  contentFile: '',
+  fileName: '',
+  fileUrl: '',
   isEnabled: true,
-  sort: 0,
 });
 
 const contentTypeOptions = [
   { label: '文本', value: 'text' },
-  { label: '文件', value: 'file' },
-  { label: '混合', value: 'mixed' },
+  { label: 'PDF', value: 'pdf' },
+  { label: 'Word', value: 'word' },
 ];
 
 const categoryOptions = computed(() => flattenCategoryOptions(categoryTree.value));
@@ -59,13 +60,6 @@ const baseFields = computed<FormField[]>(() => [
     component: 'Switch',
     componentProps: { activeText: '启用', inactiveText: '停用' },
   },
-  {
-    prop: 'sort',
-    label: '排序',
-    component: 'InputNumber',
-    componentProps: { mode: 'integer', min: 0, precision: 0 },
-  },
-  { prop: 'description', label: '描述', type: 'textarea', rows: 4 },
 ]);
 
 const contentFields = computed<FormField[]>(() => [
@@ -76,25 +70,54 @@ const contentFields = computed<FormField[]>(() => [
     options: contentTypeOptions,
     placeholder: '请选择内容类型',
   },
-  {
-    prop: 'containsImages',
-    label: '包含图片',
-    component: 'Switch',
-    componentProps: { activeText: '包含', inactiveText: '不含' },
-  },
-  {
-    prop: 'allowFileUpload',
-    label: '文件上传',
-    component: 'Switch',
-    componentProps: { activeText: '允许', inactiveText: '不允许' },
-  },
+  form.contentType === 'text'
+    ? {
+        prop: 'contentText',
+        label: '文本内容',
+        type: 'textarea',
+        rows: 8,
+        placeholder: '请输入知识库文本内容',
+      }
+    : {
+        prop: 'contentFile',
+        label: form.contentType === 'pdf' ? '上传 PDF' : '上传 Word',
+        slot: true,
+      },
 ]);
 
 const rules: FormRules = {
   categoryId: [{ required: true, message: '请选择所属分类', trigger: 'change' }],
   name: [{ required: true, message: '请输入知识库名称', trigger: 'blur' }],
   contentType: [{ required: true, message: '请选择内容类型', trigger: 'change' }],
+  contentText: [
+    {
+      validator: (_rule, value, callback) => {
+        if (form.contentType === 'text' && !String(value || '').trim()) {
+          callback(new Error('请输入文本内容'));
+          return;
+        }
+        callback();
+      },
+      trigger: 'blur',
+    },
+  ],
+  contentFile: [
+    {
+      validator: (_rule, _value, callback) => {
+        if (form.contentType !== 'text' && !form.fileUrl) {
+          callback(new Error('请上传文件'));
+          return;
+        }
+        callback();
+      },
+      trigger: 'change',
+    },
+  ],
 };
+
+const fileAccept = computed(() =>
+  form.contentType === 'pdf' ? '.pdf' : '.doc,.docx',
+);
 
 function flattenCategoryOptions(
   nodes: KnowledgeBaseCategoryTreeNode[],
@@ -115,12 +138,12 @@ function resetForm() {
     categoryId: '',
     name: '',
     code: '',
-    description: '',
     contentType: 'text',
-    containsImages: false,
-    allowFileUpload: false,
+    contentText: '',
+    contentFile: '',
+    fileName: '',
+    fileUrl: '',
     isEnabled: true,
-    sort: 0,
   });
 }
 
@@ -129,12 +152,12 @@ function fillForm(row: KnowledgeBase) {
     categoryId: row.categoryId ?? '',
     name: row.name ?? '',
     code: row.code ?? '',
-    description: row.description ?? '',
     contentType: row.contentType ?? 'text',
-    containsImages: !!row.containsImages,
-    allowFileUpload: !!row.allowFileUpload,
+    contentText: row.contentText ?? '',
+    contentFile: '',
+    fileName: row.fileName ?? '',
+    fileUrl: row.fileUrl ?? '',
     isEnabled: !!row.isEnabled,
-    sort: row.sort ?? 0,
   });
 }
 
@@ -150,12 +173,19 @@ watch(visible, (val) => {
 
 watch(
   () => form.contentType,
-  (value) => {
+  (value, oldValue) => {
     if (value === 'text') {
-      form.allowFileUpload = false;
+      form.fileName = '';
+      form.fileUrl = '';
+      form.contentFile = '';
       return;
     }
-    form.allowFileUpload = true;
+    form.contentText = '';
+    if (oldValue && oldValue !== value) {
+      form.fileName = '';
+      form.fileUrl = '';
+      form.contentFile = '';
+    }
   },
 );
 
@@ -165,8 +195,14 @@ async function handleSubmit() {
   submitting.value = true;
   try {
     const payload = {
-      ...form,
       categoryId: Number(form.categoryId),
+      name: form.name,
+      code: form.code,
+      contentType: form.contentType,
+      contentText: form.contentType === 'text' ? form.contentText : undefined,
+      fileName: form.contentType === 'text' ? undefined : form.fileName,
+      fileUrl: form.contentType === 'text' ? undefined : form.fileUrl,
+      isEnabled: form.isEnabled,
     };
     if (props.row) {
       await updateKnowledgeBase(props.row.id, payload);
@@ -211,7 +247,16 @@ onMounted(fetchCategories);
         :fields="contentFields"
         :rules="rules"
         label-width="100px"
-      />
+      >
+        <template #field-contentFile>
+          <UploadFile
+            v-model="form.fileUrl"
+            v-model:name="form.fileName"
+            :accept="fileAccept"
+            :drag-text="form.contentType === 'pdf' ? '上传 PDF 文件' : '上传 Word 文件'"
+          />
+        </template>
+      </Form>
     </div>
   </Dialog>
 </template>

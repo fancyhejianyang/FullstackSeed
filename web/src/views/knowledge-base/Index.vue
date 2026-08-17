@@ -27,16 +27,13 @@ const columns: TableColumn[] = [
   { prop: 'categoryId', label: '所属分类', minWidth: 140, slot: true },
   { prop: 'code', label: '编码', minWidth: 140 },
   { prop: 'contentType', label: '内容类型', width: 110, slot: true },
-  { prop: 'containsImages', label: '图片', width: 90, slot: true },
-  { prop: 'allowFileUpload', label: '文件', width: 90, slot: true },
+  { prop: 'fileName', label: '文件', minWidth: 180, slot: true },
   { prop: 'isEnabled', label: '状态', width: 90, slot: true },
-  { prop: 'sort', label: '排序', width: 90 },
-  { prop: 'description', label: '描述', minWidth: 220 },
   { prop: 'updatedAt', label: '更新时间', width: 180, slot: true },
 ];
 
 const searchFields: FormField[] = [
-  { prop: 'keyword', label: '关键词', type: 'input', placeholder: '名称/编码/描述' },
+  { prop: 'keyword', label: '关键词', type: 'input', placeholder: '名称/编码' },
 ];
 
 const editVisible = ref(false);
@@ -89,8 +86,10 @@ async function batchDeleteRequest(payload: { ids: Array<string | number> }) {
 }
 
 function getContentTypeLabel(value: KnowledgeBase['contentType']) {
-  const map: Record<KnowledgeBase['contentType'], string> = {
+  const map: Record<string, string> = {
     text: '文本',
+    pdf: 'PDF',
+    word: 'Word',
     file: '文件',
     mixed: '混合',
   };
@@ -146,16 +145,11 @@ onMounted(fetchCategories);
         <el-tag type="info">{{ getContentTypeLabel(row.contentType) }}</el-tag>
       </template>
 
-      <template #column-containsImages="{ row }">
-        <el-tag :type="row.containsImages ? 'success' : 'info'">
-          {{ row.containsImages ? '包含' : '不含' }}
-        </el-tag>
-      </template>
-
-      <template #column-allowFileUpload="{ row }">
-        <el-tag :type="row.allowFileUpload ? 'success' : 'info'">
-          {{ row.allowFileUpload ? '允许' : '不允许' }}
-        </el-tag>
+      <template #column-fileName="{ row }">
+        <el-link v-if="row.fileUrl" type="primary" :href="row.fileUrl" target="_blank">
+          {{ row.fileName || '下载文件' }}
+        </el-link>
+        <span v-else>-</span>
       </template>
 
       <template #column-updatedAt="{ row }">

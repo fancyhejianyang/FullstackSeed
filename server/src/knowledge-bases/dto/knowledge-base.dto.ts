@@ -30,9 +30,21 @@ export class CreateKnowledgeBaseDto {
   @IsOptional()
   description?: string;
 
-  @IsIn(['text', 'file', 'mixed'])
+  @IsIn(['text', 'pdf', 'word'])
   @IsOptional()
-  contentType?: 'text' | 'file' | 'mixed';
+  contentType?: 'text' | 'pdf' | 'word';
+
+  @IsString()
+  @IsOptional()
+  contentText?: string;
+
+  @IsString()
+  @IsOptional()
+  fileName?: string;
+
+  @IsUrl({ require_tld: false })
+  @IsOptional()
+  fileUrl?: string;
 
   @IsBoolean()
   @IsOptional()

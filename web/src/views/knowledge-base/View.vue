@@ -14,8 +14,10 @@ const visible = defineModel<boolean>('visible', { required: true });
 const rowData = computed(() => props.row);
 
 function getContentTypeLabel(value?: KnowledgeBase['contentType']) {
-  const map: Record<KnowledgeBase['contentType'], string> = {
+  const map: Record<string, string> = {
     text: '文本',
+    pdf: 'PDF',
+    word: 'Word',
     file: '文件',
     mixed: '混合',
   };
@@ -43,23 +45,16 @@ function getContentTypeLabel(value?: KnowledgeBase['contentType']) {
       <el-descriptions-item label="内容类型">
         {{ getContentTypeLabel(rowData?.contentType) }}
       </el-descriptions-item>
-      <el-descriptions-item label="包含图片">
-        <el-tag :type="rowData?.containsImages ? 'success' : 'info'">
-          {{ rowData?.containsImages ? '包含' : '不含' }}
-        </el-tag>
-      </el-descriptions-item>
-      <el-descriptions-item label="文件上传">
-        <el-tag :type="rowData?.allowFileUpload ? 'success' : 'info'">
-          {{ rowData?.allowFileUpload ? '允许' : '不允许' }}
-        </el-tag>
-      </el-descriptions-item>
-      <el-descriptions-item label="排序">
-        {{ rowData?.sort ?? '-' }}
-      </el-descriptions-item>
-      <el-descriptions-item label="描述">
+      <el-descriptions-item v-if="rowData?.contentType === 'text'" label="文本内容">
         <div class="knowledge-base-view__description">
-          {{ rowData?.description || '-' }}
+          {{ rowData?.contentText || '-' }}
         </div>
+      </el-descriptions-item>
+      <el-descriptions-item v-else label="文件">
+        <el-link v-if="rowData?.fileUrl" type="primary" :href="rowData.fileUrl" target="_blank">
+          {{ rowData.fileName || '下载文件' }}
+        </el-link>
+        <span v-else>-</span>
       </el-descriptions-item>
       <el-descriptions-item label="创建时间">
         {{ rowData?.createdAt ? formatDateTime(rowData.createdAt) : '-' }}
