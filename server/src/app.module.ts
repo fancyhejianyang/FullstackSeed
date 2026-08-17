@@ -20,6 +20,7 @@ import { UploadsModule } from './uploads/uploads.module';
 import { StorageConfigModule } from './storage-config/storage-config.module';
 import { KnowledgeAiProvidersModule } from './knowledge-ai-providers/knowledge-ai-providers.module';
 import { KnowledgeAiChatModule } from './knowledge-ai-chat/knowledge-ai-chat.module';
+import { KnowledgeBasesModule } from './knowledge-bases/knowledge-bases.module';
 
 @Module({
   imports: [
@@ -105,6 +106,7 @@ import { KnowledgeAiChatModule } from './knowledge-ai-chat/knowledge-ai-chat.mod
     UploadsModule,
     KnowledgeAiProvidersModule,
     KnowledgeAiChatModule,
+    KnowledgeBasesModule,
     DemoModule,
   ],
   controllers: [AppController],

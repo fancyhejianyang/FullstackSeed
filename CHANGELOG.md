@@ -1,5 +1,19 @@
 # CHANGELOG
 
+### 2026-08-17 搭建知识库四层管理骨架
+- 新增：
+  - `server/src/knowledge-bases/`（知识库、分类/目录、文档、分片四层实体与基础 CRUD 接口）
+  - `web/src/api/knowledgeBase.ts`（知识库四层资源前端 API）
+  - `web/src/views/knowledge-base/Index.vue`（知识库管理页面：左侧知识库/分类树，右侧文档与分片维护）
+- 修改：
+  - `server/src/app.module.ts`（挂载知识库模块）
+  - `server/src/users/users.service.ts`（默认管理员权限模块补充 `KnowledgeBase`）
+  - `server/src/menus/menus.service.ts`（新增知识库管理菜单种子 `/knowledge-bases`）
+  - `web/src/router/index.ts`（新增 `/knowledge-bases` 路由）
+  - `CHANGELOG.md`（追加本次知识库搭建快照）
+- 删除：无
+- 说明：本次只搭建知识库结构维护能力，不接向量数据库、不做召回与服务逻辑；已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-17 去除 AI 测试默认业务提示
 - 新增：无
 - 修改：

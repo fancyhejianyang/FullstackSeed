@@ -26,7 +26,14 @@ const STANDARD_ACTIONS = [
   ['batchDelete', '批量删除'],
 ] as const;
 
-const ADMIN_PERMISSION_MODULES = ['Demo', 'User', 'Role', 'Permission', 'Menu'];
+const ADMIN_PERMISSION_MODULES = [
+  'Demo',
+  'KnowledgeBase',
+  'User',
+  'Role',
+  'Permission',
+  'Menu',
+];
 
 // 内置权限点种子：只保存基础动作目录。
 // 角色授权时由「菜单模块 × 基础动作」组合成完整权限码并存入 roles.permissionCodes。
