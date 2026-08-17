@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-08-17 调整知识库菜单层级
+- 新增：
+  - `web/src/views/knowledge-base/Categories.vue`（知识库分类/目录维护页）
+- 修改：
+  - `server/src/menus/menus.service.ts`（`知识库管理` 调整为一级菜单分组，新增 `知识库分类` 与 `知识库列表` 二级菜单）
+  - `web/src/router/index.ts`（`/knowledge-bases` 改为重定向，新增 `/knowledge-bases/categories` 与 `/knowledge-bases/list`）
+  - `web/src/views/knowledge-base/Index.vue`（页面标题调整为 `知识库列表`）
+  - `CHANGELOG.md`（追加本次菜单层级调整快照）
+- 删除：无
+- 说明：菜单管理中应使用一级 `/knowledge-bases`，二级 `/knowledge-bases/categories`、`/knowledge-bases/list`；已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-17 搭建知识库四层管理骨架
 - 新增：
   - `server/src/knowledge-bases/`（知识库、分类/目录、文档、分片四层实体与基础 CRUD 接口）

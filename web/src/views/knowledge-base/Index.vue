@@ -546,7 +546,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <PageContainer title="知识库管理">
+  <PageContainer title="知识库列表">
     <div class="knowledge-base">
       <aside class="knowledge-base__side">
         <div class="knowledge-base__side-title">知识库</div>

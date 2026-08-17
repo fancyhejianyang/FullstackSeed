@@ -29,8 +29,20 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'knowledge-bases',
         name: 'knowledge-bases',
-        component: () => import('@/views/knowledge-base/Index.vue'),
+        redirect: '/knowledge-bases/list',
         meta: { title: '知识库管理', permission: 'KnowledgeBase.read' },
+      },
+      {
+        path: 'knowledge-bases/categories',
+        name: 'knowledge-base-categories',
+        component: () => import('@/views/knowledge-base/Categories.vue'),
+        meta: { title: '知识库分类', permission: 'KnowledgeBase.read' },
+      },
+      {
+        path: 'knowledge-bases/list',
+        name: 'knowledge-base-list',
+        component: () => import('@/views/knowledge-base/Index.vue'),
+        meta: { title: '知识库列表', permission: 'KnowledgeBase.read' },
       },
       {
         path: 'users',

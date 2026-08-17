@@ -22,6 +22,8 @@ const SEED_MENUS: SeedMenu[] = [
   { name: '首页', path: '/', icon: 'HomeFilled', sort: 0, permissionCode: '', isSystem: false },
   { name: '示例管理', path: '/demo', icon: 'Document', sort: 10, permissionCode: 'Demo.read', isSystem: false },
   { name: '知识库管理', path: '/knowledge-bases', icon: 'Collection', sort: 20, permissionCode: 'KnowledgeBase.read', isSystem: false },
+  { name: '知识库分类', path: '/knowledge-bases/categories', icon: 'FolderOpened', sort: 10, permissionCode: 'KnowledgeBase.read', isSystem: false, parentPath: '/knowledge-bases' },
+  { name: '知识库列表', path: '/knowledge-bases/list', icon: 'Tickets', sort: 20, permissionCode: 'KnowledgeBase.read', isSystem: false, parentPath: '/knowledge-bases' },
   { name: '账号管理', path: '/users', icon: 'User', sort: 30, permissionCode: 'User.read', isSystem: true },
   { name: '角色管理', path: '/roles', icon: 'UserFilled', sort: 40, permissionCode: 'Role.read', isSystem: true },
   { name: '权限管理', path: '/permissions', icon: 'Key', sort: 50, permissionCode: 'Permission.read', isSystem: true },
