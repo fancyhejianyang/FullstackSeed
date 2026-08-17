@@ -1,5 +1,19 @@
 # CHANGELOG
 
+### 2026-08-17 新增 AI 问答与问题记录模块
+- 新增：
+  - `server/src/knowledge-ai-chat/`（问答会话、问答消息实体，发送问题、会话列表、会话详情、删除与批量删除接口）
+  - `web/src/api/knowledgeAiChat.ts`（前端问答与记录 API）
+  - `web/src/views/knowledge-ai-chat/Index.vue`（AI 问答测试页面）
+  - `web/src/views/knowledge-ai-record/Index.vue`（问题记录列表与详情页面）
+- 修改：
+  - `server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`（抽出可复用 `callChat` 服务端调用入口）
+  - `server/src/app.module.ts` / `server/src/menus/menus.service.ts`（挂载问答模块，新增系统配置子菜单）
+  - `web/src/router/index.ts`（新增 `/system-config/ai-chat` 与 `/system-config/ai-record`）
+  - `CHANGELOG.md`（追加本次问答与记录模块快照）
+- 删除：无
+- 说明：问答接口会记录 provider、model、question、answer、错误信息与耗时；问题记录按会话维度分页查询并可查看每轮消息。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-17 新增 AI 大模型账号模块
 - 新增：
   - `server/src/knowledge-ai-providers/`（大模型供应商配置 CRUD、批量删除、测试调用接口）

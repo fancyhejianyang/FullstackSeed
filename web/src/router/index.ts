@@ -69,6 +69,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'AI 大模型账号', permission: 'Menu.read' },
       },
       {
+        path: 'system-config/ai-chat',
+        name: 'system-config-ai-chat',
+        component: () => import('@/views/knowledge-ai-chat/Index.vue'),
+        meta: { title: 'AI 问答测试', permission: 'Menu.read' },
+      },
+      {
+        path: 'system-config/ai-record',
+        name: 'system-config-ai-record',
+        component: () => import('@/views/knowledge-ai-record/Index.vue'),
+        meta: { title: '问题记录', permission: 'Menu.read' },
+      },
+      {
         path: 'system-config/wechat',
         name: 'system-config-wechat',
         component: () => import('@/views/system/Wechat.vue'),

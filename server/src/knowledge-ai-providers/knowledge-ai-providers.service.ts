@@ -22,6 +22,23 @@ interface ChatCompletionResponse {
   }>;
 }
 
+export interface KnowledgeAiChatCallPayload {
+  id: number;
+  model: string;
+  question: string;
+  systemPrompt?: string;
+}
+
+export interface KnowledgeAiChatCallResult {
+  isSuccess: boolean;
+  providerId: number;
+  providerName: string;
+  model: string;
+  answer: string;
+  errorMessage: string | null;
+  elapsedMilliseconds: number;
+}
+
 @Injectable()
 export class KnowledgeAiProvidersService {
   constructor(
@@ -93,9 +110,19 @@ export class KnowledgeAiProvidersService {
   }
 
   async test(dto: TestKnowledgeAiProviderDto) {
+    return this.callChat(dto);
+  }
+
+  async callChat(
+    payload: KnowledgeAiChatCallPayload,
+  ): Promise<KnowledgeAiChatCallResult> {
     const startedAt = Date.now();
+    let providerId = payload.id;
+    let providerName = '';
     try {
-      const provider = await this.findEntity(dto.id);
+      const provider = await this.findEntity(payload.id);
+      providerId = provider.id;
+      providerName = provider.name;
       if (!provider.isEnabled) {
         throw new BadRequestException('该大模型账号未启用');
       }
@@ -103,7 +130,7 @@ export class KnowledgeAiProvidersService {
         throw new BadRequestException('该大模型账号未配置密钥');
       }
 
-      const model = this.resolveModel(provider.models, dto.model);
+      const model = this.resolveModel(provider.models, payload.model);
       const response = await fetch(this.buildChatUrl(provider), {
         method: 'POST',
         headers: {
@@ -115,12 +142,12 @@ export class KnowledgeAiProvidersService {
           messages: [
             {
               role: 'system',
-              content:
-                '你是洗车小程序客服助手。只能根据给定知识库文档回答，回答要简洁、准确、面向用户。',
+              content: payload.systemPrompt?.trim()
+                || '你是洗车小程序客服助手。只能根据给定知识库文档回答，回答要简洁、准确、面向用户。',
             },
             {
               role: 'user',
-              content: dto.question,
+              content: payload.question,
             },
           ],
           temperature: 0.2,
@@ -142,6 +169,8 @@ export class KnowledgeAiProvidersService {
 
       return {
         isSuccess: true,
+        providerId,
+        providerName,
         model,
         answer,
         errorMessage: null,
@@ -150,7 +179,9 @@ export class KnowledgeAiProvidersService {
     } catch (error) {
       return {
         isSuccess: false,
-        model: dto.model,
+        providerId,
+        providerName,
+        model: payload.model,
         answer: '',
         errorMessage:
           error instanceof Error ? error.message : '模型接口调用失败',
