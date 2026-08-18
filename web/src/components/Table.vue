@@ -110,13 +110,15 @@ function canDo(action: 'read' | 'create' | 'update' | 'delete' | 'batchDelete') 
   const mod = props.permModule.charAt(0).toUpperCase() + props.permModule.slice(1);
   return userStore.hasPermission(`${mod}.${action}`);
 }
-const canView = computed(() => props.showView && canDo('read'));
-const canEdit = computed(() => props.showEdit && canDo('update'));
-const canDelete = computed(() => props.showDelete && canDo('delete'));
+const canView = computed(() => props.showActions && props.showView && canDo('read'));
+const canEdit = computed(() => props.showActions && props.showEdit && canDo('update'));
+const canDelete = computed(
+  () => props.showActions && props.showDelete && canDo('delete'),
+);
 const canBatchDelete = computed(() => canDo('batchDelete'));
 // 操作列是否有任一可见按钮（含自定义插槽）
 const hasActionColumn = computed(
-  () => props.showActions && (canView.value || canEdit.value || canDelete.value),
+  () => canView.value || canEdit.value || canDelete.value,
 );
 
 const loading = ref(false);
