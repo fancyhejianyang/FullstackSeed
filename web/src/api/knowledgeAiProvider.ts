@@ -6,6 +6,9 @@ export interface KnowledgeAiProvider {
   apiUrl: string;
   chatApiPath: string;
   models: string;
+  textModels: string;
+  visionModels: string;
+  embeddingModels: string;
   isEnabled: boolean;
   description: string;
   secretKeySet: boolean;
@@ -30,6 +33,9 @@ export interface KnowledgeAiProviderForm {
   chatApiPath?: string;
   secretKey?: string;
   models?: string;
+  textModels?: string;
+  visionModels?: string;
+  embeddingModels?: string;
   isEnabled?: boolean;
   description?: string;
 }

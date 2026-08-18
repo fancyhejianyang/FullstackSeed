@@ -29,6 +29,9 @@ const columns: TableColumn[] = [
   { prop: 'apiUrl', label: 'API 地址', minWidth: 220 },
   { prop: 'chatApiPath', label: 'Chat API 路径', minWidth: 180 },
   { prop: 'models', label: '模型列表', minWidth: 220, slot: true },
+  { prop: 'textModels', label: '文本模型', minWidth: 220, slot: true },
+  { prop: 'visionModels', label: '视觉模型', minWidth: 220, slot: true },
+  { prop: 'embeddingModels', label: '向量模型', minWidth: 220, slot: true },
   { prop: 'secretKeySet', label: '密钥', width: 90, slot: true },
   { prop: 'isEnabled', label: '状态', width: 90, slot: true },
   { prop: 'description', label: '描述', minWidth: 180 },
@@ -184,6 +187,45 @@ async function handleTest() {
             {{ line }}
           </el-tag>
           <span v-if="!getModelLines(row.models).length">-</span>
+        </div>
+      </template>
+
+      <template #column-textModels="{ row }">
+        <div class="ai-provider__models">
+          <el-tag
+            v-for="line in getModelLines(row.textModels).slice(0, 3)"
+            :key="line"
+            type="info"
+          >
+            {{ line }}
+          </el-tag>
+          <span v-if="!getModelLines(row.textModels).length">-</span>
+        </div>
+      </template>
+
+      <template #column-visionModels="{ row }">
+        <div class="ai-provider__models">
+          <el-tag
+            v-for="line in getModelLines(row.visionModels).slice(0, 3)"
+            :key="line"
+            type="info"
+          >
+            {{ line }}
+          </el-tag>
+          <span v-if="!getModelLines(row.visionModels).length">-</span>
+        </div>
+      </template>
+
+      <template #column-embeddingModels="{ row }">
+        <div class="ai-provider__models">
+          <el-tag
+            v-for="line in getModelLines(row.embeddingModels).slice(0, 3)"
+            :key="line"
+            type="info"
+          >
+            {{ line }}
+          </el-tag>
+          <span v-if="!getModelLines(row.embeddingModels).length">-</span>
         </div>
       </template>
 

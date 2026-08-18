@@ -1,5 +1,18 @@
 # CHANGELOG
 
+### 2026-08-18 补充大模型账号模型分组字段
+- 新增：无
+- 修改：
+  - `server/src/knowledge-ai-providers/entities/knowledge-ai-provider.entity.ts`（新增文本模型、视觉模型、向量模型字段）
+  - `server/src/knowledge-ai-providers/dto/knowledge-ai-provider.dto.ts`（同步新增模型分组入参字段）
+  - `server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`（保存与返回模型分组字段）
+  - `web/src/api/knowledgeAiProvider.ts`（同步前端类型）
+  - `web/src/views/knowledge-ai-provider/Edit.vue`（编辑表单补充三组模型字段）
+  - `web/src/views/knowledge-ai-provider/Index.vue`（列表展示三组模型字段）
+  - `CHANGELOG.md`（追加本次模型字段补充快照）
+- 删除：无
+- 说明：当前聊天测试仍使用原 `models` 字段，新增字段只作为后续文本/视觉/向量模型专用选择能力的配置储备。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-18 接入手动 PDF 文本解析
 - 新增：
   - `server/src/document-ocr/`（手动解析链路的 OCR 兜底服务入口）

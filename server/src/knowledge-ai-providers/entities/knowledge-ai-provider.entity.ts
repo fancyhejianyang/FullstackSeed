@@ -18,6 +18,15 @@ export class KnowledgeAiProvider extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   models: string | null;
 
+  @Column({ type: 'text', nullable: true })
+  textModels: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  visionModels: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  embeddingModels: string | null;
+
   @Column({ type: 'tinyint', default: true })
   isEnabled: boolean;
 

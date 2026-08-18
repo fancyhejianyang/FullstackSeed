@@ -28,6 +28,9 @@ const form = reactive<KnowledgeAiProviderForm>({
   chatApiPath: 'v1/chat/completions',
   secretKey: '',
   models: 'qwen-plus',
+  textModels: '',
+  visionModels: '',
+  embeddingModels: '',
   isEnabled: true,
   description: '',
 });
@@ -56,6 +59,27 @@ const fields: FormField[] = [
     placeholder: '模型编码#模型名称\nqwen-plus#通义千问 Plus',
   },
   {
+    prop: 'textModels',
+    label: '文本模型',
+    type: 'textarea',
+    rows: 4,
+    placeholder: '模型编码#模型名称\ngpt-4o-mini#GPT-4o Mini',
+  },
+  {
+    prop: 'visionModels',
+    label: '视觉模型',
+    type: 'textarea',
+    rows: 4,
+    placeholder: '模型编码#模型名称\nqwen-vl-plus#通义千问 VL Plus',
+  },
+  {
+    prop: 'embeddingModels',
+    label: '向量模型',
+    type: 'textarea',
+    rows: 4,
+    placeholder: '模型编码#模型名称\ntext-embedding-v3#文本向量 v3',
+  },
+  {
     prop: 'isEnabled',
     label: '是否启用',
     component: 'Switch',
@@ -75,6 +99,9 @@ function resetForm() {
   form.chatApiPath = 'v1/chat/completions';
   form.secretKey = '';
   form.models = 'qwen-plus';
+  form.textModels = '';
+  form.visionModels = '';
+  form.embeddingModels = '';
   form.isEnabled = true;
   form.description = '';
 }
@@ -85,6 +112,9 @@ function fillForm(data: KnowledgeAiProvider) {
   form.chatApiPath = data.chatApiPath || 'v1/chat/completions';
   form.secretKey = '';
   form.models = data.models || 'qwen-plus';
+  form.textModels = data.textModels || '';
+  form.visionModels = data.visionModels || '';
+  form.embeddingModels = data.embeddingModels || '';
   form.isEnabled = !!data.isEnabled;
   form.description = data.description ?? '';
 }

@@ -35,6 +35,18 @@ export class CreateKnowledgeAiProviderDto {
   @IsOptional()
   models?: string;
 
+  @IsString()
+  @IsOptional()
+  textModels?: string;
+
+  @IsString()
+  @IsOptional()
+  visionModels?: string;
+
+  @IsString()
+  @IsOptional()
+  embeddingModels?: string;
+
   @IsBoolean()
   @IsOptional()
   isEnabled?: boolean;

@@ -234,6 +234,15 @@ export class KnowledgeAiProvidersService {
     if (dto.models !== undefined || isCreate) {
       payload.models = (dto.models || 'qwen-plus').trim();
     }
+    if (dto.textModels !== undefined) {
+      payload.textModels = this.toNullableText(dto.textModels);
+    }
+    if (dto.visionModels !== undefined) {
+      payload.visionModels = this.toNullableText(dto.visionModels);
+    }
+    if (dto.embeddingModels !== undefined) {
+      payload.embeddingModels = this.toNullableText(dto.embeddingModels);
+    }
     if (dto.isEnabled !== undefined || isCreate) {
       payload.isEnabled = dto.isEnabled ?? true;
     }
@@ -250,6 +259,9 @@ export class KnowledgeAiProvidersService {
       apiUrl: provider.apiUrl,
       chatApiPath: provider.chatApiPath,
       models: provider.models ?? '',
+      textModels: provider.textModels ?? '',
+      visionModels: provider.visionModels ?? '',
+      embeddingModels: provider.embeddingModels ?? '',
       isEnabled: !!provider.isEnabled,
       description: provider.description ?? '',
       secretKeySet: !!provider.secretKey,
@@ -285,5 +297,10 @@ export class KnowledgeAiProvidersService {
         };
       })
       .filter((item) => item.code);
+  }
+
+  private toNullableText(value?: string) {
+    const text = value?.trim() ?? '';
+    return text || null;
   }
 }
