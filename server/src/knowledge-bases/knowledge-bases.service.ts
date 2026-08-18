@@ -32,6 +32,14 @@ export interface KnowledgeBaseCategoryTreeNode extends KnowledgeBaseCategory {
   children: KnowledgeBaseCategoryTreeNode[];
 }
 
+const KNOWLEDGE_PARSE_MODE = {
+  manual: 'manual',
+  mineru: 'mineru',
+} as const;
+
+type KnowledgeParseMode =
+  (typeof KNOWLEDGE_PARSE_MODE)[keyof typeof KNOWLEDGE_PARSE_MODE];
+
 @Injectable()
 export class KnowledgeBasesService {
   constructor(
@@ -186,16 +194,13 @@ export class KnowledgeBasesService {
 
   async parseBase(id: number, dto: ParseKnowledgeBaseDto = {}) {
     const base = await this.findBase(id);
-    const parseMode = dto.parseMode ?? 'manual';
+    const parseMode = this.resolveParseMode(dto.parseMode);
     await this.updateBaseProcess(base, {
       processStage: 'parsing',
       parseStatus: 'processing',
       chunkStatus: 'pending',
       indexStatus: 'pending',
-      lastProcessMessage:
-        parseMode === 'mineru'
-          ? 'MinerU 解析任务已提交，等待执行'
-          : '手动解析任务已提交，等待执行',
+      lastProcessMessage: `${this.getParseModeLabel(parseMode)}任务已提交，等待执行`,
     });
     return this.taskQueueService.add(
       'knowledge-base.parse',
@@ -206,27 +211,23 @@ export class KnowledgeBasesService {
 
   private async executeParseBase(id: number, dto: ParseKnowledgeBaseDto = {}) {
     const base = await this.findBase(id);
-    const parseMode = dto.parseMode ?? 'manual';
+    const parseMode = this.resolveParseMode(dto.parseMode);
     await this.updateBaseProcess(base, {
       processStage: 'parsing',
       parseStatus: 'processing',
       chunkStatus: 'pending',
       indexStatus: 'pending',
-      lastProcessMessage:
-        parseMode === 'mineru' ? '正在通过 MinerU 解析内容' : '正在手动解析内容',
+      lastProcessMessage: `正在${this.getParseModeLabel(parseMode)}内容`,
     });
     try {
-      const content = await this.resolveBaseParsedContent(base, parseMode);
-      const document = await this.saveBaseDocument(base, content);
+      const content = await this.parseBaseContentByMode(base, parseMode);
+      const document = await this.saveBaseDocument(base, content, parseMode);
       await this.updateBaseProcess(base, {
         processStage: 'parsed',
         parseStatus: 'success',
         chunkStatus: 'pending',
         indexStatus: 'pending',
-        lastProcessMessage:
-          parseMode === 'mineru'
-            ? 'MinerU 解析完成，等待分片'
-            : '手动解析完成，等待分片',
+        lastProcessMessage: `${this.getParseModeLabel(parseMode)}完成，等待分片`,
       });
       return { id, documentId: document.id, processStage: 'parsed', parseMode };
     } catch (error) {
@@ -493,7 +494,7 @@ export class KnowledgeBasesService {
         chunkCount: 0,
       };
     }
-    const saved = await this.applyMineruMarkdown(document, result.markdown);
+    const saved = await this.applyThirdPartyMarkdown(document, result.markdown);
     return {
       ...result,
       isCompleted: true,
@@ -508,11 +509,11 @@ export class KnowledgeBasesService {
   ) {
     const document = await this.findDocument(id);
     this.assertSupportedDocumentFile(dto.fileUrl, dto.fileName);
-    const task = await this.mineruConfigsService.createParseTask(
-      dto.fileUrl.trim(),
-      dto.fileName?.trim(),
-    );
     if (dto.waitForResult === false) {
+      const task = await this.mineruConfigsService.createParseTask(
+        dto.fileUrl.trim(),
+        dto.fileName?.trim(),
+      );
       return {
         ...task,
         documentId: id,
@@ -520,39 +521,23 @@ export class KnowledgeBasesService {
         chunkCount: 0,
       };
     }
-    const result = await this.mineruConfigsService.waitForSuccess(task.taskId);
-    const saved = await this.applyMineruMarkdown(
-      document,
-      result.markdown,
-      dto.fileName || this.resolveFileName(dto.fileUrl),
-    );
-    return {
-      ...result,
-      documentId: id,
-      isCompleted: true,
-      chunkCount: saved.chunkCount,
-    };
+    return this.executeDocumentThirdPartyParse(document, dto);
   }
 
   async parseDocument(
     id: number,
     dto: ParseKnowledgeBaseDocumentRequestDto,
   ) {
-    const parseMode = dto.parseMode ?? 'manual';
+    const parseMode = this.resolveParseMode(dto.parseMode);
     const document = await this.findDocument(id);
-    if (parseMode === 'mineru') {
-      if (!dto.fileUrl) {
-        document.status = 'failed';
-        document.description = 'MinerU 解析需要提供文件 URL';
-        await this.documentRepository.save(document);
-        throw new BadRequestException('MinerU 解析需要提供文件 URL');
-      }
+    if (parseMode === KNOWLEDGE_PARSE_MODE.mineru && !dto.fileUrl) {
+      document.status = 'failed';
+      document.description = 'MinerU 解析需要提供文件 URL';
+      await this.documentRepository.save(document);
+      throw new BadRequestException('MinerU 解析需要提供文件 URL');
     }
     document.status = 'processing';
-    document.description =
-      parseMode === 'mineru'
-        ? 'MinerU 解析任务已提交，等待执行'
-        : '手动解析任务已提交，等待执行';
+    document.description = `${this.getParseModeLabel(parseMode)}任务已提交，等待执行`;
     await this.documentRepository.save(document);
     return this.taskQueueService.add(
       'knowledge-base-document.parse',
@@ -565,44 +550,78 @@ export class KnowledgeBasesService {
     id: number,
     dto: ParseKnowledgeBaseDocumentRequestDto,
   ) {
-    const parseMode = dto.parseMode ?? 'manual';
+    const parseMode = this.resolveParseMode(dto.parseMode);
     const document = await this.findDocument(id);
     try {
-      if (parseMode === 'mineru') {
-        return this.parseDocumentWithMineru(id, {
-          fileUrl: dto.fileUrl!,
-          fileName: dto.fileName,
-          waitForResult: dto.waitForResult,
-        });
-      }
-
-      const content = await this.documentParsersService.parse({
-        contentType: this.resolveDocumentManualContentType(document),
-        contentText: document.content,
-        fileUrl: dto.fileUrl,
-        fileName: document.sourceName,
-      });
-      document.content = content.trim();
-      document.status = 'parsed';
-      document.sourceType = 'manual';
-      const saved = await this.documentRepository.save(document);
-      await this.chunkRepository.softDelete({ documentId: saved.id });
-      const chunkCount = await this.saveDocumentChunks(saved);
-      saved.description = `手动解析完成，共 ${chunkCount} 个分片`;
-      await this.documentRepository.save(saved);
-      return {
-        document: saved,
-        documentId: id,
-        isCompleted: true,
-        chunkCount,
-        parseMode,
-      };
+      return this.parseDocumentByMode(document, dto, parseMode);
     } catch (error) {
       document.status = 'failed';
       document.description = error instanceof Error ? error.message : '解析失败';
       await this.documentRepository.save(document);
       throw error;
     }
+  }
+
+  private async parseDocumentByMode(
+    document: KnowledgeBaseDocument,
+    dto: ParseKnowledgeBaseDocumentRequestDto,
+    parseMode: KnowledgeParseMode,
+  ) {
+    if (parseMode === KNOWLEDGE_PARSE_MODE.mineru) {
+      return this.executeDocumentThirdPartyParse(document, {
+        fileUrl: dto.fileUrl!,
+        fileName: dto.fileName,
+        waitForResult: dto.waitForResult,
+      });
+    }
+
+    const content = await this.documentParsersService.parse({
+      contentType: this.resolveDocumentManualContentType(document),
+      contentText: document.content,
+      fileUrl: dto.fileUrl,
+      fileName: document.sourceName,
+    });
+    document.content = content.trim();
+    document.status = 'parsed';
+    document.sourceType = KNOWLEDGE_PARSE_MODE.manual;
+    const saved = await this.documentRepository.save(document);
+    await this.chunkRepository.softDelete({ documentId: saved.id });
+    const chunkCount = await this.saveDocumentChunks(saved);
+    saved.description = `手动解析完成，共 ${chunkCount} 个分片`;
+    await this.documentRepository.save(saved);
+    return {
+      document: saved,
+      documentId: saved.id,
+      isCompleted: true,
+      chunkCount,
+      parseMode,
+    };
+  }
+
+  private async executeDocumentThirdPartyParse(
+    document: KnowledgeBaseDocument,
+    dto: ParseKnowledgeBaseDocumentDto,
+  ) {
+    const result = await this.mineruConfigsService.waitForSuccess(
+      (
+        await this.mineruConfigsService.createParseTask(
+          dto.fileUrl.trim(),
+          dto.fileName?.trim(),
+        )
+      ).taskId,
+    );
+    const saved = await this.applyThirdPartyMarkdown(
+      document,
+      result.markdown,
+      dto.fileName || this.resolveFileName(dto.fileUrl),
+    );
+    return {
+      ...result,
+      documentId: document.id,
+      isCompleted: true,
+      chunkCount: saved.chunkCount,
+      parseMode: KNOWLEDGE_PARSE_MODE.mineru,
+    };
   }
 
   async updateDocument(id: number, dto: UpdateKnowledgeBaseDocumentDto) {
@@ -765,9 +784,19 @@ export class KnowledgeBasesService {
     return this.baseRepository.save(base);
   }
 
-  private async resolveBaseParsedContent(
+  private resolveParseMode(mode?: string | null): KnowledgeParseMode {
+    return mode === KNOWLEDGE_PARSE_MODE.mineru
+      ? KNOWLEDGE_PARSE_MODE.mineru
+      : KNOWLEDGE_PARSE_MODE.manual;
+  }
+
+  private getParseModeLabel(mode: KnowledgeParseMode) {
+    return mode === KNOWLEDGE_PARSE_MODE.mineru ? 'MinerU 解析' : '手动解析';
+  }
+
+  private async parseBaseContentByMode(
     base: KnowledgeBase,
-    parseMode: NonNullable<ParseKnowledgeBaseDto['parseMode']>,
+    parseMode: KnowledgeParseMode,
   ) {
     if (base.contentType === 'text') {
       const content = base.contentText?.trim();
@@ -781,7 +810,7 @@ export class KnowledgeBasesService {
     }
     this.assertSupportedDocumentFile(base.fileUrl, base.fileName);
 
-    if (parseMode === 'manual') {
+    if (parseMode === KNOWLEDGE_PARSE_MODE.manual) {
       return this.documentParsersService.parse({
         contentType: base.contentType as 'text' | 'pdf' | 'word',
         contentText: base.contentText,
@@ -790,10 +819,10 @@ export class KnowledgeBasesService {
       });
     }
 
-    return this.resolveBaseMineruParsedContent(base);
+    return this.parseBaseWithThirdParty(base);
   }
 
-  private async resolveBaseMineruParsedContent(base: KnowledgeBase) {
+  private async parseBaseWithThirdParty(base: KnowledgeBase) {
     const task = await this.mineruConfigsService.createParseTask(
       base.fileUrl,
       base.fileName,
@@ -813,7 +842,11 @@ export class KnowledgeBasesService {
     return document;
   }
 
-  private async saveBaseDocument(base: KnowledgeBase, content: string) {
+  private async saveBaseDocument(
+    base: KnowledgeBase,
+    content: string,
+    parseMode: KnowledgeParseMode,
+  ) {
     const current = await this.documentRepository.findOne({
       where: { knowledgeBaseId: base.id },
       order: { id: 'DESC' },
@@ -828,7 +861,8 @@ export class KnowledgeBasesService {
     document.knowledgeBaseId = base.id;
     document.categoryId = base.categoryId;
     document.title = base.name;
-    document.sourceType = base.contentType === 'text' ? 'text' : 'mineru';
+    document.sourceType =
+      base.contentType === 'text' ? 'text' : parseMode;
     document.sourceName =
       base.contentType === 'text' ? base.name : base.fileName || base.name;
     document.content = content.trim();
@@ -857,7 +891,7 @@ export class KnowledgeBasesService {
     return chunks.length;
   }
 
-  private async applyMineruMarkdown(
+  private async applyThirdPartyMarkdown(
     document: KnowledgeBaseDocument,
     markdown: string,
     fileName?: string,
@@ -868,7 +902,7 @@ export class KnowledgeBasesService {
     }
     document.content = content;
     document.status = 'parsed';
-    document.sourceType = 'mineru';
+    document.sourceType = KNOWLEDGE_PARSE_MODE.mineru;
     if (fileName) document.sourceName = fileName;
     let saved = await this.documentRepository.save(document);
     await this.chunkRepository.softDelete({ documentId: saved.id });

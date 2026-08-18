@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-08-18 整理知识库解析模式分流
+- 新增：无
+- 修改：
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（新增统一解析模式常量和辅助方法，集中处理手动解析/MinerU 解析分流）
+  - `CHANGELOG.md`（追加本次解析模式重构快照）
+- 删除：无
+- 说明：减少 Service 中分散的 `manual/mineru` 字符串判断，内部方法命名调整为按模式/第三方解析表达，避免手动解析流程里出现 MinerU 方法名造成误导。已执行 `server` 的 `npm.cmd run build`，通过。
+
 ### 2026-08-18 展示知识库处理结果
 - 新增：无
 - 修改：
