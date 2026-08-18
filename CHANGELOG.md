@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-08-18 新增后端文档解析器模块
+- 新增：
+  - `server/src/document-parsers/`（文档解析器模块、统一解析服务、文本/PDF/Word 解析器）
+- 修改：
+  - `server/src/knowledge-bases/knowledge-bases.module.ts`（接入文档解析器模块）
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（手动解析分支改为调用统一解析器服务）
+  - `CHANGELOG.md`（追加本次解析器模块快照）
+- 删除：无
+- 说明：知识库业务流程与具体文档解析实现解耦；文本解析器已可用，PDF/Word 解析器先返回明确提示，后续可分别接入本地解析库。已执行 `server` 的 `npm.cmd run build`，通过。
+
 ### 2026-08-18 增加知识库解析模式选择
 - 新增：
   - `server/src/knowledge-bases/dto/knowledge-base.dto.ts`（新增 `ParseKnowledgeBaseDto.parseMode`，支持 `manual` / `mineru`）

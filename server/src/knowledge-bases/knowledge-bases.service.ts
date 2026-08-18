@@ -23,6 +23,7 @@ import { KnowledgeBaseCategory } from './entities/knowledge-base-category.entity
 import { KnowledgeBaseChunk } from './entities/knowledge-base-chunk.entity';
 import { KnowledgeBaseDocument } from './entities/knowledge-base-document.entity';
 import { KnowledgeBase } from './entities/knowledge-base.entity';
+import { DocumentParsersService } from '../document-parsers/document-parsers.service';
 import { MineruConfigsService } from '../mineru-configs/mineru-configs.service';
 
 export interface KnowledgeBaseCategoryTreeNode extends KnowledgeBaseCategory {
@@ -40,6 +41,7 @@ export class KnowledgeBasesService {
     private readonly documentRepository: Repository<KnowledgeBaseDocument>,
     @InjectRepository(KnowledgeBaseChunk)
     private readonly chunkRepository: Repository<KnowledgeBaseChunk>,
+    private readonly documentParsersService: DocumentParsersService,
     private readonly mineruConfigsService: MineruConfigsService,
   ) {}
 
@@ -651,24 +653,15 @@ export class KnowledgeBasesService {
     this.assertSupportedDocumentFile(base.fileUrl, base.fileName);
 
     if (parseMode === 'manual') {
-      return this.resolveBaseManualParsedContent(base);
+      return this.documentParsersService.parse({
+        contentType: base.contentType as 'text' | 'pdf' | 'word',
+        contentText: base.contentText,
+        fileUrl: base.fileUrl,
+        fileName: base.fileName,
+      });
     }
 
     return this.resolveBaseMineruParsedContent(base);
-  }
-
-  private resolveBaseManualParsedContent(base: KnowledgeBase): string {
-    if (base.contentType === 'pdf') {
-      throw new BadRequestException(
-        '手动 PDF 解析尚未接入本地解析器，请选择 MinerU 解析',
-      );
-    }
-    if (base.contentType === 'word') {
-      throw new BadRequestException(
-        '手动 Word 解析尚未接入本地解析器，请选择 MinerU 解析',
-      );
-    }
-    throw new BadRequestException('当前内容类型暂不支持手动解析');
   }
 
   private async resolveBaseMineruParsedContent(base: KnowledgeBase) {
