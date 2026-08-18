@@ -475,8 +475,12 @@ export class KnowledgeBasesService {
   }
 
   async createMineruTask(id: number, dto: CreateKnowledgeBaseMineruTaskDto) {
-    await this.findDocument(id);
-    this.assertSupportedDocumentFile(dto.fileUrl, dto.fileName);
+    const document = await this.findDocument(id);
+    await this.assertSupportedDocumentFileForDocument(
+      document,
+      dto.fileUrl,
+      dto.fileName,
+    );
     return this.mineruConfigsService.createParseTask(
       dto.fileUrl.trim(),
       dto.fileName?.trim(),
@@ -508,7 +512,11 @@ export class KnowledgeBasesService {
     dto: ParseKnowledgeBaseDocumentDto,
   ) {
     const document = await this.findDocument(id);
-    this.assertSupportedDocumentFile(dto.fileUrl, dto.fileName);
+    await this.assertSupportedDocumentFileForDocument(
+      document,
+      dto.fileUrl,
+      dto.fileName,
+    );
     if (dto.waitForResult === false) {
       const task = await this.mineruConfigsService.createParseTask(
         dto.fileUrl.trim(),
@@ -535,6 +543,13 @@ export class KnowledgeBasesService {
       document.description = 'MinerU 解析需要提供文件 URL';
       await this.documentRepository.save(document);
       throw new BadRequestException('MinerU 解析需要提供文件 URL');
+    }
+    if (parseMode === KNOWLEDGE_PARSE_MODE.mineru) {
+      await this.assertSupportedDocumentFileForDocument(
+        document,
+        dto.fileUrl!,
+        dto.fileName,
+      );
     }
     document.status = 'processing';
     document.description = `${this.getParseModeLabel(parseMode)}任务已提交，等待执行`;
@@ -952,6 +967,22 @@ export class KnowledgeBasesService {
       throw new BadRequestException(
         'MinerU 仅支持 .pdf .doc .docx .xls .xlsx .ppt .pptx .txt .md',
       );
+    }
+  }
+
+  private async assertSupportedDocumentFileForDocument(
+    document: KnowledgeBaseDocument,
+    fileUrl: string,
+    fileName?: string,
+  ) {
+    try {
+      this.assertSupportedDocumentFile(fileUrl, fileName);
+    } catch (error) {
+      document.status = 'failed';
+      document.description =
+        error instanceof Error ? error.message : '文档格式不支持';
+      await this.documentRepository.save(document);
+      throw error;
     }
   }
 

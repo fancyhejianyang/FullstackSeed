@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-08-18 修复文档格式校验结果落库
+- 新增：无
+- 修改：
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（MinerU 文档格式校验失败时写入文档状态和处理结果）
+  - `CHANGELOG.md`（追加本次格式校验结果落库快照）
+- 删除：无
+- 说明：`assertSupportedDocumentFile` 仍只负责校验文件扩展名；调用方会在校验失败时把错误写入文档 `description`，前端“处理结果”列可见。已执行 `server` 的 `npm.cmd run build`，通过。
+
 ### 2026-08-18 整理知识库解析模式分流
 - 新增：无
 - 修改：
