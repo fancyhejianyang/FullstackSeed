@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-08-18 接入手动 PDF 文本解析
+- 新增：
+  - `server/src/document-ocr/`（手动解析链路的 OCR 兜底服务入口）
+- 修改：
+  - `server/src/document-parsers/parsers/pdf-document.parser.ts`（接入 `pdf-parse` 文本提取，兼容 v1/v2 导出形态，文本为空时转入 OCR 兜底）
+  - `server/src/document-parsers/document-parsers.module.ts`（引入 OCR 模块）
+  - `CHANGELOG.md`（追加本次 PDF 解析快照）
+- 删除：无
+- 说明：普通文本 PDF 现在可走手动解析；扫描件/图片型 PDF 会返回明确处理结果，后续接入 Qwen 视觉模型时只需补充 OCR 服务内部实现。已执行 `server` 的 `npm.cmd run build`，通过。
+
 ### 2026-08-18 修复文档格式校验结果落库
 - 新增：无
 - 修改：
