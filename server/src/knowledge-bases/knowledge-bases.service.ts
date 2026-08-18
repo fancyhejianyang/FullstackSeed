@@ -74,23 +74,31 @@ export class KnowledgeBasesService {
 
   async createBase(dto: CreateKnowledgeBaseDto) {
     await this.assertRequiredCategory(dto.categoryId);
+    const contentType = dto.contentType ?? 'text';
     return this.baseRepository.save(
       this.baseRepository.create({
         categoryId: dto.categoryId,
         name: dto.name.trim(),
         code: dto.code?.trim() ?? '',
         description: dto.description?.trim() || null,
-        contentType: dto.contentType ?? 'text',
+        contentType,
         contentText:
-          (dto.contentType ?? 'text') === 'text'
+          contentType === 'text'
             ? dto.contentText?.trim() || null
             : null,
-        fileName:
-          (dto.contentType ?? 'text') === 'text' ? '' : dto.fileName?.trim() ?? '',
-        fileUrl:
-          (dto.contentType ?? 'text') === 'text' ? '' : dto.fileUrl?.trim() ?? '',
+        fileName: contentType === 'text' ? '' : dto.fileName?.trim() ?? '',
+        fileUrl: contentType === 'text' ? '' : dto.fileUrl?.trim() ?? '',
+        processStage: this.resolveInitialProcessStage(
+          contentType,
+          dto.contentText,
+          dto.fileUrl,
+        ),
+        parseStatus: 'pending',
+        chunkStatus: 'pending',
+        indexStatus: 'pending',
+        lastProcessMessage: null,
         containsImages: false,
-        allowFileUpload: (dto.contentType ?? 'text') !== 'text',
+        allowFileUpload: contentType !== 'text',
         isEnabled: dto.isEnabled ?? true,
         sort: dto.sort ?? 0,
       }),
@@ -99,6 +107,11 @@ export class KnowledgeBasesService {
 
   async updateBase(id: number, dto: UpdateKnowledgeBaseDto) {
     const base = await this.findBase(id);
+    const contentChanged =
+      dto.contentType !== undefined ||
+      dto.contentText !== undefined ||
+      dto.fileName !== undefined ||
+      dto.fileUrl !== undefined;
     if (dto.categoryId !== undefined) {
       await this.assertRequiredCategory(dto.categoryId);
       base.categoryId = dto.categoryId;
@@ -130,6 +143,17 @@ export class KnowledgeBasesService {
     if (dto.allowFileUpload !== undefined) {
       base.allowFileUpload = dto.allowFileUpload;
     }
+    if (contentChanged) {
+      base.processStage = this.resolveInitialProcessStage(
+        base.contentType,
+        base.contentText,
+        base.fileUrl,
+      );
+      base.parseStatus = 'pending';
+      base.chunkStatus = 'pending';
+      base.indexStatus = 'pending';
+      base.lastProcessMessage = null;
+    }
     if (dto.isEnabled !== undefined) base.isEnabled = dto.isEnabled;
     if (dto.sort !== undefined) base.sort = dto.sort;
     return this.baseRepository.save(base);
@@ -152,6 +176,108 @@ export class KnowledgeBasesService {
     await this.documentRepository.softDelete({ knowledgeBaseId: In(ids) });
     await this.baseRepository.softDelete(ids);
     return { ids };
+  }
+
+  async parseBase(id: number) {
+    const base = await this.findBase(id);
+    await this.updateBaseProcess(base, {
+      processStage: 'parsing',
+      parseStatus: 'processing',
+      chunkStatus: 'pending',
+      indexStatus: 'pending',
+      lastProcessMessage: '正在解析内容',
+    });
+    try {
+      const content = await this.resolveBaseParsedContent(base);
+      const document = await this.saveBaseDocument(base, content);
+      await this.updateBaseProcess(base, {
+        processStage: 'parsed',
+        parseStatus: 'success',
+        chunkStatus: 'pending',
+        indexStatus: 'pending',
+        lastProcessMessage: '解析完成，等待分片',
+      });
+      return { id, documentId: document.id, processStage: 'parsed' };
+    } catch (error) {
+      await this.updateBaseProcess(base, {
+        processStage: 'failed',
+        parseStatus: 'failed',
+        lastProcessMessage:
+          error instanceof Error ? error.message : '解析失败',
+      });
+      throw error;
+    }
+  }
+
+  async chunkBase(id: number) {
+    const base = await this.findBase(id);
+    if (base.parseStatus !== 'success') {
+      throw new BadRequestException('请先完成解析');
+    }
+    await this.updateBaseProcess(base, {
+      processStage: 'chunking',
+      chunkStatus: 'processing',
+      indexStatus: 'pending',
+      lastProcessMessage: '正在生成分片',
+    });
+    try {
+      const document = await this.findBaseDocument(base.id);
+      if (!document?.content) {
+        throw new BadRequestException('当前知识库文档缺少正文内容');
+      }
+      await this.chunkRepository.softDelete({ documentId: document.id });
+      const chunkCount = await this.saveDocumentChunks(document);
+      await this.updateBaseProcess(base, {
+        processStage: 'chunked',
+        chunkStatus: 'success',
+        indexStatus: 'pending',
+        lastProcessMessage: `分片完成，共 ${chunkCount} 个分片`,
+      });
+      return { id, documentId: document.id, chunkCount, processStage: 'chunked' };
+    } catch (error) {
+      await this.updateBaseProcess(base, {
+        processStage: 'failed',
+        chunkStatus: 'failed',
+        lastProcessMessage:
+          error instanceof Error ? error.message : '分片失败',
+      });
+      throw error;
+    }
+  }
+
+  async indexBase(id: number) {
+    const base = await this.findBase(id);
+    if (base.chunkStatus !== 'success') {
+      throw new BadRequestException('请先完成分片');
+    }
+    await this.updateBaseProcess(base, {
+      processStage: 'indexing',
+      indexStatus: 'processing',
+      lastProcessMessage: '正在写入索引',
+    });
+    try {
+      const chunkCount = await this.chunkRepository.count({
+        where: { knowledgeBaseId: id },
+      });
+      if (!chunkCount) {
+        throw new BadRequestException('当前知识库没有可索引的分片');
+      }
+      await this.updateBaseProcess(base, {
+        processStage: 'indexed',
+        indexStatus: 'success',
+        lastProcessMessage:
+          '索引标记已完成，向量数据库写入逻辑已预留',
+      });
+      return { id, chunkCount, processStage: 'indexed' };
+    } catch (error) {
+      await this.updateBaseProcess(base, {
+        processStage: 'failed',
+        indexStatus: 'failed',
+        lastProcessMessage:
+          error instanceof Error ? error.message : '索引失败',
+      });
+      throw error;
+    }
   }
 
   async findCategories(query: QueryKnowledgeBaseCategoryDto) {
@@ -474,6 +600,109 @@ export class KnowledgeBasesService {
     return roots;
   }
 
+  private resolveInitialProcessStage(
+    contentType: string,
+    contentText?: string | null,
+    fileUrl?: string | null,
+  ) {
+    if (contentType === 'text') {
+      return contentText?.trim() ? 'ready' : 'draft';
+    }
+    return fileUrl?.trim() ? 'uploaded' : 'draft';
+  }
+
+  private async updateBaseProcess(
+    base: KnowledgeBase,
+    payload: Partial<
+      Pick<
+        KnowledgeBase,
+        | 'processStage'
+        | 'parseStatus'
+        | 'chunkStatus'
+        | 'indexStatus'
+        | 'lastProcessMessage'
+      >
+    >,
+  ) {
+    Object.assign(base, payload);
+    return this.baseRepository.save(base);
+  }
+
+  private async resolveBaseParsedContent(base: KnowledgeBase) {
+    if (base.contentType === 'text') {
+      const content = base.contentText?.trim();
+      if (!content) {
+        throw new BadRequestException('文本知识库缺少文本内容');
+      }
+      return content;
+    }
+    if (!base.fileUrl) {
+      throw new BadRequestException('文件知识库缺少上传文件');
+    }
+    this.assertSupportedDocumentFile(base.fileUrl, base.fileName);
+    const task = await this.mineruConfigsService.createParseTask(
+      base.fileUrl,
+      base.fileName,
+    );
+    const result = await this.mineruConfigsService.waitForSuccess(task.taskId);
+    return result.markdown;
+  }
+
+  private async findBaseDocument(knowledgeBaseId: number) {
+    const document = await this.documentRepository.findOne({
+      where: { knowledgeBaseId },
+      order: { id: 'DESC' },
+    });
+    if (!document) {
+      throw new BadRequestException('请先解析生成知识库文档');
+    }
+    return document;
+  }
+
+  private async saveBaseDocument(base: KnowledgeBase, content: string) {
+    const current = await this.documentRepository.findOne({
+      where: { knowledgeBaseId: base.id },
+      order: { id: 'DESC' },
+    });
+    const document =
+      current ??
+      this.documentRepository.create({
+        knowledgeBaseId: base.id,
+        categoryId: base.categoryId,
+        sort: 0,
+      });
+    document.knowledgeBaseId = base.id;
+    document.categoryId = base.categoryId;
+    document.title = base.name;
+    document.sourceType = base.contentType === 'text' ? 'text' : 'mineru';
+    document.sourceName =
+      base.contentType === 'text' ? base.name : base.fileName || base.name;
+    document.content = content.trim();
+    document.status = 'parsed';
+    document.description = null;
+    return this.documentRepository.save(document);
+  }
+
+  private async saveDocumentChunks(document: KnowledgeBaseDocument) {
+    const chunks = this.splitMarkdown(document.content ?? '');
+    if (!chunks.length) return 0;
+    await this.chunkRepository.save(
+      chunks.map((chunk, index) =>
+        this.chunkRepository.create({
+          knowledgeBaseId: document.knowledgeBaseId,
+          categoryId: document.categoryId,
+          documentId: document.id,
+          chunkIndex: index,
+          title: `${document.title} #${index + 1}`,
+          content: chunk,
+          tokenCount: chunk.length,
+          sort: index,
+        }),
+      ),
+    );
+    return chunks.length;
+  }
+
   private async applyMineruMarkdown(
     document: KnowledgeBaseDocument,
     markdown: string,
@@ -489,24 +718,8 @@ export class KnowledgeBasesService {
     if (fileName) document.sourceName = fileName;
     const saved = await this.documentRepository.save(document);
     await this.chunkRepository.softDelete({ documentId: saved.id });
-    const chunks = this.splitMarkdown(content);
-    if (chunks.length) {
-      await this.chunkRepository.save(
-        chunks.map((chunk, index) =>
-          this.chunkRepository.create({
-            knowledgeBaseId: saved.knowledgeBaseId,
-            categoryId: saved.categoryId,
-            documentId: saved.id,
-            chunkIndex: index,
-            title: `${saved.title} #${index + 1}`,
-            content: chunk,
-            tokenCount: chunk.length,
-            sort: index,
-          }),
-        ),
-      );
-    }
-    return { document: saved, chunkCount: chunks.length };
+    const chunkCount = await this.saveDocumentChunks(saved);
+    return { document: saved, chunkCount };
   }
 
   private splitMarkdown(content: string, chunkSize = 1200, overlap = 120) {

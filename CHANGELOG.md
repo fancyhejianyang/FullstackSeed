@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-08-18 增加知识库处理阶段与行内流程操作
+- 新增：无
+- 修改：
+  - `server/src/knowledge-bases/entities/knowledge-base.entity.ts` / `knowledge-bases.service.ts` / `knowledge-bases.controller.ts`（知识库增加解析、分片、索引阶段字段与处理接口）
+  - `web/src/api/knowledgeBase.ts`（同步处理阶段字段与解析、分片、索引请求）
+  - `web/src/views/knowledge-base/Index.vue`（列表操作列按 `解析 → 分片 → 索引 → 查看 → 编辑 → 删除` 顺序展示，并增加处理阶段标记）
+  - `CHANGELOG.md`（追加本次知识库处理流程快照）
+- 删除：无
+- 说明：PDF/Word 上传后可按行触发解析、分片、索引流程；文本内容可从解析开始进入同一流程。索引接口当前先完成阶段标记，后续可替换为向量库写入逻辑。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-17 调整知识库内容配置输入
 - 新增：无
 - 修改：

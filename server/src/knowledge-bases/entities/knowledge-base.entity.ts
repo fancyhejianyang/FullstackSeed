@@ -28,6 +28,21 @@ export class KnowledgeBase extends BaseEntity {
   @Column({ length: 500, default: '' })
   fileUrl: string;
 
+  @Column({ length: 30, default: 'uploaded' })
+  processStage: string;
+
+  @Column({ length: 30, default: 'pending' })
+  parseStatus: string;
+
+  @Column({ length: 30, default: 'pending' })
+  chunkStatus: string;
+
+  @Column({ length: 30, default: 'pending' })
+  indexStatus: string;
+
+  @Column({ type: 'text', nullable: true })
+  lastProcessMessage: string | null;
+
   @Column({ type: 'tinyint', default: false })
   containsImages: boolean;
 

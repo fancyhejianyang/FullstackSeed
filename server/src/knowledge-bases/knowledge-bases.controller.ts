@@ -99,6 +99,27 @@ export class KnowledgeBasesController {
     return this.knowledgeBasesService.createBase(dto);
   }
 
+  @Post(':id/parse')
+  @RequirePermissions('KnowledgeBase.update')
+  @ApiOperation({ summary: '解析知识库内容' })
+  parseBase(@Param('id', ParseIntPipe) id: number) {
+    return this.knowledgeBasesService.parseBase(id);
+  }
+
+  @Post(':id/chunk')
+  @RequirePermissions('KnowledgeBase.update')
+  @ApiOperation({ summary: '生成知识库分片' })
+  chunkBase(@Param('id', ParseIntPipe) id: number) {
+    return this.knowledgeBasesService.chunkBase(id);
+  }
+
+  @Post(':id/index')
+  @RequirePermissions('KnowledgeBase.update')
+  @ApiOperation({ summary: '生成知识库索引' })
+  indexBase(@Param('id', ParseIntPipe) id: number) {
+    return this.knowledgeBasesService.indexBase(id);
+  }
+
   @Post('categories')
   @RequirePermissions('KnowledgeBase.create')
   @ApiOperation({ summary: '创建知识库分类' })

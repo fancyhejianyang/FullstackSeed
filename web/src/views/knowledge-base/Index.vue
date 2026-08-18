@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import { ElMessage } from 'element-plus';
 import PageContainer from '@/components/PageContainer.vue';
 import Button from '@/components/Button.vue';
 import Table, { type TableColumn } from '@/components/Table.vue';
@@ -7,9 +8,12 @@ import type { FormField } from '@/components/Form.vue';
 import { formatDateTime } from '@/utils/format';
 import {
   batchDeleteKnowledgeBases,
+  chunkKnowledgeBase,
   deleteKnowledgeBase,
   getKnowledgeBaseCategoryTree,
   getKnowledgeBases,
+  indexKnowledgeBase,
+  parseKnowledgeBase,
   type KnowledgeBase,
   type KnowledgeBaseCategoryTreeNode,
 } from '@/api/knowledgeBase';
@@ -27,6 +31,7 @@ const columns: TableColumn[] = [
   { prop: 'categoryId', label: '所属分类', minWidth: 140, slot: true },
   { prop: 'code', label: '编码', minWidth: 140 },
   { prop: 'contentType', label: '内容类型', width: 110, slot: true },
+  { prop: 'processStage', label: '处理阶段', width: 120, slot: true },
   { prop: 'fileName', label: '文件', minWidth: 180, slot: true },
   { prop: 'isEnabled', label: '状态', width: 90, slot: true },
   { prop: 'updatedAt', label: '更新时间', width: 180, slot: true },
@@ -40,6 +45,7 @@ const editVisible = ref(false);
 const viewVisible = ref(false);
 const editingRow = ref<KnowledgeBase | null>(null);
 const viewingRow = ref<KnowledgeBase | null>(null);
+const processingKey = ref('');
 const categoryNameMap = computed(() => {
   const map = new Map<number, string>();
   flattenCategories(categoryTree.value).forEach((item) => {
@@ -101,6 +107,74 @@ function getCategoryName(categoryId?: number | null) {
   return categoryNameMap.value.get(categoryId) ?? `#${categoryId}`;
 }
 
+function getStageLabel(stage?: string) {
+  const map: Record<string, string> = {
+    draft: '待补充',
+    ready: '待解析',
+    uploaded: '待解析',
+    parsing: '解析中',
+    parsed: '已解析',
+    chunking: '分片中',
+    chunked: '已分片',
+    indexing: '索引中',
+    indexed: '已索引',
+    failed: '处理失败',
+  };
+  return stage ? map[stage] ?? stage : '-';
+}
+
+function getStageType(stage?: string) {
+  if (stage === 'indexed') return 'success';
+  if (stage === 'failed') return 'danger';
+  if (stage === 'parsing' || stage === 'chunking' || stage === 'indexing') {
+    return 'warning';
+  }
+  if (stage === 'parsed' || stage === 'chunked') return 'primary';
+  return 'info';
+}
+
+function canParse(row: KnowledgeBase) {
+  if (row.contentType === 'text') return !!row.contentText?.trim();
+  return !!row.fileUrl;
+}
+
+function canChunk(row: KnowledgeBase) {
+  return row.parseStatus === 'success';
+}
+
+function canIndex(row: KnowledgeBase) {
+  return row.chunkStatus === 'success';
+}
+
+function isProcessing(row: KnowledgeBase, action: string) {
+  return processingKey.value === `${action}:${row.id}`;
+}
+
+async function runProcess(
+  row: KnowledgeBase,
+  action: 'parse' | 'chunk' | 'index',
+) {
+  const actionMap = {
+    parse: { label: '解析', request: parseKnowledgeBase },
+    chunk: { label: '分片', request: chunkKnowledgeBase },
+    index: { label: '索引', request: indexKnowledgeBase },
+  };
+  processingKey.value = `${action}:${row.id}`;
+  try {
+    await actionMap[action].request(row.id);
+    ElMessage.success(`${actionMap[action].label}完成`);
+    await tableRef.value?.refresh();
+  } finally {
+    processingKey.value = '';
+  }
+}
+
+async function handleDelete(row: KnowledgeBase) {
+  await deleteKnowledgeBase(row.id);
+  ElMessage.success('删除成功');
+  await tableRef.value?.refresh();
+}
+
 onMounted(fetchCategories);
 </script>
 
@@ -114,9 +188,9 @@ onMounted(fetchCategories);
       :checkAble="true"
       :delete-request="deleteRequest"
       :batch-delete-request="batchDeleteRequest"
+      :show-actions="false"
+      action-width="380"
       perm-module="knowledgeBase"
-      @view="handleView"
-      @edit="handleEdit"
     >
       <template #toolbar>
         <Button perm="KnowledgeBase.create" icon="Plus" @click="openCreate">
@@ -145,6 +219,21 @@ onMounted(fetchCategories);
         <el-tag type="info">{{ getContentTypeLabel(row.contentType) }}</el-tag>
       </template>
 
+      <template #column-processStage="{ row }">
+        <el-tooltip
+          v-if="row.lastProcessMessage"
+          :content="row.lastProcessMessage"
+          placement="top"
+        >
+          <el-tag :type="getStageType(row.processStage)">
+            {{ getStageLabel(row.processStage) }}
+          </el-tag>
+        </el-tooltip>
+        <el-tag v-else :type="getStageType(row.processStage)">
+          {{ getStageLabel(row.processStage) }}
+        </el-tag>
+      </template>
+
       <template #column-fileName="{ row }">
         <el-link v-if="row.fileUrl" type="primary" :href="row.fileUrl" target="_blank">
           {{ row.fileName || '下载文件' }}
@@ -154,6 +243,51 @@ onMounted(fetchCategories);
 
       <template #column-updatedAt="{ row }">
         {{ formatDateTime(row.updatedAt) }}
+      </template>
+
+      <template #actions="{ row }">
+        <Button
+          link
+          perm="KnowledgeBase.update"
+          icon="DocumentChecked"
+          :confirm="false"
+          :disabled="!canParse(row)"
+          :loading="isProcessing(row, 'parse')"
+          @click="runProcess(row, 'parse')"
+        >
+          解析
+        </Button>
+        <Button
+          link
+          perm="KnowledgeBase.update"
+          icon="Operation"
+          :confirm="false"
+          :disabled="!canChunk(row)"
+          :loading="isProcessing(row, 'chunk')"
+          @click="runProcess(row, 'chunk')"
+        >
+          分片
+        </Button>
+        <Button
+          link
+          perm="KnowledgeBase.update"
+          icon="Connection"
+          :confirm="false"
+          :disabled="!canIndex(row)"
+          :loading="isProcessing(row, 'index')"
+          @click="runProcess(row, 'index')"
+        >
+          索引
+        </Button>
+        <Button link type="info" icon="Search" :confirm="false" @click="handleView(row)">
+          查看
+        </Button>
+        <Button link type="primary" icon="Edit" :confirm="false" @click="handleEdit(row)">
+          编辑
+        </Button>
+        <Button link perm="KnowledgeBase.delete" icon="Delete" @click="handleDelete(row)">
+          删除
+        </Button>
       </template>
     </Table>
 

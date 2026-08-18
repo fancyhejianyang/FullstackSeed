@@ -10,6 +10,11 @@ export interface KnowledgeBase {
   contentText: string | null;
   fileName: string;
   fileUrl: string;
+  processStage: string;
+  parseStatus: string;
+  chunkStatus: string;
+  indexStatus: string;
+  lastProcessMessage: string | null;
   containsImages: boolean;
   allowFileUpload: boolean;
   isEnabled: boolean;
@@ -83,6 +88,13 @@ export interface KnowledgeBaseMineruTaskResult {
   chunkCount?: number;
   pollIntervalSeconds?: number;
   timeoutMinutes?: number;
+}
+
+export interface KnowledgeBaseProcessResult {
+  id: number;
+  processStage: string;
+  documentId?: number;
+  chunkCount?: number;
 }
 
 export interface ListResult<T> {
@@ -177,6 +189,24 @@ export function batchDeleteKnowledgeBases(ids: Array<string | number>) {
   return request.post<unknown, { ids: number[] }>('/knowledge-bases/batch-delete', {
     ids: ids.map(Number),
   });
+}
+
+export function parseKnowledgeBase(id: number) {
+  return request.post<unknown, KnowledgeBaseProcessResult>(
+    `/knowledge-bases/${id}/parse`,
+  );
+}
+
+export function chunkKnowledgeBase(id: number) {
+  return request.post<unknown, KnowledgeBaseProcessResult>(
+    `/knowledge-bases/${id}/chunk`,
+  );
+}
+
+export function indexKnowledgeBase(id: number) {
+  return request.post<unknown, KnowledgeBaseProcessResult>(
+    `/knowledge-bases/${id}/index`,
+  );
 }
 
 export function getKnowledgeBaseCategoryTree(
