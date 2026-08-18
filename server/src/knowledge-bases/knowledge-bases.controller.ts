@@ -20,6 +20,7 @@ import {
   CreateKnowledgeBaseDto,
   ParseKnowledgeBaseDto,
   ParseKnowledgeBaseDocumentDto,
+  ParseKnowledgeBaseDocumentRequestDto,
   QueryKnowledgeBaseCategoryDto,
   QueryKnowledgeBaseChunkDto,
   QueryKnowledgeBaseDocumentDto,
@@ -166,6 +167,16 @@ export class KnowledgeBasesController {
     @Body() dto: ParseKnowledgeBaseDocumentDto,
   ) {
     return this.knowledgeBasesService.parseDocumentWithMineru(id, dto);
+  }
+
+  @Post('documents/:id/parse')
+  @RequirePermissions('KnowledgeBase.update')
+  @ApiOperation({ summary: '按解析模式解析知识库文档' })
+  parseDocument(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ParseKnowledgeBaseDocumentRequestDto,
+  ) {
+    return this.knowledgeBasesService.parseDocument(id, dto);
   }
 
   @Post('chunks')

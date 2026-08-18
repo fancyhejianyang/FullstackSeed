@@ -77,6 +77,13 @@ export interface KnowledgeBaseMineruParsePayload
   waitForResult?: boolean;
 }
 
+export interface ParseKnowledgeBaseDocumentPayload {
+  parseMode?: KnowledgeBaseParseMode;
+  fileUrl?: string;
+  fileName?: string;
+  waitForResult?: boolean;
+}
+
 export interface KnowledgeBaseMineruTaskResult {
   taskId: string;
   documentId?: number;
@@ -312,6 +319,19 @@ export function parseKnowledgeBaseDocumentWithMineru(
     `/knowledge-bases/documents/${documentId}/mineru-parse`,
     data,
   );
+}
+
+export function parseKnowledgeBaseDocument(
+  documentId: number,
+  data: ParseKnowledgeBaseDocumentPayload,
+) {
+  return request.post<
+    unknown,
+    KnowledgeBaseMineruTaskResult & {
+      document?: KnowledgeBaseDocument;
+      parseMode?: KnowledgeBaseParseMode;
+    }
+  >(`/knowledge-bases/documents/${documentId}/parse`, data);
 }
 
 export function getKnowledgeBaseChunks(params: QueryKnowledgeBaseChunkParams) {

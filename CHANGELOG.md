@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-08-18 打通知识库文档列表解析
+- 新增：
+  - `web/src/views/knowledge-base/Documents.vue`（知识库文档列表页，支持行内选择手动解析或 MinerU 解析）
+- 修改：
+  - `server/src/knowledge-bases/dto/knowledge-base.dto.ts` / `knowledge-bases.controller.ts` / `knowledge-bases.service.ts`（新增文档级统一解析接口，手动解析接入后端文档解析器服务，MinerU 解析继续走第三方流程）
+  - `web/src/api/knowledgeBase.ts`（新增文档统一解析请求）
+  - `web/src/router/index.ts`（新增 `/knowledge-bases/documents` 路由）
+  - `CHANGELOG.md`（追加本次文档解析打通快照）
+- 删除：无
+- 说明：菜单管理可挂载“知识库文档”页面；文档列表解析操作会将 `manual` / `mineru` 模式传给后端统一接口。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-18 新增后端文档解析器模块
 - 新增：
   - `server/src/document-parsers/`（文档解析器模块、统一解析服务、文本/PDF/Word 解析器）

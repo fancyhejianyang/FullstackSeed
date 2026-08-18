@@ -305,3 +305,21 @@ export class ParseKnowledgeBaseDocumentDto extends CreateKnowledgeBaseMineruTask
   @IsOptional()
   waitForResult?: boolean;
 }
+
+export class ParseKnowledgeBaseDocumentRequestDto {
+  @IsIn(['manual', 'mineru'])
+  @IsOptional()
+  parseMode?: 'manual' | 'mineru';
+
+  @IsUrl({ require_tld: false })
+  @IsOptional()
+  fileUrl?: string;
+
+  @IsString()
+  @IsOptional()
+  fileName?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  waitForResult?: boolean;
+}

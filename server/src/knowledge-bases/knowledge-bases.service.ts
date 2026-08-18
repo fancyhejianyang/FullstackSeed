@@ -10,6 +10,7 @@ import {
   CreateKnowledgeBaseDto,
   ParseKnowledgeBaseDto,
   ParseKnowledgeBaseDocumentDto,
+  ParseKnowledgeBaseDocumentRequestDto,
   QueryKnowledgeBaseCategoryDto,
   QueryKnowledgeBaseChunkDto,
   QueryKnowledgeBaseDocumentDto,
@@ -476,6 +477,43 @@ export class KnowledgeBasesService {
     };
   }
 
+  async parseDocument(
+    id: number,
+    dto: ParseKnowledgeBaseDocumentRequestDto,
+  ) {
+    const parseMode = dto.parseMode ?? 'manual';
+    if (parseMode === 'mineru') {
+      if (!dto.fileUrl) {
+        throw new BadRequestException('MinerU 解析需要提供文件 URL');
+      }
+      return this.parseDocumentWithMineru(id, {
+        fileUrl: dto.fileUrl,
+        fileName: dto.fileName,
+        waitForResult: dto.waitForResult,
+      });
+    }
+
+    const document = await this.findDocument(id);
+    const content = await this.documentParsersService.parse({
+      contentType: this.resolveDocumentManualContentType(document),
+      contentText: document.content,
+      fileName: document.sourceName,
+    });
+    document.content = content.trim();
+    document.status = 'parsed';
+    document.sourceType = 'manual';
+    const saved = await this.documentRepository.save(document);
+    await this.chunkRepository.softDelete({ documentId: saved.id });
+    const chunkCount = await this.saveDocumentChunks(saved);
+    return {
+      document: saved,
+      documentId: id,
+      isCompleted: true,
+      chunkCount,
+      parseMode,
+    };
+  }
+
   async updateDocument(id: number, dto: UpdateKnowledgeBaseDocumentDto) {
     const document = await this.findDocument(id);
     const knowledgeBaseId = dto.knowledgeBaseId ?? document.knowledgeBaseId;
@@ -745,6 +783,14 @@ export class KnowledgeBasesService {
     await this.chunkRepository.softDelete({ documentId: saved.id });
     const chunkCount = await this.saveDocumentChunks(saved);
     return { document: saved, chunkCount };
+  }
+
+  private resolveDocumentManualContentType(
+    document: KnowledgeBaseDocument,
+  ): 'text' | 'pdf' | 'word' {
+    if (document.sourceType === 'pdf') return 'pdf';
+    if (document.sourceType === 'word') return 'word';
+    return 'text';
   }
 
   private splitMarkdown(content: string, chunkSize = 1200, overlap = 120) {

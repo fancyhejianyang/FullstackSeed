@@ -45,6 +45,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '知识库列表', permission: 'KnowledgeBase.read' },
       },
       {
+        path: 'knowledge-bases/documents',
+        name: 'knowledge-base-documents',
+        component: () => import('@/views/knowledge-base/Documents.vue'),
+        meta: { title: '知识库文档', permission: 'KnowledgeBase.read' },
+      },
+      {
         path: 'users',
         name: 'users',
         component: () => import('@/views/user/Index.vue'),
