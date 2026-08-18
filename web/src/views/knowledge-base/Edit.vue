@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, type FormRules } from 'element-plus';
 import Button from '@/components/Button.vue';
 import Form, { type FormField } from '@/components/Form.vue';
@@ -23,6 +23,7 @@ const submitting = ref(false);
 const baseFormRef = ref<InstanceType<typeof Form>>();
 const contentFormRef = ref<InstanceType<typeof Form>>();
 const categoryTree = ref<KnowledgeBaseCategoryTreeNode[]>([]);
+const fillingForm = ref(false);
 
 const form = reactive({
   categoryId: '' as string | number,
@@ -148,6 +149,7 @@ function resetForm() {
 }
 
 function fillForm(row: KnowledgeBase) {
+  fillingForm.value = true;
   Object.assign(form, {
     categoryId: row.categoryId ?? '',
     name: row.name ?? '',
@@ -158,6 +160,9 @@ function fillForm(row: KnowledgeBase) {
     fileName: row.fileName ?? '',
     fileUrl: row.fileUrl ?? '',
     isEnabled: !!row.isEnabled,
+  });
+  void nextTick(() => {
+    fillingForm.value = false;
   });
 }
 
@@ -174,6 +179,7 @@ watch(visible, (val) => {
 watch(
   () => form.contentType,
   (value, oldValue) => {
+    if (fillingForm.value) return;
     if (value === 'text') {
       form.fileName = '';
       form.fileUrl = '';
