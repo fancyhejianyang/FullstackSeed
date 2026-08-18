@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-08-18 优化知识库查看编辑交互
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/Index.vue`（查看、编辑、删除基础操作移除图标）
+  - `web/src/views/knowledge-base/Edit.vue`（新增/编辑由普通弹窗改为右侧大抽屉）
+  - `web/src/views/knowledge-base/View.vue`（查看由普通弹窗改为右侧大抽屉，并增加基础信息、内容、分片内容 Tab）
+  - `CHANGELOG.md`（追加本次知识库交互优化快照）
+- 删除：无
+- 说明：知识库查看页已接入已有分片查询接口，支持按标题/内容搜索与分页；常规操作按钮更轻量。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
 ### 2026-08-18 调整知识库列表操作按钮顺序
 - 新增：无
 - 修改：

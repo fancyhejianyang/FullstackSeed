@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, type FormRules } from 'element-plus';
-import Dialog from '@/components/Dialog.vue';
+import Button from '@/components/Button.vue';
 import Form, { type FormField } from '@/components/Form.vue';
 import UploadFile from '@/components/UploadFile.vue';
 import {
@@ -222,12 +222,12 @@ onMounted(fetchCategories);
 </script>
 
 <template>
-  <Dialog
+  <el-drawer
     v-model="visible"
     :title="props.row ? '编辑知识库' : '新增知识库'"
-    width="760px"
-    :confirm-loading="submitting"
-    @confirm="handleSubmit"
+    size="86%"
+    append-to-body
+    destroy-on-close
   >
     <div class="knowledge-base-edit">
       <div class="knowledge-base-edit__section">基础信息</div>
@@ -258,10 +258,23 @@ onMounted(fetchCategories);
         </template>
       </Form>
     </div>
-  </Dialog>
+
+    <template #footer>
+      <div class="knowledge-base-edit__footer">
+        <Button @click="visible = false">取消</Button>
+        <Button type="primary" :loading="submitting" @click="handleSubmit">
+          确定
+        </Button>
+      </div>
+    </template>
+  </el-drawer>
 </template>
 
 <style scoped>
+.knowledge-base-edit {
+  max-width: 960px;
+}
+
 .knowledge-base-edit__section {
   margin-bottom: 12px;
   color: #303133;
@@ -270,5 +283,11 @@ onMounted(fetchCategories);
 
 .knowledge-base-edit__section--next {
   margin-top: 18px;
+}
+
+.knowledge-base-edit__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 </style>

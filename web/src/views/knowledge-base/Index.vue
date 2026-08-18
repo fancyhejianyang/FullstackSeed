@@ -246,13 +246,13 @@ onMounted(fetchCategories);
       </template>
 
       <template #actions="{ row }">
-        <Button link type="info" icon="Search" :confirm="false" @click="handleView(row)">
+        <Button link type="info" :confirm="false" @click="handleView(row)">
           查看
         </Button>
-        <Button link type="primary" icon="Edit" :confirm="false" @click="handleEdit(row)">
+        <Button link type="primary" :confirm="false" @click="handleEdit(row)">
           编辑
         </Button>
-        <Button link perm="KnowledgeBase.delete" icon="Delete" @click="handleDelete(row)">
+        <Button link perm="KnowledgeBase.delete" icon="" @click="handleDelete(row)">
           删除
         </Button>
         <Button
