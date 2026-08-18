@@ -61,6 +61,7 @@ const emit = defineEmits<{
 
 const rootRef = ref<HTMLElement>();
 const menuRef = ref<HTMLElement>();
+const inputRef = ref<HTMLInputElement>();
 const opened = ref(false);
 const expanded = ref(false);
 const searchInput = ref('');
@@ -177,6 +178,7 @@ function open() {
   if (props.disabled) return;
   opened.value = true;
   highlightedIndex.value = filteredOptions.value.length ? 0 : -1;
+  void focusInput();
 }
 
 function close() {
@@ -184,6 +186,11 @@ function close() {
   searchInput.value = '';
   keyword.value = '';
   highlightedIndex.value = -1;
+}
+
+async function focusInput() {
+  await nextTick();
+  inputRef.value?.focus();
 }
 
 function toggleOpen() {
@@ -309,7 +316,7 @@ watch(opened, async (value) => {
     :class="{ 'is-opened': opened, 'is-disabled': props.disabled, 'is-expanded': expanded }"
     v-bind="$attrs"
   >
-    <div class="select-multiple__control" @click="toggleOpen">
+    <div class="select-multiple__control" @mousedown.prevent="toggleOpen">
       <div class="select-multiple__tags">
         <span
           v-for="tag in visibleTags"
@@ -321,6 +328,7 @@ watch(opened, async (value) => {
             v-if="!props.disabled"
             class="select-multiple__tag-close"
             type="button"
+            @mousedown.stop.prevent
             @click="removeValue(tag.value, $event)"
           >
             x
@@ -330,6 +338,7 @@ watch(opened, async (value) => {
           v-if="hiddenTagCount && !expanded"
           class="select-multiple__more"
           type="button"
+          @mousedown.stop.prevent
           @click="toggleExpanded"
         >
           显示更多 +{{ hiddenTagCount }}
@@ -338,11 +347,13 @@ watch(opened, async (value) => {
           v-if="hiddenTagCount && expanded"
           class="select-multiple__more"
           type="button"
+          @mousedown.stop.prevent
           @click="toggleExpanded"
         >
           收起
         </button>
         <input
+          ref="inputRef"
           class="select-multiple__input"
           :value="searchInput"
           :readonly="!props.filterable"
@@ -357,6 +368,7 @@ watch(opened, async (value) => {
         v-if="props.clearable && selectedValues.length && !props.disabled"
         class="select-multiple__clear"
         type="button"
+        @mousedown.stop.prevent
         @click="clearValue"
       >
         x

@@ -63,6 +63,7 @@ const emit = defineEmits<{
 
 const rootRef = ref<HTMLElement>();
 const menuRef = ref<HTMLElement>();
+const inputRef = ref<HTMLInputElement>();
 const opened = ref(false);
 const searchInput = ref('');
 const keyword = ref('');
@@ -176,6 +177,7 @@ function open() {
   keyword.value = '';
   highlightedIndex.value = getInitialHighlightIndex();
   scrollTop.value = 0;
+  void focusInput();
 }
 
 function close() {
@@ -183,6 +185,11 @@ function close() {
   searchInput.value = '';
   keyword.value = '';
   highlightedIndex.value = -1;
+}
+
+async function focusInput() {
+  await nextTick();
+  inputRef.value?.focus();
 }
 
 function toggleOpen() {
@@ -302,8 +309,9 @@ watch(opened, async (value) => {
     :class="{ 'is-opened': opened, 'is-disabled': props.disabled }"
     v-bind="$attrs"
   >
-    <div class="select__control" @click="toggleOpen">
+    <div class="select__control" @mousedown.prevent="toggleOpen">
       <input
+        ref="inputRef"
         class="select__input"
         :value="displayValue"
         :readonly="!opened || !props.filterable"
@@ -317,6 +325,7 @@ watch(opened, async (value) => {
         v-if="props.clearable && normalizedValue && !props.disabled"
         class="select__clear"
         type="button"
+        @mousedown.stop.prevent
         @click="clearValue"
       >
         x

@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-08-18 修复封装下拉首次点击闪退
+- 新增：无
+- 修改：
+  - `web/src/components/Select.vue`（修复输入框 focus 打开后同次 click 又触发关闭的问题）
+  - `web/src/components/SelectMultiple.vue`（同步修复多选下拉的同类触发逻辑）
+  - `CHANGELOG.md`（追加本次下拉组件修复快照）
+- 删除：无
+- 说明：下拉控制区改为基于 `mousedown` 处理打开/关闭，并在打开后手动聚焦输入框，避免首次点击弹出后立即关闭。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
 ### 2026-08-18 增加知识库处理阶段与行内流程操作
 - 新增：无
 - 修改：
