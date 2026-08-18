@@ -86,7 +86,7 @@ watch(visible, (value) => {
   <el-drawer
     v-model="visible"
     title="查看知识库"
-    size="86%"
+    size="100%"
     append-to-body
     destroy-on-close
   >

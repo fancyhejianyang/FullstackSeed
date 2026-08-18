@@ -225,7 +225,7 @@ onMounted(fetchCategories);
   <el-drawer
     v-model="visible"
     :title="props.row ? '编辑知识库' : '新增知识库'"
-    size="86%"
+    size="100%"
     append-to-body
     destroy-on-close
   >

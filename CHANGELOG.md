@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-08-18 调整知识库抽屉为全屏宽度
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/Edit.vue`（新增/编辑抽屉宽度调整为 `100%`）
+  - `web/src/views/knowledge-base/View.vue`（查看抽屉宽度调整为 `100%`）
+  - `CHANGELOG.md`（追加本次抽屉全屏宽度调整快照）
+- 删除：无
+- 说明：知识库查看/编辑现在会完整覆盖页面，不再露出左侧菜单区域。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
 ### 2026-08-18 优化知识库查看编辑交互
 - 新增：无
 - 修改：
