@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-08-18 修复通用上传返回相对路径
+- 新增：无
+- 修改：
+  - `server/src/uploads/uploads.controller.ts`（上传时读取请求协议、Host 与反向代理头）
+  - `server/src/uploads/uploads.service.ts`（本地存储无公开域名时拼接完整可访问 URL）
+  - `server/src/main.ts`（更新上传静态访问注释，明确业务字段保存完整地址）
+  - `CHANGELOG.md`（追加本次上传接口修复快照）
+- 删除：无
+- 说明：通用上传接口优先使用 OSS/CDN 配置的公开域名，否则基于当前请求来源返回 `http(s)://host/uploads/...`，知识库新增时 `fileUrl` 可继续按完整 URL 校验。已执行 `server` 的 `npm.cmd run build`，通过。
+
 ### 2026-08-18 修复封装下拉首次点击闪退
 - 新增：无
 - 修改：

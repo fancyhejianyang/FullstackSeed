@@ -28,22 +28,26 @@ export class UploadsService {
 
   constructor(private readonly storageConfigService: StorageConfigService) {}
 
-  async saveFile(file: UploadedStorageFile): Promise<UploadResult> {
+  async saveFile(
+    file: UploadedStorageFile,
+    requestOrigin = '',
+  ): Promise<UploadResult> {
     if (!file.buffer?.length) {
       throw new BadRequestException('文件内容为空');
     }
 
     const storageConfig = await this.storageConfigService.getConfig();
     if (storageConfig.enabled && storageConfig.provider !== 'local') {
-      return this.saveFileToOss(file, storageConfig);
+      return this.saveFileToOss(file, storageConfig, requestOrigin);
     }
 
-    return this.saveFileAsLocal(file, storageConfig);
+    return this.saveFileAsLocal(file, storageConfig, requestOrigin);
   }
 
   private async saveFileToOss(
     file: UploadedStorageFile,
     storageConfig: StorageConfig,
+    requestOrigin: string,
   ): Promise<UploadResult> {
     /**
      * OSS/CDN 伪代码连接点：
@@ -55,12 +59,13 @@ export class UploadsService {
      *
      * 当前种子项目未绑定具体云厂商 SDK，因此先回退本地存储，保证接口契约可用。
      */
-    return this.saveFileAsLocal(file, storageConfig);
+    return this.saveFileAsLocal(file, storageConfig, requestOrigin);
   }
 
   private async saveFileAsLocal(
     file: UploadedStorageFile,
     storageConfig: StorageConfig,
+    requestOrigin: string,
   ): Promise<UploadResult> {
     const fileName = `${randomUUID()}${this.getSafeExt(file.originalname)}`;
     const now = new Date();
@@ -74,7 +79,11 @@ export class UploadsService {
     await fs.writeFile(join(targetDir, fileName), file.buffer);
 
     return {
-      url: this.buildPublicUrl(`/uploads/${dateDir}/${fileName}`, storageConfig),
+      url: this.buildPublicUrl(
+        `/uploads/${dateDir}/${fileName}`,
+        storageConfig,
+        requestOrigin,
+      ),
       fileName,
       originalName: this.normalizeFileName(file.originalname),
       mimeType: file.mimetype ?? 'application/octet-stream',
@@ -82,9 +91,14 @@ export class UploadsService {
     };
   }
 
-  private buildPublicUrl(pathname: string, storageConfig: StorageConfig) {
-    return storageConfig.publicBaseUrl
-      ? `${storageConfig.publicBaseUrl}${pathname}`
+  private buildPublicUrl(
+    pathname: string,
+    storageConfig: StorageConfig,
+    requestOrigin: string,
+  ) {
+    const publicBaseUrl = storageConfig.publicBaseUrl || requestOrigin;
+    return publicBaseUrl
+      ? `${publicBaseUrl.replace(/\/+$/, '')}${pathname}`
       : pathname;
   }
 
