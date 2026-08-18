@@ -103,6 +103,9 @@ export interface KnowledgeBaseProcessResult {
   documentId?: number;
   chunkCount?: number;
   parseMode?: KnowledgeBaseParseMode;
+  taskId?: string;
+  status?: string;
+  name?: string;
 }
 
 export type KnowledgeBaseParseMode = 'manual' | 'mineru';
@@ -330,6 +333,9 @@ export function parseKnowledgeBaseDocument(
     KnowledgeBaseMineruTaskResult & {
       document?: KnowledgeBaseDocument;
       parseMode?: KnowledgeBaseParseMode;
+      taskId?: string;
+      status?: string;
+      name?: string;
     }
   >(`/knowledge-bases/documents/${documentId}/parse`, data);
 }

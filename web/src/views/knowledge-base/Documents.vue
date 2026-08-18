@@ -145,16 +145,14 @@ async function handleParse(row: KnowledgeBaseDocument) {
   }
   parsingKey.value = String(row.id);
   try {
-    const result = await parseKnowledgeBaseDocument(row.id, {
+    await parseKnowledgeBaseDocument(row.id, {
       parseMode,
       fileUrl: fileUrl || undefined,
       fileName: row.sourceName || row.title,
       waitForResult: true,
     });
     ElMessage.success(
-      `${parseMode === 'mineru' ? 'MinerU' : '手动'}解析完成，共 ${
-        result.chunkCount ?? 0
-      } 个分片`,
+      `${parseMode === 'mineru' ? 'MinerU' : '手动'}解析任务已提交`,
     );
     await tableRef.value?.refresh();
   } finally {

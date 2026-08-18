@@ -168,7 +168,7 @@ async function runProcess(
   processingKey.value = `${action}:${row.id}`;
   try {
     await actionMap[action].request(row.id);
-    ElMessage.success(`${actionMap[action].label}完成`);
+    ElMessage.success(`${actionMap[action].label}任务已提交`);
     await tableRef.value?.refresh();
   } finally {
     processingKey.value = '';

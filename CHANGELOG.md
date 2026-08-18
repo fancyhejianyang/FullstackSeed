@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-08-18 新增知识库处理任务队列
+- 新增：
+  - `server/src/task-queue/`（轻量内存任务队列，支持任务入队、串行执行和状态记录）
+- 修改：
+  - `server/src/knowledge-bases/knowledge-bases.module.ts` / `knowledge-bases.service.ts`（知识库解析、分片、索引与文档解析改为提交后台任务）
+  - `web/src/api/knowledgeBase.ts`（同步任务返回字段）
+  - `web/src/views/knowledge-base/Index.vue` / `Documents.vue`（操作成功文案调整为任务已提交）
+  - `CHANGELOG.md`（追加本次任务队列快照）
+- 删除：无
+- 说明：耗时处理不再让前端请求一直等待；接口提交任务后立即返回 `taskId/status`，具体解析、分片、索引在后端队列中执行并持续更新业务状态。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-18 新增后端存储文件读取服务
 - 新增：
   - `server/src/stored-files/`（根据文件 URL 读取本地上传文件或远程 OSS/CDN 文件内容）

@@ -8,11 +8,13 @@ import { KnowledgeBasesController } from './knowledge-bases.controller';
 import { KnowledgeBasesService } from './knowledge-bases.service';
 import { DocumentParsersModule } from '../document-parsers/document-parsers.module';
 import { MineruConfigsModule } from '../mineru-configs/mineru-configs.module';
+import { TaskQueueModule } from '../task-queue/task-queue.module';
 
 @Module({
   imports: [
     DocumentParsersModule,
     MineruConfigsModule,
+    TaskQueueModule,
     TypeOrmModule.forFeature([
       KnowledgeBase,
       KnowledgeBaseCategory,

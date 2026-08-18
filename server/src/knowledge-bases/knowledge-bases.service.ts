@@ -26,6 +26,7 @@ import { KnowledgeBaseDocument } from './entities/knowledge-base-document.entity
 import { KnowledgeBase } from './entities/knowledge-base.entity';
 import { DocumentParsersService } from '../document-parsers/document-parsers.service';
 import { MineruConfigsService } from '../mineru-configs/mineru-configs.service';
+import { TaskQueueService } from '../task-queue/task-queue.service';
 
 export interface KnowledgeBaseCategoryTreeNode extends KnowledgeBaseCategory {
   children: KnowledgeBaseCategoryTreeNode[];
@@ -44,6 +45,7 @@ export class KnowledgeBasesService {
     private readonly chunkRepository: Repository<KnowledgeBaseChunk>,
     private readonly documentParsersService: DocumentParsersService,
     private readonly mineruConfigsService: MineruConfigsService,
+    private readonly taskQueueService: TaskQueueService,
   ) {}
 
   async findBases(query: QueryKnowledgeBaseDto) {
@@ -191,6 +193,26 @@ export class KnowledgeBasesService {
       chunkStatus: 'pending',
       indexStatus: 'pending',
       lastProcessMessage:
+        parseMode === 'mineru'
+          ? 'MinerU 解析任务已提交，等待执行'
+          : '手动解析任务已提交，等待执行',
+    });
+    return this.taskQueueService.add(
+      'knowledge-base.parse',
+      { knowledgeBaseId: id, parseMode },
+      () => this.executeParseBase(id, dto),
+    );
+  }
+
+  private async executeParseBase(id: number, dto: ParseKnowledgeBaseDto = {}) {
+    const base = await this.findBase(id);
+    const parseMode = dto.parseMode ?? 'manual';
+    await this.updateBaseProcess(base, {
+      processStage: 'parsing',
+      parseStatus: 'processing',
+      chunkStatus: 'pending',
+      indexStatus: 'pending',
+      lastProcessMessage:
         parseMode === 'mineru' ? '正在通过 MinerU 解析内容' : '正在手动解析内容',
     });
     try {
@@ -227,6 +249,24 @@ export class KnowledgeBasesService {
       processStage: 'chunking',
       chunkStatus: 'processing',
       indexStatus: 'pending',
+      lastProcessMessage: '分片任务已提交，等待执行',
+    });
+    return this.taskQueueService.add(
+      'knowledge-base.chunk',
+      { knowledgeBaseId: id },
+      () => this.executeChunkBase(id),
+    );
+  }
+
+  private async executeChunkBase(id: number) {
+    const base = await this.findBase(id);
+    if (base.parseStatus !== 'success') {
+      throw new BadRequestException('请先完成解析');
+    }
+    await this.updateBaseProcess(base, {
+      processStage: 'chunking',
+      chunkStatus: 'processing',
+      indexStatus: 'pending',
       lastProcessMessage: '正在生成分片',
     });
     try {
@@ -255,6 +295,23 @@ export class KnowledgeBasesService {
   }
 
   async indexBase(id: number) {
+    const base = await this.findBase(id);
+    if (base.chunkStatus !== 'success') {
+      throw new BadRequestException('请先完成分片');
+    }
+    await this.updateBaseProcess(base, {
+      processStage: 'indexing',
+      indexStatus: 'processing',
+      lastProcessMessage: '索引任务已提交，等待执行',
+    });
+    return this.taskQueueService.add(
+      'knowledge-base.index',
+      { knowledgeBaseId: id },
+      () => this.executeIndexBase(id),
+    );
+  }
+
+  private async executeIndexBase(id: number) {
     const base = await this.findBase(id);
     if (base.chunkStatus !== 'success') {
       throw new BadRequestException('请先完成分片');
@@ -486,33 +543,57 @@ export class KnowledgeBasesService {
       if (!dto.fileUrl) {
         throw new BadRequestException('MinerU 解析需要提供文件 URL');
       }
-      return this.parseDocumentWithMineru(id, {
-        fileUrl: dto.fileUrl,
-        fileName: dto.fileName,
-        waitForResult: dto.waitForResult,
-      });
     }
-
     const document = await this.findDocument(id);
-    const content = await this.documentParsersService.parse({
-      contentType: this.resolveDocumentManualContentType(document),
-      contentText: document.content,
-      fileUrl: dto.fileUrl,
-      fileName: document.sourceName,
-    });
-    document.content = content.trim();
-    document.status = 'parsed';
-    document.sourceType = 'manual';
-    const saved = await this.documentRepository.save(document);
-    await this.chunkRepository.softDelete({ documentId: saved.id });
-    const chunkCount = await this.saveDocumentChunks(saved);
-    return {
-      document: saved,
-      documentId: id,
-      isCompleted: true,
-      chunkCount,
-      parseMode,
-    };
+    document.status = 'processing';
+    await this.documentRepository.save(document);
+    return this.taskQueueService.add(
+      'knowledge-base-document.parse',
+      { documentId: id, parseMode },
+      () => this.executeParseDocument(id, dto),
+    );
+  }
+
+  private async executeParseDocument(
+    id: number,
+    dto: ParseKnowledgeBaseDocumentRequestDto,
+  ) {
+    const parseMode = dto.parseMode ?? 'manual';
+    const document = await this.findDocument(id);
+    try {
+      if (parseMode === 'mineru') {
+        return this.parseDocumentWithMineru(id, {
+          fileUrl: dto.fileUrl!,
+          fileName: dto.fileName,
+          waitForResult: dto.waitForResult,
+        });
+      }
+
+      const content = await this.documentParsersService.parse({
+        contentType: this.resolveDocumentManualContentType(document),
+        contentText: document.content,
+        fileUrl: dto.fileUrl,
+        fileName: document.sourceName,
+      });
+      document.content = content.trim();
+      document.status = 'parsed';
+      document.sourceType = 'manual';
+      const saved = await this.documentRepository.save(document);
+      await this.chunkRepository.softDelete({ documentId: saved.id });
+      const chunkCount = await this.saveDocumentChunks(saved);
+      return {
+        document: saved,
+        documentId: id,
+        isCompleted: true,
+        chunkCount,
+        parseMode,
+      };
+    } catch (error) {
+      document.status = 'failed';
+      document.description = error instanceof Error ? error.message : '解析失败';
+      await this.documentRepository.save(document);
+      throw error;
+    }
   }
 
   async updateDocument(id: number, dto: UpdateKnowledgeBaseDocumentDto) {
