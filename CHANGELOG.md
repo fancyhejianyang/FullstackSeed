@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-08-18 增加知识库解析模式选择
+- 新增：
+  - `server/src/knowledge-bases/dto/knowledge-base.dto.ts`（新增 `ParseKnowledgeBaseDto.parseMode`，支持 `manual` / `mineru`）
+- 修改：
+  - `server/src/knowledge-bases/knowledge-bases.controller.ts` / `knowledge-bases.service.ts`（解析接口接收模式并按手动解析或 MinerU 解析分流）
+  - `web/src/api/knowledgeBase.ts`（同步解析模式请求类型）
+  - `web/src/views/knowledge-base/Index.vue`（点击解析时先选择手动解析或 MinerU 解析）
+  - `CHANGELOG.md`（追加本次解析模式选择快照）
+- 删除：无
+- 说明：文本内容可走手动解析；PDF/Word 手动解析分支已预留并返回明确提示，当前可选择 MinerU 解析走第三方服务。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-18 修复知识库编辑文件回显
 - 新增：无
 - 修改：

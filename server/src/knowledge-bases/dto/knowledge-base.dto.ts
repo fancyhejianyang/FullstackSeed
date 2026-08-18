@@ -67,6 +67,12 @@ export class CreateKnowledgeBaseDto {
 
 export class UpdateKnowledgeBaseDto extends PartialType(CreateKnowledgeBaseDto) {}
 
+export class ParseKnowledgeBaseDto {
+  @IsIn(['manual', 'mineru'])
+  @IsOptional()
+  parseMode?: 'manual' | 'mineru';
+}
+
 export class QueryKnowledgeBaseDto {
   @Type(() => Number)
   @IsInt()

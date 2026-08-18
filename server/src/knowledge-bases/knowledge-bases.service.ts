@@ -8,6 +8,7 @@ import {
   CreateKnowledgeBaseDocumentDto,
   CreateKnowledgeBaseMineruTaskDto,
   CreateKnowledgeBaseDto,
+  ParseKnowledgeBaseDto,
   ParseKnowledgeBaseDocumentDto,
   QueryKnowledgeBaseCategoryDto,
   QueryKnowledgeBaseChunkDto,
@@ -178,26 +179,31 @@ export class KnowledgeBasesService {
     return { ids };
   }
 
-  async parseBase(id: number) {
+  async parseBase(id: number, dto: ParseKnowledgeBaseDto = {}) {
     const base = await this.findBase(id);
+    const parseMode = dto.parseMode ?? 'manual';
     await this.updateBaseProcess(base, {
       processStage: 'parsing',
       parseStatus: 'processing',
       chunkStatus: 'pending',
       indexStatus: 'pending',
-      lastProcessMessage: '正在解析内容',
+      lastProcessMessage:
+        parseMode === 'mineru' ? '正在通过 MinerU 解析内容' : '正在手动解析内容',
     });
     try {
-      const content = await this.resolveBaseParsedContent(base);
+      const content = await this.resolveBaseParsedContent(base, parseMode);
       const document = await this.saveBaseDocument(base, content);
       await this.updateBaseProcess(base, {
         processStage: 'parsed',
         parseStatus: 'success',
         chunkStatus: 'pending',
         indexStatus: 'pending',
-        lastProcessMessage: '解析完成，等待分片',
+        lastProcessMessage:
+          parseMode === 'mineru'
+            ? 'MinerU 解析完成，等待分片'
+            : '手动解析完成，等待分片',
       });
-      return { id, documentId: document.id, processStage: 'parsed' };
+      return { id, documentId: document.id, processStage: 'parsed', parseMode };
     } catch (error) {
       await this.updateBaseProcess(base, {
         processStage: 'failed',
@@ -628,7 +634,10 @@ export class KnowledgeBasesService {
     return this.baseRepository.save(base);
   }
 
-  private async resolveBaseParsedContent(base: KnowledgeBase) {
+  private async resolveBaseParsedContent(
+    base: KnowledgeBase,
+    parseMode: NonNullable<ParseKnowledgeBaseDto['parseMode']>,
+  ) {
     if (base.contentType === 'text') {
       const content = base.contentText?.trim();
       if (!content) {
@@ -640,6 +649,29 @@ export class KnowledgeBasesService {
       throw new BadRequestException('文件知识库缺少上传文件');
     }
     this.assertSupportedDocumentFile(base.fileUrl, base.fileName);
+
+    if (parseMode === 'manual') {
+      return this.resolveBaseManualParsedContent(base);
+    }
+
+    return this.resolveBaseMineruParsedContent(base);
+  }
+
+  private resolveBaseManualParsedContent(base: KnowledgeBase): string {
+    if (base.contentType === 'pdf') {
+      throw new BadRequestException(
+        '手动 PDF 解析尚未接入本地解析器，请选择 MinerU 解析',
+      );
+    }
+    if (base.contentType === 'word') {
+      throw new BadRequestException(
+        '手动 Word 解析尚未接入本地解析器，请选择 MinerU 解析',
+      );
+    }
+    throw new BadRequestException('当前内容类型暂不支持手动解析');
+  }
+
+  private async resolveBaseMineruParsedContent(base: KnowledgeBase) {
     const task = await this.mineruConfigsService.createParseTask(
       base.fileUrl,
       base.fileName,

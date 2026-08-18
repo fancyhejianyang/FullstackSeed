@@ -95,6 +95,13 @@ export interface KnowledgeBaseProcessResult {
   processStage: string;
   documentId?: number;
   chunkCount?: number;
+  parseMode?: KnowledgeBaseParseMode;
+}
+
+export type KnowledgeBaseParseMode = 'manual' | 'mineru';
+
+export interface ParseKnowledgeBasePayload {
+  parseMode?: KnowledgeBaseParseMode;
 }
 
 export interface ListResult<T> {
@@ -191,9 +198,13 @@ export function batchDeleteKnowledgeBases(ids: Array<string | number>) {
   });
 }
 
-export function parseKnowledgeBase(id: number) {
+export function parseKnowledgeBase(
+  id: number,
+  data: ParseKnowledgeBasePayload = {},
+) {
   return request.post<unknown, KnowledgeBaseProcessResult>(
     `/knowledge-bases/${id}/parse`,
+    data,
   );
 }
 

@@ -18,6 +18,7 @@ import {
   CreateKnowledgeBaseChunkDto,
   CreateKnowledgeBaseDocumentDto,
   CreateKnowledgeBaseDto,
+  ParseKnowledgeBaseDto,
   ParseKnowledgeBaseDocumentDto,
   QueryKnowledgeBaseCategoryDto,
   QueryKnowledgeBaseChunkDto,
@@ -102,8 +103,11 @@ export class KnowledgeBasesController {
   @Post(':id/parse')
   @RequirePermissions('KnowledgeBase.update')
   @ApiOperation({ summary: '解析知识库内容' })
-  parseBase(@Param('id', ParseIntPipe) id: number) {
-    return this.knowledgeBasesService.parseBase(id);
+  parseBase(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ParseKnowledgeBaseDto,
+  ) {
+    return this.knowledgeBasesService.parseBase(id, dto);
   }
 
   @Post(':id/chunk')

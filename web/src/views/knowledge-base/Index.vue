@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import PageContainer from '@/components/PageContainer.vue';
 import Button from '@/components/Button.vue';
 import Table, { type TableColumn } from '@/components/Table.vue';
@@ -16,6 +16,7 @@ import {
   parseKnowledgeBase,
   type KnowledgeBase,
   type KnowledgeBaseCategoryTreeNode,
+  type KnowledgeBaseParseMode,
 } from '@/api/knowledgeBase';
 import Edit from './Edit.vue';
 import View from './View.vue';
@@ -154,8 +155,13 @@ async function runProcess(
   row: KnowledgeBase,
   action: 'parse' | 'chunk' | 'index',
 ) {
+  const parseMode = action === 'parse' ? await chooseParseMode() : undefined;
+  if (action === 'parse' && !parseMode) return;
   const actionMap = {
-    parse: { label: '解析', request: parseKnowledgeBase },
+    parse: {
+      label: parseMode === 'mineru' ? 'MinerU 解析' : '手动解析',
+      request: (id: number) => parseKnowledgeBase(id, { parseMode }),
+    },
     chunk: { label: '分片', request: chunkKnowledgeBase },
     index: { label: '索引', request: indexKnowledgeBase },
   };
@@ -166,6 +172,24 @@ async function runProcess(
     await tableRef.value?.refresh();
   } finally {
     processingKey.value = '';
+  }
+}
+
+async function chooseParseMode(): Promise<KnowledgeBaseParseMode | null> {
+  try {
+    await ElMessageBox.confirm(
+      '请选择本次解析方式。手动解析优先走系统内置逻辑；MinerU 解析会调用第三方配置。',
+      '选择解析模式',
+      {
+        confirmButtonText: 'MinerU 解析',
+        cancelButtonText: '手动解析',
+        distinguishCancelAndClose: true,
+        type: 'info',
+      },
+    );
+    return 'mineru';
+  } catch (action) {
+    return action === 'cancel' ? 'manual' : null;
   }
 }
 
