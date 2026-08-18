@@ -539,13 +539,20 @@ export class KnowledgeBasesService {
     dto: ParseKnowledgeBaseDocumentRequestDto,
   ) {
     const parseMode = dto.parseMode ?? 'manual';
+    const document = await this.findDocument(id);
     if (parseMode === 'mineru') {
       if (!dto.fileUrl) {
+        document.status = 'failed';
+        document.description = 'MinerU 解析需要提供文件 URL';
+        await this.documentRepository.save(document);
         throw new BadRequestException('MinerU 解析需要提供文件 URL');
       }
     }
-    const document = await this.findDocument(id);
     document.status = 'processing';
+    document.description =
+      parseMode === 'mineru'
+        ? 'MinerU 解析任务已提交，等待执行'
+        : '手动解析任务已提交，等待执行';
     await this.documentRepository.save(document);
     return this.taskQueueService.add(
       'knowledge-base-document.parse',
@@ -581,6 +588,8 @@ export class KnowledgeBasesService {
       const saved = await this.documentRepository.save(document);
       await this.chunkRepository.softDelete({ documentId: saved.id });
       const chunkCount = await this.saveDocumentChunks(saved);
+      saved.description = `手动解析完成，共 ${chunkCount} 个分片`;
+      await this.documentRepository.save(saved);
       return {
         document: saved,
         documentId: id,
@@ -861,9 +870,11 @@ export class KnowledgeBasesService {
     document.status = 'parsed';
     document.sourceType = 'mineru';
     if (fileName) document.sourceName = fileName;
-    const saved = await this.documentRepository.save(document);
+    let saved = await this.documentRepository.save(document);
     await this.chunkRepository.softDelete({ documentId: saved.id });
     const chunkCount = await this.saveDocumentChunks(saved);
+    saved.description = `MinerU 解析完成，共 ${chunkCount} 个分片`;
+    saved = await this.documentRepository.save(saved);
     return { document: saved, chunkCount };
   }
 

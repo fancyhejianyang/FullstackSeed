@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-08-18 展示知识库处理结果
+- 新增：无
+- 修改：
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（文档解析提交、成功、失败时写入处理结果，缺少 MinerU 文件 URL 也落入文档记录）
+  - `web/src/views/knowledge-base/Index.vue`（知识库列表新增处理结果列）
+  - `web/src/views/knowledge-base/Documents.vue`（知识库文档列表新增处理结果列，状态支持处理中/失败颜色）
+  - `CHANGELOG.md`（追加本次处理结果展示快照）
+- 删除：无
+- 说明：解析任务失败原因会回写到业务数据中，列表刷新后可直接在“处理结果”列查看。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-18 新增知识库处理任务队列
 - 新增：
   - `server/src/task-queue/`（轻量内存任务队列，支持任务入队、串行执行和状态记录）

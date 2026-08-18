@@ -33,6 +33,7 @@ const columns: TableColumn[] = [
   { prop: 'code', label: '编码', minWidth: 140 },
   { prop: 'contentType', label: '内容类型', width: 110, slot: true },
   { prop: 'processStage', label: '处理阶段', width: 120, slot: true },
+  { prop: 'lastProcessMessage', label: '处理结果', minWidth: 220, slot: true },
   { prop: 'fileName', label: '文件', minWidth: 180, slot: true },
   { prop: 'isEnabled', label: '状态', width: 90, slot: true },
   { prop: 'updatedAt', label: '更新时间', width: 180, slot: true },
@@ -258,6 +259,12 @@ onMounted(fetchCategories);
         </el-tag>
       </template>
 
+      <template #column-lastProcessMessage="{ row }">
+        <div class="knowledge-base-index__process-result">
+          {{ row.lastProcessMessage || '-' }}
+        </div>
+      </template>
+
       <template #column-fileName="{ row }">
         <el-link v-if="row.fileUrl" type="primary" :href="row.fileUrl" target="_blank">
           {{ row.fileName || '下载文件' }}
@@ -328,3 +335,14 @@ onMounted(fetchCategories);
     />
   </PageContainer>
 </template>
+
+<style scoped>
+.knowledge-base-index__process-result {
+  display: -webkit-box;
+  overflow: hidden;
+  line-height: 1.6;
+  word-break: break-word;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+</style>

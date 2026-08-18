@@ -34,6 +34,7 @@ const columns: TableColumn[] = [
   { prop: 'sourceType', label: '来源', width: 110, slot: true },
   { prop: 'sourceName', label: '来源名称', minWidth: 180 },
   { prop: 'status', label: '状态', width: 100, slot: true },
+  { prop: 'description', label: '处理结果', minWidth: 220, slot: true },
   { prop: 'content', label: '正文', minWidth: 260, slot: true },
   { prop: 'updatedAt', label: '更新时间', width: 180, slot: true },
 ];
@@ -78,9 +79,17 @@ function getStatusLabel(value?: string) {
     draft: '草稿',
     parsed: '已解析',
     pending: '待处理',
+    processing: '处理中',
     failed: '失败',
   };
   return value ? map[value] ?? value : '-';
+}
+
+function getStatusType(value?: string) {
+  if (value === 'parsed') return 'success';
+  if (value === 'processing') return 'warning';
+  if (value === 'failed') return 'danger';
+  return 'info';
 }
 
 function isParsing(row: KnowledgeBaseDocument) {
@@ -183,9 +192,15 @@ onMounted(fetchBases);
       </template>
 
       <template #column-status="{ row }">
-        <el-tag :type="row.status === 'parsed' ? 'success' : 'info'">
+        <el-tag :type="getStatusType(row.status)">
           {{ getStatusLabel(row.status) }}
         </el-tag>
+      </template>
+
+      <template #column-description="{ row }">
+        <div class="knowledge-documents__result">
+          {{ row.description || '-' }}
+        </div>
       </template>
 
       <template #column-content="{ row }">
@@ -216,6 +231,15 @@ onMounted(fetchBases);
 
 <style scoped>
 .knowledge-documents__content {
+  display: -webkit-box;
+  overflow: hidden;
+  line-height: 1.6;
+  word-break: break-word;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.knowledge-documents__result {
   display: -webkit-box;
   overflow: hidden;
   line-height: 1.6;
