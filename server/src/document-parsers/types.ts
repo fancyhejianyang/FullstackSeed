@@ -5,6 +5,12 @@ export interface DocumentParseContext {
   contentText?: string | null;
   fileUrl?: string | null;
   fileName?: string | null;
+  file?: {
+    buffer: Buffer;
+    fileName: string;
+    mimeType: string;
+    source: 'local' | 'remote';
+  };
 }
 
 export interface DocumentParser {

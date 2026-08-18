@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-08-18 新增后端存储文件读取服务
+- 新增：
+  - `server/src/stored-files/`（根据文件 URL 读取本地上传文件或远程 OSS/CDN 文件内容）
+- 修改：
+  - `server/src/document-parsers/`（解析器上下文支持文件 Buffer，解析前按需读取文件内容）
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（文档手动解析向解析器传递文件 URL）
+  - `CHANGELOG.md`（追加本次文件读取服务快照）
+- 删除：无
+- 说明：业务表仍保存文件 URL；解析层通过统一读取服务区分本地 `/uploads` 和远程 OSS/CDN URL，再把 Buffer 交给具体解析器。已执行 `server` 的 `npm.cmd run build`，通过。
+
 ### 2026-08-18 打通知识库文档列表解析
 - 新增：
   - `web/src/views/knowledge-base/Documents.vue`（知识库文档列表页，支持行内选择手动解析或 MinerU 解析）

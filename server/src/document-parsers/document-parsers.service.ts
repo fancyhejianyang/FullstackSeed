@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { StoredFilesService } from '../stored-files/stored-files.service';
 import { PdfDocumentParser } from './parsers/pdf-document.parser';
 import { TextDocumentParser } from './parsers/text-document.parser';
 import { WordDocumentParser } from './parsers/word-document.parser';
@@ -12,6 +13,7 @@ export class DocumentParsersService {
   private readonly parsers: DocumentParser[];
 
   constructor(
+    private readonly storedFilesService: StoredFilesService,
     textParser: TextDocumentParser,
     pdfParser: PdfDocumentParser,
     wordParser: WordDocumentParser,
@@ -24,6 +26,18 @@ export class DocumentParsersService {
     if (!parser) {
       throw new BadRequestException('当前内容类型暂不支持手动解析');
     }
-    return parser.parse(context);
+    const preparedContext = await this.prepareFileContext(context);
+    return parser.parse(preparedContext);
+  }
+
+  private async prepareFileContext(context: DocumentParseContext) {
+    if (context.contentType === 'text' || !context.fileUrl || context.file) {
+      return context;
+    }
+    const file = await this.storedFilesService.read(
+      context.fileUrl,
+      context.fileName,
+    );
+    return { ...context, file };
   }
 }

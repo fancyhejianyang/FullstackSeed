@@ -11,7 +11,10 @@ export class PdfDocumentParser implements DocumentParser {
     return contentType === 'pdf';
   }
 
-  parse(_context: DocumentParseContext): string {
+  parse(context: DocumentParseContext): string {
+    if (!context.file?.buffer.length) {
+      throw new BadRequestException('PDF 解析缺少文件内容');
+    }
     throw new BadRequestException(
       '手动 PDF 解析器尚未接入，请选择 MinerU 解析',
     );

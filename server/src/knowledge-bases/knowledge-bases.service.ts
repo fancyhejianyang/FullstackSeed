@@ -497,6 +497,7 @@ export class KnowledgeBasesService {
     const content = await this.documentParsersService.parse({
       contentType: this.resolveDocumentManualContentType(document),
       contentText: document.content,
+      fileUrl: dto.fileUrl,
       fileName: document.sourceName,
     });
     document.content = content.trim();

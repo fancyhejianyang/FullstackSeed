@@ -11,7 +11,10 @@ export class WordDocumentParser implements DocumentParser {
     return contentType === 'word';
   }
 
-  parse(_context: DocumentParseContext): string {
+  parse(context: DocumentParseContext): string {
+    if (!context.file?.buffer.length) {
+      throw new BadRequestException('Word 解析缺少文件内容');
+    }
     throw new BadRequestException(
       '手动 Word 解析器尚未接入，请选择 MinerU 解析',
     );
