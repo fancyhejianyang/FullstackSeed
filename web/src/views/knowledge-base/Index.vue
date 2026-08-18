@@ -246,6 +246,15 @@ onMounted(fetchCategories);
       </template>
 
       <template #actions="{ row }">
+        <Button link type="info" icon="Search" :confirm="false" @click="handleView(row)">
+          查看
+        </Button>
+        <Button link type="primary" icon="Edit" :confirm="false" @click="handleEdit(row)">
+          编辑
+        </Button>
+        <Button link perm="KnowledgeBase.delete" icon="Delete" @click="handleDelete(row)">
+          删除
+        </Button>
         <Button
           link
           perm="KnowledgeBase.update"
@@ -278,15 +287,6 @@ onMounted(fetchCategories);
           @click="runProcess(row, 'index')"
         >
           索引
-        </Button>
-        <Button link type="info" icon="Search" :confirm="false" @click="handleView(row)">
-          查看
-        </Button>
-        <Button link type="primary" icon="Edit" :confirm="false" @click="handleEdit(row)">
-          编辑
-        </Button>
-        <Button link perm="KnowledgeBase.delete" icon="Delete" @click="handleDelete(row)">
-          删除
         </Button>
       </template>
     </Table>
