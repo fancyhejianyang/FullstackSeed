@@ -18,6 +18,7 @@ import {
   type TestKnowledgeAiProviderResult,
 } from '@/api/knowledgeAiProvider';
 import Edit from './Edit.vue';
+import View from './View.vue';
 
 const tableRef = ref<{
   refresh: () => Promise<void>;
@@ -26,15 +27,8 @@ const tableRef = ref<{
 
 const columns: TableColumn[] = [
   { prop: 'name', label: '名称', minWidth: 180 },
-  { prop: 'apiUrl', label: 'API 地址', minWidth: 220 },
-  { prop: 'chatApiPath', label: 'Chat API 路径', minWidth: 180 },
-  { prop: 'models', label: '模型列表', minWidth: 220, slot: true },
-  { prop: 'textModels', label: '文本模型', minWidth: 220, slot: true },
-  { prop: 'visionModels', label: '视觉模型', minWidth: 220, slot: true },
-  { prop: 'embeddingModels', label: '向量模型', minWidth: 220, slot: true },
   { prop: 'secretKeySet', label: '密钥', width: 90, slot: true },
   { prop: 'isEnabled', label: '状态', width: 90, slot: true },
-  { prop: 'description', label: '描述', minWidth: 180 },
   { prop: 'updatedAt', label: '更新时间', width: 180, slot: true },
 ];
 
@@ -44,6 +38,8 @@ const searchFields: FormField[] = [
 
 const editVisible = ref(false);
 const editingRow = ref<KnowledgeAiProvider | null>(null);
+const viewVisible = ref(false);
+const viewingRow = ref<KnowledgeAiProvider | null>(null);
 const testVisible = ref(false);
 const testing = ref(false);
 const testResult = ref<TestKnowledgeAiProviderResult | null>(null);
@@ -84,6 +80,11 @@ function openCreate() {
   editVisible.value = true;
 }
 
+function handleView(row: KnowledgeAiProvider) {
+  viewingRow.value = row;
+  viewVisible.value = true;
+}
+
 function handleEdit(row: KnowledgeAiProvider) {
   editingRow.value = row;
   editVisible.value = true;
@@ -116,7 +117,7 @@ function getModelOptions(models: string) {
 
 function openTest(row: KnowledgeAiProvider) {
   editingRow.value = row;
-  const options = getModelOptions(row.models || 'qwen-plus');
+  const options = getModelOptions(row.textModels || row.models || 'qwen-plus');
   testForm.id = row.id;
   testForm.model = String(options[0]?.value ?? 'qwen-plus');
   testForm.question = '请用一句话说明当前模型已经可以正常响应。';
@@ -148,9 +149,10 @@ async function handleTest() {
       :search-fields="searchFields"
       :request="fetchProviders"
       :checkAble="true"
-      :show-view="false"
+      action-width="220"
       :delete-request="deleteRequest"
       :batch-delete-request="batchDeleteRequest"
+      @view="handleView"
       @edit="handleEdit"
     >
       <template #toolbar>
@@ -177,58 +179,6 @@ async function handleTest() {
         </Button>
       </template>
 
-      <template #column-models="{ row }">
-        <div class="ai-provider__models">
-          <el-tag
-            v-for="line in getModelLines(row.models).slice(0, 3)"
-            :key="line"
-            type="info"
-          >
-            {{ line }}
-          </el-tag>
-          <span v-if="!getModelLines(row.models).length">-</span>
-        </div>
-      </template>
-
-      <template #column-textModels="{ row }">
-        <div class="ai-provider__models">
-          <el-tag
-            v-for="line in getModelLines(row.textModels).slice(0, 3)"
-            :key="line"
-            type="info"
-          >
-            {{ line }}
-          </el-tag>
-          <span v-if="!getModelLines(row.textModels).length">-</span>
-        </div>
-      </template>
-
-      <template #column-visionModels="{ row }">
-        <div class="ai-provider__models">
-          <el-tag
-            v-for="line in getModelLines(row.visionModels).slice(0, 3)"
-            :key="line"
-            type="info"
-          >
-            {{ line }}
-          </el-tag>
-          <span v-if="!getModelLines(row.visionModels).length">-</span>
-        </div>
-      </template>
-
-      <template #column-embeddingModels="{ row }">
-        <div class="ai-provider__models">
-          <el-tag
-            v-for="line in getModelLines(row.embeddingModels).slice(0, 3)"
-            :key="line"
-            type="info"
-          >
-            {{ line }}
-          </el-tag>
-          <span v-if="!getModelLines(row.embeddingModels).length">-</span>
-        </div>
-      </template>
-
       <template #column-secretKeySet="{ row }">
         <el-tag :type="row.secretKeySet ? 'success' : 'warning'">
           {{ row.secretKeySet ? '已配置' : '未配置' }}
@@ -245,6 +195,8 @@ async function handleTest() {
         {{ formatDateTime(row.updatedAt) }}
       </template>
     </Table>
+
+    <View v-model:visible="viewVisible" :row="viewingRow" />
 
     <Edit
       v-model:visible="editVisible"
@@ -289,12 +241,6 @@ async function handleTest() {
 </template>
 
 <style scoped>
-.ai-provider__models {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
 .ai-provider__result {
   margin-top: 16px;
 }

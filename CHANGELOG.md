@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-08-19 精简大模型账号列表字段
+- 新增：
+  - `web/src/views/knowledge-ai-provider/View.vue`（大模型账号查看详情弹窗）
+- 修改：
+  - `web/src/views/knowledge-ai-provider/Index.vue`（列表隐藏 API 路径和模型清单等详情字段，增加查看入口）
+  - `CHANGELOG.md`（追加本次列表字段精简快照）
+- 删除：无
+- 说明：列表页只保留名称、密钥、状态、更新时间等摘要字段；API 地址、路径、模型清单、描述等完整信息改到详情中展示。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
 ### 2026-08-19 修复侧边栏菜单滚动
 - 新增：无
 - 修改：
