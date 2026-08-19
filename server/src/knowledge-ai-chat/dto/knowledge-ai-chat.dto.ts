@@ -15,6 +15,12 @@ export class AskKnowledgeAiDto {
   @IsOptional()
   providerId?: number;
 
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  aiFeatureConfigId?: number;
+
   @IsString()
   @IsNotEmpty()
   @IsOptional()

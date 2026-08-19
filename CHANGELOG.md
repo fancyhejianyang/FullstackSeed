@@ -1,5 +1,24 @@
 # CHANGELOG
 
+### 2026-08-19 聊天应用绑定 AI 聊天配置
+- 新增：无
+- 修改：
+  - `server/src/external-apps/entities/external-app.entity.ts`（聊天应用增加绑定 AI 聊天配置字段）
+  - `server/src/external-apps/dto/external-app.dto.ts`（创建/更新聊天应用支持 `aiFeatureConfigId`）
+  - `server/src/external-apps/external-apps.module.ts`（引入 AI 功能配置模块）
+  - `server/src/external-apps/external-apps.service.ts`（校验并保存聊天应用绑定的 AI 聊天配置）
+  - `server/src/ai-feature-configs/ai-feature-configs.service.ts`（支持查询可用聊天配置，移除同类型单启用限制）
+  - `server/src/knowledge-ai-chat/dto/knowledge-ai-chat.dto.ts`（后台测试问答支持 `aiFeatureConfigId`）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat.controller.ts`（应用端接口读取 appid 对应聊天应用上下文）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat.service.ts`（应用端优先使用聊天应用绑定配置，后台测试支持选择聊天配置）
+  - `web/src/api/externalApp.ts`（聊天应用接口类型增加 AI 配置字段）
+  - `web/src/api/knowledgeAiChat.ts`（问答测试请求支持 `aiFeatureConfigId`，流式 meta 增加配置回显）
+  - `web/src/views/external-app/`（聊天应用列表和编辑弹窗增加 AI 聊天配置）
+  - `web/src/views/knowledge-ai-chat/Index.vue`（后台问答测试增加聊天配置选择）
+  - `CHANGELOG.md`（追加本次聊天应用绑定配置快照）
+- 删除：无
+- 说明：H5 应用端只传 `appid`，后端按 `appid -> 聊天应用 -> AI 聊天配置 -> 大模型账号/模型/提示词` 匹配；未绑定时兜底全局启用的 chat 配置。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-19 新增 AI 功能配置模块
 - 新增：
   - `server/src/ai-feature-configs/`（AI 功能配置模块，支持聊天、文档解析、OCR 的账号/模型/提示词/规则/返回格式配置）

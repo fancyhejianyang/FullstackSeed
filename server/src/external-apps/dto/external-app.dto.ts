@@ -8,6 +8,7 @@ import {
   IsString,
   MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
 import { PartialType } from '@nestjs/swagger';
 
@@ -25,6 +26,12 @@ export class CreateExternalAppDto {
   @IsString()
   @IsOptional()
   domain?: string;
+
+  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  aiFeatureConfigId?: number | null;
 
   @IsBoolean()
   @IsOptional()

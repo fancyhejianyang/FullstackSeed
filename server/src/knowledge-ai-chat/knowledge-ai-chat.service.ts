@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Like, Repository } from 'typeorm';
 import { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-configs.service';
 import { AiFeatureConfig } from '../ai-feature-configs/entities/ai-feature-config.entity';
+import { ExternalApp } from '../external-apps/entities/external-app.entity';
 import {
   KnowledgeAiProvidersService,
   type KnowledgeAiChatMessagePayload,
@@ -64,7 +65,9 @@ export class KnowledgeAiChatService {
   }
 
   async ask(dto: AskKnowledgeAiDto) {
-    const { config } = await this.resolveChatFeature(dto);
+    const { config } = await this.resolveChatFeature(dto, {
+      allowDtoConfig: true,
+    });
     const result = await this.providersService.callChat({
       id: dto.providerId ?? config?.providerId,
       model: dto.model ?? config?.model,
@@ -108,8 +111,14 @@ export class KnowledgeAiChatService {
     };
   }
 
-  async askStream(dto: AskKnowledgeAiDto, writer: KnowledgeAiChatStreamWriter) {
-    const { target, config } = await this.resolveChatFeature(dto);
+  async askStream(
+    dto: AskKnowledgeAiDto,
+    writer: KnowledgeAiChatStreamWriter,
+    externalApp?: ExternalApp,
+  ) {
+    const { target, config } = await this.resolveChatFeature(dto, {
+      externalApp,
+    });
     const session = dto.sessionId
       ? await this.findSessionEntity(dto.sessionId)
       : await this.createSession(dto, target);
@@ -119,6 +128,8 @@ export class KnowledgeAiChatService {
       providerId: target.providerId,
       providerName: target.providerName,
       model: target.model,
+      aiFeatureConfigId: config?.id ?? null,
+      aiFeatureConfigName: config?.name ?? null,
     });
 
     const messages = await this.buildStreamMessages(dto, config);
@@ -141,8 +152,13 @@ export class KnowledgeAiChatService {
     return { session, message };
   }
 
-  async initSession(dto: InitKnowledgeAiChatSessionDto) {
-    const { target } = await this.resolveChatFeature(dto);
+  async initSession(
+    dto: InitKnowledgeAiChatSessionDto,
+    externalApp?: ExternalApp,
+  ) {
+    const { target, config } = await this.resolveChatFeature(dto, {
+      externalApp,
+    });
     const session = await this.createSessionRecord({
       title: this.buildTitle(dto),
       providerId: target.providerId,
@@ -155,6 +171,8 @@ export class KnowledgeAiChatService {
       providerId: session.providerId,
       providerName: session.providerName,
       model: session.model,
+      aiFeatureConfigId: config?.id ?? null,
+      aiFeatureConfigName: config?.name ?? null,
     };
   }
 
@@ -294,11 +312,20 @@ export class KnowledgeAiChatService {
     return message;
   }
 
-  private async resolveChatFeature(dto: { providerId?: number; model?: string }) {
-    const config = await this.featureConfigsService.findEnabledByFeature('chat');
+  private async resolveChatFeature(
+    dto: { providerId?: number; model?: string; aiFeatureConfigId?: number },
+    options: { allowDtoConfig?: boolean; externalApp?: ExternalApp } = {},
+  ) {
+    const configId =
+      options.externalApp?.aiFeatureConfigId ??
+      (options.allowDtoConfig ? dto.aiFeatureConfigId : undefined);
+    const config = configId
+      ? await this.featureConfigsService.findUsableChatConfig(configId)
+      : await this.featureConfigsService.findEnabledByFeature('chat');
+    const useRequestTarget = !options.externalApp;
     const target = await this.providersService.resolveChatTarget({
-      id: dto.providerId ?? config?.providerId,
-      model: dto.model ?? config?.model,
+      id: useRequestTarget ? dto.providerId ?? config?.providerId : config?.providerId,
+      model: useRequestTarget ? dto.model ?? config?.model : config?.model,
     });
     return { target, config };
   }

@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Like, Not, Repository } from 'typeorm';
+import { In, Like, Repository } from 'typeorm';
 import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
 import type { AiFeatureType } from './ai-feature-config.constants';
 import {
@@ -51,6 +51,17 @@ export class AiFeatureConfigsService {
     return config;
   }
 
+  async findUsableChatConfig(id: number) {
+    const config = await this.findOne(id);
+    if (config.featureType !== 'chat') {
+      throw new BadRequestException('请选择聊天类型的 AI 功能配置');
+    }
+    if (!config.isEnabled) {
+      throw new BadRequestException('该 AI 聊天配置未启用');
+    }
+    return config;
+  }
+
   findEnabledByFeature(featureType: AiFeatureType) {
     return this.configRepository.findOne({
       where: { featureType, isEnabled: true },
@@ -63,16 +74,13 @@ export class AiFeatureConfigsService {
     const saved = await this.configRepository.save(
       this.configRepository.create(payload),
     );
-    await this.ensureSingleEnabled(saved);
     return saved;
   }
 
   async update(id: number, dto: UpdateAiFeatureConfigDto) {
     const config = await this.findOne(id);
     Object.assign(config, await this.toEntityPayload(dto, false));
-    const saved = await this.configRepository.save(config);
-    await this.ensureSingleEnabled(saved);
-    return saved;
+    return this.configRepository.save(config);
   }
 
   async remove(id: number) {
@@ -123,17 +131,8 @@ export class AiFeatureConfigsService {
     return payload;
   }
 
-  private async ensureSingleEnabled(config: AiFeatureConfig) {
-    if (!config.isEnabled) return;
-    await this.configRepository.update(
-      { id: Not(config.id), featureType: config.featureType, isEnabled: true },
-      { isEnabled: false },
-    );
-  }
-
   private toNullableText(value?: string) {
     const text = value?.trim() ?? '';
     return text || null;
   }
 }
-

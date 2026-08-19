@@ -7,6 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomBytes } from 'crypto';
 import { In, Like, Repository } from 'typeorm';
+import { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-configs.service';
 import {
   CreateExternalAppDto,
   QueryExternalAppDto,
@@ -19,6 +20,7 @@ export class ExternalAppsService {
   constructor(
     @InjectRepository(ExternalApp)
     private readonly externalAppRepository: Repository<ExternalApp>,
+    private readonly featureConfigsService: AiFeatureConfigsService,
   ) {}
 
   async findAll(query: QueryExternalAppDto) {
@@ -53,11 +55,16 @@ export class ExternalAppsService {
   async create(dto: CreateExternalAppDto) {
     const appId = dto.appId?.trim() || (await this.generateAppId());
     await this.assertAppIdUnique(appId);
+    const config = dto.aiFeatureConfigId
+      ? await this.featureConfigsService.findUsableChatConfig(dto.aiFeatureConfigId)
+      : null;
     return this.externalAppRepository.save(
       this.externalAppRepository.create({
         name: dto.name.trim(),
         appId,
         domain: this.toNullableText(dto.domain),
+        aiFeatureConfigId: config?.id ?? null,
+        aiFeatureConfigName: config?.name ?? null,
         isEnabled: dto.isEnabled ?? true,
         description: this.toNullableText(dto.description),
       }),
@@ -78,6 +85,13 @@ export class ExternalAppsService {
     }
     if (dto.name !== undefined) app.name = dto.name.trim();
     if (dto.domain !== undefined) app.domain = this.toNullableText(dto.domain);
+    if (dto.aiFeatureConfigId !== undefined) {
+      const config = dto.aiFeatureConfigId
+        ? await this.featureConfigsService.findUsableChatConfig(dto.aiFeatureConfigId)
+        : null;
+      app.aiFeatureConfigId = config?.id ?? null;
+      app.aiFeatureConfigName = config?.name ?? null;
+    }
     if (dto.isEnabled !== undefined) app.isEnabled = dto.isEnabled;
     if (dto.description !== undefined) {
       app.description = this.toNullableText(dto.description);

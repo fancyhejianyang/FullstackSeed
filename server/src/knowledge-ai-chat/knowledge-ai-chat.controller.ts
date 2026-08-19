@@ -7,13 +7,15 @@ import {
   ParseIntPipe,
   Post,
   Query,
+  Req,
   Res,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { Public } from '../common/decorators/public.decorator';
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator';
+import { ExternalApp } from '../external-apps/entities/external-app.entity';
 import { AppIdGuard } from '../external-apps/guards/app-id.guard';
 import {
   AskKnowledgeAiDto,
@@ -48,8 +50,11 @@ export class KnowledgeAiChatController {
   @Public()
   @UseGuards(AppIdGuard)
   @ApiOperation({ summary: '应用端初始化 AI 问答会话' })
-  initSession(@Body() dto: InitKnowledgeAiChatSessionDto) {
-    return this.knowledgeAiChatService.initSession(dto);
+  initSession(
+    @Body() dto: InitKnowledgeAiChatSessionDto,
+    @Req() req: Request & { externalApp?: ExternalApp },
+  ) {
+    return this.knowledgeAiChatService.initSession(dto, req.externalApp);
   }
 
   @Post('ask')
@@ -64,7 +69,11 @@ export class KnowledgeAiChatController {
   @Public()
   @UseGuards(AppIdGuard)
   @ApiOperation({ summary: '发送问题并流式返回 AI 回答' })
-  async askStream(@Body() dto: AskKnowledgeAiDto, @Res() res: Response) {
+  async askStream(
+    @Body() dto: AskKnowledgeAiDto,
+    @Req() req: Request & { externalApp?: ExternalApp },
+    @Res() res: Response,
+  ) {
     this.prepareStreamResponse(res);
     const writeEvent = (event: string, data: unknown) => {
       res.write(`event: ${event}\n`);
@@ -72,7 +81,7 @@ export class KnowledgeAiChatController {
     };
 
     try {
-      await this.knowledgeAiChatService.askStream(dto, { writeEvent });
+      await this.knowledgeAiChatService.askStream(dto, { writeEvent }, req.externalApp);
     } catch (error) {
       writeEvent('error', {
         message: error instanceof Error ? error.message : 'AI 流式调用失败',

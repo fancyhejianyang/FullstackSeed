@@ -50,6 +50,7 @@ export interface QueryKnowledgeAiChatSessionParams {
 
 export interface AskKnowledgeAiPayload {
   providerId?: number;
+  aiFeatureConfigId?: number;
   model?: string;
   question: string;
   sessionId?: number;
@@ -73,6 +74,8 @@ export interface InitKnowledgeAiSessionResult {
   providerId: number;
   providerName: string;
   model: string;
+  aiFeatureConfigId?: number | null;
+  aiFeatureConfigName?: string | null;
 }
 
 export interface AppChatRequestOptions {
@@ -88,6 +91,8 @@ export type KnowledgeAiChatStreamEvent =
         providerId: number;
         providerName: string;
         model: string;
+        aiFeatureConfigId?: number | null;
+        aiFeatureConfigName?: string | null;
       };
     }
   | {

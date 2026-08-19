@@ -5,6 +5,8 @@ export interface ExternalApp {
   name: string;
   appId: string;
   domain: string | null;
+  aiFeatureConfigId: number | null;
+  aiFeatureConfigName: string | null;
   isEnabled: boolean;
   description: string | null;
   createdAt: string;
@@ -26,6 +28,7 @@ export interface ExternalAppForm {
   name: string;
   appId?: string;
   domain?: string;
+  aiFeatureConfigId?: number | null;
   isEnabled?: boolean;
   description?: string;
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { ElMessage, type FormRules } from 'element-plus';
 import PageContainer from '@/components/PageContainer.vue';
 import Button from '@/components/Button.vue';
@@ -8,24 +8,43 @@ import {
   askKnowledgeAi,
   type KnowledgeAiChatMessage,
 } from '@/api/knowledgeAiChat';
+import {
+  getAiFeatureConfigs,
+  type AiFeatureConfig,
+} from '@/api/aiFeatureConfig';
 
 const sending = ref(false);
 const sessionId = ref<number>();
 const lastMessage = ref<KnowledgeAiChatMessage>();
 const formRef = ref<InstanceType<typeof Form>>();
+const chatConfigs = ref<AiFeatureConfig[]>([]);
 
 const form = reactive({
-  systemPrompt:
-    '你是通用测试助手。请用简洁、准确的中文回答用户问题。',
+  aiFeatureConfigId: '',
+  systemPrompt: '',
   question: '请用一句话说明当前模型已经可以正常响应。',
 });
 
 const fields = computed<FormField[]>(() => [
   {
+    prop: 'aiFeatureConfigId',
+    label: '聊天配置',
+    type: 'select',
+    placeholder: '不选则使用全局默认',
+    options: [
+      { label: '全局默认', value: '' },
+      ...chatConfigs.value.map((item) => ({
+        label: item.name,
+        value: item.id,
+      })),
+    ],
+  },
+  {
     prop: 'systemPrompt',
-    label: '系统提示',
+    label: '临时提示',
     type: 'textarea',
     rows: 4,
+    placeholder: '留空则使用所选 AI 聊天配置中的提示词',
   },
   {
     prop: 'question',
@@ -45,7 +64,10 @@ async function handleAsk() {
   try {
     const result = await askKnowledgeAi({
       question: form.question,
-      systemPrompt: form.systemPrompt,
+      aiFeatureConfigId: form.aiFeatureConfigId
+        ? Number(form.aiFeatureConfigId)
+        : undefined,
+      systemPrompt: form.systemPrompt || undefined,
       sessionId: sessionId.value,
     });
     sessionId.value = result.session.id;
@@ -64,6 +86,17 @@ function startNewSession() {
   sessionId.value = undefined;
   lastMessage.value = undefined;
 }
+
+async function fetchChatConfigs() {
+  const result = await getAiFeatureConfigs({
+    page: 1,
+    pageSize: 200,
+    featureType: 'chat',
+  });
+  chatConfigs.value = result.list.filter((item) => item.isEnabled);
+}
+
+onMounted(fetchChatConfigs);
 </script>
 
 <template>

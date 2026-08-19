@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { ElMessage, type FormRules } from 'element-plus';
 import Dialog from '@/components/Dialog.vue';
 import Form, { type FormField } from '@/components/Form.vue';
@@ -10,6 +10,10 @@ import {
   type ExternalApp,
   type ExternalAppForm,
 } from '@/api/externalApp';
+import {
+  getAiFeatureConfigs,
+  type AiFeatureConfig,
+} from '@/api/aiFeatureConfig';
 
 const props = defineProps<{
   row?: ExternalApp | null;
@@ -21,22 +25,37 @@ const visible = defineModel<boolean>('visible', { required: true });
 const loading = ref(false);
 const submitting = ref(false);
 const formRef = ref<InstanceType<typeof Form>>();
+const chatConfigs = ref<AiFeatureConfig[]>([]);
 
 const form = reactive<ExternalAppForm>({
   name: '',
   appId: '',
   domain: '',
+  aiFeatureConfigId: null,
   isEnabled: true,
   description: '',
 });
 
-const fields: FormField[] = [
+const fields = computed<FormField[]>(() => [
   { prop: 'name', label: '应用名称', type: 'input', placeholder: '如 H5聊天应用' },
   {
     prop: 'appId',
     label: 'AppId',
     type: 'input',
     placeholder: '创建时留空则自动生成',
+  },
+  {
+    prop: 'aiFeatureConfigId',
+    label: 'AI 聊天配置',
+    type: 'select',
+    placeholder: '不选则使用全局默认',
+    options: [
+      { label: '全局默认', value: '' },
+      ...chatConfigs.value.map((item) => ({
+        label: item.name,
+        value: item.id,
+      })),
+    ],
   },
   {
     prop: 'domain',
@@ -52,7 +71,7 @@ const fields: FormField[] = [
     componentProps: { activeText: '启用', inactiveText: '停用' },
   },
   { prop: 'description', label: '描述', type: 'textarea', rows: 3 },
-];
+]);
 
 const rules: FormRules = {
   name: [{ required: true, message: '请输入应用名称', trigger: 'blur' }],
@@ -62,6 +81,7 @@ function resetForm() {
   form.name = '';
   form.appId = '';
   form.domain = '';
+  form.aiFeatureConfigId = null;
   form.isEnabled = true;
   form.description = '';
 }
@@ -70,29 +90,48 @@ function fillForm(data: ExternalApp) {
   form.name = data.name ?? '';
   form.appId = data.appId ?? '';
   form.domain = data.domain ?? '';
+  form.aiFeatureConfigId = data.aiFeatureConfigId ?? null;
   form.isEnabled = !!data.isEnabled;
   form.description = data.description ?? '';
 }
 
 watch(visible, async (value) => {
   if (!value) return;
+  loading.value = true;
   if (props.row?.id) {
-    loading.value = true;
     try {
+      await fetchChatConfigs();
       fillForm(await getExternalApp(props.row.id));
     } finally {
       loading.value = false;
     }
   } else {
-    resetForm();
+    try {
+      await fetchChatConfigs();
+      resetForm();
+    } finally {
+      loading.value = false;
+    }
   }
 });
+
+async function fetchChatConfigs() {
+  const result = await getAiFeatureConfigs({
+    page: 1,
+    pageSize: 200,
+    featureType: 'chat',
+  });
+  chatConfigs.value = result.list.filter((item) => item.isEnabled);
+}
 
 function buildPayload() {
   const payload: ExternalAppForm = {
     name: form.name.trim(),
     appId: form.appId?.trim(),
     domain: form.domain?.trim(),
+    aiFeatureConfigId: form.aiFeatureConfigId
+      ? Number(form.aiFeatureConfigId)
+      : null,
     isEnabled: form.isEnabled,
     description: form.description?.trim(),
   };
