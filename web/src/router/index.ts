@@ -93,6 +93,30 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'AI 大模型账号', permission: 'Menu.read' },
       },
       {
+        path: 'chat-management',
+        name: 'chat-management',
+        redirect: '/chat-management/ai-chat',
+        meta: { title: '聊天管理', permission: 'Menu.read' },
+      },
+      {
+        path: 'chat-management/ai-chat',
+        name: 'chat-management-ai-chat',
+        component: () => import('@/views/knowledge-ai-chat/Index.vue'),
+        meta: { title: 'AI 问答测试', permission: 'Menu.read' },
+      },
+      {
+        path: 'chat-management/apps',
+        name: 'chat-management-apps',
+        component: () => import('@/views/external-app/Index.vue'),
+        meta: { title: '聊天应用', permission: 'Menu.read' },
+      },
+      {
+        path: 'chat-management/records',
+        name: 'chat-management-records',
+        component: () => import('@/views/knowledge-ai-record/Index.vue'),
+        meta: { title: '问答记录', permission: 'Menu.read' },
+      },
+      {
         path: 'system-config/ai-chat',
         name: 'system-config-ai-chat',
         component: () => import('@/views/knowledge-ai-chat/Index.vue'),

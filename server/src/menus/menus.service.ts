@@ -29,10 +29,12 @@ const SEED_MENUS: SeedMenu[] = [
   { name: '权限管理', path: '/permissions', icon: 'Key', sort: 50, permissionCode: 'Permission.read', isSystem: true },
   { name: '菜单管理', path: '/menus', icon: 'Menu', sort: 60, permissionCode: 'Menu.read', isSystem: true },
   { name: '系统配置', path: '/system-config', icon: 'Setting', sort: 70, permissionCode: 'Menu.read', isSystem: true },
+  { name: '聊天管理', path: '/chat-management', icon: 'ChatDotRound', sort: 75, permissionCode: 'Menu.read', isSystem: true },
   { name: '配置菜单', path: '/system-config/menu', icon: 'Operation', sort: 10, permissionCode: 'Menu.read', isSystem: true, parentPath: '/system-config' },
   { name: 'AI 大模型账号', path: '/system-config/ai', icon: 'Connection', sort: 20, permissionCode: 'Menu.read', isSystem: true, parentPath: '/system-config' },
-  { name: 'AI 问答测试', path: '/system-config/ai-chat', icon: 'ChatLineRound', sort: 30, permissionCode: 'Menu.read', isSystem: true, parentPath: '/system-config' },
-  { name: '问题记录', path: '/system-config/ai-record', icon: 'Notebook', sort: 40, permissionCode: 'Menu.read', isSystem: true, parentPath: '/system-config' },
+  { name: 'AI 问答测试', path: '/chat-management/ai-chat', icon: '', sort: 10, permissionCode: 'Menu.read', isSystem: true, parentPath: '/chat-management' },
+  { name: '聊天应用', path: '/chat-management/apps', icon: '', sort: 20, permissionCode: 'Menu.read', isSystem: true, parentPath: '/chat-management' },
+  { name: '问题记录', path: '/chat-management/records', icon: '', sort: 30, permissionCode: 'Menu.read', isSystem: true, parentPath: '/chat-management' },
   { name: '微信 / 小程序', path: '/system-config/wechat', icon: 'ChatDotRound', sort: 50, permissionCode: 'Menu.read', isSystem: true, parentPath: '/system-config' },
   { name: '日志记录', path: '/system-config/log-record', icon: 'Tickets', sort: 60, permissionCode: 'Menu.read', isSystem: true, parentPath: '/system-config' },
   { name: '数据导入', path: '/system-config/data-import', icon: 'UploadFilled', sort: 70, permissionCode: 'Menu.read', isSystem: true, parentPath: '/system-config' },
@@ -41,7 +43,7 @@ const SEED_MENUS: SeedMenu[] = [
 ];
 
 // 锁定菜单路径：前端不限制操作，后端 API 对此类菜单统一做管理员身份校验
-const PROTECTED_MENU_PATHS = ['/menus', '/system-config'];
+const PROTECTED_MENU_PATHS = ['/menus', '/system-config', '/chat-management'];
 
 @Injectable()
 export class MenusService implements OnModuleInit {
@@ -81,6 +83,53 @@ export class MenusService implements OnModuleInit {
         await this.menuRepository.save(exist);
       }
     }
+    await this.migrateChatManagementMenus();
+  }
+
+  private async migrateChatManagementMenus() {
+    const parent = await this.menuRepository.findOne({
+      where: { path: '/chat-management' },
+    });
+    if (!parent) return;
+    await this.moveSeedMenu({
+      names: ['AI 问答测试'],
+      paths: ['/system-config/ai-chat', '/chat-management/ai-chat'],
+      parentId: parent.id,
+      targetName: 'AI 问答测试',
+      targetPath: '/chat-management/ai-chat',
+      sort: 10,
+    });
+    await this.moveSeedMenu({
+      names: ['问题记录', '问答记录'],
+      paths: ['/system-config/ai-record', '/chat-management/records'],
+      parentId: parent.id,
+      targetName: '问答记录',
+      targetPath: '/chat-management/records',
+      sort: 30,
+    });
+  }
+
+  private async moveSeedMenu(options: {
+    names: string[];
+    paths: string[];
+    parentId: number;
+    targetName: string;
+    targetPath: string;
+    sort: number;
+  }) {
+    const menu = await this.menuRepository.findOne({
+      where: [
+        ...options.paths.map((path) => ({ path })),
+        ...options.names.map((name) => ({ name })),
+      ],
+    });
+    if (!menu) return;
+    menu.name = options.targetName;
+    menu.path = options.targetPath;
+    menu.parentId = options.parentId;
+    menu.icon = '';
+    menu.sort = options.sort;
+    await this.menuRepository.save(menu);
   }
 
   /** 全部菜单（扁平，按 sort 升序） */

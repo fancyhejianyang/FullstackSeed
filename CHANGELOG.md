@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-08-19 新增聊天应用页面与聊天管理菜单
+- 新增：
+  - `web/src/api/externalApp.ts`（聊天应用接口封装）
+  - `web/src/views/external-app/`（聊天应用列表页和编辑弹窗）
+- 修改：
+  - `server/src/menus/menus.service.ts`（新增“聊天管理”一级菜单，挂载 AI 问答测试、聊天应用、问答记录，并迁移旧聊天菜单）
+  - `web/src/router/index.ts`（新增聊天管理路由和聊天应用页面路由）
+  - `CHANGELOG.md`（追加本次聊天管理菜单快照）
+- 删除：无
+- 说明：聊天相关入口从系统配置中拆到“聊天管理”目录；旧 AI 问答测试/问题记录菜单会迁移到新目录，问题记录重命名为问答记录。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-19 优化二级菜单图标展示
 - 新增：无
 - 修改：
