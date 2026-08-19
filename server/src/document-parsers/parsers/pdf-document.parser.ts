@@ -10,9 +10,15 @@ type PdfParseResult = {
   text?: string;
 };
 
-type PdfParseFn = (buffer: Buffer) => Promise<PdfParseResult>;
+type PdfParseOptions = {
+  pageJoiner?: string;
+};
+type PdfParseFn = (
+  buffer: Buffer,
+  options?: PdfParseOptions,
+) => Promise<PdfParseResult>;
 type PdfParseClass = new (options: { data: Buffer }) => {
-  getText: () => Promise<PdfParseResult>;
+  getText: (options?: PdfParseOptions) => Promise<PdfParseResult>;
   destroy?: () => Promise<void> | void;
 };
 type PdfParseModule =
@@ -36,7 +42,7 @@ export class PdfDocumentParser implements DocumentParser {
     }
 
     const pdfParse = this.loadPdfParse();
-    const result = await pdfParse(context.file.buffer);
+    const result = await pdfParse(context.file.buffer, { pageJoiner: '' });
     const text = this.normalizeText(result.text);
     if (text) return text;
 
@@ -59,7 +65,7 @@ export class PdfDocumentParser implements DocumentParser {
         return async (buffer) => {
           const parser = new PDFParse({ data: buffer });
           try {
-            return await parser.getText();
+            return await parser.getText({ pageJoiner: '' });
           } finally {
             await parser.destroy?.();
           }
@@ -76,6 +82,7 @@ export class PdfDocumentParser implements DocumentParser {
   private normalizeText(text?: string) {
     return (text || '')
       .replace(/\r\n/g, '\n')
+      .replace(/^\s*--\s*\d+\s+of\s+\d+\s*--\s*$/gim, '')
       .replace(/[ \t]+\n/g, '\n')
       .replace(/\n{3,}/g, '\n\n')
       .trim();

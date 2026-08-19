@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-08-19 修复知识库解析正文展示
+- 新增：无
+- 修改：
+  - `server/src/document-parsers/parsers/pdf-document.parser.ts`（关闭 `pdf-parse` 默认页码分隔符，并过滤 `-- 1 of 1 --` 这类占位内容）
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（解析完成后同步解析正文到知识库主记录，详情兜底读取最新解析文档正文）
+  - `web/src/api/knowledgeBase.ts`（新增知识库详情接口封装）
+  - `web/src/views/knowledge-base/View.vue`（查看详情时拉取最新详情，内容 Tab 优先展示解析正文并保留原文件链接）
+  - `CHANGELOG.md`（追加本次知识库解析正文展示修复快照）
+- 删除：无
+- 说明：修复手动解析后内容 Tab 仍只显示上传 PDF、无法查看解析结果的问题；PDF 手动解析不再把默认页码占位符当成正文。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-19 精简大模型账号列表字段
 - 新增：
   - `web/src/views/knowledge-ai-provider/View.vue`（大模型账号查看详情弹窗）

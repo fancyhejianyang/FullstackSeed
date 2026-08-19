@@ -83,6 +83,15 @@ export class KnowledgeBasesService {
   async findBase(id: number) {
     const base = await this.baseRepository.findOne({ where: { id } });
     if (!base) throw new NotFoundException('知识库不存在');
+    if (base.contentText?.trim()) return base;
+
+    const document = await this.documentRepository.findOne({
+      where: { knowledgeBaseId: id, status: 'parsed' },
+      order: { id: 'DESC' },
+    });
+    if (document?.content) {
+      base.contentText = document.content;
+    }
     return base;
   }
 
@@ -600,6 +609,7 @@ export class KnowledgeBasesService {
     document.status = 'parsed';
     document.sourceType = KNOWLEDGE_PARSE_MODE.manual;
     const saved = await this.documentRepository.save(document);
+    await this.syncBaseParsedContent(saved, content);
     await this.chunkRepository.softDelete({ documentId: saved.id });
     const chunkCount = await this.saveDocumentChunks(saved);
     saved.description = `手动解析完成，共 ${chunkCount} 个分片`;
@@ -883,7 +893,9 @@ export class KnowledgeBasesService {
     document.content = content.trim();
     document.status = 'parsed';
     document.description = null;
-    return this.documentRepository.save(document);
+    const saved = await this.documentRepository.save(document);
+    base.contentText = content.trim();
+    return saved;
   }
 
   private async saveDocumentChunks(document: KnowledgeBaseDocument) {
@@ -920,6 +932,7 @@ export class KnowledgeBasesService {
     document.sourceType = KNOWLEDGE_PARSE_MODE.mineru;
     if (fileName) document.sourceName = fileName;
     let saved = await this.documentRepository.save(document);
+    await this.syncBaseParsedContent(saved, content);
     await this.chunkRepository.softDelete({ documentId: saved.id });
     const chunkCount = await this.saveDocumentChunks(saved);
     saved.description = `MinerU 解析完成，共 ${chunkCount} 个分片`;
@@ -933,6 +946,15 @@ export class KnowledgeBasesService {
     if (document.sourceType === 'pdf') return 'pdf';
     if (document.sourceType === 'word') return 'word';
     return 'text';
+  }
+
+  private async syncBaseParsedContent(
+    document: KnowledgeBaseDocument,
+    content: string,
+  ) {
+    await this.baseRepository.update(document.knowledgeBaseId, {
+      contentText: content.trim(),
+    });
   }
 
   private splitMarkdown(content: string, chunkSize = 1200, overlap = 120) {

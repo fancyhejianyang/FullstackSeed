@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue';
 import Button from '@/components/Button.vue';
 import { formatDateTime } from '@/utils/format';
 import {
+  getKnowledgeBase,
   getKnowledgeBaseChunks,
   type KnowledgeBase,
   type KnowledgeBaseChunk,
@@ -14,7 +15,9 @@ const props = defineProps<{
 }>();
 
 const visible = defineModel<boolean>('visible', { required: true });
-const rowData = computed(() => props.row);
+const loading = ref(false);
+const detail = ref<KnowledgeBase | null>(null);
+const rowData = computed(() => detail.value ?? props.row);
 const activeTab = ref('basic');
 const chunkKeyword = ref('');
 const chunkLoading = ref(false);
@@ -22,6 +25,7 @@ const chunks = ref<KnowledgeBaseChunk[]>([]);
 const chunkTotal = ref(0);
 const chunkPage = ref(1);
 const chunkPageSize = ref(10);
+const parsedContent = computed(() => rowData.value?.contentText?.trim() || '');
 
 function getContentTypeLabel(value?: KnowledgeBase['contentType']) {
   const map: Record<string, string> = {
@@ -72,13 +76,23 @@ function handleTabChange(name: string | number) {
   }
 }
 
-watch(visible, (value) => {
-  if (!value) return;
+watch(visible, async (value) => {
+  if (!value) {
+    detail.value = null;
+    return;
+  }
   activeTab.value = 'basic';
   chunkKeyword.value = '';
   chunkPage.value = 1;
   chunks.value = [];
   chunkTotal.value = 0;
+  if (!props.row?.id) return;
+  loading.value = true;
+  try {
+    detail.value = await getKnowledgeBase(props.row.id);
+  } finally {
+    loading.value = false;
+  }
 });
 </script>
 
@@ -90,7 +104,12 @@ watch(visible, (value) => {
     append-to-body
     destroy-on-close
   >
-    <el-tabs v-model="activeTab" class="knowledge-base-view" @tab-change="handleTabChange">
+    <el-tabs
+      v-loading="loading"
+      v-model="activeTab"
+      class="knowledge-base-view"
+      @tab-change="handleTabChange"
+    >
       <el-tab-pane label="基础信息" name="basic">
         <el-descriptions :column="2" border>
           <el-descriptions-item label="名称">
@@ -135,20 +154,20 @@ watch(visible, (value) => {
       </el-tab-pane>
 
       <el-tab-pane label="内容" name="content">
-        <div v-if="rowData?.contentType === 'text'" class="knowledge-base-view__text">
-          {{ rowData?.contentText || '-' }}
+        <div v-if="parsedContent" class="knowledge-base-view__text">
+          {{ parsedContent }}
         </div>
-        <div v-else class="knowledge-base-view__file">
-          <span>文件：</span>
+        <el-empty v-else description="暂无解析正文" />
+
+        <div v-if="rowData?.fileUrl" class="knowledge-base-view__file">
+          <span>原文件：</span>
           <el-link
-            v-if="rowData?.fileUrl"
             type="primary"
             :href="rowData.fileUrl"
             target="_blank"
           >
             {{ rowData.fileName || '下载文件' }}
           </el-link>
-          <span v-else>-</span>
         </div>
       </el-tab-pane>
 
@@ -232,6 +251,7 @@ watch(visible, (value) => {
 .knowledge-base-view__file {
   display: flex;
   align-items: center;
+  margin-top: 12px;
   min-height: 48px;
 }
 

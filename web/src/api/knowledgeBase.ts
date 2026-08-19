@@ -190,6 +190,10 @@ export function getKnowledgeBases(params: QueryKnowledgeBaseParams) {
   });
 }
 
+export function getKnowledgeBase(id: number) {
+  return request.get<unknown, KnowledgeBase>(`/knowledge-bases/${id}`);
+}
+
 export function createKnowledgeBase(data: Partial<KnowledgeBaseForm>) {
   return request.post<unknown, KnowledgeBase>('/knowledge-bases', data);
 }
