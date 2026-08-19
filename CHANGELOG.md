@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-08-19 修复聊天应用 AI 配置字段类型
+- 新增：无
+- 修改：
+  - `server/src/external-apps/entities/external-app.entity.ts`（为 `aiFeatureConfigId` / `aiFeatureConfigName` 显式声明数据库列类型）
+  - `CHANGELOG.md`（追加本次实体字段类型修复快照）
+- 删除：无
+- 说明：修复 TypeORM 将可空联合类型识别为 `Object`，导致 MySQL 启动时报 `Data type "Object" ... is not supported` 的问题。已执行 `server` 的 `npm.cmd run build`，通过。
+
 ### 2026-08-19 聊天应用绑定 AI 聊天配置
 - 新增：无
 - 修改：

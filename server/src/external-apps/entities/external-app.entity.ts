@@ -13,10 +13,10 @@ export class ExternalApp extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   domain: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'int', nullable: true })
   aiFeatureConfigId: number | null;
 
-  @Column({ length: 120, nullable: true })
+  @Column({ type: 'varchar', length: 120, nullable: true })
   aiFeatureConfigName: string | null;
 
   @Column({ type: 'tinyint', default: true })
