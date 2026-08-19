@@ -98,6 +98,7 @@ export type KnowledgeAiChatStreamEvent =
     };
 
 export interface AskKnowledgeAiStreamOptions {
+  appId: string;
   signal?: AbortSignal;
   onEvent: (event: KnowledgeAiChatStreamEvent) => void;
 }
@@ -114,7 +115,7 @@ export async function askKnowledgeAiStream(
   const response = await fetch(`${baseUrl}/knowledge-ai-chat/ask/stream`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+      'x-app-id': options.appId,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(data),

@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-08-19 统一聊天流式接口 appId 请求头契约
+- 新增：无
+- 修改：
+  - `server/src/external-apps/guards/app-id.guard.ts`（appId 仅从 `x-app-id` 请求头读取）
+  - `server/src/knowledge-ai-chat/dto/knowledge-ai-chat.dto.ts`（移除 body appId 字段）
+  - `web/src/api/knowledgeAiChat.ts`（流式问答封装通过 `x-app-id` Header 传递 appId）
+  - `CHANGELOG.md`（追加本次请求头契约快照）
+- 删除：无
+- 说明：domain 仍由后端从 `Origin` / `Referer` 自动获取并校验，前端无需传 domain。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-19 新增聊天应用页面与聊天管理菜单
 - 新增：
   - `web/src/api/externalApp.ts`（聊天应用接口封装）

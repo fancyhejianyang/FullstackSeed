@@ -37,10 +37,6 @@ export class AskKnowledgeAiDto {
   @IsString()
   @IsOptional()
   title?: string;
-
-  @IsString()
-  @IsOptional()
-  appId?: string;
 }
 
 export class QueryKnowledgeAiChatSessionDto {

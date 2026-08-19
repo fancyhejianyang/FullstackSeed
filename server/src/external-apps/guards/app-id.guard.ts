@@ -13,8 +13,6 @@ export class AppIdGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<{
       headers: Record<string, string | string[] | undefined>;
-      query?: Record<string, unknown>;
-      body?: Record<string, unknown>;
       externalApp?: unknown;
     }>();
     const appId = this.resolveAppId(request);
@@ -27,18 +25,10 @@ export class AppIdGuard implements CanActivate {
 
   private resolveAppId(request: {
     headers: Record<string, string | string[] | undefined>;
-    query?: Record<string, unknown>;
-    body?: Record<string, unknown>;
   }) {
     const header = request.headers['x-app-id'];
     if (Array.isArray(header)) return header[0];
     if (header) return header;
-
-    const queryAppId = request.query?.appId;
-    if (typeof queryAppId === 'string') return queryAppId;
-
-    const bodyAppId = request.body?.appId;
-    if (typeof bodyAppId === 'string') return bodyAppId;
 
     throw new UnauthorizedException('缺少 appId');
   }
