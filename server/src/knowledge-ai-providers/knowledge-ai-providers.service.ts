@@ -22,11 +22,46 @@ interface ChatCompletionResponse {
   }>;
 }
 
+interface ChatCompletionStreamResponse {
+  choices?: Array<{
+    delta?: {
+      content?: string;
+    };
+    message?: {
+      content?: string;
+    };
+  }>;
+}
+
+export interface KnowledgeAiChatMessagePayload {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
 export interface KnowledgeAiChatCallPayload {
   id?: number;
   model?: string;
   question: string;
   systemPrompt?: string;
+}
+
+export interface KnowledgeAiChatTargetPayload {
+  id?: number;
+  model?: string;
+}
+
+export interface KnowledgeAiChatTarget {
+  providerId: number;
+  providerName: string;
+  model: string;
+  url: string;
+  secretKey: string;
+}
+
+export interface KnowledgeAiChatStreamPayload {
+  target: KnowledgeAiChatTarget;
+  messages: KnowledgeAiChatMessagePayload[];
+  onDelta: (content: string) => void;
 }
 
 export interface KnowledgeAiChatCallResult {
@@ -113,6 +148,31 @@ export class KnowledgeAiProvidersService {
     return this.callChat(dto);
   }
 
+  async resolveChatTarget(
+    payload: KnowledgeAiChatTargetPayload,
+  ): Promise<KnowledgeAiChatTarget> {
+    const provider = payload.id
+      ? await this.findEntity(payload.id)
+      : await this.findEnabledEntity();
+    if (!provider.isEnabled) {
+      throw new BadRequestException('该大模型账号未启用');
+    }
+    if (!provider.secretKey) {
+      throw new BadRequestException('该大模型账号未配置密钥');
+    }
+
+    return {
+      providerId: provider.id,
+      providerName: provider.name,
+      model: this.resolveModel(
+        provider.textModels || provider.models,
+        payload.model,
+      ),
+      url: this.buildChatUrl(provider),
+      secretKey: provider.secretKey,
+    };
+  }
+
   async callChat(
     payload: KnowledgeAiChatCallPayload,
   ): Promise<KnowledgeAiChatCallResult> {
@@ -121,38 +181,19 @@ export class KnowledgeAiProvidersService {
     let providerName = '';
     let model = payload.model ?? '';
     try {
-      const provider = payload.id
-        ? await this.findEntity(payload.id)
-        : await this.findEnabledEntity();
-      providerId = provider.id;
-      providerName = provider.name;
-      if (!provider.isEnabled) {
-        throw new BadRequestException('该大模型账号未启用');
-      }
-      if (!provider.secretKey) {
-        throw new BadRequestException('该大模型账号未配置密钥');
-      }
-
-      model = this.resolveModel(provider.models, payload.model);
-      const response = await fetch(this.buildChatUrl(provider), {
+      const target = await this.resolveChatTarget(payload);
+      providerId = target.providerId;
+      providerName = target.providerName;
+      model = target.model;
+      const response = await fetch(target.url, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${provider.secretKey}`,
+          Authorization: `Bearer ${target.secretKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           model,
-          messages: [
-            {
-              role: 'system',
-              content: payload.systemPrompt?.trim()
-                || '你是通用测试助手。请用简洁、准确的中文回答用户问题。',
-            },
-            {
-              role: 'user',
-              content: payload.question,
-            },
-          ],
+          messages: this.buildQuestionMessages(payload),
           temperature: 0.2,
         }),
       });
@@ -188,6 +229,61 @@ export class KnowledgeAiProvidersService {
         answer: '',
         errorMessage:
           error instanceof Error ? error.message : '模型接口调用失败',
+        elapsedMilliseconds: Date.now() - startedAt,
+      };
+    }
+  }
+
+  async callChatStream(
+    payload: KnowledgeAiChatStreamPayload,
+  ): Promise<KnowledgeAiChatCallResult> {
+    const startedAt = Date.now();
+    let answer = '';
+    try {
+      const response = await fetch(payload.target.url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${payload.target.secretKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: payload.target.model,
+          messages: payload.messages,
+          temperature: 0.2,
+          stream: true,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new BadRequestException(
+          `模型接口调用失败：${response.status} ${errorText}`,
+        );
+      }
+      if (!response.body) {
+        throw new BadRequestException('模型接口未返回流式响应内容');
+      }
+
+      answer = await this.readChatStream(response.body, payload.onDelta);
+
+      return {
+        isSuccess: true,
+        providerId: payload.target.providerId,
+        providerName: payload.target.providerName,
+        model: payload.target.model,
+        answer,
+        errorMessage: null,
+        elapsedMilliseconds: Date.now() - startedAt,
+      };
+    } catch (error) {
+      return {
+        isSuccess: false,
+        providerId: payload.target.providerId,
+        providerName: payload.target.providerName,
+        model: payload.target.model,
+        answer,
+        errorMessage:
+          error instanceof Error ? error.message : '模型接口流式调用失败',
         elapsedMilliseconds: Date.now() - startedAt,
       };
     }
@@ -276,6 +372,23 @@ export class KnowledgeAiProvidersService {
     ).replace(/^\/+/, '')}`;
   }
 
+  private buildQuestionMessages(
+    payload: KnowledgeAiChatCallPayload,
+  ): KnowledgeAiChatMessagePayload[] {
+    return [
+      {
+        role: 'system',
+        content:
+          payload.systemPrompt?.trim() ||
+          '你是通用测试助手。请用简洁、准确的中文回答用户问题。',
+      },
+      {
+        role: 'user',
+        content: payload.question,
+      },
+    ];
+  }
+
   private resolveModel(models: string | null, requested?: string) {
     const available = this.parseModels(models);
     if (!available.length) return requested || 'qwen-plus';
@@ -302,5 +415,59 @@ export class KnowledgeAiProvidersService {
   private toNullableText(value?: string) {
     const text = value?.trim() ?? '';
     return text || null;
+  }
+
+  private async readChatStream(
+    body: ReadableStream<Uint8Array>,
+    onDelta: (content: string) => void,
+  ) {
+    const reader = body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let answer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const blocks = buffer.split(/\r?\n\r?\n/);
+      buffer = blocks.pop() ?? '';
+      for (const block of blocks) {
+        const result = this.consumeStreamBlock(block, onDelta);
+        answer += result.content;
+        if (result.isDone) return answer;
+      }
+    }
+
+    buffer += decoder.decode();
+    if (buffer.trim()) {
+      answer += this.consumeStreamBlock(buffer, onDelta).content;
+    }
+    return answer;
+  }
+
+  private consumeStreamBlock(
+    block: string,
+    onDelta: (content: string) => void,
+  ) {
+    let content = '';
+    for (const line of block.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data:')) continue;
+      const data = trimmed.slice(5).trim();
+      if (!data) continue;
+      if (data === '[DONE]') return { content, isDone: true };
+
+      const parsed = JSON.parse(data) as ChatCompletionStreamResponse;
+      const delta =
+        parsed.choices?.[0]?.delta?.content ||
+        parsed.choices?.[0]?.message?.content ||
+        '';
+      if (delta) {
+        content += delta;
+        onDelta(delta);
+      }
+    }
+    return { content, isDone: false };
   }
 }

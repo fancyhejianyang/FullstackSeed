@@ -62,8 +62,69 @@ export interface AskKnowledgeAiResult {
   message: KnowledgeAiChatMessage;
 }
 
+export type KnowledgeAiChatStreamEvent =
+  | {
+      event: 'meta';
+      data: {
+        sessionId: number;
+        providerId: number;
+        providerName: string;
+        model: string;
+      };
+    }
+  | {
+      event: 'delta';
+      data: { content: string };
+    }
+  | {
+      event: 'error';
+      data: {
+        message?: string;
+        errorMessage?: string | null;
+        isSuccess?: boolean;
+      };
+    }
+  | {
+      event: 'done';
+      data: {
+        sessionId: number;
+        messageId: number;
+        isSuccess: boolean;
+        model: string;
+        answer: string;
+        errorMessage: string | null;
+        elapsedMilliseconds: number;
+      };
+    };
+
+export interface AskKnowledgeAiStreamOptions {
+  signal?: AbortSignal;
+  onEvent: (event: KnowledgeAiChatStreamEvent) => void;
+}
+
 export function askKnowledgeAi(data: AskKnowledgeAiPayload) {
   return request.post<unknown, AskKnowledgeAiResult>('/knowledge-ai-chat/ask', data);
+}
+
+export async function askKnowledgeAiStream(
+  data: AskKnowledgeAiPayload,
+  options: AskKnowledgeAiStreamOptions,
+) {
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api';
+  const response = await fetch(`${baseUrl}/knowledge-ai-chat/ask/stream`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+    signal: options.signal,
+  });
+  if (!response.ok || !response.body) {
+    throw new Error(`AI 流式请求失败：${response.status}`);
+  }
+
+  await readSseStream(response.body, options.onEvent);
 }
 
 export function getKnowledgeAiChatSessions(
@@ -90,4 +151,47 @@ export function batchDeleteKnowledgeAiChatSessions(ids: Array<string | number>) 
     '/knowledge-ai-chat/sessions/batch-delete',
     { ids: ids.map(Number) },
   );
+}
+
+async function readSseStream(
+  body: ReadableStream<Uint8Array>,
+  onEvent: (event: KnowledgeAiChatStreamEvent) => void,
+) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const blocks = buffer.split(/\r?\n\r?\n/);
+    buffer = blocks.pop() ?? '';
+    blocks.forEach((block) => emitSseBlock(block, onEvent));
+  }
+
+  buffer += decoder.decode();
+  if (buffer.trim()) emitSseBlock(buffer, onEvent);
+}
+
+function emitSseBlock(
+  block: string,
+  onEvent: (event: KnowledgeAiChatStreamEvent) => void,
+) {
+  const eventName =
+    block
+      .split(/\r?\n/)
+      .find((line) => line.startsWith('event:'))
+      ?.slice(6)
+      .trim() || 'message';
+  const data = block
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith('data:'))
+    .map((line) => line.slice(5).trim())
+    .join('\n');
+  if (!data) return;
+  onEvent({
+    event: eventName,
+    data: JSON.parse(data),
+  } as KnowledgeAiChatStreamEvent);
 }

@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-08-19 新增 AI 聊天流式接口
+- 新增：无
+- 修改：
+  - `server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`（新增 OpenAI 兼容流式调用与 SSE 增量解析）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat.controller.ts`（新增 `POST /api/knowledge-ai-chat/ask/stream` 流式接口）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat.service.ts`（流式问答接入会话历史、增量输出和问答记录落库）
+  - `web/src/api/knowledgeAiChat.ts`（新增前端流式问答请求封装和 SSE 事件解析）
+  - `CHANGELOG.md`（追加本次流式聊天接口快照）
+- 删除：无
+- 说明：接口会自动使用当前唯一启用的大模型账号，返回 `meta` / `delta` / `error` / `done` SSE 事件；已有非流式问答接口保持不变。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-18 补充大模型账号模型分组字段
 - 新增：无
 - 修改：
