@@ -1,0 +1,142 @@
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { randomBytes } from 'crypto';
+import { In, Like, Repository } from 'typeorm';
+import {
+  CreateExternalAppDto,
+  QueryExternalAppDto,
+  UpdateExternalAppDto,
+} from './dto/external-app.dto';
+import { ExternalApp } from './entities/external-app.entity';
+
+@Injectable()
+export class ExternalAppsService {
+  constructor(
+    @InjectRepository(ExternalApp)
+    private readonly externalAppRepository: Repository<ExternalApp>,
+  ) {}
+
+  async findAll(query: QueryExternalAppDto) {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 10;
+    const keyword = query.keyword?.trim();
+    const where = keyword
+      ? [
+          { name: Like(`%${keyword}%`) },
+          { appId: Like(`%${keyword}%`) },
+          { description: Like(`%${keyword}%`) },
+        ]
+      : {};
+    const [list, total] = await this.externalAppRepository.findAndCount({
+      where,
+      order: { id: 'DESC' },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    });
+    return { list, total };
+  }
+
+  async findOne(id: number) {
+    const app = await this.externalAppRepository.findOne({ where: { id } });
+    if (!app) {
+      throw new NotFoundException('外部应用不存在');
+    }
+    return app;
+  }
+
+  async create(dto: CreateExternalAppDto) {
+    const appId = dto.appId?.trim() || (await this.generateAppId());
+    await this.assertAppIdUnique(appId);
+    return this.externalAppRepository.save(
+      this.externalAppRepository.create({
+        name: dto.name.trim(),
+        appId,
+        isEnabled: dto.isEnabled ?? true,
+        description: this.toNullableText(dto.description),
+      }),
+    );
+  }
+
+  async update(id: number, dto: UpdateExternalAppDto) {
+    const app = await this.findOne(id);
+    if (dto.appId !== undefined) {
+      const appId = dto.appId.trim();
+      if (!appId) {
+        throw new ConflictException('appId 不能为空');
+      }
+      if (appId !== app.appId) {
+        await this.assertAppIdUnique(appId);
+      }
+      app.appId = appId;
+    }
+    if (dto.name !== undefined) app.name = dto.name.trim();
+    if (dto.isEnabled !== undefined) app.isEnabled = dto.isEnabled;
+    if (dto.description !== undefined) {
+      app.description = this.toNullableText(dto.description);
+    }
+    return this.externalAppRepository.save(app);
+  }
+
+  async remove(id: number) {
+    await this.findOne(id);
+    await this.externalAppRepository.softDelete(id);
+    return { id };
+  }
+
+  async batchRemove(ids: number[]) {
+    const uniqueIds = Array.from(new Set(ids));
+    if (!uniqueIds.length) return { ids: [] };
+    const count = await this.externalAppRepository.count({
+      where: { id: In(uniqueIds) },
+    });
+    if (count !== uniqueIds.length) {
+      throw new NotFoundException('部分外部应用不存在');
+    }
+    await this.externalAppRepository.softDelete(uniqueIds);
+    return { ids: uniqueIds };
+  }
+
+  async assertUsableAppId(appId: string | undefined | null) {
+    const value = appId?.trim();
+    if (!value) {
+      throw new UnauthorizedException('缺少 appId');
+    }
+    const app = await this.externalAppRepository.findOne({
+      where: { appId: value },
+    });
+    if (!app || !app.isEnabled) {
+      throw new UnauthorizedException('appId 无效或已停用');
+    }
+    return app;
+  }
+
+  private async generateAppId() {
+    for (let index = 0; index < 5; index += 1) {
+      const appId = `app_${randomBytes(12).toString('hex')}`;
+      const exists = await this.externalAppRepository.exists({
+        where: { appId },
+      });
+      if (!exists) return appId;
+    }
+    throw new ConflictException('生成 appId 失败，请重试');
+  }
+
+  private async assertAppIdUnique(appId: string) {
+    const exists = await this.externalAppRepository.exists({
+      where: { appId },
+    });
+    if (exists) {
+      throw new ConflictException('appId 已存在');
+    }
+  }
+
+  private toNullableText(value?: string) {
+    const text = value?.trim() ?? '';
+    return text || null;
+  }
+}

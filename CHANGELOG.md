@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-08-19 新增外部应用 appId 接入
+- 新增：
+  - `server/src/external-apps/`（外部应用 appId 管理模块，支持创建、查询、更新、删除、批量删除）
+- 修改：
+  - `server/src/app.module.ts`（挂载外部应用模块）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat.module.ts`（引入外部应用模块供 Guard 使用）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat.controller.ts`（流式聊天接口改为 `appId` 校验，不再要求后台 JWT）
+  - `server/src/knowledge-ai-chat/dto/knowledge-ai-chat.dto.ts`（请求 DTO 兼容 `appId`）
+  - `CHANGELOG.md`（追加本次 appId 接入快照）
+- 删除：无
+- 说明：H5 可通过 `x-app-id` 请求头调用 `POST /api/knowledge-ai-chat/ask/stream`；后台管理接口 `POST /api/external-apps` 可分配 appId。已执行 `server` 的 `npm.cmd run build`，通过。
+
 ### 2026-08-19 新增 AI 聊天流式接口
 - 新增：无
 - 修改：

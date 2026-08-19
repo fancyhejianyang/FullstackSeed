@@ -8,10 +8,13 @@ import {
   Post,
   Query,
   Res,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
+import { Public } from '../common/decorators/public.decorator';
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator';
+import { AppIdGuard } from '../external-apps/guards/app-id.guard';
 import {
   AskKnowledgeAiDto,
   BatchDeleteKnowledgeAiChatSessionDto,
@@ -47,7 +50,8 @@ export class KnowledgeAiChatController {
   }
 
   @Post('ask/stream')
-  @RequirePermissions('Menu.read')
+  @Public()
+  @UseGuards(AppIdGuard)
   @ApiOperation({ summary: '发送问题并流式返回 AI 回答' })
   async askStream(@Body() dto: AskKnowledgeAiDto, @Res() res: Response) {
     this.prepareStreamResponse(res);

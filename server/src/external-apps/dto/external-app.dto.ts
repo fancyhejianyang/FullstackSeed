@@ -1,49 +1,39 @@
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  IsBoolean,
   IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
+  MaxLength,
   Min,
 } from 'class-validator';
+import { PartialType } from '@nestjs/swagger';
 
-export class AskKnowledgeAiDto {
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @IsOptional()
-  providerId?: number;
-
+export class CreateExternalAppDto {
   @IsString()
   @IsNotEmpty()
-  @IsOptional()
-  model?: string;
-
-  @IsString()
-  @IsNotEmpty()
-  question: string;
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @IsOptional()
-  sessionId?: number;
+  @MaxLength(120)
+  name: string;
 
   @IsString()
   @IsOptional()
-  systemPrompt?: string;
-
-  @IsString()
-  @IsOptional()
-  title?: string;
-
-  @IsString()
-  @IsOptional()
+  @MaxLength(64)
   appId?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  isEnabled?: boolean;
+
+  @IsString()
+  @IsOptional()
+  description?: string;
 }
 
-export class QueryKnowledgeAiChatSessionDto {
+export class UpdateExternalAppDto extends PartialType(CreateExternalAppDto) {}
+
+export class QueryExternalAppDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
@@ -59,15 +49,9 @@ export class QueryKnowledgeAiChatSessionDto {
   @IsString()
   @IsOptional()
   keyword?: string;
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @IsOptional()
-  providerId?: number;
 }
 
-export class BatchDeleteKnowledgeAiChatSessionDto {
+export class BatchDeleteExternalAppDto {
   @IsArray()
   @Type(() => Number)
   @IsInt({ each: true })
