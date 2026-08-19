@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Like, Repository } from 'typeorm';
+import { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-configs.service';
+import { AiFeatureConfig } from '../ai-feature-configs/entities/ai-feature-config.entity';
 import {
   KnowledgeAiProvidersService,
   type KnowledgeAiChatMessagePayload,
@@ -25,6 +27,7 @@ export class KnowledgeAiChatService {
     private readonly sessionRepository: Repository<KnowledgeAiChatSession>,
     @InjectRepository(KnowledgeAiChatMessage)
     private readonly messageRepository: Repository<KnowledgeAiChatMessage>,
+    private readonly featureConfigsService: AiFeatureConfigsService,
     private readonly providersService: KnowledgeAiProvidersService,
   ) {}
 
@@ -61,11 +64,12 @@ export class KnowledgeAiChatService {
   }
 
   async ask(dto: AskKnowledgeAiDto) {
+    const { config } = await this.resolveChatFeature(dto);
     const result = await this.providersService.callChat({
-      id: dto.providerId,
-      model: dto.model,
+      id: dto.providerId ?? config?.providerId,
+      model: dto.model ?? config?.model,
       question: dto.question,
-      systemPrompt: dto.systemPrompt,
+      systemPrompt: this.buildSystemMessageContent(dto.systemPrompt, config),
     });
 
     const session = dto.sessionId
@@ -78,7 +82,7 @@ export class KnowledgeAiChatService {
         providerId: result.providerId,
         providerName: result.providerName || session.providerName,
         model: result.model,
-        systemPrompt: dto.systemPrompt?.trim() || null,
+        systemPrompt: this.buildSystemMessageContent(dto.systemPrompt, config),
         question: dto.question.trim(),
         answer: result.answer || null,
         isSuccess: result.isSuccess,
@@ -105,10 +109,7 @@ export class KnowledgeAiChatService {
   }
 
   async askStream(dto: AskKnowledgeAiDto, writer: KnowledgeAiChatStreamWriter) {
-    const target = await this.providersService.resolveChatTarget({
-      id: dto.providerId,
-      model: dto.model,
-    });
+    const { target, config } = await this.resolveChatFeature(dto);
     const session = dto.sessionId
       ? await this.findSessionEntity(dto.sessionId)
       : await this.createSession(dto, target);
@@ -120,14 +121,14 @@ export class KnowledgeAiChatService {
       model: target.model,
     });
 
-    const messages = await this.buildStreamMessages(dto);
+    const messages = await this.buildStreamMessages(dto, config);
     const result = await this.providersService.callChatStream({
       target,
       messages,
       onDelta: (content) => writer.writeEvent('delta', { content }),
     });
 
-    const message = await this.saveMessage(dto, session, target, result);
+    const message = await this.saveMessage(dto, session, target, result, config);
     writer.writeEvent(result.isSuccess ? 'done' : 'error', {
       sessionId: session.id,
       messageId: message.id,
@@ -141,9 +142,7 @@ export class KnowledgeAiChatService {
   }
 
   async initSession(dto: InitKnowledgeAiChatSessionDto) {
-    const target = await this.providersService.resolveChatTarget({
-      model: dto.model,
-    });
+    const { target } = await this.resolveChatFeature(dto);
     const session = await this.createSessionRecord({
       title: this.buildTitle(dto),
       providerId: target.providerId,
@@ -229,13 +228,12 @@ export class KnowledgeAiChatService {
 
   private async buildStreamMessages(
     dto: AskKnowledgeAiDto,
+    config?: AiFeatureConfig | null,
   ): Promise<KnowledgeAiChatMessagePayload[]> {
     const messages: KnowledgeAiChatMessagePayload[] = [
       {
         role: 'system',
-        content:
-          dto.systemPrompt?.trim() ||
-          '你是通用 AI 助手。请根据用户问题给出简洁、准确的中文回答。',
+        content: this.buildSystemMessageContent(dto.systemPrompt, config),
       },
     ];
     if (dto.sessionId) {
@@ -266,6 +264,7 @@ export class KnowledgeAiChatService {
       errorMessage: string | null;
       elapsedMilliseconds: number;
     },
+    config?: AiFeatureConfig | null,
   ) {
     const message = await this.messageRepository.save(
       this.messageRepository.create({
@@ -273,7 +272,7 @@ export class KnowledgeAiChatService {
         providerId: target.providerId,
         providerName: target.providerName,
         model: result.model,
-        systemPrompt: dto.systemPrompt?.trim() || null,
+        systemPrompt: this.buildSystemMessageContent(dto.systemPrompt, config),
         question: dto.question.trim(),
         answer: result.answer || null,
         isSuccess: result.isSuccess,
@@ -293,5 +292,38 @@ export class KnowledgeAiChatService {
     session.elapsedMilliseconds = result.elapsedMilliseconds;
     await this.sessionRepository.save(session);
     return message;
+  }
+
+  private async resolveChatFeature(dto: { providerId?: number; model?: string }) {
+    const config = await this.featureConfigsService.findEnabledByFeature('chat');
+    const target = await this.providersService.resolveChatTarget({
+      id: dto.providerId ?? config?.providerId,
+      model: dto.model ?? config?.model,
+    });
+    return { target, config };
+  }
+
+  private buildSystemMessageContent(
+    overridePrompt?: string,
+    config?: AiFeatureConfig | null,
+  ) {
+    const parts = [
+      overridePrompt?.trim() ||
+        config?.systemPrompt?.trim() ||
+        '你是通用 AI 助手。请根据用户问题给出简洁、准确的中文回答。',
+      config?.rules?.trim() ? `规则：\n${config.rules.trim()}` : '',
+      this.buildResponseFormatInstruction(config?.responseFormat),
+    ].filter(Boolean);
+    return parts.join('\n\n');
+  }
+
+  private buildResponseFormatInstruction(format?: string | null) {
+    if (format === 'json') {
+      return '返回格式：请返回合法 JSON，不要包裹 Markdown 代码块。';
+    }
+    if (format === 'markdown') {
+      return '返回格式：请使用 Markdown 输出。';
+    }
+    return '';
   }
 }

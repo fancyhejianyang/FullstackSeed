@@ -34,7 +34,8 @@ const SEED_MENUS: SeedMenu[] = [
   { name: 'AI 大模型账号', path: '/system-config/ai', icon: 'Connection', sort: 20, permissionCode: 'Menu.read', isSystem: true, parentPath: '/system-config' },
   { name: 'AI 问答测试', path: '/chat-management/ai-chat', icon: '', sort: 10, permissionCode: 'Menu.read', isSystem: true, parentPath: '/chat-management' },
   { name: '聊天应用', path: '/chat-management/apps', icon: '', sort: 20, permissionCode: 'Menu.read', isSystem: true, parentPath: '/chat-management' },
-  { name: '问题记录', path: '/chat-management/records', icon: '', sort: 30, permissionCode: 'Menu.read', isSystem: true, parentPath: '/chat-management' },
+  { name: 'AI 功能配置', path: '/chat-management/ai-configs', icon: '', sort: 30, permissionCode: 'Menu.read', isSystem: true, parentPath: '/chat-management' },
+  { name: '问题记录', path: '/chat-management/records', icon: '', sort: 40, permissionCode: 'Menu.read', isSystem: true, parentPath: '/chat-management' },
   { name: '微信 / 小程序', path: '/system-config/wechat', icon: 'ChatDotRound', sort: 50, permissionCode: 'Menu.read', isSystem: true, parentPath: '/system-config' },
   { name: '日志记录', path: '/system-config/log-record', icon: 'Tickets', sort: 60, permissionCode: 'Menu.read', isSystem: true, parentPath: '/system-config' },
   { name: '数据导入', path: '/system-config/data-import', icon: 'UploadFilled', sort: 70, permissionCode: 'Menu.read', isSystem: true, parentPath: '/system-config' },
@@ -105,7 +106,7 @@ export class MenusService implements OnModuleInit {
       parentId: parent.id,
       targetName: '问答记录',
       targetPath: '/chat-management/records',
-      sort: 30,
+      sort: 40,
     });
   }
 

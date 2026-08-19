@@ -1,5 +1,20 @@
 # CHANGELOG
 
+### 2026-08-19 新增 AI 功能配置模块
+- 新增：
+  - `server/src/ai-feature-configs/`（AI 功能配置模块，支持聊天、文档解析、OCR 的账号/模型/提示词/规则/返回格式配置）
+  - `web/src/api/aiFeatureConfig.ts`（AI 功能配置接口封装）
+  - `web/src/views/ai-feature-config/`（AI 功能配置列表页与编辑弹窗）
+- 修改：
+  - `server/src/app.module.ts`（挂载 AI 功能配置模块）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat.module.ts`（引入 AI 功能配置模块）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat.service.ts`（聊天初始化、普通问答和流式问答优先读取“聊天”功能配置）
+  - `server/src/menus/menus.service.ts`（聊天管理下新增“AI 功能配置”菜单）
+  - `web/src/router/index.ts`（新增“AI 功能配置”路由）
+  - `CHANGELOG.md`（追加本次 AI 功能配置快照）
+- 删除：无
+- 说明：大模型账号继续只负责账号与模型清单；聊天/文档解析/OCR 的业务级模型选择、提示词、规则和返回格式进入独立配置。同一功能类型只保留一个启用配置，便于后端接口稳定匹配。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-19 新增应用端 AI 会话初始化接口
 - 新增：无
 - 修改：

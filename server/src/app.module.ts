@@ -23,6 +23,7 @@ import { KnowledgeAiChatModule } from './knowledge-ai-chat/knowledge-ai-chat.mod
 import { KnowledgeBasesModule } from './knowledge-bases/knowledge-bases.module';
 import { MineruConfigsModule } from './mineru-configs/mineru-configs.module';
 import { ExternalAppsModule } from './external-apps/external-apps.module';
+import { AiFeatureConfigsModule } from './ai-feature-configs/ai-feature-configs.module';
 
 @Module({
   imports: [
@@ -107,6 +108,7 @@ import { ExternalAppsModule } from './external-apps/external-apps.module';
     StorageConfigModule,
     UploadsModule,
     KnowledgeAiProvidersModule,
+    AiFeatureConfigsModule,
     KnowledgeAiChatModule,
     ExternalAppsModule,
     MineruConfigsModule,
