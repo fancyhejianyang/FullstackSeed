@@ -29,6 +29,7 @@ export class ExternalAppsService {
       ? [
           { name: Like(`%${keyword}%`) },
           { appId: Like(`%${keyword}%`) },
+          { domain: Like(`%${keyword}%`) },
           { description: Like(`%${keyword}%`) },
         ]
       : {};
@@ -56,6 +57,7 @@ export class ExternalAppsService {
       this.externalAppRepository.create({
         name: dto.name.trim(),
         appId,
+        domain: this.toNullableText(dto.domain),
         isEnabled: dto.isEnabled ?? true,
         description: this.toNullableText(dto.description),
       }),
@@ -75,6 +77,7 @@ export class ExternalAppsService {
       app.appId = appId;
     }
     if (dto.name !== undefined) app.name = dto.name.trim();
+    if (dto.domain !== undefined) app.domain = this.toNullableText(dto.domain);
     if (dto.isEnabled !== undefined) app.isEnabled = dto.isEnabled;
     if (dto.description !== undefined) {
       app.description = this.toNullableText(dto.description);
@@ -101,7 +104,10 @@ export class ExternalAppsService {
     return { ids: uniqueIds };
   }
 
-  async assertUsableAppId(appId: string | undefined | null) {
+  async assertUsableAppId(
+    appId: string | undefined | null,
+    requestDomain?: string | null,
+  ) {
     const value = appId?.trim();
     if (!value) {
       throw new UnauthorizedException('缺少 appId');
@@ -112,6 +118,7 @@ export class ExternalAppsService {
     if (!app || !app.isEnabled) {
       throw new UnauthorizedException('appId 无效或已停用');
     }
+    this.assertDomainAllowed(app, requestDomain);
     return app;
   }
 
@@ -138,5 +145,34 @@ export class ExternalAppsService {
   private toNullableText(value?: string) {
     const text = value?.trim() ?? '';
     return text || null;
+  }
+
+  private assertDomainAllowed(app: ExternalApp, requestDomain?: string | null) {
+    const domains = this.parseDomains(app.domain);
+    if (!domains.length) return;
+    const normalized = this.normalizeDomain(requestDomain);
+    if (!normalized) {
+      throw new UnauthorizedException('缺少来源域名');
+    }
+    if (!domains.includes(normalized)) {
+      throw new UnauthorizedException('来源域名不在白名单');
+    }
+  }
+
+  private parseDomains(domain: string | null) {
+    return (domain || '')
+      .split(/[\s,，]+/)
+      .map((item) => this.normalizeDomain(item))
+      .filter((item): item is string => !!item);
+  }
+
+  private normalizeDomain(value?: string | null) {
+    const text = value?.trim().toLowerCase();
+    if (!text) return '';
+    try {
+      return new URL(text.includes('://') ? text : `https://${text}`).hostname;
+    } catch {
+      return text.split('/')[0].split(':')[0];
+    }
   }
 }

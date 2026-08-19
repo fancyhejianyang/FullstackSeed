@@ -10,6 +10,9 @@ export class ExternalApp extends BaseEntity {
   @Column({ length: 64 })
   appId: string;
 
+  @Column({ type: 'text', nullable: true })
+  domain: string | null;
+
   @Column({ type: 'tinyint', default: true })
   isEnabled: boolean;
 

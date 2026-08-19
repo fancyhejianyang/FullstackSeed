@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-08-19 外部应用增加域名白名单校验
+- 新增：无
+- 修改：
+  - `server/src/external-apps/entities/external-app.entity.ts`（外部应用增加 `domain` 字段）
+  - `server/src/external-apps/dto/external-app.dto.ts`（创建/更新外部应用支持配置 `domain`）
+  - `server/src/external-apps/external-apps.service.ts`（按 appId 和来源域名校验白名单，domain 为空时跳过校验）
+  - `server/src/external-apps/guards/app-id.guard.ts`（读取 `Origin` / `Referer` 作为请求来源域名）
+  - `CHANGELOG.md`（追加本次域名白名单校验快照）
+- 删除：无
+- 说明：H5 调用流式聊天接口时需匹配后台配置的 appId 和 domain；测试阶段 domain 留空表示不校验来源域名。已执行 `server` 的 `npm.cmd run build`，通过。
+
 ### 2026-08-19 新增外部应用 appId 接入
 - 新增：
   - `server/src/external-apps/`（外部应用 appId 管理模块，支持创建、查询、更新、删除、批量删除）

@@ -22,6 +22,10 @@ export class CreateExternalAppDto {
   @MaxLength(64)
   appId?: string;
 
+  @IsString()
+  @IsOptional()
+  domain?: string;
+
   @IsBoolean()
   @IsOptional()
   isEnabled?: boolean;
