@@ -23,12 +23,12 @@ import {
 import { KnowledgeAiChatService } from './knowledge-ai-chat.service';
 
 @ApiTags('KnowledgeAiChat')
-@ApiBearerAuth()
 @Controller('knowledge-ai-chat')
 export class KnowledgeAiChatController {
   constructor(private readonly knowledgeAiChatService: KnowledgeAiChatService) {}
 
   @Get('sessions')
+  @ApiBearerAuth()
   @RequirePermissions('Menu.read')
   @ApiOperation({ summary: '分页查询问答会话记录' })
   findSessions(@Query() query: QueryKnowledgeAiChatSessionDto) {
@@ -36,6 +36,7 @@ export class KnowledgeAiChatController {
   }
 
   @Get('sessions/:id')
+  @ApiBearerAuth()
   @RequirePermissions('Menu.read')
   @ApiOperation({ summary: '问答会话详情' })
   findSession(@Param('id', ParseIntPipe) id: number) {
@@ -43,6 +44,7 @@ export class KnowledgeAiChatController {
   }
 
   @Post('ask')
+  @ApiBearerAuth()
   @RequirePermissions('Menu.read')
   @ApiOperation({ summary: '发送问题并记录问答内容' })
   ask(@Body() dto: AskKnowledgeAiDto) {
@@ -72,6 +74,7 @@ export class KnowledgeAiChatController {
   }
 
   @Delete('sessions/:id')
+  @ApiBearerAuth()
   @RequirePermissions('Menu.read')
   @ApiOperation({ summary: '删除问答会话记录' })
   removeSession(@Param('id', ParseIntPipe) id: number) {
@@ -79,6 +82,7 @@ export class KnowledgeAiChatController {
   }
 
   @Post('sessions/batch-delete')
+  @ApiBearerAuth()
   @RequirePermissions('Menu.read')
   @ApiOperation({ summary: '批量删除问答会话记录' })
   batchRemoveSessions(@Body() dto: BatchDeleteKnowledgeAiChatSessionDto) {

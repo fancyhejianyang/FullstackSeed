@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-08-19 调整聊天流式接口应用端鉴权
+- 新增：无
+- 修改：
+  - `server/src/external-apps/guards/app-id.guard.ts`（优先读取 Header `appid`，兼容 `x-app-id`，不读取 body/query）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat.controller.ts`（流式接口移除 Swagger Bearer 标记，其它后台接口保留 Bearer）
+  - `web/src/api/knowledgeAiChat.ts`（流式问答封装改为 Header `appid`）
+  - `CHANGELOG.md`（追加本次应用端鉴权契约快照）
+- 删除：无
+- 说明：流式聊天接口不走 Authorization/JWT，统一使用 `appid + Origin/Referer domain` 验证。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-19 统一聊天流式接口 appId 请求头契约
 - 新增：无
 - 修改：

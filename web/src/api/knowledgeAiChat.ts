@@ -115,7 +115,7 @@ export async function askKnowledgeAiStream(
   const response = await fetch(`${baseUrl}/knowledge-ai-chat/ask/stream`, {
     method: 'POST',
     headers: {
-      'x-app-id': options.appId,
+      appid: options.appId,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(data),

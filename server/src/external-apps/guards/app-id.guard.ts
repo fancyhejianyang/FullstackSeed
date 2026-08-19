@@ -26,7 +26,7 @@ export class AppIdGuard implements CanActivate {
   private resolveAppId(request: {
     headers: Record<string, string | string[] | undefined>;
   }) {
-    const header = request.headers['x-app-id'];
+    const header = request.headers.appid ?? request.headers['x-app-id'];
     if (Array.isArray(header)) return header[0];
     if (header) return header;
 
