@@ -44,6 +44,7 @@ const featureTypeOptions = [
   { label: '聊天', value: 'chat' },
   { label: '文档解析', value: 'documentParse' },
   { label: 'OCR', value: 'ocr' },
+  { label: '向量化', value: 'embedding' },
 ];
 
 const providerOptions = computed(() =>
@@ -57,12 +58,7 @@ const selectedProvider = computed(() =>
   providers.value.find((item) => item.id === Number(form.providerId)),
 );
 
-const modelOptions = computed(() =>
-  parseModelText(getModelText(selectedProvider.value, form.featureType)).map((item) => ({
-    label: item.name,
-    value: item.code,
-  })),
-);
+const modelOptions = computed(() => getModelOptions(selectedProvider.value, form.featureType));
 
 const fields = computed<FormField[]>(() => [
   { prop: 'name', label: '配置名称', type: 'input', placeholder: '如 聊天默认配置' },
@@ -215,7 +211,24 @@ function getModelText(provider: KnowledgeAiProvider | undefined, featureType: Ai
   if (!provider) return '';
   if (featureType === 'chat') return provider.textModels || provider.models;
   if (featureType === 'ocr') return provider.visionModels || provider.models;
-  return provider.textModels || provider.visionModels || provider.models;
+  if (featureType === 'embedding') return provider.embeddingModels || provider.models;
+  return [provider.visionModels, provider.textModels, provider.models]
+    .filter(Boolean)
+    .join('\n');
+}
+
+function getModelOptions(provider: KnowledgeAiProvider | undefined, featureType: AiFeatureType) {
+  const seen = new Set<string>();
+  return parseModelText(getModelText(provider, featureType))
+    .filter((item) => {
+      if (seen.has(item.code)) return false;
+      seen.add(item.code);
+      return true;
+    })
+    .map((item) => ({
+      label: item.name === item.code ? item.code : `${item.name} (${item.code})`,
+      value: item.code,
+    }));
 }
 
 function parseModelText(value: string) {
@@ -248,4 +261,3 @@ function parseModelText(value: string) {
     </div>
   </Dialog>
 </template>
-

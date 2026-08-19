@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-08-19 优化 AI 功能配置模型匹配
+- 新增：无
+- 修改：
+  - `server/src/ai-feature-configs/ai-feature-config.constants.ts`（AI 功能类型新增 `embedding` 向量化配置）
+  - `web/src/api/aiFeatureConfig.ts`（前端 AI 功能类型补充 `embedding`）
+  - `web/src/views/ai-feature-config/Index.vue`（功能类型筛选增加“向量化”）
+  - `web/src/views/ai-feature-config/Edit.vue`（模型下拉按功能类型读取账号内对应模型：聊天取文本、OCR 取视觉、文档解析合并视觉/文本、向量化取向量模型）
+  - `CHANGELOG.md`（追加本次 AI 功能配置模型匹配快照）
+- 删除：无
+- 说明：分片本身不依赖向量模型，后续索引/向量入库阶段才需要 embedding 模型，因此独立为“向量化”功能配置。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-19 修复知识库解析正文展示
 - 新增：无
 - 修改：

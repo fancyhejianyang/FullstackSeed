@@ -1,6 +1,6 @@
 import request from '@/utils/request';
 
-export type AiFeatureType = 'chat' | 'documentParse' | 'ocr';
+export type AiFeatureType = 'chat' | 'documentParse' | 'ocr' | 'embedding';
 export type AiResponseFormat = 'text' | 'json' | 'markdown';
 
 export interface AiFeatureConfig {
@@ -72,4 +72,3 @@ export function batchDeleteAiFeatureConfigs(ids: Array<string | number>) {
     { ids: ids.map(Number) },
   );
 }
-

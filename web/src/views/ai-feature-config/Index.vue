@@ -24,6 +24,7 @@ const featureTypeOptions = [
   { label: '聊天', value: 'chat' },
   { label: '文档解析', value: 'documentParse' },
   { label: 'OCR', value: 'ocr' },
+  { label: '向量化', value: 'embedding' },
 ];
 
 const responseFormatMap = {
@@ -136,4 +137,3 @@ function getFeatureLabel(value: AiFeatureType) {
     />
   </PageContainer>
 </template>
-
