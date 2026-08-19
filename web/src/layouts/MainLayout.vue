@@ -27,7 +27,12 @@ async function handleLogout() {
   <el-container class="layout">
     <el-aside :width="isCollapse ? '64px' : '210px'" class="layout__aside">
       <div class="layout__logo">{{ isCollapse ? 'FS' : 'FullstackSeed' }}</div>
-      <el-menu :default-active="activeMenu" :collapse="isCollapse" router>
+      <el-menu
+        class="layout__menu"
+        :default-active="activeMenu"
+        :collapse="isCollapse"
+        router
+      >
         <MenuTree :items="menus" />
       </el-menu>
     </el-aside>
@@ -65,6 +70,8 @@ async function handleLogout() {
   height: 100vh;
 }
 .layout__aside {
+  display: flex;
+  flex-direction: column;
   background: #304156;
   transition: width 0.2s;
   overflow: hidden;
@@ -80,6 +87,22 @@ async function handleLogout() {
 .layout__aside :deep(.el-menu) {
   border-right: none;
   background: #304156;
+}
+.layout__menu {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.layout__menu::-webkit-scrollbar {
+  width: 6px;
+}
+.layout__menu::-webkit-scrollbar-thumb {
+  background: rgba(191, 203, 217, 0.28);
+  border-radius: 6px;
+}
+.layout__menu::-webkit-scrollbar-track {
+  background: transparent;
 }
 .layout__aside :deep(.el-menu-item),
 .layout__aside :deep(.el-sub-menu__title) {
