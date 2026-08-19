@@ -9,7 +9,19 @@
  */
 import type { MenuNode } from '@/api/menu';
 
-defineProps<{ items: MenuNode[] }>();
+const props = withDefaults(
+  defineProps<{
+    items: MenuNode[];
+    level?: number;
+  }>(),
+  {
+    level: 1,
+  },
+);
+
+function shouldShowIcon(item: MenuNode) {
+  return props.level === 1 && !!item.icon;
+}
 </script>
 
 <template>
@@ -17,15 +29,15 @@ defineProps<{ items: MenuNode[] }>();
     <!-- 含子菜单 -->
     <el-sub-menu v-if="item.children && item.children.length" :index="item.path || `sub-${item.id}`">
       <template #title>
-        <el-icon v-if="item.icon"><component :is="item.icon" /></el-icon>
+        <el-icon v-if="shouldShowIcon(item)"><component :is="item.icon" /></el-icon>
         <span>{{ item.name }}</span>
       </template>
-      <MenuTree :items="item.children" />
+      <MenuTree :items="item.children" :level="props.level + 1" />
     </el-sub-menu>
 
     <!-- 叶子菜单 -->
     <el-menu-item v-else :index="item.path">
-      <el-icon v-if="item.icon"><component :is="item.icon" /></el-icon>
+      <el-icon v-if="shouldShowIcon(item)"><component :is="item.icon" /></el-icon>
       <template #title>{{ item.name }}</template>
     </el-menu-item>
   </template>

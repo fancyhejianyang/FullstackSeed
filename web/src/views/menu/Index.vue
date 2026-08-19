@@ -87,6 +87,10 @@ function formatPermissionCodes(code: string | undefined | null) {
   return codes.map(getPermissionLabel).join('、');
 }
 
+function isTopMenu(row: MenuNode) {
+  return row.parentId === null || row.parentId === undefined;
+}
+
 // 新增/编辑弹窗
 const editVisible = ref(false);
 const editingRow = ref<MenuNode | null>(null);
@@ -207,7 +211,9 @@ onMounted(async () => {
       <el-table-column type="selection" width="48" />
       <el-table-column prop="name" label="菜单名称" width="150">
         <template #default="{ row }">
-          <el-icon v-if="row.icon" class="menu-icon"><component :is="row.icon" /></el-icon>
+          <el-icon v-if="isTopMenu(row) && row.icon" class="menu-icon">
+            <component :is="row.icon" />
+          </el-icon>
           {{ row.name }}
         </template>
       </el-table-column>

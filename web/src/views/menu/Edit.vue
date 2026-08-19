@@ -60,7 +60,9 @@ const parentOptions = computed<MenuNode[]>(() => {
   return prune(props.treeData);
 });
 
-const fields: FormField[] = [
+const isChildMenu = computed(() => form.parentId !== null && form.parentId !== undefined);
+
+const fields = computed<FormField[]>(() => [
   { prop: 'parentId', label: '上级菜单', slot: true },
   { prop: 'name', label: '菜单名称', type: 'input' },
   {
@@ -73,12 +75,23 @@ const fields: FormField[] = [
     ],
   },
   { prop: 'path', label: '路由地址', type: 'input', placeholder: '如 /users' },
-  { prop: 'icon', label: '图标', type: 'input', placeholder: 'Element Plus 图标名，如 Menu' },
+  ...(
+    isChildMenu.value
+      ? []
+      : [
+          {
+            prop: 'icon',
+            label: '图标',
+            type: 'input',
+            placeholder: 'Element Plus 图标名，如 Menu',
+          } satisfies FormField,
+        ]
+  ),
   { prop: 'permissionCode', label: '权限码', type: 'input', placeholder: '如 Menu.read；为空则登录可见' },
   { prop: 'sort', label: '排序', slot: true },
   { prop: 'isSystem', label: '系统固定', slot: true },
   { prop: 'isActive', label: '状态', slot: true },
-];
+]);
 
 const rules: FormRules = {
   name: [{ required: true, message: '请输入菜单名称', trigger: 'blur' }],
@@ -118,6 +131,15 @@ watch(visible, (val) => {
   }
 });
 
+watch(
+  () => form.parentId,
+  (parentId) => {
+    if (parentId !== null && parentId !== undefined) {
+      form.icon = '';
+    }
+  },
+);
+
 async function handleSubmit() {
   await formRef.value?.validate();
   if (!form.name.trim()) {
@@ -130,7 +152,7 @@ async function handleSubmit() {
       parentId: form.parentId,
       name: form.name.trim(),
       path: form.path.trim(),
-      icon: form.icon.trim(),
+      icon: isChildMenu.value ? '' : form.icon.trim(),
       sort: form.sort,
       type: form.type,
       permissionCode: form.permissionCode.trim(),

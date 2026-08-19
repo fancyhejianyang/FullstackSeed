@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-08-19 优化二级菜单图标展示
+- 新增：无
+- 修改：
+  - `web/src/components/MenuTree.vue`（侧边栏仅一级菜单展示图标）
+  - `web/src/views/menu/Index.vue`（菜单管理列表仅一级菜单展示图标）
+  - `web/src/views/menu/Edit.vue`（选择上级菜单后隐藏图标字段，子菜单提交时清空图标）
+  - `CHANGELOG.md`（追加本次菜单图标展示快照）
+- 删除：无
+- 说明：二级菜单不再显示图标；新增/编辑二级菜单时无需填写图标。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
 ### 2026-08-19 外部应用增加域名白名单校验
 - 新增：无
 - 修改：
