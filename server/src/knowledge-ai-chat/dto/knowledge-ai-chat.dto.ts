@@ -39,6 +39,17 @@ export class AskKnowledgeAiDto {
   title?: string;
 }
 
+export class InitKnowledgeAiChatSessionDto {
+  @IsString()
+  @IsNotEmpty()
+  @IsOptional()
+  model?: string;
+
+  @IsString()
+  @IsOptional()
+  title?: string;
+}
+
 export class QueryKnowledgeAiChatSessionDto {
   @Type(() => Number)
   @IsInt()

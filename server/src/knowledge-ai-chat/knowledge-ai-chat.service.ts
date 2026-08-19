@@ -8,6 +8,7 @@ import {
 } from '../knowledge-ai-providers/knowledge-ai-providers.service';
 import {
   AskKnowledgeAiDto,
+  InitKnowledgeAiChatSessionDto,
   QueryKnowledgeAiChatSessionDto,
 } from './dto/knowledge-ai-chat.dto';
 import { KnowledgeAiChatMessage } from './entities/knowledge-ai-chat-message.entity';
@@ -139,6 +140,25 @@ export class KnowledgeAiChatService {
     return { session, message };
   }
 
+  async initSession(dto: InitKnowledgeAiChatSessionDto) {
+    const target = await this.providersService.resolveChatTarget({
+      model: dto.model,
+    });
+    const session = await this.createSessionRecord({
+      title: this.buildTitle(dto),
+      providerId: target.providerId,
+      providerName: target.providerName,
+      model: target.model,
+    });
+    return {
+      sessionId: session.id,
+      title: session.title,
+      providerId: session.providerId,
+      providerName: session.providerName,
+      model: session.model,
+    };
+  }
+
   async removeSession(id: number) {
     await this.findSessionEntity(id);
     await this.sessionRepository.softDelete(id);
@@ -172,12 +192,26 @@ export class KnowledgeAiChatService {
     dto: AskKnowledgeAiDto,
     result: { providerId: number; providerName: string; model: string },
   ) {
+    return this.createSessionRecord({
+      title: this.buildTitle(dto),
+      providerId: result.providerId,
+      providerName: result.providerName,
+      model: result.model,
+    });
+  }
+
+  private createSessionRecord(payload: {
+    title: string;
+    providerId: number;
+    providerName: string;
+    model: string;
+  }) {
     return this.sessionRepository.save(
       this.sessionRepository.create({
-        title: this.buildTitle(dto),
-        providerId: result.providerId,
-        providerName: result.providerName,
-        model: result.model,
+        title: payload.title,
+        providerId: payload.providerId,
+        providerName: payload.providerName,
+        model: payload.model,
         messageCount: 0,
         lastQuestion: null,
         lastAnswer: null,
@@ -188,8 +222,8 @@ export class KnowledgeAiChatService {
     );
   }
 
-  private buildTitle(dto: AskKnowledgeAiDto) {
-    const title = dto.title?.trim() || dto.question.trim();
+  private buildTitle(dto: { title?: string; question?: string }) {
+    const title = dto.title?.trim() || dto.question?.trim() || 'AI 客服会话';
     return title.length > 80 ? `${title.slice(0, 80)}...` : title;
   }
 

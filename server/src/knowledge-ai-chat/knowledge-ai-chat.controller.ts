@@ -18,6 +18,7 @@ import { AppIdGuard } from '../external-apps/guards/app-id.guard';
 import {
   AskKnowledgeAiDto,
   BatchDeleteKnowledgeAiChatSessionDto,
+  InitKnowledgeAiChatSessionDto,
   QueryKnowledgeAiChatSessionDto,
 } from './dto/knowledge-ai-chat.dto';
 import { KnowledgeAiChatService } from './knowledge-ai-chat.service';
@@ -41,6 +42,14 @@ export class KnowledgeAiChatController {
   @ApiOperation({ summary: '问答会话详情' })
   findSession(@Param('id', ParseIntPipe) id: number) {
     return this.knowledgeAiChatService.findSession(id);
+  }
+
+  @Post('sessions/init')
+  @Public()
+  @UseGuards(AppIdGuard)
+  @ApiOperation({ summary: '应用端初始化 AI 问答会话' })
+  initSession(@Body() dto: InitKnowledgeAiChatSessionDto) {
+    return this.knowledgeAiChatService.initSession(dto);
   }
 
   @Post('ask')

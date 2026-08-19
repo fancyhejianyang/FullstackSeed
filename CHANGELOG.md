@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-08-19 新增应用端 AI 会话初始化接口
+- 新增：无
+- 修改：
+  - `server/src/knowledge-ai-chat/dto/knowledge-ai-chat.dto.ts`（新增初始化会话请求 DTO）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat.controller.ts`（新增 `POST /api/knowledge-ai-chat/sessions/init`）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat.service.ts`（新增应用端会话创建逻辑）
+  - `web/src/api/knowledgeAiChat.ts`（新增初始化 AI 会话 API 封装）
+  - `CHANGELOG.md`（追加本次会话初始化接口快照）
+- 删除：无
+- 说明：H5 可先通过 `appid + domain` 校验初始化后端真实会话，后续流式聊天复用返回的 `sessionId`，避免客户端自造 SID 导致会话不存在。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-19 调整聊天流式接口应用端鉴权
 - 新增：无
 - 修改：

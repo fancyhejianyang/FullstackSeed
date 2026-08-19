@@ -62,6 +62,24 @@ export interface AskKnowledgeAiResult {
   message: KnowledgeAiChatMessage;
 }
 
+export interface InitKnowledgeAiSessionPayload {
+  model?: string;
+  title?: string;
+}
+
+export interface InitKnowledgeAiSessionResult {
+  sessionId: number;
+  title: string;
+  providerId: number;
+  providerName: string;
+  model: string;
+}
+
+export interface AppChatRequestOptions {
+  appId: string;
+  signal?: AbortSignal;
+}
+
 export type KnowledgeAiChatStreamEvent =
   | {
       event: 'meta';
@@ -107,12 +125,34 @@ export function askKnowledgeAi(data: AskKnowledgeAiPayload) {
   return request.post<unknown, AskKnowledgeAiResult>('/knowledge-ai-chat/ask', data);
 }
 
+export async function initKnowledgeAiSession(
+  data: InitKnowledgeAiSessionPayload,
+  options: AppChatRequestOptions,
+) {
+  const response = await fetch(
+    `${getApiBaseUrl()}/knowledge-ai-chat/sessions/init`,
+    {
+      method: 'POST',
+      headers: {
+        appid: options.appId,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+      signal: options.signal,
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`AI 会话初始化失败：${response.status}`);
+  }
+  const result = await response.json();
+  return result.data as InitKnowledgeAiSessionResult;
+}
+
 export async function askKnowledgeAiStream(
   data: AskKnowledgeAiPayload,
   options: AskKnowledgeAiStreamOptions,
 ) {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api';
-  const response = await fetch(`${baseUrl}/knowledge-ai-chat/ask/stream`, {
+  const response = await fetch(`${getApiBaseUrl()}/knowledge-ai-chat/ask/stream`, {
     method: 'POST',
     headers: {
       appid: options.appId,
@@ -195,4 +235,8 @@ function emitSseBlock(
     event: eventName,
     data: JSON.parse(data),
   } as KnowledgeAiChatStreamEvent);
+}
+
+function getApiBaseUrl() {
+  return import.meta.env.VITE_API_BASE_URL || '/api';
 }
