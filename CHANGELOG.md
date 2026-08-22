@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-08-22 手动分片画布渲染优化（拖拽挂起重绘 + 按片段绘制 + 文本测量 O(n)）
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/View.vue`
+    - 拖拽与重绘解耦：`handleManualCanvasMouseMove` 期间只更新选区 ref，不再触发重绘；`watch([manualSourceContent, manualSelectionStart, manualSelectionEnd, manualEditorVisible])` 内 `if (manualSelectionDragging.value) return` 挂起渲染；`handleManualCanvasMouseUp` 在松开那一刻调用一次 `scheduleManualGridDraw()`，把选区渲染卡在结束帧，拖拽过程 0 帧重绘。
+    - state 层按片段绘制：`drawManualGrid` 主循环改用 `drawManualPixiStateRangesForRow`，仅对「与锁定区间相交的行 + 当前选区覆盖的行」绘制矩形，跳过无关行；底层锁定段取区间交集、选区段取坐标区间交集，不再逐行全量重算。
+    - 文本测量去 O(n²)：新增 `buildManualLinePrefixWidths()` 预计算每行从行首到各列的累计宽度数组；`buildManualPixiTextSegments` / `drawManualPixiStateRangesForRow` 直接按索引取前缀宽度定位 x，避免逐字符 `measureText` 与 `text.slice(0, column)` 造成的 O(n²) 开销（文本仍走整行单 `Text` 节点，不回退逐字符节点）。
+    - 连带修复：补 import `createKnowledgeBaseChunk`/`updateKnowledgeBaseChunk`/`deleteKnowledgeBaseChunk`（上一轮单条接口改造遗留的未导入编译错误）。
+- 删除：无
+- 说明：渲染瓶颈来自「拖拽每帧经 watch 全量重绘（销毁+重建所有 Text 节点 + 全量重算锁定/选区矩形）」与「逐字符 measureText 的 O(n²) 文本测量」，均非 PixiJS 本身必需。本轮拖拽中只记录起点终点、松手一次性渲染；测算改为按本次片段遍历 + 行前缀宽度缓存，JS 侧计算开销远低于 DOM/UI 重建。逻辑层与单条接口契约未变。
+
 ### 2026-08-22 修复知识库分片配置编辑页校验与类型问题
 - 新增：无
 - 修改：
