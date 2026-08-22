@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Like, Repository } from 'typeorm';
 import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
+import { MineruConfigsService } from '../mineru-configs/mineru-configs.service';
 import type { AiFeatureType } from './ai-feature-config.constants';
 import {
   CreateAiFeatureConfigDto,
@@ -16,6 +17,7 @@ export class AiFeatureConfigsService {
     @InjectRepository(AiFeatureConfig)
     private readonly configRepository: Repository<AiFeatureConfig>,
     private readonly providersService: KnowledgeAiProvidersService,
+    private readonly mineruConfigsService: MineruConfigsService,
   ) {}
 
   async findAll(query: QueryAiFeatureConfigDto) {
@@ -30,6 +32,7 @@ export class AiFeatureConfigsService {
       ? [
           { ...baseWhere, name: Like(`%${keyword}%`) },
           { ...baseWhere, providerName: Like(`%${keyword}%`) },
+          { ...baseWhere, mineruConfigName: Like(`%${keyword}%`) },
           { ...baseWhere, model: Like(`%${keyword}%`) },
           { ...baseWhere, description: Like(`%${keyword}%`) },
         ]
@@ -59,6 +62,9 @@ export class AiFeatureConfigsService {
     if (!config.isEnabled) {
       throw new BadRequestException('该 AI 聊天配置未启用');
     }
+    if (!config.providerId || !config.model) {
+      throw new BadRequestException('聊天配置缺少大模型账号或模型');
+    }
     return config;
   }
 
@@ -71,15 +77,16 @@ export class AiFeatureConfigsService {
 
   async create(dto: CreateAiFeatureConfigDto) {
     const payload = await this.toEntityPayload(dto, true);
-    const saved = await this.configRepository.save(
-      this.configRepository.create(payload),
-    );
+    const entity = this.configRepository.create(payload);
+    this.assertExecutableConfig(entity);
+    const saved = await this.configRepository.save(entity);
     return saved;
   }
 
   async update(id: number, dto: UpdateAiFeatureConfigDto) {
     const config = await this.findOne(id);
     Object.assign(config, await this.toEntityPayload(dto, false));
+    this.assertExecutableConfig(config);
     return this.configRepository.save(config);
   }
 
@@ -110,17 +117,45 @@ export class AiFeatureConfigsService {
     if (dto.name !== undefined) payload.name = dto.name.trim();
     if (dto.featureType !== undefined) payload.featureType = dto.featureType;
     if (dto.providerId !== undefined) {
-      const provider = await this.providersService.findOne(dto.providerId);
-      payload.providerId = provider.id;
-      payload.providerName = provider.name;
+      if (dto.providerId) {
+        const provider = await this.providersService.findOne(dto.providerId);
+        payload.providerId = provider.id;
+        payload.providerName = provider.name;
+      } else {
+        payload.providerId = null;
+        payload.providerName = null;
+      }
     }
-    if (dto.model !== undefined) payload.model = dto.model.trim();
+    if (dto.model !== undefined) payload.model = dto.model?.trim() || null;
+    if (dto.mineruConfigId !== undefined) {
+      if (dto.mineruConfigId) {
+        const mineruConfig = await this.mineruConfigsService.findOne(
+          dto.mineruConfigId,
+        );
+        payload.mineruConfigId = mineruConfig.id;
+        payload.mineruConfigName = mineruConfig.name;
+      } else {
+        payload.mineruConfigId = null;
+        payload.mineruConfigName = null;
+      }
+    }
     if (dto.systemPrompt !== undefined) {
       payload.systemPrompt = this.toNullableText(dto.systemPrompt);
     }
     if (dto.rules !== undefined) payload.rules = this.toNullableText(dto.rules);
     if (dto.responseFormat !== undefined || isCreate) {
       payload.responseFormat = dto.responseFormat ?? 'text';
+    }
+    if (dto.useMineru !== undefined || isCreate) {
+      payload.useMineru = dto.useMineru ?? false;
+      if (payload.useMineru) {
+        payload.providerId = null;
+        payload.providerName = null;
+        payload.model = null;
+      } else {
+        payload.mineruConfigId = null;
+        payload.mineruConfigName = null;
+      }
     }
     if (dto.isEnabled !== undefined || isCreate) {
       payload.isEnabled = dto.isEnabled ?? true;
@@ -129,6 +164,18 @@ export class AiFeatureConfigsService {
       payload.description = this.toNullableText(dto.description);
     }
     return payload;
+  }
+
+  private assertExecutableConfig(config: Partial<AiFeatureConfig>) {
+    if (config.featureType === 'ocr' && config.useMineru) {
+      if (!config.mineruConfigId) {
+        throw new BadRequestException('请选择 MinerU 配置');
+      }
+      return;
+    }
+    if (!config.providerId || !config.model?.trim()) {
+      throw new BadRequestException('请选择大模型账号和模型');
+    }
   }
 
   private toNullableText(value?: string) {

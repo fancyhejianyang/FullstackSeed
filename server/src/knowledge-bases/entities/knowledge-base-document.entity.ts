@@ -29,6 +29,15 @@ export class KnowledgeBaseDocument extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   description: string | null;
 
+  @Column({ type: 'text', nullable: true })
+  hitKeywords: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  colloquialDescription: string | null;
+
+  @Column({ type: 'int', default: 0 })
+  matchPriority: number;
+
   @Column({ type: 'int', default: 0 })
   sort: number;
 }

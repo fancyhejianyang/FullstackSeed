@@ -24,6 +24,7 @@ import { KnowledgeBasesModule } from './knowledge-bases/knowledge-bases.module';
 import { MineruConfigsModule } from './mineru-configs/mineru-configs.module';
 import { ExternalAppsModule } from './external-apps/external-apps.module';
 import { AiFeatureConfigsModule } from './ai-feature-configs/ai-feature-configs.module';
+import { KnowledgeRetrievalConfigsModule } from './knowledge-retrieval-configs/knowledge-retrieval-configs.module';
 
 @Module({
   imports: [
@@ -109,6 +110,7 @@ import { AiFeatureConfigsModule } from './ai-feature-configs/ai-feature-configs.
     UploadsModule,
     KnowledgeAiProvidersModule,
     AiFeatureConfigsModule,
+    KnowledgeRetrievalConfigsModule,
     KnowledgeAiChatModule,
     ExternalAppsModule,
     MineruConfigsModule,

@@ -14,14 +14,23 @@ export class AiFeatureConfig extends BaseEntity {
   @Column({ length: 40 })
   featureType: AiFeatureType;
 
-  @Column()
-  providerId: number;
+  @Column({ type: 'int', nullable: true })
+  providerId: number | null;
 
-  @Column({ length: 120 })
-  providerName: string;
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  providerName: string | null;
 
-  @Column({ length: 120 })
-  model: string;
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  model: string | null;
+
+  @Column({ type: 'tinyint', default: false })
+  useMineru: boolean;
+
+  @Column({ type: 'int', nullable: true })
+  mineruConfigId: number | null;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  mineruConfigName: string | null;
 
   @Column({ type: 'text', nullable: true })
   systemPrompt: string | null;
@@ -38,4 +47,3 @@ export class AiFeatureConfig extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   description: string | null;
 }
-

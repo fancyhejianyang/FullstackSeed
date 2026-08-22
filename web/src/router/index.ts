@@ -117,6 +117,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'AI 功能配置', permission: 'Menu.read' },
       },
       {
+        path: 'chat-management/retrieval-configs',
+        name: 'chat-management-retrieval-configs',
+        component: () => import('@/views/knowledge-retrieval-config/Index.vue'),
+        meta: { title: '知识库检索配置', permission: 'Menu.read' },
+      },
+      {
         path: 'chat-management/records',
         name: 'chat-management-records',
         component: () => import('@/views/knowledge-ai-record/Index.vue'),

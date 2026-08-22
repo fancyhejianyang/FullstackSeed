@@ -30,9 +30,23 @@ export class CreateKnowledgeBaseDto {
   @IsOptional()
   description?: string;
 
-  @IsIn(['text', 'pdf', 'word'])
+  @IsString()
   @IsOptional()
-  contentType?: 'text' | 'pdf' | 'word';
+  hitKeywords?: string;
+
+  @IsString()
+  @IsOptional()
+  colloquialDescription?: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  matchPriority?: number;
+
+  @IsIn(['text', 'pdf', 'word', 'image'])
+  @IsOptional()
+  contentType?: 'text' | 'pdf' | 'word' | 'image';
 
   @IsString()
   @IsOptional()
@@ -174,6 +188,20 @@ export class CreateKnowledgeBaseDocumentDto {
   @IsString()
   @IsOptional()
   description?: string;
+
+  @IsString()
+  @IsOptional()
+  hitKeywords?: string;
+
+  @IsString()
+  @IsOptional()
+  colloquialDescription?: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  matchPriority?: number;
 
   @Type(() => Number)
   @IsInt()

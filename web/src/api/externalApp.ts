@@ -7,6 +7,8 @@ export interface ExternalApp {
   domain: string | null;
   aiFeatureConfigId: number | null;
   aiFeatureConfigName: string | null;
+  retrievalConfigId: number | null;
+  retrievalConfigName: string | null;
   isEnabled: boolean;
   description: string | null;
   createdAt: string;
@@ -29,6 +31,7 @@ export interface ExternalAppForm {
   appId?: string;
   domain?: string;
   aiFeatureConfigId?: number | null;
+  retrievalConfigId?: number | null;
   isEnabled?: boolean;
   description?: string;
 }

@@ -76,6 +76,8 @@ export interface InitKnowledgeAiSessionResult {
   model: string;
   aiFeatureConfigId?: number | null;
   aiFeatureConfigName?: string | null;
+  retrievalConfigId?: number | null;
+  retrievalConfigName?: string | null;
 }
 
 export interface AppChatRequestOptions {
@@ -93,6 +95,8 @@ export type KnowledgeAiChatStreamEvent =
         model: string;
         aiFeatureConfigId?: number | null;
         aiFeatureConfigName?: string | null;
+        retrievalConfigId?: number | null;
+        retrievalConfigName?: string | null;
       };
     }
   | {

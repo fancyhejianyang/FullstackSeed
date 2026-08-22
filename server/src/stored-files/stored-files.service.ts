@@ -36,7 +36,8 @@ export class StoredFilesService {
       };
     }
 
-    return this.readRemoteFile(url, fileName);
+    const readableUrl = await this.storageConfigService.resolveReadableUrl(url);
+    return this.readRemoteFile(readableUrl, fileName || this.resolveFileName(url));
   }
 
   private async resolveLocalUploadPath(fileUrl: string) {
@@ -149,6 +150,12 @@ export class StoredFilesService {
     }
     if (lowerName.endsWith('.txt')) return 'text/plain';
     if (lowerName.endsWith('.md')) return 'text/markdown';
+    if (lowerName.endsWith('.png')) return 'image/png';
+    if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) {
+      return 'image/jpeg';
+    }
+    if (lowerName.endsWith('.webp')) return 'image/webp';
+    if (lowerName.endsWith('.bmp')) return 'image/bmp';
     return 'application/octet-stream';
   }
 }

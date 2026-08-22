@@ -67,7 +67,7 @@ export class KnowledgeBasesService {
       .take(pageSize);
     if (query.keyword?.trim()) {
       qb.where(
-        'base.name LIKE :keyword OR base.code LIKE :keyword OR base.description LIKE :keyword',
+        'base.name LIKE :keyword OR base.code LIKE :keyword OR base.description LIKE :keyword OR base.hitKeywords LIKE :keyword OR base.colloquialDescription LIKE :keyword',
         { keyword: `%${query.keyword.trim()}%` },
       );
     }
@@ -104,6 +104,9 @@ export class KnowledgeBasesService {
         name: dto.name.trim(),
         code: dto.code?.trim() ?? '',
         description: dto.description?.trim() || null,
+        hitKeywords: dto.hitKeywords?.trim() || null,
+        colloquialDescription: dto.colloquialDescription?.trim() || null,
+        matchPriority: dto.matchPriority ?? 0,
         contentType,
         contentText:
           contentType === 'text'
@@ -143,6 +146,16 @@ export class KnowledgeBasesService {
     if (dto.code !== undefined) base.code = dto.code.trim();
     if (dto.description !== undefined) {
       base.description = dto.description.trim() || null;
+    }
+    if (dto.hitKeywords !== undefined) {
+      base.hitKeywords = dto.hitKeywords.trim() || null;
+    }
+    if (dto.colloquialDescription !== undefined) {
+      base.colloquialDescription =
+        dto.colloquialDescription.trim() || null;
+    }
+    if (dto.matchPriority !== undefined) {
+      base.matchPriority = dto.matchPriority;
     }
     if (dto.contentType !== undefined) base.contentType = dto.contentType;
     if (dto.contentText !== undefined) {
@@ -450,7 +463,7 @@ export class KnowledgeBasesService {
     }
     if (query.keyword?.trim()) {
       qb.andWhere(
-        '(document.title LIKE :keyword OR document.sourceName LIKE :keyword OR document.content LIKE :keyword)',
+        '(document.title LIKE :keyword OR document.sourceName LIKE :keyword OR document.content LIKE :keyword OR document.hitKeywords LIKE :keyword OR document.colloquialDescription LIKE :keyword)',
         { keyword: `%${query.keyword.trim()}%` },
       );
     }
@@ -478,6 +491,9 @@ export class KnowledgeBasesService {
         content: dto.content?.trim() || null,
         status: dto.status?.trim() || 'draft',
         description: dto.description?.trim() || null,
+        hitKeywords: dto.hitKeywords?.trim() || null,
+        colloquialDescription: dto.colloquialDescription?.trim() || null,
+        matchPriority: dto.matchPriority ?? 0,
         sort: dto.sort ?? 0,
       }),
     );
@@ -576,8 +592,11 @@ export class KnowledgeBasesService {
   ) {
     const parseMode = this.resolveParseMode(dto.parseMode);
     const document = await this.findDocument(id);
+    document.status = 'processing';
+    document.description = `正在${this.getParseModeLabel(parseMode)}内容`;
+    await this.documentRepository.save(document);
     try {
-      return this.parseDocumentByMode(document, dto, parseMode);
+      return await this.parseDocumentByMode(document, dto, parseMode);
     } catch (error) {
       document.status = 'failed';
       document.description = error instanceof Error ? error.message : '解析失败';
@@ -627,13 +646,16 @@ export class KnowledgeBasesService {
     document: KnowledgeBaseDocument,
     dto: ParseKnowledgeBaseDocumentDto,
   ) {
+    const task = await this.mineruConfigsService.createParseTask(
+      dto.fileUrl.trim(),
+      dto.fileName?.trim(),
+    );
+    document.status = 'processing';
+    document.description = `MinerU 解析任务已创建，任务ID：${task.taskId}`;
+    await this.documentRepository.save(document);
     const result = await this.mineruConfigsService.waitForSuccess(
-      (
-        await this.mineruConfigsService.createParseTask(
-          dto.fileUrl.trim(),
-          dto.fileName?.trim(),
-        )
-      ).taskId,
+      task.taskId,
+      task.configId,
     );
     const saved = await this.applyThirdPartyMarkdown(
       document,
@@ -671,6 +693,16 @@ export class KnowledgeBasesService {
     if (dto.status !== undefined) document.status = dto.status.trim() || 'draft';
     if (dto.description !== undefined) {
       document.description = dto.description.trim() || null;
+    }
+    if (dto.hitKeywords !== undefined) {
+      document.hitKeywords = dto.hitKeywords.trim() || null;
+    }
+    if (dto.colloquialDescription !== undefined) {
+      document.colloquialDescription =
+        dto.colloquialDescription.trim() || null;
+    }
+    if (dto.matchPriority !== undefined) {
+      document.matchPriority = dto.matchPriority;
     }
     if (dto.sort !== undefined) document.sort = dto.sort;
     const saved = await this.documentRepository.save(document);
@@ -837,7 +869,7 @@ export class KnowledgeBasesService {
 
     if (parseMode === KNOWLEDGE_PARSE_MODE.manual) {
       return this.documentParsersService.parse({
-        contentType: base.contentType as 'text' | 'pdf' | 'word',
+        contentType: base.contentType as 'text' | 'pdf' | 'word' | 'image',
         contentText: base.contentText,
         fileUrl: base.fileUrl,
         fileName: base.fileName,
@@ -893,6 +925,9 @@ export class KnowledgeBasesService {
     document.content = content.trim();
     document.status = 'parsed';
     document.description = null;
+    document.hitKeywords = base.hitKeywords;
+    document.colloquialDescription = base.colloquialDescription;
+    document.matchPriority = base.matchPriority;
     const saved = await this.documentRepository.save(document);
     base.contentText = content.trim();
     return saved;
@@ -931,6 +966,17 @@ export class KnowledgeBasesService {
     document.status = 'parsed';
     document.sourceType = KNOWLEDGE_PARSE_MODE.mineru;
     if (fileName) document.sourceName = fileName;
+    if (!document.hitKeywords || !document.colloquialDescription) {
+      const base = await this.baseRepository.findOne({
+        where: { id: document.knowledgeBaseId },
+      });
+      document.hitKeywords = document.hitKeywords || base?.hitKeywords || null;
+      document.colloquialDescription =
+        document.colloquialDescription ||
+        base?.colloquialDescription ||
+        null;
+      document.matchPriority = document.matchPriority || base?.matchPriority || 0;
+    }
     let saved = await this.documentRepository.save(document);
     await this.syncBaseParsedContent(saved, content);
     await this.chunkRepository.softDelete({ documentId: saved.id });
@@ -942,9 +988,10 @@ export class KnowledgeBasesService {
 
   private resolveDocumentManualContentType(
     document: KnowledgeBaseDocument,
-  ): 'text' | 'pdf' | 'word' {
+  ): 'text' | 'pdf' | 'word' | 'image' {
     if (document.sourceType === 'pdf') return 'pdf';
     if (document.sourceType === 'word') return 'word';
+    if (document.sourceType === 'image') return 'image';
     return 'text';
   }
 
@@ -982,12 +1029,17 @@ export class KnowledgeBasesService {
       '.pptx',
       '.txt',
       '.md',
+      '.png',
+      '.jpg',
+      '.jpeg',
+      '.webp',
+      '.bmp',
     ]);
     const name = (fileName || this.resolveFileName(fileUrl)).toLowerCase();
     const ext = name.includes('.') ? name.slice(name.lastIndexOf('.')) : '';
     if (!supported.has(ext)) {
       throw new BadRequestException(
-        'MinerU 仅支持 .pdf .doc .docx .xls .xlsx .ppt .pptx .txt .md',
+        '解析仅支持 .pdf .doc .docx .xls .xlsx .ppt .pptx .txt .md .png .jpg .jpeg .webp .bmp',
       );
     }
   }

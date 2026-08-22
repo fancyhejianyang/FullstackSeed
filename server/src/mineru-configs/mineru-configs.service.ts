@@ -11,16 +11,20 @@ import {
   UpdateMineruConfigDto,
 } from './dto/mineru-config.dto';
 import { MineruConfig } from './entities/mineru-config.entity';
+import { StorageConfigService } from '../storage-config/storage-config.service';
 
 interface MineruCreateTaskResponse {
   task_id?: string;
   taskId?: string;
+  taskID?: string;
   id?: string;
-  data?: {
-    task_id?: string;
-    taskId?: string;
-    id?: string;
-  };
+  task_ids?: string[];
+  taskIds?: string[];
+  code?: string | number;
+  message?: string;
+  msg?: string;
+  error?: string | { message?: string };
+  data?: unknown;
 }
 
 interface MineruQueryTaskResponse {
@@ -59,6 +63,7 @@ export class MineruConfigsService {
   constructor(
     @InjectRepository(MineruConfig)
     private readonly configRepository: Repository<MineruConfig>,
+    private readonly storageConfigService: StorageConfigService,
   ) {}
 
   async findAll(query: QueryMineruConfigDto) {
@@ -142,21 +147,37 @@ export class MineruConfigsService {
     return config;
   }
 
+  async findUsableEntity(id: number) {
+    const config = await this.findEntity(id);
+    if (!config.token) {
+      throw new BadRequestException('当前 MinerU 配置未设置访问令牌');
+    }
+    return config;
+  }
+
   async createParseTask(
     fileUrl: string,
     fileName?: string,
+    configId?: number | null,
   ): Promise<MineruCreateTaskResult> {
-    const config = await this.findEnabledEntity();
+    const config = configId
+      ? await this.findUsableEntity(configId)
+      : await this.findEnabledEntity();
+    const readableFileUrl = await this.storageConfigService.resolveReadableUrl(
+      fileUrl,
+      Math.max(config.timeoutMinutes * 60 + 600, 3600),
+    );
+    const resolvedFileName = fileName || this.resolveFileName(fileUrl);
     const response = await fetch(this.buildUrl(config.baseUrl, config.createTaskPath), {
       method: 'POST',
       headers: this.buildHeaders(config),
       body: JSON.stringify({
-        url: fileUrl,
-        file_url: fileUrl,
+        url: readableFileUrl,
+        file_url: readableFileUrl,
         files: [
           {
-            url: fileUrl,
-            file_name: fileName || this.resolveFileName(fileUrl),
+            url: readableFileUrl,
+            file_name: resolvedFileName,
           },
         ],
         model_version: config.modelVersion,
@@ -166,11 +187,11 @@ export class MineruConfigsService {
       }),
     });
     const data = await this.readJson<MineruCreateTaskResponse>(response);
-    const taskId =
-      data.task_id || data.taskId || data.id ||
-      data.data?.task_id || data.data?.taskId || data.data?.id;
+    const taskId = this.extractTaskId(data);
     if (!taskId) {
-      throw new BadRequestException('MinerU 创建任务响应缺少 task_id');
+      throw new BadRequestException(
+        `MinerU 创建任务响应缺少 task_id：${this.buildMineruErrorMessage(data)}`,
+      );
     }
     return {
       taskId,
@@ -184,6 +205,21 @@ export class MineruConfigsService {
 
   async queryParseTask(taskId: string): Promise<MineruTaskStatus> {
     const config = await this.findEnabledEntity();
+    return this.queryParseTaskWithConfig(config, taskId);
+  }
+
+  async queryParseTaskByConfig(
+    taskId: string,
+    configId: number,
+  ): Promise<MineruTaskStatus> {
+    const config = await this.findUsableEntity(configId);
+    return this.queryParseTaskWithConfig(config, taskId);
+  }
+
+  private async queryParseTaskWithConfig(
+    config: MineruConfig,
+    taskId: string,
+  ): Promise<MineruTaskStatus> {
     const path = config.queryTaskPath.replace(
       '{task_id}',
       encodeURIComponent(taskId),
@@ -204,13 +240,15 @@ export class MineruConfigsService {
     };
   }
 
-  async waitForSuccess(taskId: string) {
-    const config = await this.findEnabledEntity();
+  async waitForSuccess(taskId: string, configId?: number | null) {
+    const config = configId
+      ? await this.findUsableEntity(configId)
+      : await this.findEnabledEntity();
     const startedAt = Date.now();
     const timeoutMs = config.timeoutMinutes * 60 * 1000;
     const intervalMs = config.pollIntervalSeconds * 1000;
     while (Date.now() - startedAt <= timeoutMs) {
-      const result = await this.queryParseTask(taskId);
+      const result = await this.queryParseTaskWithConfig(config, taskId);
       if (this.isSuccessStatus(result.status)) return result;
       if (this.isFailedStatus(result.status)) {
         throw new BadRequestException(result.message || 'MinerU 解析任务失败');
@@ -338,6 +376,62 @@ export class MineruConfigsService {
       return JSON.parse(text) as T;
     } catch {
       throw new BadRequestException('MinerU 接口响应不是合法 JSON');
+    }
+  }
+
+  private extractTaskId(value: unknown): string {
+    if (!value) return '';
+    if (typeof value === 'string') return value.trim();
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const taskId = this.extractTaskId(item);
+        if (taskId) return taskId;
+      }
+      return '';
+    }
+    if (typeof value !== 'object') return '';
+
+    const record = value as Record<string, unknown>;
+    const directValue =
+      record.task_id ??
+      record.taskId ??
+      record.taskID ??
+      record.id ??
+      record.job_id ??
+      record.jobId;
+    if (typeof directValue === 'string' && directValue.trim()) {
+      return directValue.trim();
+    }
+
+    const taskIds = record.task_ids ?? record.taskIds;
+    if (Array.isArray(taskIds)) {
+      const taskId = this.extractTaskId(taskIds);
+      if (taskId) return taskId;
+    }
+
+    for (const key of ['data', 'result', 'task', 'tasks']) {
+      const taskId = this.extractTaskId(record[key]);
+      if (taskId) return taskId;
+    }
+    return '';
+  }
+
+  private buildMineruErrorMessage(data: MineruCreateTaskResponse) {
+    const error = data.error;
+    const messageParts = [
+      data.message,
+      data.msg,
+      typeof error === 'string' ? error : error?.message,
+    ].filter(Boolean);
+    const message = messageParts.length ? `${messageParts.join('；')}；` : '';
+    return `${message}响应摘要 ${this.stringifyForError(data)}`;
+  }
+
+  private stringifyForError(value: unknown) {
+    try {
+      return JSON.stringify(value).slice(0, 1000);
+    } catch {
+      return '响应无法序列化';
     }
   }
 

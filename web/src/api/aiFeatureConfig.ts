@@ -7,9 +7,12 @@ export interface AiFeatureConfig {
   id: number;
   name: string;
   featureType: AiFeatureType;
-  providerId: number;
-  providerName: string;
-  model: string;
+  providerId: number | null;
+  providerName: string | null;
+  model: string | null;
+  useMineru: boolean;
+  mineruConfigId: number | null;
+  mineruConfigName: string | null;
   systemPrompt: string | null;
   rules: string | null;
   responseFormat: AiResponseFormat;
@@ -35,8 +38,10 @@ export interface QueryAiFeatureConfigParams {
 export interface AiFeatureConfigForm {
   name: string;
   featureType: AiFeatureType;
-  providerId: number | '';
-  model: string;
+  providerId?: number | '' | null;
+  model?: string;
+  useMineru?: boolean;
+  mineruConfigId?: number | '' | null;
   systemPrompt?: string;
   rules?: string;
   responseFormat?: AiResponseFormat;

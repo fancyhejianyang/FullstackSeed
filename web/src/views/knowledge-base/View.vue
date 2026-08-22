@@ -32,6 +32,7 @@ function getContentTypeLabel(value?: KnowledgeBase['contentType']) {
     text: '文本',
     pdf: 'PDF',
     word: 'Word',
+    image: '图片',
     file: '文件',
     mixed: '混合',
   };
@@ -125,6 +126,15 @@ watch(visible, async (value) => {
             <el-tag :type="rowData?.isEnabled ? 'success' : 'info'">
               {{ rowData?.isEnabled ? '启用' : '停用' }}
             </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="命中关键字">
+            {{ rowData?.hitKeywords || '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="口语化描述">
+            {{ rowData?.colloquialDescription || '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="匹配优先级">
+            {{ rowData?.matchPriority ?? 0 }}
           </el-descriptions-item>
           <el-descriptions-item label="内容类型">
             {{ getContentTypeLabel(rowData?.contentType) }}

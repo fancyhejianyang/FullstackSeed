@@ -69,8 +69,8 @@ export class KnowledgeAiChatService {
       allowDtoConfig: true,
     });
     const result = await this.providersService.callChat({
-      id: dto.providerId ?? config?.providerId,
-      model: dto.model ?? config?.model,
+      id: dto.providerId ?? config?.providerId ?? undefined,
+      model: dto.model ?? config?.model ?? undefined,
       question: dto.question,
       systemPrompt: this.buildSystemMessageContent(dto.systemPrompt, config),
     });
@@ -130,6 +130,8 @@ export class KnowledgeAiChatService {
       model: target.model,
       aiFeatureConfigId: config?.id ?? null,
       aiFeatureConfigName: config?.name ?? null,
+      retrievalConfigId: externalApp?.retrievalConfigId ?? null,
+      retrievalConfigName: externalApp?.retrievalConfigName ?? null,
     });
 
     const messages = await this.buildStreamMessages(dto, config);
@@ -173,6 +175,8 @@ export class KnowledgeAiChatService {
       model: session.model,
       aiFeatureConfigId: config?.id ?? null,
       aiFeatureConfigName: config?.name ?? null,
+      retrievalConfigId: externalApp?.retrievalConfigId ?? null,
+      retrievalConfigName: externalApp?.retrievalConfigName ?? null,
     };
   }
 
@@ -324,8 +328,12 @@ export class KnowledgeAiChatService {
       : await this.featureConfigsService.findEnabledByFeature('chat');
     const useRequestTarget = !options.externalApp;
     const target = await this.providersService.resolveChatTarget({
-      id: useRequestTarget ? dto.providerId ?? config?.providerId : config?.providerId,
-      model: useRequestTarget ? dto.model ?? config?.model : config?.model,
+      id: useRequestTarget
+        ? dto.providerId ?? config?.providerId ?? undefined
+        : config?.providerId ?? undefined,
+      model: useRequestTarget
+        ? dto.model ?? config?.model ?? undefined
+        : config?.model ?? undefined,
     });
     return { target, config };
   }

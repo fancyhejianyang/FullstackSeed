@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { StorageConfigModule } from '../storage-config/storage-config.module';
 import { MineruConfig } from './entities/mineru-config.entity';
 import { MineruConfigsController } from './mineru-configs.controller';
 import { MineruConfigsService } from './mineru-configs.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([MineruConfig])],
+  imports: [TypeOrmModule.forFeature([MineruConfig]), StorageConfigModule],
   controllers: [MineruConfigsController],
   providers: [MineruConfigsService],
   exports: [MineruConfigsService],

@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { StoredFilesService } from '../stored-files/stored-files.service';
 import { PdfDocumentParser } from './parsers/pdf-document.parser';
+import { ImageDocumentParser } from './parsers/image-document.parser';
 import { TextDocumentParser } from './parsers/text-document.parser';
 import { WordDocumentParser } from './parsers/word-document.parser';
 import {
@@ -17,8 +18,9 @@ export class DocumentParsersService {
     textParser: TextDocumentParser,
     pdfParser: PdfDocumentParser,
     wordParser: WordDocumentParser,
+    imageParser: ImageDocumentParser,
   ) {
-    this.parsers = [textParser, pdfParser, wordParser];
+    this.parsers = [textParser, pdfParser, wordParser, imageParser];
   }
 
   async parse(context: DocumentParseContext) {

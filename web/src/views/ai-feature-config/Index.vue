@@ -36,8 +36,9 @@ const responseFormatMap = {
 const columns: TableColumn[] = [
   { prop: 'name', label: '配置名称', minWidth: 180 },
   { prop: 'featureType', label: '功能类型', width: 120, slot: true },
-  { prop: 'providerName', label: '大模型账号', minWidth: 160 },
-  { prop: 'model', label: '模型', minWidth: 160 },
+  { prop: 'executeMode', label: '执行方式', width: 120, slot: true },
+  { prop: 'providerName', label: '配置/账号', minWidth: 160, slot: true },
+  { prop: 'model', label: '模型', minWidth: 160, slot: true },
   { prop: 'responseFormat', label: '返回格式', width: 120, slot: true },
   { prop: 'isEnabled', label: '状态', width: 90, slot: true },
   { prop: 'description', label: '描述', minWidth: 180 },
@@ -113,6 +114,18 @@ function getFeatureLabel(value: AiFeatureType) {
 
       <template #column-featureType="{ row }">
         {{ getFeatureLabel(row.featureType) }}
+      </template>
+
+      <template #column-executeMode="{ row }">
+        {{ row.featureType === 'ocr' && row.useMineru ? 'MinerU' : '模型' }}
+      </template>
+
+      <template #column-providerName="{ row }">
+        {{ row.featureType === 'ocr' && row.useMineru ? row.mineruConfigName || '-' : row.providerName || '-' }}
+      </template>
+
+      <template #column-model="{ row }">
+        {{ row.model || '-' }}
       </template>
 
       <template #column-responseFormat="{ row }">

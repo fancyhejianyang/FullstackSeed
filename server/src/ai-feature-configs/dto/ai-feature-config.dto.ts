@@ -9,6 +9,7 @@ import {
   IsString,
   MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
 import { PartialType } from '@nestjs/swagger';
 import {
@@ -27,15 +28,23 @@ export class CreateAiFeatureConfigDto {
   @IsIn(AI_FEATURE_TYPES)
   featureType: AiFeatureType;
 
+  @ValidateIf(
+    (dto: CreateAiFeatureConfigDto) =>
+      !(dto.featureType === 'ocr' && dto.useMineru),
+  )
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  providerId: number;
+  providerId?: number | null;
 
+  @ValidateIf(
+    (dto: CreateAiFeatureConfigDto) =>
+      !(dto.featureType === 'ocr' && dto.useMineru),
+  )
   @IsString()
   @IsNotEmpty()
   @MaxLength(120)
-  model: string;
+  model?: string | null;
 
   @IsString()
   @IsOptional()
@@ -48,6 +57,19 @@ export class CreateAiFeatureConfigDto {
   @IsIn(AI_RESPONSE_FORMATS)
   @IsOptional()
   responseFormat?: AiResponseFormat;
+
+  @IsBoolean()
+  @IsOptional()
+  useMineru?: boolean;
+
+  @ValidateIf(
+    (dto: CreateAiFeatureConfigDto) =>
+      dto.featureType === 'ocr' && !!dto.useMineru,
+  )
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  mineruConfigId?: number | null;
 
   @IsBoolean()
   @IsOptional()
@@ -97,4 +119,3 @@ export class BatchDeleteAiFeatureConfigDto {
   @Min(1, { each: true })
   ids: number[];
 }
-

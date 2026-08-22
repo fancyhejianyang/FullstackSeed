@@ -23,6 +23,7 @@ const columns: TableColumn[] = [
   { prop: 'name', label: '应用名称', minWidth: 180 },
   { prop: 'appId', label: 'AppId', minWidth: 240, slot: true },
   { prop: 'aiFeatureConfigName', label: 'AI 聊天配置', minWidth: 180, slot: true },
+  { prop: 'retrievalConfigName', label: '知识库检索配置', minWidth: 180, slot: true },
   { prop: 'domain', label: '白名单域名', minWidth: 260, slot: true },
   { prop: 'isEnabled', label: '状态', width: 90, slot: true },
   { prop: 'description', label: '描述', minWidth: 180 },
@@ -112,6 +113,10 @@ function splitDomains(domain: string | null) {
 
       <template #column-aiFeatureConfigName="{ row }">
         {{ row.aiFeatureConfigName || '全局默认' }}
+      </template>
+
+      <template #column-retrievalConfigName="{ row }">
+        {{ row.retrievalConfigName || '不使用知识库' }}
       </template>
 
       <template #column-isEnabled="{ row }">

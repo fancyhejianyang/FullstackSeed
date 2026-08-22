@@ -33,6 +33,12 @@ export class CreateExternalAppDto {
   @Min(1)
   aiFeatureConfigId?: number | null;
 
+  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  retrievalConfigId?: number | null;
+
   @IsBoolean()
   @IsOptional()
   isEnabled?: boolean;

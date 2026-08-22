@@ -1,7 +1,8 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import OSS from 'ali-oss';
 import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
-import { extname, join } from 'node:path';
+import { extname, join, posix } from 'node:path';
 import {
   StorageConfigService,
   type StorageConfig,
@@ -47,19 +48,38 @@ export class UploadsService {
   private async saveFileToOss(
     file: UploadedStorageFile,
     storageConfig: StorageConfig,
-    requestOrigin: string,
+    _requestOrigin: string,
   ): Promise<UploadResult> {
-    /**
-     * OSS/CDN 伪代码连接点：
-     * 1. 根据 storageConfig.provider 创建对应 SDK Client
-     * 2. 使用 bucket / region / endpoint / accessKeyId / accessKeySecret 初始化
-     * 3. const objectKey = `${storageConfig.uploadDir}/${dateDir}/${fileName}`
-     * 4. await client.putObject(objectKey, file.buffer, { contentType: file.mimetype })
-     * 5. return { url: `${storageConfig.publicBaseUrl}/${objectKey}`, ... }
-     *
-     * 当前种子项目未绑定具体云厂商 SDK，因此先回退本地存储，保证接口契约可用。
-     */
-    return this.saveFileAsLocal(file, storageConfig, requestOrigin);
+    if (storageConfig.provider !== 'aliyun-oss') {
+      throw new BadRequestException('当前存储类型暂未接入上传实现');
+    }
+    this.assertAliyunOssConfig(storageConfig);
+
+    const fileName = `${randomUUID()}${this.getSafeExt(file.originalname)}`;
+    const objectKey = this.buildObjectKey(storageConfig.uploadDir, fileName);
+    const client = new OSS({
+      region: storageConfig.region,
+      endpoint: storageConfig.endpoint,
+      accessKeyId: storageConfig.accessKeyId,
+      accessKeySecret: storageConfig.accessKeySecret,
+      bucket: storageConfig.bucket,
+      secure: true,
+    });
+
+    await client.put(objectKey, file.buffer, {
+      mime: file.mimetype || 'application/octet-stream',
+      headers: {
+        'Content-Type': file.mimetype || 'application/octet-stream',
+      },
+    });
+
+    return {
+      url: this.buildOssPublicUrl(storageConfig.publicBaseUrl, objectKey),
+      fileName,
+      originalName: this.normalizeFileName(file.originalname),
+      mimeType: file.mimetype ?? 'application/octet-stream',
+      size: file.size,
+    };
   }
 
   private async saveFileAsLocal(
@@ -100,6 +120,49 @@ export class UploadsService {
     return publicBaseUrl
       ? `${publicBaseUrl.replace(/\/+$/, '')}${pathname}`
       : pathname;
+  }
+
+  private buildOssPublicUrl(publicBaseUrl: string, objectKey: string) {
+    const baseUrl = this.withProtocol(publicBaseUrl);
+    return `${baseUrl.replace(/\/+$/, '')}/${objectKey}`;
+  }
+
+  private buildObjectKey(uploadDir: string, fileName: string) {
+    const now = new Date();
+    const dateDir = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, '0'),
+      String(now.getDate()).padStart(2, '0'),
+    ].join('/');
+    return posix.join(
+      uploadDir.replace(/^\/+|\/+$/g, '') || 'uploads',
+      dateDir,
+      fileName,
+    );
+  }
+
+  private assertAliyunOssConfig(storageConfig: StorageConfig) {
+    const missingFields = [
+      ['公开域名', storageConfig.publicBaseUrl],
+      ['Bucket', storageConfig.bucket],
+      ['Region', storageConfig.region],
+      ['Endpoint', storageConfig.endpoint],
+      ['AccessKey', storageConfig.accessKeyId],
+      ['Secret', storageConfig.accessKeySecret],
+    ]
+      .filter(([, value]) => !value)
+      .map(([label]) => label);
+    if (missingFields.length) {
+      throw new BadRequestException(
+        `阿里云 OSS 配置不完整：${missingFields.join('、')}`,
+      );
+    }
+  }
+
+  private withProtocol(value: string) {
+    const text = value.trim();
+    if (/^https?:\/\//i.test(text)) return text;
+    return `https://${text}`;
   }
 
   private getSafeExt(filename: string) {

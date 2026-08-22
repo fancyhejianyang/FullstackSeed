@@ -16,6 +16,15 @@ export class KnowledgeBase extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   description: string | null;
 
+  @Column({ type: 'text', nullable: true })
+  hitKeywords: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  colloquialDescription: string | null;
+
+  @Column({ type: 'int', default: 0 })
+  matchPriority: number;
+
   @Column({ length: 20, default: 'text' })
   contentType: string;
 

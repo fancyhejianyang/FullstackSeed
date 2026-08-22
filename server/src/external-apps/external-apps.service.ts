@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { randomBytes } from 'crypto';
 import { In, Like, Repository } from 'typeorm';
 import { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-configs.service';
+import { KnowledgeRetrievalConfigsService } from '../knowledge-retrieval-configs/knowledge-retrieval-configs.service';
 import {
   CreateExternalAppDto,
   QueryExternalAppDto,
@@ -21,6 +22,7 @@ export class ExternalAppsService {
     @InjectRepository(ExternalApp)
     private readonly externalAppRepository: Repository<ExternalApp>,
     private readonly featureConfigsService: AiFeatureConfigsService,
+    private readonly retrievalConfigsService: KnowledgeRetrievalConfigsService,
   ) {}
 
   async findAll(query: QueryExternalAppDto) {
@@ -32,6 +34,8 @@ export class ExternalAppsService {
           { name: Like(`%${keyword}%`) },
           { appId: Like(`%${keyword}%`) },
           { domain: Like(`%${keyword}%`) },
+          { aiFeatureConfigName: Like(`%${keyword}%`) },
+          { retrievalConfigName: Like(`%${keyword}%`) },
           { description: Like(`%${keyword}%`) },
         ]
       : {};
@@ -58,6 +62,9 @@ export class ExternalAppsService {
     const config = dto.aiFeatureConfigId
       ? await this.featureConfigsService.findUsableChatConfig(dto.aiFeatureConfigId)
       : null;
+    const retrievalConfig = dto.retrievalConfigId
+      ? await this.retrievalConfigsService.findUsableConfig(dto.retrievalConfigId)
+      : null;
     return this.externalAppRepository.save(
       this.externalAppRepository.create({
         name: dto.name.trim(),
@@ -65,6 +72,8 @@ export class ExternalAppsService {
         domain: this.toNullableText(dto.domain),
         aiFeatureConfigId: config?.id ?? null,
         aiFeatureConfigName: config?.name ?? null,
+        retrievalConfigId: retrievalConfig?.id ?? null,
+        retrievalConfigName: retrievalConfig?.name ?? null,
         isEnabled: dto.isEnabled ?? true,
         description: this.toNullableText(dto.description),
       }),
@@ -91,6 +100,13 @@ export class ExternalAppsService {
         : null;
       app.aiFeatureConfigId = config?.id ?? null;
       app.aiFeatureConfigName = config?.name ?? null;
+    }
+    if (dto.retrievalConfigId !== undefined) {
+      const retrievalConfig = dto.retrievalConfigId
+        ? await this.retrievalConfigsService.findUsableConfig(dto.retrievalConfigId)
+        : null;
+      app.retrievalConfigId = retrievalConfig?.id ?? null;
+      app.retrievalConfigName = retrievalConfig?.name ?? null;
     }
     if (dto.isEnabled !== undefined) app.isEnabled = dto.isEnabled;
     if (dto.description !== undefined) {
@@ -133,6 +149,12 @@ export class ExternalAppsService {
       throw new UnauthorizedException('appId 无效或已停用');
     }
     this.assertDomainAllowed(app, requestDomain);
+    if (app.retrievalConfigId) {
+      const retrievalConfig = await this.retrievalConfigsService.findUsableConfig(
+        app.retrievalConfigId,
+      );
+      app.retrievalConfigName = retrievalConfig.name;
+    }
     return app;
   }
 

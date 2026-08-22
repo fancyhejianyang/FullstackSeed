@@ -17,9 +17,18 @@ interface ChatCompletionResponse {
   choices?: Array<{
     message?: {
       role?: string;
-      content?: string;
+      content?: unknown;
+      reasoning_content?: unknown;
     };
+    delta?: {
+      content?: unknown;
+    };
+    text?: unknown;
   }>;
+  output_text?: unknown;
+  output?: unknown;
+  text?: unknown;
+  answer?: unknown;
 }
 
 interface ChatCompletionStreamResponse {
@@ -62,6 +71,12 @@ export interface KnowledgeAiChatStreamPayload {
   target: KnowledgeAiChatTarget;
   messages: KnowledgeAiChatMessagePayload[];
   onDelta: (content: string) => void;
+}
+
+export interface KnowledgeAiVisionOcrPayload {
+  target: KnowledgeAiChatTarget;
+  imageDataUrls: string[];
+  systemPrompt?: string | null;
 }
 
 export interface KnowledgeAiChatCallResult {
@@ -165,7 +180,32 @@ export class KnowledgeAiProvidersService {
       providerId: provider.id,
       providerName: provider.name,
       model: this.resolveModel(
-        provider.textModels || provider.models,
+        this.joinModelTexts(provider.models, provider.textModels),
+        payload.model,
+      ),
+      url: this.buildChatUrl(provider),
+      secretKey: provider.secretKey,
+    };
+  }
+
+  async resolveVisionTarget(
+    payload: KnowledgeAiChatTargetPayload,
+  ): Promise<KnowledgeAiChatTarget> {
+    const provider = payload.id
+      ? await this.findEntity(payload.id)
+      : await this.findEnabledEntity();
+    if (!provider.isEnabled) {
+      throw new BadRequestException('该大模型账号未启用');
+    }
+    if (!provider.secretKey) {
+      throw new BadRequestException('该大模型账号未配置密钥');
+    }
+
+    return {
+      providerId: provider.id,
+      providerName: provider.name,
+      model: this.resolveModel(
+        this.joinModelTexts(provider.visionModels, provider.models),
         payload.model,
       ),
       url: this.buildChatUrl(provider),
@@ -206,7 +246,7 @@ export class KnowledgeAiProvidersService {
       }
 
       const data = (await response.json()) as ChatCompletionResponse;
-      const answer = data.choices?.[0]?.message?.content ?? '';
+      const answer = this.extractResponseContent(data);
       if (!answer) {
         throw new BadRequestException('模型接口响应缺少 choices[0].message.content');
       }
@@ -284,6 +324,62 @@ export class KnowledgeAiProvidersService {
         answer,
         errorMessage:
           error instanceof Error ? error.message : '模型接口流式调用失败',
+        elapsedMilliseconds: Date.now() - startedAt,
+      };
+    }
+  }
+
+  async callVisionOcr(
+    payload: KnowledgeAiVisionOcrPayload,
+  ): Promise<KnowledgeAiChatCallResult> {
+    const startedAt = Date.now();
+    try {
+      const response = await fetch(payload.target.url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${payload.target.secretKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: payload.target.model,
+          messages: this.buildVisionOcrMessages(payload),
+          temperature: 0,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new BadRequestException(
+          `视觉模型 OCR 调用失败：${response.status} ${errorText}`,
+        );
+      }
+
+      const data = (await response.json()) as ChatCompletionResponse;
+      const answer = this.extractResponseContent(data);
+      if (!answer) {
+        throw new BadRequestException(
+          `视觉模型 OCR 响应缺少识别内容：${this.stringifyForError(data)}`,
+        );
+      }
+
+      return {
+        isSuccess: true,
+        providerId: payload.target.providerId,
+        providerName: payload.target.providerName,
+        model: payload.target.model,
+        answer,
+        errorMessage: null,
+        elapsedMilliseconds: Date.now() - startedAt,
+      };
+    } catch (error) {
+      return {
+        isSuccess: false,
+        providerId: payload.target.providerId,
+        providerName: payload.target.providerName,
+        model: payload.target.model,
+        answer: '',
+        errorMessage:
+          error instanceof Error ? error.message : '视觉模型 OCR 调用失败',
         elapsedMilliseconds: Date.now() - startedAt,
       };
     }
@@ -367,9 +463,13 @@ export class KnowledgeAiProvidersService {
   }
 
   private buildChatUrl(provider: KnowledgeAiProvider) {
-    return `${provider.apiUrl.replace(/\/+$/, '')}/${(
-      provider.chatApiPath || 'v1/chat/completions'
-    ).replace(/^\/+/, '')}`;
+    const apiUrl = provider.apiUrl.replace(/\/+$/, '');
+    const chatPath = (provider.chatApiPath || 'v1/chat/completions').replace(
+      /^\/+/,
+      '',
+    );
+    if (/\/chat\/completions$/.test(apiUrl)) return apiUrl;
+    return `${apiUrl}/${chatPath}`;
   }
 
   private buildQuestionMessages(
@@ -389,12 +489,97 @@ export class KnowledgeAiProvidersService {
     ];
   }
 
+  private buildVisionOcrMessages(payload: KnowledgeAiVisionOcrPayload) {
+    const prompt =
+      payload.systemPrompt?.trim() ||
+      '你是 OCR 文档识别助手。请识别图片中的全部文字，保持原文顺序，适合保存为知识库正文。';
+    return [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: `${prompt}\n\n请识别以下图片中的文字。只返回识别结果，可用 Markdown 保留标题、列表和表格结构，不要添加解释。`,
+          },
+          ...payload.imageDataUrls.map((url) => ({
+            type: 'image_url',
+            image_url: { url },
+          })),
+        ],
+      },
+    ];
+  }
+
   private resolveModel(models: string | null, requested?: string) {
     const available = this.parseModels(models);
     if (!available.length) return requested || 'qwen-plus';
     if (!requested) return available[0].code;
     if (available.some((item) => item.code === requested)) return requested;
     throw new BadRequestException('调用模型不在该账号模型列表中');
+  }
+
+  private extractResponseContent(data: ChatCompletionResponse) {
+    const firstChoice = data.choices?.[0];
+    const output = this.asRecord(data.output);
+    const outputChoices = Array.isArray(output?.choices)
+      ? output.choices
+      : undefined;
+    const outputFirstChoice = this.asRecord(outputChoices?.[0]);
+    const outputMessage = this.asRecord(outputFirstChoice?.message);
+
+    return (
+      this.readMessageContent(firstChoice?.message?.content) ||
+      this.readMessageContent(firstChoice?.delta?.content) ||
+      this.readMessageContent(firstChoice?.text) ||
+      this.readMessageContent(data.output_text) ||
+      this.readMessageContent(outputMessage?.content) ||
+      this.readMessageContent(outputFirstChoice?.text) ||
+      this.readMessageContent(output?.text) ||
+      this.readMessageContent(data.text) ||
+      this.readMessageContent(data.answer) ||
+      ''
+    );
+  }
+
+  private readMessageContent(content?: unknown): string {
+    if (!content) return '';
+    if (typeof content === 'string') return content.trim();
+    if (typeof content === 'number' || typeof content === 'boolean') {
+      return String(content);
+    }
+    return content
+      ? Array.isArray(content)
+        ? content
+            .map((item) => this.readMessageContent(item))
+            .filter(Boolean)
+            .join('')
+        : this.readObjectContent(content)
+      : '';
+  }
+
+  private readObjectContent(content: unknown) {
+    const record = this.asRecord(content);
+    if (!record) return '';
+    return (
+      this.readMessageContent(record.text) ||
+      this.readMessageContent(record.content) ||
+      this.readMessageContent(record.value) ||
+      ''
+    ).trim();
+  }
+
+  private asRecord(value: unknown): Record<string, unknown> | null {
+    return value && typeof value === 'object'
+      ? (value as Record<string, unknown>)
+      : null;
+  }
+
+  private stringifyForError(value: unknown) {
+    try {
+      return JSON.stringify(value).slice(0, 1000);
+    } catch {
+      return '响应无法序列化';
+    }
   }
 
   private parseModels(models: string | null) {
@@ -410,6 +595,13 @@ export class KnowledgeAiProvidersService {
         };
       })
       .filter((item) => item.code);
+  }
+
+  private joinModelTexts(...values: Array<string | null | undefined>) {
+    return values
+      .map((item) => item?.trim())
+      .filter(Boolean)
+      .join('\n');
   }
 
   private toNullableText(value?: string) {

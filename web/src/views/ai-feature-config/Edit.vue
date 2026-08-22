@@ -15,6 +15,10 @@ import {
   getKnowledgeAiProviders,
   type KnowledgeAiProvider,
 } from '@/api/knowledgeAiProvider';
+import {
+  getMineruConfigs,
+  type MineruConfig,
+} from '@/api/mineruConfig';
 
 const props = defineProps<{
   row?: AiFeatureConfig | null;
@@ -27,12 +31,15 @@ const loading = ref(false);
 const submitting = ref(false);
 const formRef = ref<InstanceType<typeof Form>>();
 const providers = ref<KnowledgeAiProvider[]>([]);
+const mineruConfigs = ref<MineruConfig[]>([]);
 
 const form = reactive<AiFeatureConfigForm>({
   name: '',
   featureType: 'chat',
   providerId: '',
   model: '',
+  useMineru: false,
+  mineruConfigId: '',
   systemPrompt: '',
   rules: '',
   responseFormat: 'text',
@@ -54,78 +61,128 @@ const providerOptions = computed(() =>
   })),
 );
 
+const mineruConfigOptions = computed(() =>
+  mineruConfigs.value.map((item) => ({
+    label: item.name,
+    value: item.id,
+  })),
+);
+
 const selectedProvider = computed(() =>
   providers.value.find((item) => item.id === Number(form.providerId)),
 );
 
+const isMineruOcr = computed(() => form.featureType === 'ocr' && !!form.useMineru);
+
 const modelOptions = computed(() => getModelOptions(selectedProvider.value, form.featureType));
 
-const fields = computed<FormField[]>(() => [
-  { prop: 'name', label: '配置名称', type: 'input', placeholder: '如 聊天默认配置' },
-  {
-    prop: 'featureType',
-    label: '功能类型',
-    type: 'select',
-    options: featureTypeOptions,
-  },
-  {
-    prop: 'providerId',
-    label: '大模型账号',
-    type: 'select',
-    options: providerOptions,
-  },
-  {
-    prop: 'model',
-    label: '模型',
-    type: 'select',
-    options: modelOptions,
-    placeholder: '请选择模型',
-  },
-  {
-    prop: 'systemPrompt',
-    label: '提示词',
-    type: 'textarea',
-    rows: 5,
-    placeholder: '该功能默认系统提示词，可被测试请求临时覆盖',
-  },
-  {
-    prop: 'rules',
-    label: '规则',
-    type: 'textarea',
-    rows: 4,
-    placeholder: '如温度、口吻、禁止输出内容等业务规则说明',
-  },
-  {
-    prop: 'responseFormat',
-    label: '返回格式',
-    type: 'select',
-    options: [
-      { label: '文本', value: 'text' },
-      { label: 'JSON', value: 'json' },
-      { label: 'Markdown', value: 'markdown' },
-    ],
-  },
-  {
-    prop: 'isEnabled',
-    label: '是否启用',
-    component: 'Switch',
-    componentProps: { activeText: '启用', inactiveText: '停用' },
-  },
-  { prop: 'description', label: '描述', type: 'textarea', rows: 3 },
-]);
+const fields = computed<FormField[]>(() => {
+  const baseFields: FormField[] = [
+    { prop: 'name', label: '配置名称', type: 'input', placeholder: '如 聊天默认配置' },
+    {
+      prop: 'featureType',
+      label: '功能类型',
+      type: 'select',
+      options: featureTypeOptions,
+    },
+  ];
 
-const rules: FormRules = {
+  if (form.featureType === 'ocr') {
+    baseFields.push({
+      prop: 'useMineru',
+      label: 'OCR 引擎',
+      component: 'Switch',
+      componentProps: {
+        activeText: 'MinerU',
+        inactiveText: '视觉模型',
+      },
+    });
+  }
+
+  if (isMineruOcr.value) {
+    baseFields.push({
+      prop: 'mineruConfigId',
+      label: 'MinerU 配置',
+      type: 'select',
+      options: mineruConfigOptions,
+      placeholder: '请选择 MinerU 配置',
+    });
+  }
+
+  if (!isMineruOcr.value) {
+    baseFields.push(
+      {
+        prop: 'providerId',
+        label: '大模型账号',
+        type: 'select',
+        options: providerOptions,
+      },
+      {
+        prop: 'model',
+        label: '模型',
+        type: 'select',
+        options: modelOptions,
+        placeholder: '请选择模型',
+      },
+    );
+  }
+
+  return [
+    ...baseFields,
+    {
+      prop: 'systemPrompt',
+      label: '提示词',
+      type: 'textarea',
+      rows: 5,
+      placeholder: isMineruOcr.value
+        ? '使用 MinerU 时可作为 OCR 配置说明保留'
+        : '该功能默认系统提示词，可被测试请求临时覆盖',
+    },
+    {
+      prop: 'rules',
+      label: '规则',
+      type: 'textarea',
+      rows: 4,
+      placeholder: '如温度、口吻、禁止输出内容等业务规则说明',
+    },
+    {
+      prop: 'responseFormat',
+      label: '返回格式',
+      type: 'select',
+      options: [
+        { label: '文本', value: 'text' },
+        { label: 'JSON', value: 'json' },
+        { label: 'Markdown', value: 'markdown' },
+      ],
+    },
+    {
+      prop: 'isEnabled',
+      label: '是否启用',
+      component: 'Switch',
+      componentProps: { activeText: '启用', inactiveText: '停用' },
+    },
+    { prop: 'description', label: '描述', type: 'textarea', rows: 3 },
+  ];
+});
+
+const rules = computed<FormRules>(() => ({
   name: [{ required: true, message: '请输入配置名称', trigger: 'blur' }],
   featureType: [{ required: true, message: '请选择功能类型', trigger: 'change' }],
-  providerId: [{ required: true, message: '请选择大模型账号', trigger: 'change' }],
-  model: [{ required: true, message: '请选择模型', trigger: 'change' }],
-};
+  ...(isMineruOcr.value
+    ? {
+        mineruConfigId: [{ required: true, message: '请选择 MinerU 配置', trigger: 'change' }],
+      }
+    : {
+        providerId: [{ required: true, message: '请选择大模型账号', trigger: 'change' }],
+        model: [{ required: true, message: '请选择模型', trigger: 'change' }],
+      }),
+}));
 
 watch(visible, async (value) => {
   if (!value) return;
   loading.value = true;
   try {
-    await fetchProviders();
+    await fetchOptions();
     if (props.row?.id) {
       fillForm(await getAiFeatureConfig(props.row.id));
     } else {
@@ -137,8 +194,14 @@ watch(visible, async (value) => {
 });
 
 watch(
-  () => [form.featureType, form.providerId, providers.value.length],
+  () => [form.featureType, form.providerId, form.useMineru, providers.value.length],
   () => {
+    if (isMineruOcr.value) {
+      form.providerId = '';
+      form.model = '';
+      return;
+    }
+    form.mineruConfigId = '';
     const options = modelOptions.value;
     if (options.length && !options.some((item) => item.value === form.model)) {
       form.model = '';
@@ -146,9 +209,13 @@ watch(
   },
 );
 
-async function fetchProviders() {
-  const result = await getKnowledgeAiProviders({ page: 1, pageSize: 200 });
-  providers.value = result.list;
+async function fetchOptions() {
+  const [providerResult, mineruResult] = await Promise.all([
+    getKnowledgeAiProviders({ page: 1, pageSize: 200 }),
+    getMineruConfigs({ page: 1, pageSize: 200 }),
+  ]);
+  providers.value = providerResult.list;
+  mineruConfigs.value = mineruResult.list;
 }
 
 function resetForm() {
@@ -156,6 +223,8 @@ function resetForm() {
   form.featureType = 'chat';
   form.providerId = '';
   form.model = '';
+  form.useMineru = false;
+  form.mineruConfigId = '';
   form.systemPrompt = '';
   form.rules = '';
   form.responseFormat = 'text';
@@ -166,8 +235,10 @@ function resetForm() {
 function fillForm(data: AiFeatureConfig) {
   form.name = data.name ?? '';
   form.featureType = data.featureType;
-  form.providerId = data.providerId;
+  form.providerId = data.providerId ?? '';
   form.model = data.model ?? '';
+  form.useMineru = !!data.useMineru;
+  form.mineruConfigId = data.mineruConfigId ?? '';
   form.systemPrompt = data.systemPrompt ?? '';
   form.rules = data.rules ?? '';
   form.responseFormat = data.responseFormat ?? 'text';
@@ -179,8 +250,10 @@ function buildPayload(): AiFeatureConfigForm {
   return {
     name: form.name.trim(),
     featureType: form.featureType,
-    providerId: Number(form.providerId),
-    model: form.model.trim(),
+    providerId: isMineruOcr.value ? null : Number(form.providerId),
+    model: isMineruOcr.value ? '' : form.model?.trim(),
+    useMineru: !!form.useMineru,
+    mineruConfigId: isMineruOcr.value ? Number(form.mineruConfigId) : null,
     systemPrompt: form.systemPrompt?.trim(),
     rules: form.rules?.trim(),
     responseFormat: form.responseFormat,
@@ -209,12 +282,16 @@ async function handleSubmit() {
 
 function getModelText(provider: KnowledgeAiProvider | undefined, featureType: AiFeatureType) {
   if (!provider) return '';
-  if (featureType === 'chat') return provider.textModels || provider.models;
-  if (featureType === 'ocr') return provider.visionModels || provider.models;
-  if (featureType === 'embedding') return provider.embeddingModels || provider.models;
-  return [provider.visionModels, provider.textModels, provider.models]
-    .filter(Boolean)
-    .join('\n');
+  if (featureType === 'chat') {
+    return joinModelTexts(provider.models, provider.textModels);
+  }
+  if (featureType === 'ocr') {
+    return joinModelTexts(provider.visionModels, provider.models);
+  }
+  if (featureType === 'embedding') {
+    return joinModelTexts(provider.embeddingModels, provider.models);
+  }
+  return joinModelTexts(provider.visionModels, provider.textModels, provider.models);
 }
 
 function getModelOptions(provider: KnowledgeAiProvider | undefined, featureType: AiFeatureType) {
@@ -245,6 +322,14 @@ function parseModelText(value: string) {
       };
     })
     .filter((item) => item.code);
+}
+
+function joinModelTexts(...values: Array<string | null | undefined>) {
+  // 账号的“模型列表”是通用池，功能模型是补充/精简池；这里合并后由 getModelOptions 去重。
+  return values
+    .map((item) => item?.trim())
+    .filter(Boolean)
+    .join('\n');
 }
 </script>
 

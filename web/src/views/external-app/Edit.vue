@@ -14,6 +14,10 @@ import {
   getAiFeatureConfigs,
   type AiFeatureConfig,
 } from '@/api/aiFeatureConfig';
+import {
+  getKnowledgeRetrievalConfigs,
+  type KnowledgeRetrievalConfig,
+} from '@/api/knowledgeRetrievalConfig';
 
 const props = defineProps<{
   row?: ExternalApp | null;
@@ -26,12 +30,14 @@ const loading = ref(false);
 const submitting = ref(false);
 const formRef = ref<InstanceType<typeof Form>>();
 const chatConfigs = ref<AiFeatureConfig[]>([]);
+const retrievalConfigs = ref<KnowledgeRetrievalConfig[]>([]);
 
 const form = reactive<ExternalAppForm>({
   name: '',
   appId: '',
   domain: '',
   aiFeatureConfigId: null,
+  retrievalConfigId: null,
   isEnabled: true,
   description: '',
 });
@@ -48,11 +54,21 @@ const fields = computed<FormField[]>(() => [
     prop: 'aiFeatureConfigId',
     label: 'AI 聊天配置',
     type: 'select',
-    placeholder: '不选则使用全局默认',
+    placeholder: '请选择 AI 聊天配置',
+    options: chatConfigs.value.map((item) => ({
+      label: `${item.name}（${item.providerName || '-'} / ${item.model || '-'}）`,
+      value: item.id,
+    })),
+  },
+  {
+    prop: 'retrievalConfigId',
+    label: '知识库检索配置',
+    type: 'select',
+    placeholder: '不使用知识库检索',
     options: [
-      { label: '全局默认', value: '' },
-      ...chatConfigs.value.map((item) => ({
-        label: item.name,
+      { label: '不使用知识库检索', value: '' },
+      ...retrievalConfigs.value.map((item) => ({
+        label: `${item.name}（${getRetrievalModeText(item.retrievalMode)}）`,
         value: item.id,
       })),
     ],
@@ -75,13 +91,18 @@ const fields = computed<FormField[]>(() => [
 
 const rules: FormRules = {
   name: [{ required: true, message: '请输入应用名称', trigger: 'blur' }],
+  aiFeatureConfigId: [
+    { required: true, message: '请选择 AI 聊天配置', trigger: 'change' },
+  ],
 };
 
 function resetForm() {
   form.name = '';
   form.appId = '';
   form.domain = '';
-  form.aiFeatureConfigId = null;
+  form.aiFeatureConfigId = chatConfigs.value.length === 1 ? chatConfigs.value[0].id : null;
+  form.retrievalConfigId =
+    retrievalConfigs.value.length === 1 ? retrievalConfigs.value[0].id : null;
   form.isEnabled = true;
   form.description = '';
 }
@@ -90,7 +111,12 @@ function fillForm(data: ExternalApp) {
   form.name = data.name ?? '';
   form.appId = data.appId ?? '';
   form.domain = data.domain ?? '';
-  form.aiFeatureConfigId = data.aiFeatureConfigId ?? null;
+  form.aiFeatureConfigId =
+    data.aiFeatureConfigId ??
+    (chatConfigs.value.length === 1 ? chatConfigs.value[0].id : null);
+  form.retrievalConfigId =
+    data.retrievalConfigId ??
+    (retrievalConfigs.value.length === 1 ? retrievalConfigs.value[0].id : null);
   form.isEnabled = !!data.isEnabled;
   form.description = data.description ?? '';
 }
@@ -116,12 +142,22 @@ watch(visible, async (value) => {
 });
 
 async function fetchChatConfigs() {
-  const result = await getAiFeatureConfigs({
-    page: 1,
-    pageSize: 200,
-    featureType: 'chat',
-  });
-  chatConfigs.value = result.list.filter((item) => item.isEnabled);
+  const [chatResult, retrievalResult] = await Promise.all([
+    getAiFeatureConfigs({
+      page: 1,
+      pageSize: 200,
+      featureType: 'chat',
+    }),
+    getKnowledgeRetrievalConfigs({
+      page: 1,
+      pageSize: 200,
+    }),
+  ]);
+  chatConfigs.value = chatResult.list.filter((item) => item.isEnabled);
+  retrievalConfigs.value = retrievalResult.list.filter((item) => item.isEnabled);
+  if (!chatConfigs.value.length) {
+    ElMessage.warning('请先新增并启用聊天类型的 AI 功能配置');
+  }
 }
 
 function buildPayload() {
@@ -129,8 +165,9 @@ function buildPayload() {
     name: form.name.trim(),
     appId: form.appId?.trim(),
     domain: form.domain?.trim(),
-    aiFeatureConfigId: form.aiFeatureConfigId
-      ? Number(form.aiFeatureConfigId)
+    aiFeatureConfigId: Number(form.aiFeatureConfigId),
+    retrievalConfigId: form.retrievalConfigId
+      ? Number(form.retrievalConfigId)
       : null,
     isEnabled: form.isEnabled,
     description: form.description?.trim(),
@@ -141,6 +178,10 @@ function buildPayload() {
 
 async function handleSubmit() {
   await formRef.value?.validate();
+  if (!form.aiFeatureConfigId) {
+    ElMessage.warning('请选择 AI 聊天配置');
+    return;
+  }
   submitting.value = true;
   try {
     if (props.row?.id) {
@@ -155,6 +196,15 @@ async function handleSubmit() {
   } finally {
     submitting.value = false;
   }
+}
+
+function getRetrievalModeText(mode: string) {
+  const map: Record<string, string> = {
+    fullText: '全文检索',
+    vector: '向量检索',
+    hybrid: '混合检索',
+  };
+  return map[mode] || mode;
 }
 </script>
 

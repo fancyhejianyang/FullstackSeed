@@ -29,6 +29,9 @@ const form = reactive({
   categoryId: '' as string | number,
   name: '',
   code: '',
+  hitKeywords: '',
+  colloquialDescription: '',
+  matchPriority: 0,
   contentType: 'text' as KnowledgeBase['contentType'],
   contentText: '',
   contentFile: '',
@@ -41,6 +44,7 @@ const contentTypeOptions = [
   { label: '文本', value: 'text' },
   { label: 'PDF', value: 'pdf' },
   { label: 'Word', value: 'word' },
+  { label: '图片', value: 'image' },
 ];
 
 const categoryOptions = computed(() => flattenCategoryOptions(categoryTree.value));
@@ -55,6 +59,26 @@ const baseFields = computed<FormField[]>(() => [
   },
   { prop: 'name', label: '名称', type: 'input' },
   { prop: 'code', label: '编码', type: 'input' },
+  {
+    prop: 'hitKeywords',
+    label: '命中关键字',
+    type: 'textarea',
+    rows: 3,
+    placeholder: '多个关键字可用逗号、空格或换行分隔',
+  },
+  {
+    prop: 'colloquialDescription',
+    label: '口语化描述',
+    type: 'textarea',
+    rows: 3,
+    placeholder: '如用户可能会说的问法、简称、别名',
+  },
+  {
+    prop: 'matchPriority',
+    label: '匹配优先级',
+    component: 'InputNumber',
+    componentProps: { mode: 'integer', min: 0, max: 9999 },
+  },
   {
     prop: 'isEnabled',
     label: '状态',
@@ -81,7 +105,7 @@ const contentFields = computed<FormField[]>(() => [
       }
     : {
         prop: 'contentFile',
-        label: form.contentType === 'pdf' ? '上传 PDF' : '上传 Word',
+        label: getUploadLabel(form.contentType),
         slot: true,
       },
 ]);
@@ -117,8 +141,24 @@ const rules: FormRules = {
 };
 
 const fileAccept = computed(() =>
-  form.contentType === 'pdf' ? '.pdf' : '.doc,.docx',
+  form.contentType === 'pdf'
+    ? '.pdf'
+    : form.contentType === 'image'
+      ? '.png,.jpg,.jpeg,.webp,.bmp'
+      : '.doc,.docx',
 );
+
+const uploadDragText = computed(() => {
+  if (form.contentType === 'pdf') return '上传 PDF 文件';
+  if (form.contentType === 'image') return '上传图片文件';
+  return '上传 Word 文件';
+});
+
+function getUploadLabel(contentType: KnowledgeBase['contentType']) {
+  if (contentType === 'pdf') return '上传 PDF';
+  if (contentType === 'image') return '上传图片';
+  return '上传 Word';
+}
 
 function flattenCategoryOptions(
   nodes: KnowledgeBaseCategoryTreeNode[],
@@ -139,6 +179,9 @@ function resetForm() {
     categoryId: '',
     name: '',
     code: '',
+    hitKeywords: '',
+    colloquialDescription: '',
+    matchPriority: 0,
     contentType: 'text',
     contentText: '',
     contentFile: '',
@@ -154,6 +197,9 @@ function fillForm(row: KnowledgeBase) {
     categoryId: row.categoryId ?? '',
     name: row.name ?? '',
     code: row.code ?? '',
+    hitKeywords: row.hitKeywords ?? '',
+    colloquialDescription: row.colloquialDescription ?? '',
+    matchPriority: row.matchPriority ?? 0,
     contentType: row.contentType ?? 'text',
     contentText: row.contentText ?? '',
     contentFile: '',
@@ -204,6 +250,9 @@ async function handleSubmit() {
       categoryId: Number(form.categoryId),
       name: form.name,
       code: form.code,
+      hitKeywords: form.hitKeywords,
+      colloquialDescription: form.colloquialDescription,
+      matchPriority: Number(form.matchPriority || 0),
       contentType: form.contentType,
       contentText: form.contentType === 'text' ? form.contentText : undefined,
       fileName: form.contentType === 'text' ? undefined : form.fileName,
@@ -259,7 +308,7 @@ onMounted(fetchCategories);
             v-model="form.fileUrl"
             v-model:name="form.fileName"
             :accept="fileAccept"
-            :drag-text="form.contentType === 'pdf' ? '上传 PDF 文件' : '上传 Word 文件'"
+            :drag-text="uploadDragText"
           />
         </template>
       </Form>

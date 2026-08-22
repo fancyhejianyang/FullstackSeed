@@ -6,7 +6,10 @@ export interface KnowledgeBase {
   name: string;
   code: string;
   description: string | null;
-  contentType: 'text' | 'pdf' | 'word';
+  hitKeywords: string | null;
+  colloquialDescription: string | null;
+  matchPriority: number;
+  contentType: 'text' | 'pdf' | 'word' | 'image';
   contentText: string | null;
   fileName: string;
   fileUrl: string;
@@ -29,6 +32,9 @@ export interface KnowledgeBaseCategory {
   name: string;
   code: string;
   description: string | null;
+  hitKeywords: string | null;
+  colloquialDescription: string | null;
+  matchPriority: number;
   sort: number;
   createdAt: string;
   updatedAt: string;
@@ -153,6 +159,9 @@ export type KnowledgeBaseForm = Pick<
   | 'name'
   | 'code'
   | 'description'
+  | 'hitKeywords'
+  | 'colloquialDescription'
+  | 'matchPriority'
   | 'contentType'
   | 'contentText'
   | 'fileName'
@@ -176,6 +185,9 @@ export type KnowledgeBaseDocumentForm = Pick<
   | 'content'
   | 'status'
   | 'description'
+  | 'hitKeywords'
+  | 'colloquialDescription'
+  | 'matchPriority'
   | 'sort'
 >;
 

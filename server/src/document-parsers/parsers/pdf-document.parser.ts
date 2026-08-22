@@ -46,7 +46,7 @@ export class PdfDocumentParser implements DocumentParser {
     const text = this.normalizeText(result.text);
     if (text) return text;
 
-    const ocrResult = this.documentOcrService.recognizePdf(context);
+    const ocrResult = await this.documentOcrService.recognizePdf(context);
     return this.normalizeText(ocrResult.text);
   }
 

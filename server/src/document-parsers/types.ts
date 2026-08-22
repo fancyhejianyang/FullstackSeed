@@ -1,4 +1,4 @@
-export type DocumentParseContentType = 'text' | 'pdf' | 'word';
+export type DocumentParseContentType = 'text' | 'pdf' | 'word' | 'image';
 
 export interface DocumentParseContext {
   contentType: DocumentParseContentType;

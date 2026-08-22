@@ -19,6 +19,12 @@ export class ExternalApp extends BaseEntity {
   @Column({ type: 'varchar', length: 120, nullable: true })
   aiFeatureConfigName: string | null;
 
+  @Column({ type: 'int', nullable: true })
+  retrievalConfigId: number | null;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  retrievalConfigName: string | null;
+
   @Column({ type: 'tinyint', default: true })
   isEnabled: boolean;
 
