@@ -1,5 +1,527 @@
 # CHANGELOG
 
+### 2026-08-22 强化 AI 自动提交为强制规则
+- 新增：无
+- 修改：
+  - `AGENTS.md`（Agent 工作规则第 7 条由“默认自动提交”改为“强制自动提交（必做项）”：每次改动完成后必须自动 git commit 并填写描述改动的 commit message，仅用户明确要求“不提交”时才可跳过）
+  - `CHANGELOG.md`（追加本次自动提交规则强化快照）
+- 删除：无
+- 说明：规则文本中的 commit message 示例（如 `docs: 强化自动提交规则`）仅示意，实际提交需按改动内容填写。
+
+### 2026-08-22 本地 OCR Worker 支持复用与启动预热
+- 新增：无
+- 修改：
+  - `server/src/document-ocr/document-ocr.service.ts`（Tesseract Worker 改为单例复用，支持 `TESSERACT_WARMUP_ON_START=true` 在服务启动时异步预热；同一 Worker 的识别任务串行排队；PDF OCR 页面渲染依赖提示改为明确要求 `PDFParse.getScreenshot` 能力）
+  - `server/.env.example`（补充本地 OCR 语言、语言包路径、超时、远程下载和启动预热开关示例）
+  - `CHANGELOG.md`（追加本次本地 OCR Worker 生命周期优化快照）
+- 删除：无
+- 说明：`loadPdfParseClass` 不是普通文本提取逻辑，而是 OCR 兜底时用于把 PDF 页面渲染成图片；普通文本 PDF 仍由 PDF 文本解析器先处理。启动预热失败只写日志，不阻断服务启动，后续请求仍可重试初始化。
+
+### 2026-08-21 PDF 手动 OCR 页数写入手动分片配置
+- 新增：无
+- 修改：
+  - `server/src/knowledge-chunk-configs/entities/knowledge-chunk-config.entity.ts`（分片配置新增 `pdfOcrMaxPages`，默认 8 页）
+  - `server/src/knowledge-chunk-configs/dto/knowledge-chunk-config.dto.ts`、`server/src/knowledge-chunk-configs/knowledge-chunk-configs.service.ts`（新增字段校验与保存逻辑）
+  - `server/src/document-ocr/document-ocr.module.ts`、`server/src/document-ocr/document-ocr.service.ts`（PDF 手动 OCR 渲染页数读取默认手动配置，不再固定 8 页）
+  - `web/src/api/knowledgeChunkConfig.ts`、`web/src/views/knowledge-chunk-config/Edit.vue`、`web/src/views/knowledge-chunk-config/Index.vue`（手动配置表单与列表支持 PDF OCR 页数）
+  - `CHANGELOG.md`（追加本次 PDF OCR 页数配置化快照）
+- 删除：无
+- 说明：该字段仅作用于手动解析 PDF 进入本地 OCR 的场景；普通 PDF 文本提取成功时不会触发 OCR 页数限制。
+
+### 2026-08-21 手动分片画布初始化增加遮罩
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/View.vue`（手动分片打开后等待 Pixi 原文画布首帧绘制完成再允许拖拽；初始化期间显示遮罩提示，并禁用生成分片入口）
+  - `CHANGELOG.md`（追加本次手动分片画布初始化交互修复快照）
+- 删除：无
+- 说明：大内容进入手动分片时，画布和坐标层需要一次初始化；现在首帧完成前会明确提示“原文画布准备中”，避免用户过早拖拽导致无效操作。
+
+### 2026-08-21 本地 OCR 语言包改为显式本地加载
+- 新增：无
+- 修改：
+  - `server/src/document-ocr/document-ocr.service.ts`（本地 OCR 初始化前检查 `TESSERACT_LANG_PATH` 或服务运行目录下的语言包；存在 `.traineddata` 时自动关闭 gzip，缺包时直接返回明确错误，不再默认隐式外网下载）
+  - `CHANGELOG.md`（追加本次本地 OCR 语言包加载修正快照）
+- 删除：无
+- 说明：当前服务目录已存在 `chi_sim.traineddata`，本地 OCR 默认改为中文简体 `chi_sim`；如果配置 `chi_sim+eng`，则同目录还必须存在 `eng.traineddata`。
+
+### 2026-08-21 本地 OCR 增加初始化超时与语言包配置
+- 新增：无
+- 修改：
+  - `server/src/document-ocr/document-ocr.service.ts`（Tesseract Worker 初始化与逐图识别增加超时保护、进度日志、本地语言包目录与缓存目录配置）
+  - `CHANGELOG.md`（追加本次 OCR 初始化卡住问题的处理快照）
+- 删除：无
+- 说明：`createWorker('chi_sim+eng')` 卡住通常是 Tesseract 初始化或下载中文/英文语言包时阻塞；现在默认初始化 30 秒超时、单图识别 60 秒超时，可通过 `TESSERACT_LANG_PATH` 指向本地语言包目录避免依赖外网下载。
+
+### 2026-08-21 增加手动 OCR 调试日志
+- 新增：无
+- 修改：
+  - `server/src/document-parsers/parsers/pdf-document.parser.ts`（手动 PDF 解析增加普通文本命中与进入 OCR 的调试日志）
+  - `server/src/document-ocr/document-ocr.service.ts`（本地 PDF/图片 OCR 增加渲染、进入 OCR、Tesseract 初始化和逐图识别日志）
+  - `CHANGELOG.md`（追加本次 OCR 调试日志快照）
+- 删除：无
+- 说明：用于定位手动 PDF/图片解析时断点进不到 `recognizeImagesWithLocalOcr` 的原因，常见情况是 PDF 普通文本已命中直接返回，或 PDF 页面渲染阶段先失败。
+
+### 2026-08-21 手动 PDF/图片 OCR 改为本地识别
+- 新增：
+  - `server` 依赖 `tesseract.js`（用于后端本地图片 OCR）
+- 修改：
+  - `server/src/document-ocr/document-ocr.service.ts`（手动 PDF OCR 和图片 OCR 改为本地 Tesseract 识别；PDF 无文本时渲染页面后逐页识别；不再读取 OCR 功能配置，不再分流到 MinerU 或视觉模型）
+  - `server/src/document-ocr/document-ocr.module.ts`（移除 OCR 服务对 AI 功能配置、大模型账号和 MinerU 配置模块的依赖）
+  - `server/package.json` / `server/package-lock.json`（新增本地 OCR 依赖）
+  - `CHANGELOG.md`（追加本次手动 OCR 本地化快照）
+- 删除：无
+- 说明：MinerU 只在用户明确选择 MinerU 解析模式时使用；手动解析 PDF/图片统一走后端本地 OCR 链路。
+
+### 2026-08-21 去掉分片配置描述字段
+- 新增：无
+- 修改：
+  - `server/src/knowledge-chunk-configs/dto/knowledge-chunk-config.dto.ts`（分片配置接口不再接收描述字段）
+  - `server/src/knowledge-chunk-configs/knowledge-chunk-configs.service.ts`（分片配置不再写入描述，列表关键词只搜索配置名称）
+  - `web/src/api/knowledgeChunkConfig.ts`（前端分片配置类型移除描述字段）
+  - `web/src/views/knowledge-chunk-config/Edit.vue`（分片配置弹窗去掉描述输入）
+  - `web/src/views/knowledge-chunk-config/Index.vue`（搜索提示改为仅配置名称）
+  - `CHANGELOG.md`（追加本次描述字段移除快照）
+- 删除：无
+- 说明：数据库实体中的 `description` 列暂时保留用于兼容已有表结构，但前后端接口与页面不再使用。默认配置已按分片模式隔离：手动默认只作用于手动分片，MinerU/自动默认只作用于自动分片。
+
+### 2026-08-21 手动分片记录首尾上下文长度
+- 新增：无
+- 修改：
+  - `server/src/knowledge-bases/entities/knowledge-base-chunk.entity.ts`（分片增加 `contextBeforeLength` / `contextAfterLength`，记录手动分片实际补充的首尾上下文字符数）
+  - `server/src/knowledge-bases/dto/knowledge-base.dto.ts`（手动覆盖分片 DTO 支持首尾上下文长度）
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（保存手动分片时写入首尾上下文长度）
+  - `web/src/api/knowledgeBase.ts`（补充分片首尾上下文长度类型）
+  - `web/src/views/knowledge-base/View.vue`（生成手动分片时按配置重叠值计算首尾字符数；恢复时可根据该长度从入库内容反推出核心段）
+  - `CHANGELOG.md`（追加本次手动分片首尾上下文长度快照）
+- 删除：无
+- 说明：手动分片入库内容保留前置上下文 + 核心内容 + 后置上下文，同时记录首尾实际长度；后续删除、恢复、重新打开编辑时能明确知道哪一段是核心选区。
+
+### 2026-08-21 分片配置区分自动与手动模式
+- 新增：无
+- 修改：
+  - `server/src/knowledge-chunk-configs/entities/knowledge-chunk-config.entity.ts`（新增 `chunkMode` 字段，区分自动分片与手动分片配置）
+  - `server/src/knowledge-chunk-configs/dto/knowledge-chunk-config.dto.ts`（新增分片模式入参与查询筛选）
+  - `server/src/knowledge-chunk-configs/knowledge-chunk-configs.service.ts`（支持按模式查询配置，手动模式只校验重叠值，自动模式继续校验分片大小与重叠关系；默认配置按模式隔离）
+  - `web/src/api/knowledgeChunkConfig.ts`（补充分片模式类型与查询参数）
+  - `web/src/views/knowledge-chunk-config/Edit.vue`（配置表单新增分片模式；手动模式仅展示上下文重叠与基础开关，隐藏分片大小、超时、切分方式、保留标题）
+  - `web/src/views/knowledge-chunk-config/Index.vue`（列表展示分片模式，手动模式下自动分片字段显示为 `-`）
+  - `web/src/views/knowledge-base/View.vue`（手动分片读取手动模式配置的重叠字符数，不再使用固定值）
+  - `CHANGELOG.md`（追加本次分片配置模式调整快照）
+- 删除：无
+- 说明：页面显示“手动 / MinerU/自动”，内部字段使用 `manual / auto`；手动分片的重叠值用于保存入库时补充核心选区前后文，不影响左侧核心选区锁定。
+
+### 2026-08-21 手动分片补充上下文重叠
+- 新增：无
+- 修改：
+  - `server/src/knowledge-bases/entities/knowledge-base-chunk.entity.ts`（分片增加核心内容与手动坐标元数据，用于区分“核心选区”和“入库上下文”）
+  - `server/src/knowledge-bases/dto/knowledge-base.dto.ts`（手动覆盖分片 DTO 支持核心内容与手动起止偏移）
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（保存手动分片时写入核心内容、手动起止偏移和带上下文的分片内容）
+  - `web/src/api/knowledgeBase.ts`（补充分片元数据类型）
+  - `web/src/views/knowledge-base/View.vue`（手动分片生成时自动为入库内容补充前后文，左侧仍只锁定用户划选的核心区域）
+  - `CHANGELOG.md`（追加本次手动分片上下文补偿快照）
+- 删除：无
+- 说明：手动分片不再是纯硬切；默认保存核心选区前后各约 120 字符作为上下文，避免检索命中后 AI 缺少前后语义。已有旧分片无元数据时仍按内容定位兼容。
+
+### 2026-08-21 修复自动分片转手动编辑坐标恢复
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/View.vue`（已有分片回填到手动分片原文坐标时，兼容自动/MinerU 分片的重叠文本；删除已有分片后左侧原文区域能正确解除锁定）
+  - `CHANGELOG.md`（追加本次手动分片坐标恢复修复快照）
+- 删除：无
+- 说明：自动分片常带有重叠内容，原逻辑从上一个分片结束后继续定位下一个分片，导致部分分片坐标丢失；现在改为从上一个分片起点之后继续定位，并统一换行符。
+
+### 2026-08-21 手动分片改为自动保存
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/View.vue`（去掉手动分片区域的“保存分片”按钮，生成分片、删除分片和修改分片标题后自动调用保存接口；同步失败时回滚前端分片列表）
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（手动覆盖分片接口允许 `chunks: []`，全删时软删已有分片并将知识库状态回到已解析、待分片）
+  - `CHANGELOG.md`（追加本次手动分片自动保存快照）
+- 删除：无
+- 说明：全删除分片时前端会提交空数组，后端用空数组表示当前没有分片，不再要求至少保留一个有效分片。
+
+### 2026-08-21 知识库列表支持横向滚动
+- 新增：无
+- 修改：
+  - `web/src/components/Table.vue`（新增 `fit` 可选参数，默认保持自动撑满；设为 `false` 时按列宽触发表格横向滚动）
+  - `web/src/views/knowledge-base/Index.vue`（知识库列表关闭自动撑满，文件名列固定 250px，并对长文件名做省略和悬浮完整提示）
+  - `AGENTS-COMPONENTS.md`（补充 Table `fit` 参数说明）
+  - `CHANGELOG.md`（追加本次列表展示修正快照）
+- 删除：无
+- 说明：本次只调整前端列表展示，不涉及接口字段和后端逻辑。
+
+### 2026-08-21 新增知识库处理流程文档
+- 新增：
+  - `知识库处理流程.md`（梳理知识库分类、主记录、文档、分片、解析、索引、检索和问答使用的完整顺序）
+- 修改：
+  - `CHANGELOG.md`（追加本次流程文档快照）
+- 删除：无
+- 说明：文档按当前代码实现拆分知识库文档处理链路，并标记向量索引、混合检索、Rerank、OCR、队列持久化等后续扩展边界。仅文档变更，未执行构建。
+
+### 2026-08-20 修复数字输入组件输入草稿态
+- 新增：无
+- 修改：
+  - `web/src/components/InputNumber.vue`（增加内部草稿值，输入时先保留用户输入内容，失焦/确认时再最终解析和范围限制，避免表单字段输入时被立即改写导致无法正常编辑）
+  - `CHANGELOG.md`（追加本次数字输入组件修复快照）
+- 删除：无
+- 说明：知识库新增/编辑中的“匹配优先级”字段使用 `InputNumber`，修复后可正常输入数字。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
+### 2026-08-20 手动分片链接整体折行
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/View.vue`（手动分片原文折行从固定字符数切分改为按真实文字宽度折行，并将 `（链接：...）` 与裸 URL 当作整体 token，避免链接在 `.` 等位置被截断）
+  - `CHANGELOG.md`（追加本次手动分片链接整体折行快照）
+- 删除：无
+- 说明：链接断开不是因为 `.` 符号本身，而是此前固定字符数折行刚好切到该位置；现在链接能放下时会整体跟随关键文字块，放不下时整体换行，只有链接自身超过一整行宽度才拆分。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
+### 2026-08-20 修复手动分片链接鼠标命中偏移
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/View.vue`（鼠标拖拽命中改为按真实文本宽度反推字符位置，修复数字/字母链接宽度较小时选区进度与鼠标位置不一致；原文容器增加 6px padding，Pixi canvas 宽度改为撑满容器）
+  - `CHANGELOG.md`（追加本次手动分片链接命中修复快照）
+- 删除：无
+- 说明：链接、数字、英文等窄字符现在会按实际渲染宽度参与命中和高亮计算，避免鼠标滑动到后方但高亮仍停在前方。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
+### 2026-08-20 修复手动分片链接选区错位
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/View.vue`（Pixi 原文区选区底色和分段文字改为按真实文本宽度定位，修复链接被选中时高亮与文字错位；展示列数从 40 放宽到 48，减少关键字后链接被提前换行）
+  - `CHANGELOG.md`（追加本次手动分片链接选区修复快照）
+- 删除：无
+- 说明：坐标命中仍按字符 offset 计算，但视觉绘制使用文本测量宽度，避免正常字体排版与固定格子宽度冲突。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
+### 2026-08-20 手动分片链接改为跟随正文自然折行
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/View.vue`（手动分片原文展示取消 `（链接：...）` 强制独立换行，链接跟随关键文字块展示，超出固定宽度后自然折行）
+  - `CHANGELOG.md`（追加本次手动分片链接折行策略调整快照）
+- 删除：无
+- 说明：后端解析出的 `申请价保（链接：...）` 结构保持不变，仅调整前端手动分片展示层的折行策略。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
+### 2026-08-20 优化手动分片两栏布局与选区颜色
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/View.vue`（手动分片原文区与分片区改为 50/50 撑满整行；左侧选区背景加深，选中文字统一蓝色，锁定文字保持灰色）
+  - `CHANGELOG.md`（追加本次手动分片两栏与选区视觉优化快照）
+- 删除：无
+- 说明：文字仍按连续同色片段渲染，避免退回逐字符绘制造成的间距问题；坐标选择逻辑不变。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
+### 2026-08-20 优化手动分片文本间距与片段面板宽度
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/View.vue`（Pixi 原文区从逐字符绘制改为整行文本绘制，减少固定格子造成的字体间距；右侧分片面板加宽到 520px，分片预览字体调整为 14px）
+  - `CHANGELOG.md`（追加本次手动分片文本排版优化快照）
+- 删除：无
+- 说明：坐标命中和选择底色仍按字符位置计算，但文字本身按正常文本行渲染，视觉上不再像保留网格像素。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
+### 2026-08-20 手动分片 Pixi 文本面板去网格化
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/View.vue`（手动分片原文区去掉网格线、行列头和等比例布局；Pixi 舞台仅保留文本、选区高亮和已分片锁定底色，左侧按内容实际宽度展示，右侧分片栏改为固定工具面板宽度）
+  - `CHANGELOG.md`（追加本次手动分片 Pixi 文本面板优化快照）
+- 删除：无
+- 说明：视觉上从“字符网格表”调整为“文本选择面板”，减少模糊和视觉负担，保留底层字符坐标与分片保存逻辑。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
+### 2026-08-20 手动分片网格接入 PixiJS
+- 新增：
+  - `web` 依赖 `pixi.js`（用于手动分片原文网格的分层渲染）
+- 修改：
+  - `web/src/views/knowledge-base/View.vue`（手动分片原文网格从原生 Canvas 2D 切换为 PixiJS 舞台；背景、网格、锁定/选中状态、文字分层绘制，并在弹窗关闭/组件卸载时销毁 Pixi 实例）
+  - `web/package.json`、`web/package-lock.json`（新增 PixiJS 依赖）
+  - `CHANGELOG.md`（追加本次 PixiJS 渲染层接入快照）
+- 删除：无
+- 说明：拖拽选择仍复用原有坐标和分片保存逻辑，渲染层改为更适合高频重绘的 PixiJS。已执行 `web` 的 `npm.cmd run type-check`，通过；执行 `npm.cmd run build` 时被仓库既有类型问题阻断，涉及 `knowledgeBase.ts`、`InputEmail.vue`、`ai-feature-config/Index.vue`、`knowledge-base/Index.vue`，非本次 PixiJS 改动引起。
+
+### 2026-08-20 手动分片网格链接独立换行
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/View.vue`（手动分片网格固定列数调整为 40；展示层识别 `（链接：...）` 并从新行开始渲染，避免链接和正文揉在同一行）
+  - `CHANGELOG.md`（追加本次手动分片链接换行展示快照）
+- 删除：无
+- 说明：链接换行只影响网格展示，坐标仍映射到原文 offset，保存分片时不会插入额外换行。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
+### 2026-08-20 手动分片网格固定列数折行
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/View.vue`（手动分片原文网格固定为 32 列展示，长链接会在网格中自动折行；坐标映射仍指向原文 offset，生成分片时按原始内容截取）
+  - `CHANGELOG.md`（追加本次手动分片网格折行快照）
+- 删除：无
+- 说明：该调整只影响网格展示层，解决链接内联后单行过长导致横向滚动过宽的问题；分片保存内容不额外插入展示换行。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
+### 2026-08-20 调整手动分片左右比例与分片展示
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/View.vue`（手动分片编辑区与分片结果区改为 5:5；Canvas 网格单元改为等宽等高；右侧分片内容取消高度限制，预览字体调整为 12px 并压缩行高）
+  - `CHANGELOG.md`（追加本次手动分片布局微调快照）
+- 删除：无
+- 说明：右侧分片内容现在随内容自动撑开，不再出现单个分片预览内部滚动；网格单元宽高一致，便于按行列坐标观察。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
+### 2026-08-20 Word 解析链接改为原句内联
+- 新增：无
+- 修改：
+  - `server/src/document-parsers/parsers/word-document.parser.ts`（手动解析 `.docx` 时直接从 HTML 转文本，将超链接以括号形式追加到对应词句后，不再额外生成“链接语句块”）
+  - `CHANGELOG.md`（追加本次 Word 链接内联解析快照）
+- 删除：无
+- 说明：链接会输出为 `申请价保（链接：https://...）` 这类形式，方便手动分片时按原句选择并保存链接上下文；同时对 Word 超链接字段中的冗余 URL/标记做了清洗。已执行 `server` 的 `npm.cmd run build`，通过。
+
+### 2026-08-20 手动分片左右对照与 Word 链接块提取
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/View.vue`（手动分片编辑改为左侧原文网格、右侧已生成片段的对照布局，保存分片按钮归入片段栏）
+  - `server/src/document-parsers/parsers/word-document.parser.ts`（手动解析 `.docx` 时同步提取超链接所在语句块，并在解析正文末尾追加“链接语句块”区域）
+  - `CHANGELOG.md`（追加本次手动分片与 Word 链接解析快照）
+- 删除：无
+- 说明：Word 文档中的链接地址会以 `链接：URL` 的形式保留在解析文本中，方便手动分片时把链接上下文一起选入分片。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
+### 2026-08-20 分片列表 Token 列改为字符数
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/View.vue`（分片内容列表中 `Token数` 列改名为 `字符数`，避免误解为大模型 token 消耗）
+  - `CHANGELOG.md`（追加本次分片统计列文案调整快照）
+- 删除：无
+- 说明：当前 `tokenCount` 字段实际保存的是分片内容字符长度，不代表 AI 模型调用 token，也不会因手动分片产生模型费用。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
+### 2026-08-20 去掉知识库编码展示与录入
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/Edit.vue`（知识库新增/编辑表单去掉编码字段，提交时不再传 `code`）
+  - `web/src/views/knowledge-base/Index.vue`（知识库列表去掉编码列，关键词占位改为名称/关键字）
+  - `web/src/views/knowledge-base/View.vue`（知识库详情去掉编码展示）
+  - `CHANGELOG.md`（追加本次知识库编码移除快照）
+- 删除：无
+- 说明：仅移除知识库自身编码的前端录入与展示；知识库分类编码暂保留。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
+### 2026-08-20 完善手动分片拖拽与锁定交互
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/View.vue`（进入手动分片后隐藏解析正文区域；Canvas 网格改为按原文行渲染；鼠标按下拖动并松开后固定选择范围；已生成分片的原文范围在网格中置灰锁定，删除分片后释放对应范围）
+  - `CHANGELOG.md`（追加本次手动分片拖拽与锁定交互快照）
+- 删除：无
+- 说明：手动分片现在按行列坐标选择，不再按固定 80 字符硬切行；空格不额外渲染符号，但坐标仍按原文列位置计算。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
+### 2026-08-20 手动分片直接使用详情解析正文
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/View.vue`（打开手动分片时直接使用当前详情中的 `parsedContent/contentText` 渲染 Canvas 网格，不再额外查询知识库文档；保存时缺少文档 ID 才补查文档）
+  - `CHANGELOG.md`（追加本次手动分片数据来源优化快照）
+- 删除：无
+- 说明：详情页已经通过 `getKnowledgeBase` 回填了解析正文，手动分片编辑器无需再次请求文档正文，减少点击等待和因文档查询失败导致网格不展示的可能。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
+### 2026-08-20 手动分片网格改为 Canvas 坐标绘制
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/View.vue`（手动分片网格从每字一个 DOM 按钮改为 Canvas 绘制；点击画布坐标映射到固定行列，每个文字仍占据一个网格；打开编辑器不再强依赖文档记录 ID，只要已有解析正文即可展示网格）
+  - `CHANGELOG.md`（追加本次 Canvas 网格交互优化快照）
+- 删除：无
+- 说明：Canvas 方案减少长文档场景下的大量 DOM 节点，解决点击“手动分片”后界面可能无明显变化或渲染迟滞的问题；保存时仍复用已有手动覆盖分片接口。已执行 `web` 的 `npm.cmd run type-check` 与 `server` 的 `npm.cmd run build`，均通过。
+
+### 2026-08-20 优化手动分片为网格坐标选择
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/View.vue`（手动分片改为固定 80 列字符网格，支持点击字符格设置起止坐标、按坐标范围生成分片、查看坐标和分片预览）
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（手动覆盖分片时保留坐标范围内的正文原文，仅用空白裁剪判断是否为空，避免保存时改变分片边界）
+  - `CHANGELOG.md`（追加本次手动分片网格坐标交互快照）
+- 删除：无
+- 说明：手动分片不再通过自由 textarea 直接编辑正文，改为网格化内容选择，便于后续扩展“划到某行某列”的坐标表达。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
+### 2026-08-20 收敛分片配置为自动分片规则
+- 新增：无
+- 修改：
+  - `server/src/knowledge-chunk-configs/*`（移除配置中的手动/自动模式字段，新增自动分片超时时间 `timeoutMinutes`，单位分钟）
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（自动分片按配置的超时时间执行超时保护；手动分片仍由知识库详情页独立操作）
+  - `web/src/api/knowledgeChunkConfig.ts`、`web/src/views/knowledge-chunk-config/*.vue`（分片配置列表和编辑表单去掉模式选择，增加超时时间）
+  - `CHANGELOG.md`（追加本次分片配置口径调整快照）
+- 删除：无
+- 说明：分片配置页现在只管理系统自动分片规则；手动分片不走配置页，而是在知识库详情内容页载入解析正文后人工编辑并保存分片。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
+### 2026-08-20 新增知识库分片配置与手动分片
+- 新增：
+  - `server/src/knowledge-chunk-configs/`（知识库分片配置模块，支持分片大小、重叠字符、切分方式、默认配置和启停）
+  - `web/src/api/knowledgeChunkConfig.ts`、`web/src/views/knowledge-chunk-config/Index.vue`、`web/src/views/knowledge-chunk-config/Edit.vue`（分片配置列表与编辑页）
+- 修改：
+  - `server/src/app.module.ts`、`server/src/knowledge-bases/knowledge-bases.module.ts`（挂载分片配置模块）
+  - `server/src/knowledge-bases/*`（自动分片读取默认分片配置；新增手动覆盖文档分片接口）
+  - `server/src/menus/menus.service.ts`、`web/src/router/index.ts`（知识库管理下新增“分片配置”菜单/路由）
+  - `web/src/api/knowledgeBase.ts`、`web/src/views/knowledge-base/View.vue`（知识库详情内容页支持载入解析正文、编辑分片并保存覆盖）
+- 删除：无
+- 说明：分片规则从检索配置中独立出来，作为知识库构建阶段配置。系统自动分片读取该配置，手动分片由用户在详情页按正文划分。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
+### 2026-08-20 修正聊天应用检索配置回显误导
+- 新增：无
+- 修改：
+  - `web/src/views/external-app/Edit.vue`（编辑已有聊天应用时，知识库检索配置按数据库真实值回显；不再因系统只有一条检索配置而自动显示为已绑定）
+  - `CHANGELOG.md`（追加本次聊天应用检索配置回显修正快照）
+- 删除：无
+- 说明：此前编辑已有聊天应用时，如果数据库 `retrievalConfigId` 为 `NULL` 且系统只有一条检索配置，前端会自动回显这条配置，造成“看起来已绑定但接口返回 `retrievalConfigId:null`”的误判。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
+### 2026-08-20 收紧 AI 流式问答知识库约束
+- 新增：无
+- 修改：
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat.service.ts`（绑定知识库检索配置时，即使命中为空也不再裸问题调用模型；流式接口新增 `retrieval` 事件暴露本次检索是否命中参考资料）
+  - `web/src/api/knowledgeAiChat.ts`（补充 `retrieval` SSE 事件类型）
+  - `CHANGELOG.md`（追加本次知识库问答约束修正快照）
+- 删除：无
+- 说明：此前检索配置存在但未命中内容时，会退回原始问题，导致大模型按外部常识回答。现在只要启用知识库检索配置，模型就会被明确约束只能依据知识库；未命中时应回答“知识库中未找到相关内容，无法确认”。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
+### 2026-08-20 接入 AI 问答知识库检索上下文
+- 新增：
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat-retrieval.service.ts`（按知识库检索配置读取分片/文档/知识库正文，生成问答参考资料上下文）
+- 修改：
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat.module.ts`（注入知识库与检索配置相关实体/模块）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat.service.ts`（后台问答和应用端流式问答在调用模型前拼入知识库参考资料）
+  - `server/src/knowledge-ai-chat/dto/knowledge-ai-chat.dto.ts`、`web/src/api/knowledgeAiChat.ts`（后台问答请求支持传入 `retrievalConfigId`）
+  - `CHANGELOG.md`（追加本次 AI 问答知识库检索接入快照）
+- 删除：无
+- 说明：当前先实现全文/分片兜底检索，不依赖向量库；优先读取 `knowledge_base_chunks`，没有分片时回退 `knowledge_base_documents.content` 与 `knowledge_bases.contentText`。应用端会使用聊天应用绑定的知识库检索配置。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
+### 2026-08-20 调整操作日志扫描源为启动落库与拦截匹配
+- 新增：
+  - `server/src/log-records/entities/log-api-source.entity.ts`（日志 API 扫描源表，存储模块、API、HTTP 方法、操作摘要、系统模块标记与 API 监控开关）
+- 修改：
+  - `server/src/log-records/log-api-scanner.ts`（扫描源补充系统/配置类模块标记，用于排除日志自身和系统配置级 API）
+  - `server/src/log-records/log-records.module.ts`（注册 `LogApiSource` 实体）
+  - `server/src/log-records/log-records.service.ts`（启动时扫描 controller 并同步入库；配置保存时同步模块与 API 开关；请求日志写入改为按数据库中的 API 源和模块配置判断）
+  - `CHANGELOG.md`（追加本次操作日志扫描源落库快照）
+- 删除：无
+- 说明：日志配置源现在不再依赖打开配置时的临时扫描结果；服务启动/重启时会把 controller 扫描结果落入 `log_api_sources`，拦截器只记录已启用模块且命中已启用 API 源的请求。日志管理模块本身和系统配置类 API 会入源表但默认排除监控。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
+### 2026-08-20 优化操作日志模块配置与 API 扫描源
+- 新增：
+  - `server/src/log-records/log-api-scanner.ts`（启动/配置查询时扫描后端 controller，生成模块与 API 配置源）
+- 修改：
+  - `server/src/log-records/log-records.service.ts`（日志配置从固定模块映射改为扫描源；保存模块级开关；日志记录按真实 API 路径匹配操作摘要）
+  - `server/src/log-records/dto/log-record.dto.ts`（日志模块配置 DTO 支持模块启用状态，兼容旧 actions 配置）
+  - `web/src/api/logRecord.ts`、`web/src/views/log-record/Index.vue`（操作日志配置弹窗改为模块级两列勾选，不再展示 API 级配置）
+  - `CHANGELOG.md`（追加本次操作日志配置优化快照）
+- 删除：无
+- 说明：后端会在模块初始化和管理端打开配置时扫描 `src/**/*.controller.ts`，提取 `@Controller`、HTTP 方法和 `@ApiOperation` 摘要；配置只控制模块是否纳入日志统计，具体 API 路径和操作名称仍会进入日志明细。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
+### 2026-08-20 移除检索配置中的分片参数
+- 新增：无
+- 修改：
+  - `server/src/knowledge-retrieval-configs/entities/knowledge-retrieval-config.entity.ts`（移除 `chunkSize` / `chunkOverlap` 字段）
+  - `server/src/knowledge-retrieval-configs/dto/knowledge-retrieval-config.dto.ts`（移除检索配置 DTO 中的分片参数）
+  - `server/src/knowledge-retrieval-configs/knowledge-retrieval-configs.service.ts`（删除分片参数保存与校验，仅保留重排配置校验）
+  - `web/src/api/knowledgeRetrievalConfig.ts`、`web/src/views/knowledge-retrieval-config/Edit.vue`（前端类型和表单移除分片大小/分片重叠）
+  - `CHANGELOG.md`（追加本次检索配置分片参数移除快照）
+- 删除：无
+- 说明：分片大小/分片重叠属于知识库构建/文档处理阶段，不属于查询检索阶段；检索配置保留召回、权重、范围和重排相关参数。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
+### 2026-08-20 优化知识库检索范围与文档匹配元信息
+- 新增：无
+- 修改：
+  - `server/src/knowledge-bases/entities/knowledge-base.entity.ts`、`server/src/knowledge-bases/entities/knowledge-base-document.entity.ts`（新增命中关键字、口语化描述、匹配优先级字段）
+  - `server/src/knowledge-bases/dto/knowledge-base.dto.ts`、`server/src/knowledge-bases/knowledge-bases.service.ts`（主知识库与文档 DTO/保存/查询/解析同步这些匹配元信息）
+  - `server/src/knowledge-retrieval-configs/*`（检索配置范围新增分类 ID/名称，保留具体知识库文档 ID/名称）
+  - `web/src/api/knowledgeBase.ts`、`web/src/views/knowledge-base/*.vue`（知识库新增/编辑/列表/详情/文档列表展示匹配元信息）
+  - `web/src/api/knowledgeRetrievalConfig.ts`、`web/src/views/knowledge-retrieval-config/*.vue`（知识库范围由扁平多选改为分类 + 文档树形勾选）
+  - `CHANGELOG.md`（追加本次检索范围与文档匹配元信息快照）
+- 删除：无
+- 说明：检索配置可按分类和具体知识库文档勾选范围；知识库文档可维护命中关键字、口语化描述和匹配优先级，为后续全文/向量/Agent 检索提供更稳定的元数据。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
+### 2026-08-20 打通知识库文本/Word/PDF/图片解析分片基础链路
+- 新增：
+  - `server/src/document-parsers/parsers/image-document.parser.ts`（图片知识库手动解析器，走 OCR 功能配置识别正文）
+- 修改：
+  - `server/package.json` / `server/package-lock.json`（新增 `mammoth`，用于 `.docx` 手动解析）
+  - `server/src/document-parsers/*`（解析内容类型新增 `image`；Word 手动解析接入 `.docx` 文本提取）
+  - `server/src/document-ocr/document-ocr.service.ts`（新增图片 OCR 识别，按 OCR 功能配置走视觉模型或 MinerU）
+  - `server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`（OCR 视觉提示从 PDF 页面泛化为图片文字识别）
+  - `server/src/stored-files/stored-files.service.ts`（补充图片 MIME 识别）
+  - `server/src/knowledge-bases/dto/knowledge-base.dto.ts`、`server/src/knowledge-bases/knowledge-bases.service.ts`（知识库内容类型支持 `image`，解析文件类型校验补充图片格式）
+  - `web/src/api/knowledgeBase.ts`、`web/src/views/knowledge-base/*.vue`（前端知识库新增/列表/详情/文档页支持图片类型）
+  - `CHANGELOG.md`（追加本次解析分片基础链路快照）
+- 删除：无
+- 说明：当前阶段仅打通普通文本、PDF、Word（手动支持 `.docx`，`.doc` 建议 MinerU）、图片的解析与分片链路，不包含向量化和向量数据库写入。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
+### 2026-08-20 调整阿里云新版 MaaS OpenAI 地址说明
+- 新增：无
+- 修改：
+  - `server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`（后端模型校验改为合并通用模型列表和功能模型列表；URL 仍严格按 `apiUrl + chatApiPath` 拼接，不自动兼容重复 `/v1` 配置）
+  - `CHANGELOG.md`（追加本次阿里云 MaaS 地址配置说明快照）
+- 删除：无
+- 说明：阿里云新版示例的 `baseURL` 形如 `https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`，OpenAI SDK 会追加 `/chat/completions`；项目后端则用 `apiUrl + chatApiPath` 拼接。因此后台应填写为 `apiUrl=https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode`、`chatApiPath=v1/chat/completions`，或填写为 `apiUrl=.../compatible-mode/v1`、`chatApiPath=chat/completions`。已执行 `server` 的 `npm.cmd run build`，通过。
+
+### 2026-08-20 修正 AI 功能配置模型下拉来源
+- 新增：无
+- 修改：
+  - `web/src/views/ai-feature-config/Edit.vue`（聊天类型模型下拉改为合并账号“模型列表”和“文本模型”；OCR/向量化/文档解析也按“功能专属模型 + 通用模型列表”合并去重）
+  - `CHANGELOG.md`（追加本次模型下拉来源修正快照）
+- 删除：无
+- 说明：此前聊天类型只要账号维护了“文本模型”，就不会读取通用“模型列表”，导致阿里云账号可选模型只剩少量文本模型。现在通用模型池不会被专属模型字段覆盖。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
+### 2026-08-20 新增知识库检索配置模块
+- 新增：
+  - `server/src/knowledge-retrieval-configs/`（知识库检索配置 Entity/DTO/Service/Controller/Module）
+  - `web/src/api/knowledgeRetrievalConfig.ts`（检索配置前端接口）
+  - `web/src/views/knowledge-retrieval-config/Index.vue`（检索配置列表页）
+  - `web/src/views/knowledge-retrieval-config/Edit.vue`（检索配置新增/编辑弹窗）
+- 修改：
+  - `server/src/app.module.ts`（注册知识库检索配置模块）
+  - `server/src/menus/menus.service.ts`（聊天管理下新增“知识库检索配置”二级菜单）
+  - `server/src/external-apps/*`（聊天应用支持绑定知识库检索配置，并在 appId 校验时确认绑定配置可用）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat.service.ts`（流式聊天 meta / 初始化会话返回绑定的检索配置标识）
+  - `web/src/api/externalApp.ts`、`web/src/views/external-app/Index.vue`、`web/src/views/external-app/Edit.vue`（聊天应用列表与表单展示/选择知识库检索配置）
+  - `web/src/api/knowledgeAiChat.ts`、`web/src/router/index.ts`（补充检索配置元信息类型与路由）
+  - `CHANGELOG.md`（追加本次知识库检索配置模块快照）
+- 删除：无
+- 说明：检索配置可维护多条，支持选择知识库范围、检索模式、召回参数、混合权重、分片参数和可选重排配置；聊天应用可绑定其中一条，留空则保持纯聊天。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
+### 2026-08-19 优化聊天应用绑定配置选择
+- 新增：无
+- 修改：
+  - `web/src/views/external-app/Edit.vue`（聊天应用编辑表单将 AI 聊天配置改为必选下拉，展示配置名/账号/模型；只有一个启用聊天配置时自动选中）
+  - `CHANGELOG.md`（追加本次聊天应用绑定配置选择优化快照）
+- 删除：无
+- 说明：聊天应用现在必须明确绑定一条聊天类型 AI 功能配置，避免应用端调用时仍落到不明确的全局默认配置。已执行 `web` 的 `npm.cmd run type-check`，通过。
+
+### 2026-08-19 修复 MinerU 文档解析状态回写
+- 新增：无
+- 修改：
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（文档解析队列执行时立即回写“正在解析”状态，创建 MinerU 任务后记录任务 ID；修复异步解析未 `await` 导致失败不能写回文档状态的问题）
+  - `CHANGELOG.md`（追加本次 MinerU 文档解析状态修复快照）
+- 删除：无
+- 说明：修复知识库文档选择 MinerU 解析后，列表长期停留在“任务已提交，等待执行”的问题。已执行 `server` 的 `npm.cmd run build`，通过。
+
+### 2026-08-19 支持私有 OSS 签名读取
+- 新增：无
+- 修改：
+  - `server/src/storage-config/storage-config.service.ts`（根据 OSS 配置识别本系统 OSS 文件并生成临时签名 URL）
+  - `server/src/stored-files/stored-files.service.ts`（手动解析远程文件前自动转签名 URL，解决私有 Bucket 读取 403）
+  - `server/src/mineru-configs/mineru-configs.module.ts`（引入存储配置模块）
+  - `server/src/mineru-configs/mineru-configs.service.ts`（调用 MinerU 前将私有 OSS 文件 URL 转为临时签名 URL）
+  - `CHANGELOG.md`（追加本次私有 OSS 签名读取快照）
+- 删除：无
+- 说明：OSS Bucket 保持私有时，后端读取和 MinerU 第三方解析不能直接使用普通公网 URL；现在会在服务端用 AccessKey 生成有效期签名 URL，再用于 fetch 或提交给 MinerU。已执行 `server` 的 `npm.cmd run build`，通过。
+
+### 2026-08-19 接入阿里云 OSS 上传
+- 新增：无
+- 修改：
+  - `server/package.json` / `server/package-lock.json`（新增 `ali-oss` 与类型依赖）
+  - `server/src/uploads/uploads.service.ts`（上传接口在启用阿里云 OSS 时真实调用 OSS 上传，返回公网文件 URL；配置缺失时返回明确错误，不再静默回退本地）
+  - `CHANGELOG.md`（追加本次 OSS 上传接入快照）
+- 删除：无
+- 说明：此前 OSS/CDN 上传分支只是伪代码并回退本地，因此阿里云桶不会新增文件且返回 localhost 地址。现在 `provider=aliyun-oss` 时会上传至 `uploadDir/yyyy/mm/dd/uuid.ext`，并返回 `https://publicBaseUrl/objectKey`。已执行 `server` 的 `npm.cmd run build`，通过。
+
+### 2026-08-19 接入 OCR 功能配置分流
+- 新增：无
+- 修改：
+  - `server/src/ai-feature-configs/entities/ai-feature-config.entity.ts`（AI 功能配置支持 `useMineru`，OCR 使用 MinerU 时账号/模型可为空）
+  - `server/src/ai-feature-configs/dto/ai-feature-config.dto.ts`（创建/更新配置支持 `useMineru` 字段）
+  - `server/src/ai-feature-configs/ai-feature-configs.module.ts`（引入 MinerU 配置模块）
+  - `server/src/ai-feature-configs/ai-feature-configs.service.ts`（OCR+MinerU 分流校验，保存绑定的 MinerU 配置，聊天配置继续强制账号/模型）
+  - `server/src/document-ocr/document-ocr.module.ts`（引入 AI 功能配置、大模型账号、MinerU 配置服务）
+  - `server/src/document-ocr/document-ocr.service.ts`（PDF OCR 优先读取 OCR 功能配置，按 `useMineru` 选择绑定的 MinerU 配置或视觉模型）
+  - `server/src/document-parsers/parsers/pdf-document.parser.ts`（等待异步 OCR 结果后进入分片流程）
+  - `server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`（新增视觉模型 OCR 调用能力）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat.service.ts`（适配 AI 功能配置账号/模型可空后的聊天兜底）
+  - `server/src/mineru-configs/mineru-configs.service.ts`（MinerU 解析支持指定配置 ID，不再只依赖全局启用配置；创建任务响应兼容嵌套/数组任务 ID，并在缺少任务 ID 时返回响应摘要）
+  - `web/src/api/aiFeatureConfig.ts`（前端类型支持账号/模型可空和 `useMineru`）
+  - `web/src/views/ai-feature-config/Edit.vue`（OCR 配置增加 MinerU/视觉模型切换，MinerU 模式下选择具体 MinerU 配置）
+  - `web/src/views/ai-feature-config/Index.vue`（列表展示 OCR 执行方式和绑定的 MinerU 配置）
+  - `CHANGELOG.md`（追加本次 OCR 配置分流快照）
+- 删除：无
+- 说明：手动 PDF 解析提取不到文本时，会读取启用的 OCR 功能配置；`useMineru=true` 走该 AI 功能配置绑定的 MinerU 配置，`useMineru=false` 走所选账号的视觉模型。视觉 OCR 请求已兼容只接受 `user` 多模态消息的供应商，响应读取兼容 `choices` / `output` / `output_text` 等常见格式。已执行 `server` 的 `npm.cmd run build` 与 `web` 的 `npm.cmd run type-check`，均通过。
+
 ### 2026-08-19 优化 AI 功能配置模型匹配
 - 新增：无
 - 修改：
