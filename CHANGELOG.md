@@ -1,5 +1,26 @@
 # CHANGELOG
 
+### 2026-08-22 修复知识库分片配置编辑页校验与类型问题
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-chunk-config/Edit.vue`（`handleSubmit` 捕获 `el-form.validate()` 校验失败 reject，避免未处理异常并补表单未挂载兜底；`name` trim 后二次校验防止提交空名称；`watch(visible)` 加载详情补 catch 兜底；`fields` computed 三个条件展开数组加 `as FormField[]` 断言修复 `component` 类型拓宽导致的类型错误）
+- 删除：无
+- 说明：`validate()` 校验失败在 Element Plus 中会 reject，原代码 `await formRef.value?.validate()` 会抛未处理异常；`required` 校验不拦截纯空格，trim 后可能提交空名称；条件展开数组字面量无法获得 `FormField` 上下文类型，导致 `computed<FormField[]>` 失配（同为动态字段的 retrieval 页用显式 `FormField[]` 变量规避，本页改为断言）。
+
+### 2026-08-22 手动分片三项优化（单片段同步 / 锁定二分 / 上限配置化）
+- 新增：无
+- 修改：
+  - `server/src/knowledge-bases/dto/knowledge-base.dto.ts`（`CreateKnowledgeBaseChunkDto` 增加手动分片字段 `coreContent/manualStartOffset/manualEndOffset/contextBeforeLength/contextAfterLength`，`UpdateKnowledgeBaseChunkDto` 自动继承）
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（`createChunk`/`updateChunk` 落手动字段；`createChunk`/`removeChunk` 删除后通过私有 `syncDocumentChunkState` 同步文档状态；删空时回退 parsed/pending）
+  - `server/src/knowledge-chunk-configs/entities/knowledge-chunk-config.entity.ts`（新增 `manualMaxChunks`，默认 500）
+  - `server/src/knowledge-chunk-configs/dto/knowledge-chunk-config.dto.ts`、`knowledge-chunk-configs.service.ts`（新增字段校验、保存与种子默认值）
+  - `web/src/api/knowledgeChunkConfig.ts`（`KnowledgeChunkConfig` 接口与 `KnowledgeChunkConfigForm` 增加 `manualMaxChunks`）
+  - `web/src/views/knowledge-chunk-config/Edit.vue`（手动模式表单新增「手动分片上限」输入项，含校验/默认/回填/提交）
+  - `web/src/api/knowledgeBase.ts`（`KnowledgeBaseChunkForm` 增加手动字段，支持单条传输）
+  - `web/src/views/knowledge-base/View.vue`（`ManualChunkDraft` 增 `id`；新增/删除/改标题改为调用单条接口 `create/update/deleteKnowledgeBaseChunk`，不再整表替换；锁定检测改为有序区间 + 二分查找 `manualLockedRanges`；`prepareManualChunks` 加载分页与创建上限改用 `manualMaxChunks`；分片计数显示上限）
+- 删除：无
+- 说明：手动分片由整表 softDelete+重建改为单条增量同步，每次增/删/改标题仅传单个片段，显著降低接口数据压力；锁定检测从 O(chunks) 逐字符扫描降为 O(log n) 二分；500 条上限保留并下沉到「知识库分片配置」的 `manualMaxChunks`（可配置 1~10000），达到上限时提示用户删除分片或调整配置。
+
 ### 2026-08-22 强化 AI 自动提交为强制规则
 - 新增：无
 - 修改：
