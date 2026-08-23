@@ -1,5 +1,19 @@
 # CHANGELOG
 
+### 2026-08-24 新增向量化配置后台页面
+- 新增：
+  - `server/src/vector-configs/`（向量化配置实体、DTO、Controller、Service、Module；支持 Chroma 地址、Collection、Tenant、Database、Token 和启用开关）
+  - `web/src/api/vectorConfig.ts`（向量化配置接口封装）
+  - `web/src/views/vector-config/Index.vue`、`web/src/views/vector-config/Edit.vue`（向量化配置列表与编辑弹窗）
+- 修改：
+  - `server/src/knowledge-vectors/knowledge-vector.service.ts`（向量服务优先读取已启用的后台向量化配置；无配置时回退到 `CHROMA_*` 环境变量）
+  - `server/src/knowledge-vectors/knowledge-vectors.module.ts`（引入向量化配置模块）
+  - `server/src/app.module.ts`（挂载向量化配置模块并补充 Chroma 环境变量校验）
+  - `server/src/menus/menus.service.ts`（系统配置下新增“向量化配置”菜单）
+  - `web/src/router/index.ts`（新增 `/system-config/vector` 路由）
+- 删除：无
+- 说明：后台可维护多条向量化配置，但同一时间仅允许启用一条；索引与检索会使用启用配置连接 Chroma，未启用配置时保持环境变量兜底。
+
 ### 2026-08-24 接入知识库分片真实向量索引链路
 - 新增：
   - `server/src/knowledge-vectors/knowledge-embedding.service.ts`（读取已启用的 embedding AI 功能配置，调用大模型账号向量接口）

@@ -171,6 +171,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'MinerU 解析配置', permission: 'Menu.read' },
       },
       {
+        path: 'system-config/vector',
+        name: 'system-config-vector',
+        component: () => import('@/views/vector-config/Index.vue'),
+        meta: { title: '向量化配置', permission: 'Menu.read' },
+      },
+      {
         // 布局内兜底 404（保留侧边栏）
         path: ':pathMatch(.*)*',
         name: 'not-found',

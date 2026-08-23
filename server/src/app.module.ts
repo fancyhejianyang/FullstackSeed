@@ -25,6 +25,7 @@ import { MineruConfigsModule } from './mineru-configs/mineru-configs.module';
 import { ExternalAppsModule } from './external-apps/external-apps.module';
 import { AiFeatureConfigsModule } from './ai-feature-configs/ai-feature-configs.module';
 import { KnowledgeRetrievalConfigsModule } from './knowledge-retrieval-configs/knowledge-retrieval-configs.module';
+import { VectorConfigsModule } from './vector-configs/vector-configs.module';
 
 @Module({
   imports: [
@@ -51,6 +52,11 @@ import { KnowledgeRetrievalConfigsModule } from './knowledge-retrieval-configs/k
         JWT_EXPIRES_IN: Joi.string().default('7d'),
         BCRYPT_SALT_ROUNDS: Joi.number().integer().min(4).max(15).default(10),
         UPLOAD_PUBLIC_BASE_URL: Joi.string().allow('').default(''),
+        CHROMA_URL: Joi.string().allow('').default('http://localhost:8000'),
+        CHROMA_COLLECTION: Joi.string().allow('').default('knowledge_chunks'),
+        CHROMA_TENANT: Joi.string().allow('').default('default_tenant'),
+        CHROMA_DATABASE: Joi.string().allow('').default('default_database'),
+        CHROMA_TOKEN: Joi.string().allow('').default(''),
         ADMIN_PASSWORD: Joi.when('NODE_ENV', {
           is: 'production',
           then: Joi.string().min(8).required(),
@@ -111,6 +117,7 @@ import { KnowledgeRetrievalConfigsModule } from './knowledge-retrieval-configs/k
     KnowledgeAiProvidersModule,
     AiFeatureConfigsModule,
     KnowledgeRetrievalConfigsModule,
+    VectorConfigsModule,
     KnowledgeAiChatModule,
     ExternalAppsModule,
     MineruConfigsModule,

@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { ChromaClient, type Collection, type Metadata, type Where } from 'chromadb';
+import { VectorConfigsService } from '../vector-configs/vector-configs.service';
 
 export interface KnowledgeVectorUpsertItem {
   id: string;
@@ -19,6 +20,9 @@ export interface KnowledgeVectorSearchResult {
 export class KnowledgeVectorService {
   private client: ChromaClient | null = null;
   private collectionPromise: Promise<Collection> | null = null;
+  private configCacheKey = '';
+
+  constructor(private readonly vectorConfigsService: VectorConfigsService) {}
 
   async upsertChunks(items: KnowledgeVectorUpsertItem[]) {
     if (!items.length) return;
@@ -77,9 +81,22 @@ export class KnowledgeVectorService {
   }
 
   private async getCollection() {
+    const config = await this.vectorConfigsService.findUsableConfig();
+    const cacheKey = [
+      config.chromaUrl,
+      config.collectionName,
+      config.tenant,
+      config.database,
+      config.token || '',
+    ].join('|');
+    if (cacheKey !== this.configCacheKey) {
+      this.client = null;
+      this.collectionPromise = null;
+      this.configCacheKey = cacheKey;
+    }
     if (!this.collectionPromise) {
-      this.collectionPromise = this.getClient().getOrCreateCollection({
-        name: process.env.CHROMA_COLLECTION || 'knowledge_chunks',
+      this.collectionPromise = this.getClient(config).getOrCreateCollection({
+        name: config.collectionName,
         metadata: {
           source: 'FullstackSeed',
           purpose: 'knowledge-base',
@@ -89,18 +106,18 @@ export class KnowledgeVectorService {
     return this.collectionPromise;
   }
 
-  private getClient() {
+  private getClient(config: Awaited<ReturnType<VectorConfigsService['findUsableConfig']>>) {
     if (this.client) return this.client;
-    const url = this.parseChromaUrl(process.env.CHROMA_URL || 'http://localhost:8000');
-    const headers = process.env.CHROMA_TOKEN
-      ? { Authorization: `Bearer ${process.env.CHROMA_TOKEN}` }
+    const url = this.parseChromaUrl(config.chromaUrl);
+    const headers = config.token
+      ? { Authorization: `Bearer ${config.token}` }
       : undefined;
     this.client = new ChromaClient({
       host: url.hostname,
       port: Number(url.port || (url.protocol === 'https:' ? 443 : 80)),
       ssl: url.protocol === 'https:',
-      tenant: process.env.CHROMA_TENANT || 'default_tenant',
-      database: process.env.CHROMA_DATABASE || 'default_database',
+      tenant: config.tenant,
+      database: config.database,
       headers,
     });
     return this.client;
