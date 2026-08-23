@@ -1,5 +1,24 @@
 # CHANGELOG
 
+### 2026-08-24 接入知识库分片真实向量索引链路
+- 新增：
+  - `server/src/knowledge-vectors/knowledge-embedding.service.ts`（读取已启用的 embedding AI 功能配置，调用大模型账号向量接口）
+  - `server/src/knowledge-vectors/knowledge-vector.service.ts`（封装 Chroma upsert/delete/search）
+  - `server/src/knowledge-vectors/knowledge-vectors.module.ts`（向量服务模块）
+- 修改：
+  - `server/src/knowledge-bases/entities/knowledge-base-chunk.entity.ts`（新增 `vectorId/contentHash/vectorStatus/vectorError/vectorizedAt` 分片向量字段）
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（分片新增/删除/更新顺序与待索引状态规范化；索引任务改为真实 embedding + Chroma 写入；删除知识库/文档/分片时清理旧向量）
+  - `server/src/knowledge-bases/knowledge-bases.module.ts`（引入向量服务模块）
+  - `server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`（新增 embedding 目标解析、OpenAI 兼容 `/embeddings` 调用与响应解析）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat-retrieval.service.ts`（按检索配置接入 `fullText/vector/hybrid`，混合模式融合关键词召回和向量召回）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat.module.ts`（引入向量服务模块）
+  - `server/.env.example`（补充 Chroma 连接配置）
+  - `web/src/api/knowledgeBase.ts`（补充分片向量字段类型）
+  - `web/src/views/knowledge-base/View.vue`（分片内容列表展示向量状态、错误原因和向量化时间）
+  - `知识库处理流程.md`（追加已落地实现记录和运行前置）
+- 删除：无
+- 说明：点击知识库列表「索引」后会进入真实异步向量化；未配置启用的 embedding 功能配置或 Chroma 服务不可用时，失败原因会回写到知识库处理结果和分片向量错误字段。
+
 ### 2026-08-23 补充 Chroma 服务端依赖计划
 - 新增：无
 - 修改：

@@ -9,12 +9,16 @@ import { KnowledgeBasesService } from './knowledge-bases.service';
 import { DocumentParsersModule } from '../document-parsers/document-parsers.module';
 import { MineruConfigsModule } from '../mineru-configs/mineru-configs.module';
 import { TaskQueueModule } from '../task-queue/task-queue.module';
+import { KnowledgeChunkConfigsModule } from '../knowledge-chunk-configs/knowledge-chunk-configs.module';
+import { KnowledgeVectorsModule } from '../knowledge-vectors/knowledge-vectors.module';
 
 @Module({
   imports: [
     DocumentParsersModule,
     MineruConfigsModule,
     TaskQueueModule,
+    KnowledgeChunkConfigsModule,
+    KnowledgeVectorsModule,
     TypeOrmModule.forFeature([
       KnowledgeBase,
       KnowledgeBaseCategory,

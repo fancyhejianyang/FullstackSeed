@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, Repository, type FindOptionsWhere } from 'typeorm';
+import { createHash } from 'crypto';
 import {
   BatchDeleteKnowledgeBaseDto,
   CreateKnowledgeBaseCategoryDto,
@@ -15,6 +16,7 @@ import {
   QueryKnowledgeBaseChunkDto,
   QueryKnowledgeBaseDocumentDto,
   QueryKnowledgeBaseDto,
+  ReplaceKnowledgeBaseDocumentChunksDto,
   UpdateKnowledgeBaseCategoryDto,
   UpdateKnowledgeBaseChunkDto,
   UpdateKnowledgeBaseDocumentDto,
@@ -27,6 +29,11 @@ import { KnowledgeBase } from './entities/knowledge-base.entity';
 import { DocumentParsersService } from '../document-parsers/document-parsers.service';
 import { MineruConfigsService } from '../mineru-configs/mineru-configs.service';
 import { TaskQueueService } from '../task-queue/task-queue.service';
+import { KnowledgeChunkConfigsService } from '../knowledge-chunk-configs/knowledge-chunk-configs.service';
+import type { KnowledgeChunkConfig } from '../knowledge-chunk-configs/entities/knowledge-chunk-config.entity';
+import { KnowledgeEmbeddingService } from '../knowledge-vectors/knowledge-embedding.service';
+import { KnowledgeVectorService } from '../knowledge-vectors/knowledge-vector.service';
+import type { Metadata } from 'chromadb';
 
 export interface KnowledgeBaseCategoryTreeNode extends KnowledgeBaseCategory {
   children: KnowledgeBaseCategoryTreeNode[];
@@ -35,6 +42,13 @@ export interface KnowledgeBaseCategoryTreeNode extends KnowledgeBaseCategory {
 const KNOWLEDGE_PARSE_MODE = {
   manual: 'manual',
   mineru: 'mineru',
+} as const;
+
+const KNOWLEDGE_CHUNK_VECTOR_STATUS = {
+  pending: 'pending',
+  processing: 'processing',
+  success: 'success',
+  failed: 'failed',
 } as const;
 
 type KnowledgeParseMode =
@@ -54,6 +68,9 @@ export class KnowledgeBasesService {
     private readonly documentParsersService: DocumentParsersService,
     private readonly mineruConfigsService: MineruConfigsService,
     private readonly taskQueueService: TaskQueueService,
+    private readonly chunkConfigsService: KnowledgeChunkConfigsService,
+    private readonly embeddingService: KnowledgeEmbeddingService,
+    private readonly vectorService: KnowledgeVectorService,
   ) {}
 
   async findBases(query: QueryKnowledgeBaseDto) {
@@ -138,6 +155,11 @@ export class KnowledgeBasesService {
       dto.contentText !== undefined ||
       dto.fileName !== undefined ||
       dto.fileUrl !== undefined;
+    const retrievalMetadataChanged =
+      dto.name !== undefined ||
+      dto.hitKeywords !== undefined ||
+      dto.colloquialDescription !== undefined ||
+      dto.matchPriority !== undefined;
     if (dto.categoryId !== undefined) {
       await this.assertRequiredCategory(dto.categoryId);
       base.categoryId = dto.categoryId;
@@ -192,11 +214,18 @@ export class KnowledgeBasesService {
     }
     if (dto.isEnabled !== undefined) base.isEnabled = dto.isEnabled;
     if (dto.sort !== undefined) base.sort = dto.sort;
-    return this.baseRepository.save(base);
+    const saved = await this.baseRepository.save(base);
+    if (!contentChanged && retrievalMetadataChanged) {
+      await this.markBaseIndexPendingByBaseId(saved.id);
+      saved.indexStatus = 'pending';
+      saved.lastProcessMessage = '检索辅助信息已变更，等待重新索引';
+    }
+    return saved;
   }
 
   async removeBase(id: number) {
     await this.findBase(id);
+    await this.deleteVectorsByCondition({ knowledgeBaseId: id });
     await this.chunkRepository.softDelete({ knowledgeBaseId: id });
     await this.documentRepository.softDelete({ knowledgeBaseId: id });
     await this.baseRepository.softDelete(id);
@@ -208,6 +237,7 @@ export class KnowledgeBasesService {
     if (!ids.length) return { ids: [] };
     const count = await this.baseRepository.count({ where: { id: In(ids) } });
     if (count !== ids.length) throw new NotFoundException('部分知识库不存在');
+    await this.deleteVectorsByCondition({ knowledgeBaseId: In(ids) });
     await this.chunkRepository.softDelete({ knowledgeBaseId: In(ids) });
     await this.documentRepository.softDelete({ knowledgeBaseId: In(ids) });
     await this.baseRepository.softDelete(ids);
@@ -293,12 +323,14 @@ export class KnowledgeBasesService {
       lastProcessMessage: '正在生成分片',
     });
     try {
+      const chunkConfig = await this.chunkConfigsService.findDefaultConfig();
       const document = await this.findBaseDocument(base.id);
       if (!document?.content) {
         throw new BadRequestException('当前知识库文档缺少正文内容');
       }
+      await this.deleteVectorsByCondition({ documentId: document.id });
       await this.chunkRepository.softDelete({ documentId: document.id });
-      const chunkCount = await this.saveDocumentChunks(document);
+      const chunkCount = await this.saveDocumentChunks(document, chunkConfig);
       await this.updateBaseProcess(base, {
         processStage: 'chunked',
         chunkStatus: 'success',
@@ -344,21 +376,112 @@ export class KnowledgeBasesService {
       indexStatus: 'processing',
       lastProcessMessage: '正在写入索引',
     });
+    let processingChunkIds: number[] = [];
     try {
-      const chunkCount = await this.chunkRepository.count({
+      const chunks = await this.chunkRepository.find({
         where: { knowledgeBaseId: id },
+        order: { sort: 'ASC', chunkIndex: 'ASC', id: 'ASC' },
       });
-      if (!chunkCount) {
+      if (!chunks.length) {
         throw new BadRequestException('当前知识库没有可索引的分片');
       }
+
+      const documentIds = Array.from(new Set(chunks.map((chunk) => chunk.documentId)));
+      const documents = await this.documentRepository.find({
+        where: { id: In(documentIds) },
+      });
+      const documentMap = new Map(documents.map((item) => [item.id, item]));
+      const indexItems = chunks
+        .map((chunk) => {
+          const document = documentMap.get(chunk.documentId);
+          const vectorText = this.buildVectorDocumentText(base, document, chunk);
+          const contentHash = this.buildContentHash(vectorText);
+          return {
+            chunk,
+            document,
+            vectorId: this.buildChunkVectorId(chunk),
+            vectorText,
+            contentHash,
+          };
+        })
+        .filter(
+          (item) =>
+            item.chunk.vectorStatus !== KNOWLEDGE_CHUNK_VECTOR_STATUS.success ||
+            item.chunk.contentHash !== item.contentHash ||
+            item.chunk.vectorId !== item.vectorId,
+        );
+
+      if (!indexItems.length) {
+        await this.updateBaseProcess(base, {
+          processStage: 'indexed',
+          indexStatus: 'success',
+          lastProcessMessage: `索引已是最新状态，共 ${chunks.length} 个分片无需重建`,
+        });
+        return {
+          id,
+          chunkCount: chunks.length,
+          indexedCount: 0,
+          skippedCount: chunks.length,
+          processStage: 'indexed',
+        };
+      }
+
+      processingChunkIds = indexItems.map((item) => item.chunk.id);
+      await this.chunkRepository.update(
+        { id: In(processingChunkIds) },
+        {
+          vectorStatus: KNOWLEDGE_CHUNK_VECTOR_STATUS.processing,
+          vectorError: null,
+        },
+      );
+
+      const embeddings = await this.embeddingService.embedDocuments(
+        indexItems.map((item) => item.vectorText),
+      );
+      await this.vectorService.upsertChunks(
+        indexItems.map((item, index) => ({
+          id: item.vectorId,
+          embedding: embeddings[index],
+          document: item.vectorText,
+          metadata: this.buildVectorMetadata(base, item.document, item.chunk),
+        })),
+      );
+
+      const now = new Date();
+      await this.chunkRepository.save(
+        indexItems.map((item) => {
+          item.chunk.vectorId = item.vectorId;
+          item.chunk.contentHash = item.contentHash;
+          item.chunk.vectorStatus = KNOWLEDGE_CHUNK_VECTOR_STATUS.success;
+          item.chunk.vectorError = null;
+          item.chunk.vectorizedAt = now;
+          item.chunk.tokenCount = item.chunk.content.length;
+          return item.chunk;
+        }),
+      );
       await this.updateBaseProcess(base, {
         processStage: 'indexed',
         indexStatus: 'success',
         lastProcessMessage:
-          '索引标记已完成，向量数据库写入逻辑已预留',
+          `索引完成：写入 ${indexItems.length} 个分片，跳过 ${chunks.length - indexItems.length} 个未变化分片`,
       });
-      return { id, chunkCount, processStage: 'indexed' };
+      return {
+        id,
+        chunkCount: chunks.length,
+        indexedCount: indexItems.length,
+        skippedCount: chunks.length - indexItems.length,
+        processStage: 'indexed',
+      };
     } catch (error) {
+      if (processingChunkIds.length) {
+        await this.chunkRepository.update(
+          { id: In(processingChunkIds) },
+          {
+            vectorStatus: KNOWLEDGE_CHUNK_VECTOR_STATUS.failed,
+            vectorError: error instanceof Error ? error.message : '索引失败',
+          },
+        );
+      }
       await this.updateBaseProcess(base, {
         processStage: 'failed',
         indexStatus: 'failed',
@@ -629,9 +752,12 @@ export class KnowledgeBasesService {
     document.sourceType = KNOWLEDGE_PARSE_MODE.manual;
     const saved = await this.documentRepository.save(document);
     await this.syncBaseParsedContent(saved, content);
+    await this.deleteVectorsByCondition({ documentId: saved.id });
     await this.chunkRepository.softDelete({ documentId: saved.id });
     const chunkCount = await this.saveDocumentChunks(saved);
-    saved.description = `手动解析完成，共 ${chunkCount} 个分片`;
+    saved.description = chunkCount
+      ? `手动解析完成，共 ${chunkCount} 个分片`
+      : '手动解析完成，等待手动分片';
     await this.documentRepository.save(saved);
     return {
       document: saved,
@@ -673,6 +799,13 @@ export class KnowledgeBasesService {
 
   async updateDocument(id: number, dto: UpdateKnowledgeBaseDocumentDto) {
     const document = await this.findDocument(id);
+    const retrievalMetadataChanged =
+      dto.title !== undefined ||
+      dto.content !== undefined ||
+      dto.sourceName !== undefined ||
+      dto.hitKeywords !== undefined ||
+      dto.colloquialDescription !== undefined ||
+      dto.matchPriority !== undefined;
     const knowledgeBaseId = dto.knowledgeBaseId ?? document.knowledgeBaseId;
     const base = await this.findBase(knowledgeBaseId);
     const categoryId =
@@ -713,11 +846,15 @@ export class KnowledgeBasesService {
         categoryId: saved.categoryId,
       },
     );
+    if (retrievalMetadataChanged) {
+      await this.markBaseIndexPendingByDocument(saved.id, true);
+    }
     return saved;
   }
 
   async removeDocument(id: number) {
     await this.findDocument(id);
+    await this.deleteVectorsByCondition({ documentId: id });
     await this.chunkRepository.softDelete({ documentId: id });
     await this.documentRepository.softDelete(id);
     return { id };
@@ -761,18 +898,89 @@ export class KnowledgeBasesService {
 
   async createChunk(dto: CreateKnowledgeBaseChunkDto) {
     const document = await this.findDocument(dto.documentId);
-    return this.chunkRepository.save(
+    const nextOrder = await this.nextChunkOrder(document.id);
+    const chunk = await this.chunkRepository.save(
       this.chunkRepository.create({
         knowledgeBaseId: document.knowledgeBaseId,
         categoryId: document.categoryId,
         documentId: document.id,
-        chunkIndex: dto.chunkIndex ?? 0,
+        chunkIndex: dto.chunkIndex ?? nextOrder,
         title: dto.title?.trim() ?? '',
         content: dto.content.trim(),
-        tokenCount: dto.tokenCount ?? 0,
-        sort: dto.sort ?? 0,
+        coreContent: dto.coreContent?.trim() || null,
+        manualStartOffset: dto.manualStartOffset ?? null,
+        manualEndOffset: dto.manualEndOffset ?? null,
+        contextBeforeLength: dto.contextBeforeLength ?? 0,
+        contextAfterLength: dto.contextAfterLength ?? 0,
+        tokenCount: dto.tokenCount ?? dto.content.trim().length,
+        sort: dto.sort ?? nextOrder,
+        vectorStatus: KNOWLEDGE_CHUNK_VECTOR_STATUS.pending,
+        vectorError: null,
       }),
     );
+    // 单条创建后同步文档分片状态（与整表 replace 保持一致）
+    await this.syncDocumentChunkState(document.id);
+    return chunk;
+  }
+
+  async replaceDocumentChunks(
+    documentId: number,
+    dto: ReplaceKnowledgeBaseDocumentChunksDto,
+  ) {
+    const document = await this.findDocument(documentId);
+    const chunks = dto.chunks
+      .map((item) => ({
+        title: item.title?.trim() || '',
+        content: item.content,
+        coreContent: item.coreContent?.trim() || null,
+        manualStartOffset: item.manualStartOffset ?? null,
+        manualEndOffset: item.manualEndOffset ?? null,
+        contextBeforeLength: item.contextBeforeLength ?? 0,
+        contextAfterLength: item.contextAfterLength ?? 0,
+      }))
+      .filter((item) => item.content.trim());
+    await this.deleteVectorsByCondition({ documentId });
+    await this.chunkRepository.softDelete({ documentId });
+    if (chunks.length) {
+      await this.chunkRepository.save(
+        chunks.map((chunk, index) =>
+          this.chunkRepository.create({
+            knowledgeBaseId: document.knowledgeBaseId,
+            categoryId: document.categoryId,
+            documentId: document.id,
+            chunkIndex: index,
+            title: chunk.title || `${document.title} #${index + 1}`,
+            content: chunk.content,
+            coreContent: chunk.coreContent,
+            manualStartOffset: chunk.manualStartOffset,
+            manualEndOffset: chunk.manualEndOffset,
+            contextBeforeLength: chunk.contextBeforeLength,
+            contextAfterLength: chunk.contextAfterLength,
+            tokenCount: chunk.content.length,
+            sort: index,
+            vectorStatus: KNOWLEDGE_CHUNK_VECTOR_STATUS.pending,
+            vectorError: null,
+          }),
+        ),
+      );
+    }
+    document.description = chunks.length
+      ? `手动分片完成，共 ${chunks.length} 个分片`
+      : '手动分片已清空，等待重新分片';
+    await this.documentRepository.save(document);
+    const base = await this.baseRepository.findOne({
+      where: { id: document.knowledgeBaseId },
+    });
+    const processStage = chunks.length ? 'chunked' : 'parsed';
+    if (base) {
+      await this.updateBaseProcess(base, {
+        processStage,
+        chunkStatus: chunks.length ? 'success' : 'pending',
+        indexStatus: 'pending',
+        lastProcessMessage: document.description,
+      });
+    }
+    return { documentId, chunkCount: chunks.length, processStage };
   }
 
   async updateChunk(id: number, dto: UpdateKnowledgeBaseChunkDto) {
@@ -786,15 +994,212 @@ export class KnowledgeBasesService {
     if (dto.chunkIndex !== undefined) chunk.chunkIndex = dto.chunkIndex;
     if (dto.title !== undefined) chunk.title = dto.title.trim();
     if (dto.content !== undefined) chunk.content = dto.content.trim();
-    if (dto.tokenCount !== undefined) chunk.tokenCount = dto.tokenCount;
+    if (dto.coreContent !== undefined)
+      chunk.coreContent = dto.coreContent.trim() || null;
+    if (dto.manualStartOffset !== undefined)
+      chunk.manualStartOffset = dto.manualStartOffset ?? null;
+    if (dto.manualEndOffset !== undefined)
+      chunk.manualEndOffset = dto.manualEndOffset ?? null;
+    if (dto.contextBeforeLength !== undefined)
+      chunk.contextBeforeLength = dto.contextBeforeLength;
+    if (dto.contextAfterLength !== undefined)
+      chunk.contextAfterLength = dto.contextAfterLength;
+    if (dto.tokenCount !== undefined) {
+      chunk.tokenCount = dto.tokenCount;
+    } else if (dto.content !== undefined) {
+      chunk.tokenCount = chunk.content.length;
+    }
     if (dto.sort !== undefined) chunk.sort = dto.sort;
-    return this.chunkRepository.save(chunk);
+    chunk.vectorStatus = KNOWLEDGE_CHUNK_VECTOR_STATUS.pending;
+    chunk.vectorError = null;
+    chunk.vectorizedAt = null;
+    chunk.contentHash = null;
+    const saved = await this.chunkRepository.save(chunk);
+    await this.markBaseIndexPendingByDocument(saved.documentId);
+    return saved;
   }
 
   async removeChunk(id: number) {
-    await this.findChunk(id);
+    const chunk = await this.findChunk(id);
+    const { documentId } = chunk;
+    await this.deleteVectorsByIds(chunk.vectorId ? [chunk.vectorId] : []);
     await this.chunkRepository.softDelete(id);
+    await this.reorderDocumentChunks(documentId);
+    // 单条删除后同步文档分片状态（删空时回退为 parsed/pending）
+    await this.syncDocumentChunkState(documentId);
     return { id };
+  }
+
+  // 汇总某文档未删除分片数量，并据此同步文档描述与知识库处理状态
+  private async syncDocumentChunkState(documentId: number) {
+    const document = await this.findDocument(documentId);
+    const count = await this.chunkRepository.count({ where: { documentId } });
+    document.description = count
+      ? `手动分片完成，共 ${count} 个分片`
+      : '手动分片已清空，等待重新分片';
+    await this.documentRepository.save(document);
+    const base = await this.baseRepository.findOne({
+      where: { id: document.knowledgeBaseId },
+    });
+    if (base) {
+      await this.updateBaseProcess(base, {
+        processStage: count ? 'chunked' : 'parsed',
+        chunkStatus: count ? 'success' : 'pending',
+        indexStatus: 'pending',
+        lastProcessMessage: document.description,
+      });
+    }
+  }
+
+  private async nextChunkOrder(documentId: number) {
+    const latest = await this.chunkRepository.findOne({
+      where: { documentId },
+      order: { sort: 'DESC', chunkIndex: 'DESC', id: 'DESC' },
+    });
+    return Math.max(latest?.sort ?? -1, latest?.chunkIndex ?? -1) + 1;
+  }
+
+  private async reorderDocumentChunks(documentId: number) {
+    const chunks = await this.chunkRepository.find({
+      where: { documentId },
+      order: { sort: 'ASC', chunkIndex: 'ASC', id: 'ASC' },
+    });
+    if (!chunks.length) return;
+    await this.chunkRepository.save(
+      chunks.map((chunk, index) => {
+        chunk.chunkIndex = index;
+        chunk.sort = index;
+        return chunk;
+      }),
+    );
+  }
+
+  private async markBaseIndexPendingByDocument(
+    documentId: number,
+    resetChunks = false,
+  ) {
+    const document = await this.findDocument(documentId);
+    const count = await this.chunkRepository.count({ where: { documentId } });
+    if (!count) return;
+    if (resetChunks) {
+      await this.chunkRepository.update(
+        { documentId },
+        {
+          vectorStatus: KNOWLEDGE_CHUNK_VECTOR_STATUS.pending,
+          vectorError: null,
+          vectorizedAt: null,
+          contentHash: null,
+        },
+      );
+    }
+    const base = await this.baseRepository.findOne({
+      where: { id: document.knowledgeBaseId },
+    });
+    if (!base) return;
+    await this.updateBaseProcess(base, {
+      processStage: 'chunked',
+      chunkStatus: 'success',
+      indexStatus: 'pending',
+      lastProcessMessage: '分片已变更，等待重新索引',
+    });
+  }
+
+  private async markBaseIndexPendingByBaseId(knowledgeBaseId: number) {
+    const count = await this.chunkRepository.count({
+      where: { knowledgeBaseId },
+    });
+    if (!count) return;
+    await this.chunkRepository.update(
+      { knowledgeBaseId },
+      {
+        vectorStatus: KNOWLEDGE_CHUNK_VECTOR_STATUS.pending,
+        vectorError: null,
+        vectorizedAt: null,
+        contentHash: null,
+      },
+    );
+    const base = await this.baseRepository.findOne({
+      where: { id: knowledgeBaseId },
+    });
+    if (!base) return;
+    await this.updateBaseProcess(base, {
+      processStage: 'chunked',
+      chunkStatus: 'success',
+      indexStatus: 'pending',
+      lastProcessMessage: '检索辅助信息已变更，等待重新索引',
+    });
+  }
+
+  private buildChunkVectorId(chunk: KnowledgeBaseChunk) {
+    return `kb:${chunk.knowledgeBaseId}:doc:${chunk.documentId}:chunk:${chunk.id}`;
+  }
+
+  private buildContentHash(value: string) {
+    return createHash('sha256').update(value, 'utf8').digest('hex');
+  }
+
+  private buildVectorDocumentText(
+    base: KnowledgeBase,
+    document: KnowledgeBaseDocument | undefined,
+    chunk: KnowledgeBaseChunk,
+  ) {
+    const hitKeywords = document?.hitKeywords || base.hitKeywords || '';
+    const colloquialDescription =
+      document?.colloquialDescription || base.colloquialDescription || '';
+    return [
+      `标题：${chunk.title || document?.title || base.name}`,
+      `知识库：${base.name}`,
+      document?.sourceName ? `来源：${document.sourceName}` : '',
+      hitKeywords ? `命中关键字：${hitKeywords}` : '',
+      colloquialDescription ? `口语化描述：${colloquialDescription}` : '',
+      `匹配优先级：${document?.matchPriority ?? base.matchPriority ?? 0}`,
+      '正文：',
+      chunk.content,
+    ]
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  private buildVectorMetadata(
+    base: KnowledgeBase,
+    document: KnowledgeBaseDocument | undefined,
+    chunk: KnowledgeBaseChunk,
+  ): Metadata {
+    return {
+      knowledgeBaseId: chunk.knowledgeBaseId,
+      categoryId: chunk.categoryId ?? 0,
+      documentId: chunk.documentId,
+      chunkId: chunk.id,
+      chunkIndex: chunk.chunkIndex,
+      sort: chunk.sort,
+      title: chunk.title || document?.title || base.name,
+      sourceName: document?.sourceName || base.name,
+      contentType: base.contentType,
+      fileName: base.fileName || '',
+      fileUrl: base.fileUrl || '',
+      hitKeywords: document?.hitKeywords || base.hitKeywords || '',
+      colloquialDescription:
+        document?.colloquialDescription || base.colloquialDescription || '',
+      matchPriority: document?.matchPriority ?? base.matchPriority ?? 0,
+      manualStartOffset: chunk.manualStartOffset ?? -1,
+      manualEndOffset: chunk.manualEndOffset ?? -1,
+    };
+  }
+
+  private async deleteVectorsByCondition(
+    where: FindOptionsWhere<KnowledgeBaseChunk> | FindOptionsWhere<KnowledgeBaseChunk>[],
+  ) {
+    const chunks = await this.chunkRepository.find({ where });
+    await this.deleteVectorsByIds(
+      chunks
+        .map((chunk) => chunk.vectorId)
+        .filter((id): id is string => Boolean(id)),
+    );
+  }
+
+  private async deleteVectorsByIds(vectorIds: string[]) {
+    if (!vectorIds.length) return;
+    await this.vectorService.deleteChunks(vectorIds);
   }
 
   private buildCategoryTree(list: KnowledgeBaseCategory[]) {
@@ -933,8 +1338,17 @@ export class KnowledgeBasesService {
     return saved;
   }
 
-  private async saveDocumentChunks(document: KnowledgeBaseDocument) {
-    const chunks = this.splitMarkdown(document.content ?? '');
+  private async saveDocumentChunks(
+    document: KnowledgeBaseDocument,
+    config?: KnowledgeChunkConfig,
+  ) {
+    const chunkConfig =
+      config ?? (await this.chunkConfigsService.findDefaultConfig());
+    const chunks = this.splitMarkdown(
+      document.content ?? '',
+      chunkConfig,
+      this.resolveChunkDeadline(chunkConfig),
+    );
     if (!chunks.length) return 0;
     await this.chunkRepository.save(
       chunks.map((chunk, index) =>
@@ -947,6 +1361,8 @@ export class KnowledgeBasesService {
           content: chunk,
           tokenCount: chunk.length,
           sort: index,
+          vectorStatus: KNOWLEDGE_CHUNK_VECTOR_STATUS.pending,
+          vectorError: null,
         }),
       ),
     );
@@ -979,9 +1395,12 @@ export class KnowledgeBasesService {
     }
     let saved = await this.documentRepository.save(document);
     await this.syncBaseParsedContent(saved, content);
+    await this.deleteVectorsByCondition({ documentId: saved.id });
     await this.chunkRepository.softDelete({ documentId: saved.id });
     const chunkCount = await this.saveDocumentChunks(saved);
-    saved.description = `MinerU 解析完成，共 ${chunkCount} 个分片`;
+    saved.description = chunkCount
+      ? `MinerU 解析完成，共 ${chunkCount} 个分片`
+      : 'MinerU 解析完成，等待手动分片';
     saved = await this.documentRepository.save(saved);
     return { document: saved, chunkCount };
   }
@@ -1004,18 +1423,89 @@ export class KnowledgeBasesService {
     });
   }
 
-  private splitMarkdown(content: string, chunkSize = 1200, overlap = 120) {
+  private splitMarkdown(
+    content: string,
+    config: KnowledgeChunkConfig,
+    deadline: number,
+  ): string[] {
     const text = content.trim();
     if (!text) return [];
+    const chunkSize = config.chunkSize || 1200;
+    const overlap = Math.min(config.chunkOverlap || 0, chunkSize - 1);
+    if (config.separator === 'paragraph') {
+      return this.splitByParagraph(text, chunkSize, overlap, deadline);
+    }
+    return this.splitByLength(text, chunkSize, overlap, deadline);
+  }
+
+  private splitByLength(
+    text: string,
+    chunkSize: number,
+    overlap: number,
+    deadline: number,
+  ): string[] {
     const chunks: string[] = [];
     let start = 0;
     while (start < text.length) {
+      this.assertChunkDeadline(deadline);
       const end = Math.min(start + chunkSize, text.length);
       chunks.push(text.slice(start, end).trim());
       if (end >= text.length) break;
       start = Math.max(end - overlap, start + 1);
     }
     return chunks.filter(Boolean);
+  }
+
+  private splitByParagraph(
+    text: string,
+    chunkSize: number,
+    overlap: number,
+    deadline: number,
+  ): string[] {
+    this.assertChunkDeadline(deadline);
+    const paragraphs = text
+      .split(/\n{2,}/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (!paragraphs.length) {
+      return this.splitByLength(text, chunkSize, overlap, deadline);
+    }
+    const chunks: string[] = [];
+    let current = '';
+    for (const paragraph of paragraphs) {
+      this.assertChunkDeadline(deadline);
+      const next = current ? `${current}\n\n${paragraph}` : paragraph;
+      if (next.length <= chunkSize) {
+        current = next;
+        continue;
+      }
+      if (current) chunks.push(current);
+      if (paragraph.length > chunkSize) {
+        chunks.push(...this.splitByLength(paragraph, chunkSize, overlap, deadline));
+        current = '';
+      } else {
+        current = paragraph;
+      }
+    }
+    if (current) chunks.push(current);
+    if (!overlap) return chunks.filter(Boolean);
+    return chunks.map((chunk, index) => {
+      if (index === 0) return chunk;
+      const prevTail = chunks[index - 1].slice(-overlap);
+      return `${prevTail}\n${chunk}`.trim();
+    });
+  }
+
+  private resolveChunkDeadline(config: KnowledgeChunkConfig) {
+    const minutes = Math.max(1, config.timeoutMinutes || 5);
+    return Date.now() + minutes * 60 * 1000;
+  }
+
+  private assertChunkDeadline(deadline: number) {
+    if (Date.now() <= deadline) return;
+    throw new BadRequestException(
+      '自动分片超时，请调大超时时间或改用手动分片',
+    );
   }
 
   private assertSupportedDocumentFile(fileUrl: string, fileName?: string) {

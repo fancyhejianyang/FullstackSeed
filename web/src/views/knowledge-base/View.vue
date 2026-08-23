@@ -136,6 +136,28 @@ function getStatusLabel(status?: string) {
   return status ? map[status] ?? status : '-';
 }
 
+function getVectorStatusLabel(value?: string | null) {
+  const map: Record<string, string> = {
+    pending: '待向量化',
+    processing: '向量化中',
+    success: '已写入',
+    failed: '失败',
+    skipped: '未变化',
+  };
+  return map[value || 'pending'] || value || '-';
+}
+
+function getVectorStatusType(value?: string | null) {
+  const map: Record<string, 'info' | 'warning' | 'success' | 'danger'> = {
+    pending: 'info',
+    processing: 'warning',
+    success: 'success',
+    failed: 'danger',
+    skipped: 'info',
+  };
+  return map[value || 'pending'] || 'info';
+}
+
 async function fetchChunks() {
   if (!rowData.value?.id) return;
   chunkLoading.value = true;
@@ -1304,6 +1326,27 @@ onBeforeUnmount(() => {
             </template>
           </el-table-column>
           <el-table-column prop="tokenCount" label="字符数" width="100" />
+          <el-table-column prop="vectorStatus" label="向量状态" width="120">
+            <template #default="{ row }">
+              <el-tooltip
+                v-if="row.vectorError"
+                :content="row.vectorError"
+                placement="top"
+              >
+                <el-tag :type="getVectorStatusType(row.vectorStatus)">
+                  {{ getVectorStatusLabel(row.vectorStatus) }}
+                </el-tag>
+              </el-tooltip>
+              <el-tag v-else :type="getVectorStatusType(row.vectorStatus)">
+                {{ getVectorStatusLabel(row.vectorStatus) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="vectorizedAt" label="向量化时间" width="180">
+            <template #default="{ row }">
+              {{ row.vectorizedAt ? formatDateTime(row.vectorizedAt) : '-' }}
+            </template>
+          </el-table-column>
           <el-table-column prop="updatedAt" label="更新时间" width="180">
             <template #default="{ row }">
               {{ row.updatedAt ? formatDateTime(row.updatedAt) : '-' }}

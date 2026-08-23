@@ -42,6 +42,14 @@ interface ChatCompletionStreamResponse {
   }>;
 }
 
+interface EmbeddingResponse {
+  data?: Array<{
+    embedding?: unknown;
+  }>;
+  embeddings?: unknown;
+  output?: unknown;
+}
+
 export interface KnowledgeAiChatMessagePayload {
   role: 'system' | 'user' | 'assistant';
   content: string;
@@ -77,6 +85,11 @@ export interface KnowledgeAiVisionOcrPayload {
   target: KnowledgeAiChatTarget;
   imageDataUrls: string[];
   systemPrompt?: string | null;
+}
+
+export interface KnowledgeAiEmbeddingPayload {
+  target: KnowledgeAiChatTarget;
+  input: string | string[];
 }
 
 export interface KnowledgeAiChatCallResult {
@@ -209,6 +222,31 @@ export class KnowledgeAiProvidersService {
         payload.model,
       ),
       url: this.buildChatUrl(provider),
+      secretKey: provider.secretKey,
+    };
+  }
+
+  async resolveEmbeddingTarget(
+    payload: KnowledgeAiChatTargetPayload,
+  ): Promise<KnowledgeAiChatTarget> {
+    const provider = payload.id
+      ? await this.findEntity(payload.id)
+      : await this.findEnabledEntity();
+    if (!provider.isEnabled) {
+      throw new BadRequestException('该大模型账号未启用');
+    }
+    if (!provider.secretKey) {
+      throw new BadRequestException('该大模型账号未配置密钥');
+    }
+
+    return {
+      providerId: provider.id,
+      providerName: provider.name,
+      model: this.resolveModel(
+        this.joinModelTexts(provider.embeddingModels, provider.models),
+        payload.model,
+      ),
+      url: this.buildEmbeddingUrl(provider),
       secretKey: provider.secretKey,
     };
   }
@@ -385,6 +423,37 @@ export class KnowledgeAiProvidersService {
     }
   }
 
+  async callEmbedding(payload: KnowledgeAiEmbeddingPayload): Promise<number[][]> {
+    const input = Array.isArray(payload.input) ? payload.input : [payload.input];
+    const response = await fetch(payload.target.url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${payload.target.secretKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: payload.target.model,
+        input,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new BadRequestException(
+        `向量模型调用失败：${response.status} ${errorText}`,
+      );
+    }
+
+    const data = (await response.json()) as EmbeddingResponse;
+    const embeddings = this.extractEmbeddings(data);
+    if (embeddings.length !== input.length) {
+      throw new BadRequestException(
+        `向量模型响应数量不匹配：${this.stringifyForError(data)}`,
+      );
+    }
+    return embeddings;
+  }
+
   private async findEntity(id: number) {
     const provider = await this.providerRepository.findOne({ where: { id } });
     if (!provider) {
@@ -470,6 +539,18 @@ export class KnowledgeAiProvidersService {
     );
     if (/\/chat\/completions$/.test(apiUrl)) return apiUrl;
     return `${apiUrl}/${chatPath}`;
+  }
+
+  private buildEmbeddingUrl(provider: KnowledgeAiProvider) {
+    const apiUrl = provider.apiUrl.replace(/\/+$/, '');
+    if (/\/embeddings$/.test(apiUrl)) return apiUrl;
+    if (/\/chat\/completions$/.test(apiUrl)) {
+      return apiUrl.replace(/\/chat\/completions$/, '/embeddings');
+    }
+    return this.buildChatUrl(provider).replace(
+      /\/chat\/completions$/,
+      '/embeddings',
+    );
   }
 
   private buildQuestionMessages(
@@ -566,6 +647,34 @@ export class KnowledgeAiProvidersService {
       this.readMessageContent(record.value) ||
       ''
     ).trim();
+  }
+
+  private extractEmbeddings(data: EmbeddingResponse): number[][] {
+    const direct = this.toEmbeddingList(data.embeddings);
+    if (direct.length) return direct;
+
+    const rows = Array.isArray(data.data) ? data.data : [];
+    const embeddings = rows
+      .map((item) => this.toEmbedding(item.embedding))
+      .filter((item): item is number[] => Boolean(item?.length));
+    if (embeddings.length) return embeddings;
+
+    const output = this.asRecord(data.output);
+    return this.toEmbeddingList(output?.embeddings);
+  }
+
+  private toEmbeddingList(value: unknown) {
+    return Array.isArray(value)
+      ? value
+          .map((item) => this.toEmbedding(item))
+          .filter((item): item is number[] => Boolean(item?.length))
+      : [];
+  }
+
+  private toEmbedding(value: unknown) {
+    if (!Array.isArray(value)) return null;
+    const vector = value.map((item) => Number(item));
+    return vector.every((item) => Number.isFinite(item)) ? vector : null;
   }
 
   private asRecord(value: unknown): Record<string, unknown> | null {

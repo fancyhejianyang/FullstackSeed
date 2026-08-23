@@ -1,5 +1,18 @@
 import request from '@/utils/request';
 
+/**
+ * 校验并返回合法的正整数 ID。
+ * 接口层是数据边界，提前拦截 undefined/NaN/Infinity/负数，
+ * 避免生成 `/knowledge-bases/undefined` 之类的畸形 URL。
+ */
+function assertId(id: number | string | undefined, name: string): number {
+  const value = typeof id === 'string' ? Number(id) : id;
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+    throw new Error(`[knowledgeBase] 非法 ${name}: ${String(id)}`);
+  }
+  return value;
+}
+
 export interface KnowledgeBase {
   id: number;
   categoryId: number | null;
@@ -54,6 +67,10 @@ export interface KnowledgeBaseDocument {
   content: string | null;
   status: string;
   description: string | null;
+  // AI 检索辅助字段（与后端实体对齐）
+  hitKeywords: string | null;
+  colloquialDescription: string | null;
+  matchPriority: number;
   sort: number;
   createdAt: string;
   updatedAt: string;
@@ -67,8 +84,18 @@ export interface KnowledgeBaseChunk {
   chunkIndex: number;
   title: string;
   content: string;
+  coreContent: string | null;
+  manualStartOffset: number | null;
+  manualEndOffset: number | null;
+  contextBeforeLength: number;
+  contextAfterLength: number;
   tokenCount: number;
   sort: number;
+  vectorId: string | null;
+  contentHash: string | null;
+  vectorStatus: string;
+  vectorError: string | null;
+  vectorizedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -193,8 +220,36 @@ export type KnowledgeBaseDocumentForm = Pick<
 
 export type KnowledgeBaseChunkForm = Pick<
   KnowledgeBaseChunk,
-  'documentId' | 'chunkIndex' | 'title' | 'content' | 'tokenCount' | 'sort'
+  | 'documentId'
+  | 'chunkIndex'
+  | 'title'
+  | 'content'
+  | 'tokenCount'
+  | 'sort'
+  | 'coreContent'
+  | 'manualStartOffset'
+  | 'manualEndOffset'
+  | 'contextBeforeLength'
+  | 'contextAfterLength'
 >;
+
+export interface ReplaceKnowledgeBaseDocumentChunksPayload {
+  chunks: Array<{
+    title?: string;
+    content: string;
+    coreContent?: string;
+    manualStartOffset?: number;
+    manualEndOffset?: number;
+    contextBeforeLength?: number;
+    contextAfterLength?: number;
+  }>;
+}
+
+export interface ReplaceKnowledgeBaseDocumentChunksResult {
+  documentId: number;
+  chunkCount: number;
+  processStage: string;
+}
 
 export function getKnowledgeBases(params: QueryKnowledgeBaseParams) {
   return request.get<unknown, ListResult<KnowledgeBase>>('/knowledge-bases', {
@@ -203,7 +258,8 @@ export function getKnowledgeBases(params: QueryKnowledgeBaseParams) {
 }
 
 export function getKnowledgeBase(id: number) {
-  return request.get<unknown, KnowledgeBase>(`/knowledge-bases/${id}`);
+  const nid = assertId(id, 'id');
+  return request.get<unknown, KnowledgeBase>(`/knowledge-bases/${nid}`);
 }
 
 export function createKnowledgeBase(data: Partial<KnowledgeBaseForm>) {
@@ -211,16 +267,22 @@ export function createKnowledgeBase(data: Partial<KnowledgeBaseForm>) {
 }
 
 export function updateKnowledgeBase(id: number, data: Partial<KnowledgeBaseForm>) {
-  return request.patch<unknown, KnowledgeBase>(`/knowledge-bases/${id}`, data);
+  const nid = assertId(id, 'id');
+  return request.patch<unknown, KnowledgeBase>(`/knowledge-bases/${nid}`, data);
 }
 
 export function deleteKnowledgeBase(id: number) {
-  return request.delete<unknown, { id: number }>(`/knowledge-bases/${id}`);
+  const nid = assertId(id, 'id');
+  return request.delete<unknown, { id: number }>(`/knowledge-bases/${nid}`);
 }
 
 export function batchDeleteKnowledgeBases(ids: Array<string | number>) {
+  // 过滤并转成合法正整数 id，避免 NaN/0/负数下发到后端
+  const validIds = ids
+    .map((item) => assertId(item, 'id'))
+    .filter((value) => value > 0);
   return request.post<unknown, { ids: number[] }>('/knowledge-bases/batch-delete', {
-    ids: ids.map(Number),
+    ids: validIds,
   });
 }
 
@@ -228,21 +290,24 @@ export function parseKnowledgeBase(
   id: number,
   data: ParseKnowledgeBasePayload = {},
 ) {
+  const nid = assertId(id, 'id');
   return request.post<unknown, KnowledgeBaseProcessResult>(
-    `/knowledge-bases/${id}/parse`,
+    `/knowledge-bases/${nid}/parse`,
     data,
   );
 }
 
 export function chunkKnowledgeBase(id: number) {
+  const nid = assertId(id, 'id');
   return request.post<unknown, KnowledgeBaseProcessResult>(
-    `/knowledge-bases/${id}/chunk`,
+    `/knowledge-bases/${nid}/chunk`,
   );
 }
 
 export function indexKnowledgeBase(id: number) {
+  const nid = assertId(id, 'id');
   return request.post<unknown, KnowledgeBaseProcessResult>(
-    `/knowledge-bases/${id}/index`,
+    `/knowledge-bases/${nid}/index`,
   );
 }
 
@@ -268,15 +333,17 @@ export function updateKnowledgeBaseCategory(
   id: number,
   data: Partial<KnowledgeBaseCategoryForm>,
 ) {
+  const nid = assertId(id, 'id');
   return request.patch<unknown, KnowledgeBaseCategory>(
-    `/knowledge-bases/categories/${id}`,
+    `/knowledge-bases/categories/${nid}`,
     data,
   );
 }
 
 export function deleteKnowledgeBaseCategory(id: number) {
+  const nid = assertId(id, 'id');
   return request.delete<unknown, { id: number; ids: number[] }>(
-    `/knowledge-bases/categories/${id}`,
+    `/knowledge-bases/categories/${nid}`,
   );
 }
 
@@ -302,15 +369,17 @@ export function updateKnowledgeBaseDocument(
   id: number,
   data: Partial<KnowledgeBaseDocumentForm>,
 ) {
+  const nid = assertId(id, 'id');
   return request.patch<unknown, KnowledgeBaseDocument>(
-    `/knowledge-bases/documents/${id}`,
+    `/knowledge-bases/documents/${nid}`,
     data,
   );
 }
 
 export function deleteKnowledgeBaseDocument(id: number) {
+  const nid = assertId(id, 'id');
   return request.delete<unknown, { id: number }>(
-    `/knowledge-bases/documents/${id}`,
+    `/knowledge-bases/documents/${nid}`,
   );
 }
 
@@ -318,15 +387,18 @@ export function createKnowledgeBaseMineruTask(
   documentId: number,
   data: KnowledgeBaseMineruTaskPayload,
 ) {
+  const nid = assertId(documentId, 'documentId');
   return request.post<unknown, KnowledgeBaseMineruTaskResult>(
-    `/knowledge-bases/documents/${documentId}/mineru-tasks`,
+    `/knowledge-bases/documents/${nid}/mineru-tasks`,
     data,
   );
 }
 
 export function getKnowledgeBaseMineruTask(documentId: number, taskId: string) {
+  const nid = assertId(documentId, 'documentId');
+  const safeTaskId = encodeURIComponent(taskId);
   return request.get<unknown, KnowledgeBaseMineruTaskResult>(
-    `/knowledge-bases/documents/${documentId}/mineru-tasks/${taskId}`,
+    `/knowledge-bases/documents/${nid}/mineru-tasks/${safeTaskId}`,
   );
 }
 
@@ -334,8 +406,9 @@ export function parseKnowledgeBaseDocumentWithMineru(
   documentId: number,
   data: KnowledgeBaseMineruParsePayload,
 ) {
+  const nid = assertId(documentId, 'documentId');
   return request.post<unknown, KnowledgeBaseMineruTaskResult>(
-    `/knowledge-bases/documents/${documentId}/mineru-parse`,
+    `/knowledge-bases/documents/${nid}/mineru-parse`,
     data,
   );
 }
@@ -344,6 +417,7 @@ export function parseKnowledgeBaseDocument(
   documentId: number,
   data: ParseKnowledgeBaseDocumentPayload,
 ) {
+  const nid = assertId(documentId, 'documentId');
   return request.post<
     unknown,
     KnowledgeBaseMineruTaskResult & {
@@ -353,7 +427,7 @@ export function parseKnowledgeBaseDocument(
       status?: string;
       name?: string;
     }
-  >(`/knowledge-bases/documents/${documentId}/parse`, data);
+  >(`/knowledge-bases/documents/${nid}/parse`, data);
 }
 
 export function getKnowledgeBaseChunks(params: QueryKnowledgeBaseChunkParams) {
@@ -367,16 +441,29 @@ export function createKnowledgeBaseChunk(data: Partial<KnowledgeBaseChunkForm>) 
   return request.post<unknown, KnowledgeBaseChunk>('/knowledge-bases/chunks', data);
 }
 
+export function replaceKnowledgeBaseDocumentChunks(
+  documentId: number,
+  data: ReplaceKnowledgeBaseDocumentChunksPayload,
+) {
+  const nid = assertId(documentId, 'documentId');
+  return request.post<unknown, ReplaceKnowledgeBaseDocumentChunksResult>(
+    `/knowledge-bases/documents/${nid}/chunks/manual`,
+    data,
+  );
+}
+
 export function updateKnowledgeBaseChunk(
   id: number,
   data: Partial<KnowledgeBaseChunkForm>,
 ) {
+  const nid = assertId(id, 'id');
   return request.patch<unknown, KnowledgeBaseChunk>(
-    `/knowledge-bases/chunks/${id}`,
+    `/knowledge-bases/chunks/${nid}`,
     data,
   );
 }
 
 export function deleteKnowledgeBaseChunk(id: number) {
-  return request.delete<unknown, { id: number }>(`/knowledge-bases/chunks/${id}`);
+  const nid = assertId(id, 'id');
+  return request.delete<unknown, { id: number }>(`/knowledge-bases/chunks/${nid}`);
 }
