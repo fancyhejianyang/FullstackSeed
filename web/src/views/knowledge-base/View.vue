@@ -1598,12 +1598,15 @@ onBeforeUnmount(() => {
 .knowledge-base-view__grid {
   position: relative;
   overflow: auto;
-  max-height: 460px;
+  height: min(68vh, 760px);
+  min-height: 520px;
+  max-height: 82vh;
   padding: 6px;
   border: 1px solid #dcdfe6;
   border-radius: 4px;
   background: #ffffff;
   box-sizing: border-box;
+  resize: vertical;
 }
 
 .knowledge-base-view__grid-stage {
