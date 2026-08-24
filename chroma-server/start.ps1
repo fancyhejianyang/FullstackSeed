@@ -16,10 +16,5 @@ if (Test-Path -LiteralPath $venvChroma) {
   exit $LASTEXITCODE
 }
 
-$globalChroma = Get-Command chroma -ErrorAction SilentlyContinue
-if ($globalChroma) {
-  & $globalChroma.Source run --path $dataPath --host $hostName --port $port
-  exit $LASTEXITCODE
-}
-
-& py -3 -m chromadb.cli.cli run --path $dataPath --host $hostName --port $port
+Write-Error 'Chroma 服务依赖尚未安装，请先在 server 目录执行：npm.cmd run chroma:install'
+exit 1

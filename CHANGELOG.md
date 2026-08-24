@@ -1,5 +1,12 @@
 # CHANGELOG
 
+### 2026-08-24 优化 Chroma 启动脚本未安装提示
+- 新增：无
+- 修改：
+  - `chroma-server/start.ps1`（未安装项目内 Python 虚拟环境时，不再回退全局 Python，改为明确提示先执行 `npm.cmd run chroma:install`）
+- 删除：无
+- 说明：避免首次启动时因全局 Python 未安装 `chromadb` 而出现难以理解的 `ModuleNotFoundError`。
+
 ### 2026-08-24 补齐 Chroma 本地 Python 服务启动方案
 - 新增：
   - `.gitignore`（忽略 `chroma-data/` 和 Chroma Python 虚拟环境）
