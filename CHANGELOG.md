@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-08-24 明确向量模型配置与 Chroma 配置职责
+- 新增：无
+- 修改：
+  - `server/src/knowledge-vectors/knowledge-embedding.service.ts`（向量生成阶段将变量与错误提示明确为“AI 功能配置 - 向量化”，避免和 Chroma 向量库配置混淆）
+  - `web/src/views/vector-config/Index.vue`（向量化配置页展示当前启用的向量模型功能配置状态）
+  - `CHANGELOG.md`（追加本次变更快照）
+- 删除：无
+- 说明：知识库索引需要同时具备“向量模型配置”和“Chroma 存储配置”；前者在 AI 功能配置中启用，后者在向量化配置中维护。
+
 ### 2026-08-24 收敛向量化配置单例读写逻辑
 - 新增：
   - `GET /api/vector-configs/current`、`POST /api/vector-configs/current`（当前向量化配置读取与保存接口）

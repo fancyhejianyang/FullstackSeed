@@ -10,6 +10,10 @@ import {
   type VectorConfig,
   type VectorConfigForm,
 } from '@/api/vectorConfig';
+import {
+  getAiFeatureConfigs,
+  type AiFeatureConfig,
+} from '@/api/aiFeatureConfig';
 
 const formRef = ref<InstanceType<typeof Form>>();
 const loading = ref(false);
@@ -17,6 +21,7 @@ const submitting = ref(false);
 const currentId = ref<number | null>(null);
 const tokenSet = ref(false);
 const loadedConfigName = ref('');
+const embeddingConfig = ref<AiFeatureConfig | null>(null);
 
 const form = reactive<VectorConfigForm>({
   name: '本地 Chroma 向量配置',
@@ -114,7 +119,16 @@ function fillForm(data: VectorConfig) {
 async function loadConfig() {
   loading.value = true;
   try {
-    const config = await getCurrentVectorConfig();
+    const [config, embeddingResult] = await Promise.all([
+      getCurrentVectorConfig(),
+      getAiFeatureConfigs({
+        page: 1,
+        pageSize: 1,
+        featureType: 'embedding',
+      }),
+    ]);
+    embeddingConfig.value =
+      embeddingResult.list.find((item) => item.isEnabled) ?? null;
     if (!config) {
       resetForm();
       return;
@@ -158,6 +172,16 @@ onMounted(loadConfig);
       <div class="vector-config__header">
         <div>
           <h2>Chroma 向量服务</h2>
+          <p>
+            向量模型：
+            <template v-if="embeddingConfig">
+              {{ embeddingConfig.name }}
+              <span v-if="embeddingConfig.providerName || embeddingConfig.model">
+                （{{ [embeddingConfig.providerName, embeddingConfig.model].filter(Boolean).join(' / ') }}）
+              </span>
+            </template>
+            <template v-else>未启用 AI 功能配置 - 向量化</template>
+          </p>
         </div>
         <el-tag :type="form.isEnabled ? 'success' : 'info'">
           {{ form.isEnabled ? '启用中' : '已停用' }}
@@ -202,6 +226,12 @@ onMounted(loadConfig);
   font-size: 16px;
   font-weight: 600;
   color: #303133;
+}
+
+.vector-config__header p {
+  margin: 0;
+  color: #606266;
+  line-height: 1.6;
 }
 
 .vector-config__footer {

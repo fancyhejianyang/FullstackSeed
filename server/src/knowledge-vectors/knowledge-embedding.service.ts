@@ -13,18 +13,22 @@ export class KnowledgeEmbeddingService {
     const normalized = texts.map((item) => item.trim()).filter(Boolean);
     if (!normalized.length) return [];
 
-    const config =
+    const embeddingFeatureConfig =
       await this.aiFeatureConfigsService.findEnabledByFeature('embedding');
-    if (!config) {
-      throw new BadRequestException('请先配置并启用向量模型功能配置');
+    if (!embeddingFeatureConfig) {
+      throw new BadRequestException(
+        '请先在 AI 功能配置中创建并启用“向量化”配置，选择大模型账号和支持 embeddings 的向量模型',
+      );
     }
-    if (!config.providerId || !config.model) {
-      throw new BadRequestException('向量模型功能配置缺少大模型账号或模型');
+    if (!embeddingFeatureConfig.providerId || !embeddingFeatureConfig.model) {
+      throw new BadRequestException(
+        `AI 功能配置“${embeddingFeatureConfig.name}”缺少大模型账号或向量模型`,
+      );
     }
 
     const target = await this.providersService.resolveEmbeddingTarget({
-      id: config.providerId,
-      model: config.model,
+      id: embeddingFeatureConfig.providerId,
+      model: embeddingFeatureConfig.model,
     });
     return this.providersService.callEmbedding({
       target,
