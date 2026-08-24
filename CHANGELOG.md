@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-08-24 补齐 Chroma 本地 Python 服务启动方案
+- 新增：
+  - `.gitignore`（忽略 `chroma-data/` 和 Chroma Python 虚拟环境）
+  - `chroma-server/`（Chroma 本地服务说明、Python 依赖、安装脚本、启动脚本）
+- 修改：
+  - `server/package.json`（新增 `chroma:install`、`chroma:start` 脚本）
+  - `知识库处理流程.md`（补充本项目 Chroma 服务职责、启动命令、持久化目录和后端连接关系）
+- 删除：无
+- 说明：`chromadb` npm 包仅作为后端访问 Chroma 的客户端；真正的 Chroma 向量数据库服务改为通过项目内 Python 脚本独立启动，默认将向量数据持久化到项目根目录 `chroma-data/`。
+
 ### 2026-08-24 新增向量化配置后台页面
 - 新增：
   - `server/src/vector-configs/`（向量化配置实体、DTO、Controller、Service、Module；支持 Chroma 地址、Collection、Tenant、Database、Token 和启用开关）

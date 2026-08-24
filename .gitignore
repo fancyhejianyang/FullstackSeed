@@ -1,0 +1,5 @@
+# Chroma local vector database files
+/chroma-data/
+
+# Local Python virtual environments
+/chroma-server/.venv/
