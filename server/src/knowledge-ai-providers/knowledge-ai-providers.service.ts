@@ -453,7 +453,7 @@ export class KnowledgeAiProvidersService {
     if (!response.ok) {
       const errorText = await response.text();
       throw new BadRequestException(
-        `向量模型调用失败：${response.status} ${errorText}；当前模型 ${target.model}，请确认它是文本向量模型且在当前账号/地域可用`,
+        `向量模型调用失败：${response.status} ${errorText}；当前模型 ${target.model}，请求地址 ${target.url}，请确认它是文本向量模型且在当前账号/地域可用`,
       );
     }
 
@@ -558,12 +558,9 @@ export class KnowledgeAiProvidersService {
 
   private buildChatUrl(provider: KnowledgeAiProvider) {
     const apiUrl = provider.apiUrl.replace(/\/+$/, '');
-    const chatPath = (provider.chatApiPath || 'v1/chat/completions').replace(
-      /^\/+/,
-      '',
-    );
+    const chatPath = provider.chatApiPath || 'v1/chat/completions';
     if (/\/chat\/completions$/.test(apiUrl)) return apiUrl;
-    return `${apiUrl}/${chatPath}`;
+    return this.appendApiPath(apiUrl, chatPath);
   }
 
   private buildEmbeddingUrl(provider: KnowledgeAiProvider) {
@@ -576,6 +573,15 @@ export class KnowledgeAiProvidersService {
       /\/chat\/completions$/,
       '/embeddings',
     );
+  }
+
+  private appendApiPath(baseUrl: string, path: string) {
+    const base = baseUrl.replace(/\/+$/, '');
+    let cleanPath = path.replace(/^\/+/, '');
+    if (/\/v1$/i.test(base) && /^v1\//i.test(cleanPath)) {
+      cleanPath = cleanPath.replace(/^v1\/+/i, '');
+    }
+    return `${base}/${cleanPath}`;
   }
 
   private buildQuestionMessages(
