@@ -13,6 +13,7 @@ export interface KnowledgeAiProvider {
   isEnabled: boolean;
   description: string;
   secretKeySet: boolean;
+  secretKeyMasked: string;
   createdAt: string;
   updatedAt: string;
 }

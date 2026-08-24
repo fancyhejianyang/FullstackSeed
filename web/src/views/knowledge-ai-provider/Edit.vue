@@ -21,6 +21,7 @@ const visible = defineModel<boolean>('visible', { required: true });
 const loading = ref(false);
 const submitting = ref(false);
 const formRef = ref<InstanceType<typeof Form>>();
+const secretKeyMasked = ref('');
 
 const form = reactive<KnowledgeAiProviderForm>({
   name: '',
@@ -55,8 +56,13 @@ const fields: FormField[] = [
     prop: 'secretKey',
     label: '密钥',
     type: 'input',
-    inputMode: 'password',
-    placeholder: '编辑时留空表示不修改',
+    inputMode: 'text',
+    placeholder: '编辑时保持星号不变表示不修改',
+    componentProps: {
+      autocomplete: 'off',
+      name: 'ai-provider-secret',
+      spellcheck: false,
+    },
   },
   {
     prop: 'models',
@@ -106,6 +112,7 @@ function resetForm() {
   form.workspaceId = '';
   form.chatApiPath = 'v1/chat/completions';
   form.secretKey = '';
+  secretKeyMasked.value = '';
   form.models = 'qwen-plus';
   form.textModels = '';
   form.visionModels = '';
@@ -119,7 +126,8 @@ function fillForm(data: KnowledgeAiProvider) {
   form.apiUrl = data.apiUrl ?? '';
   form.workspaceId = data.workspaceId ?? '';
   form.chatApiPath = data.chatApiPath || 'v1/chat/completions';
-  form.secretKey = '';
+  secretKeyMasked.value = data.secretKeyMasked || '';
+  form.secretKey = secretKeyMasked.value;
   form.models = data.models || 'qwen-plus';
   form.textModels = data.textModels || '';
   form.visionModels = data.visionModels || '';
@@ -144,7 +152,8 @@ watch(visible, async (value) => {
 
 function buildPayload() {
   const payload: KnowledgeAiProviderForm = { ...form };
-  if (props.row && !payload.secretKey?.trim()) {
+  const secretKey = payload.secretKey?.trim() ?? '';
+  if (props.row && (!secretKey || secretKey === secretKeyMasked.value)) {
     delete payload.secretKey;
   }
   return payload;

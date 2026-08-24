@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-08-24 大模型账号密钥支持掩码回显
+- 新增：无
+- 修改：
+  - `server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`（账号详情返回 `secretKeyMasked` 掩码，不返回完整密钥）
+  - `web/src/api/knowledgeAiProvider.ts`、`web/src/views/knowledge-ai-provider/Edit.vue`（编辑账号时密钥显示星号掩码；保持掩码不变不提交密钥，输入新值才覆盖保存；密钥框使用普通文本输入并关闭浏览器自动完成）
+  - `web/src/components/Form.vue`（普通输入和多行输入支持透传 `componentProps`）
+- 删除：无
+- 说明：避免密钥编辑框空白造成“是否已保存”不明确，同时避开浏览器密码记忆对配置表单的干扰。
+
 ### 2026-08-24 规范化大模型密钥输入
 - 新增：无
 - 修改：

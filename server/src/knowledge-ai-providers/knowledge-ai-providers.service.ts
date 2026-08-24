@@ -528,6 +528,13 @@ export class KnowledgeAiProvidersService {
     return `已配置，长度 ${text.length}，尾号 ${suffix}`;
   }
 
+  private maskSecretKeyForView(secretKey: string | null | undefined) {
+    const text = this.normalizeSecretKey(secretKey);
+    if (!text) return '';
+    const suffix = text.length > 4 ? text.slice(-4) : text;
+    return `${'*'.repeat(Math.max(8, text.length - suffix.length))}${suffix}`;
+  }
+
   private async findEntity(id: number) {
     const provider = await this.providerRepository.findOne({ where: { id } });
     if (!provider) {
@@ -604,6 +611,7 @@ export class KnowledgeAiProvidersService {
       isEnabled: !!provider.isEnabled,
       description: provider.description ?? '',
       secretKeySet: !!provider.secretKey,
+      secretKeyMasked: this.maskSecretKeyForView(provider.secretKey),
       createdAt: provider.createdAt,
       updatedAt: provider.updatedAt,
     };

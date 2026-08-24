@@ -181,6 +181,7 @@ defineExpose({ validate, resetFields });
       <!-- 多行文本 -->
       <Input
         v-else-if="field.type === 'textarea'"
+        v-bind="getDynamicComponentProps(field)"
         v-model="model[field.prop]"
         mode="textarea"
         :rows="field.rows || 4"
@@ -189,6 +190,7 @@ defineExpose({ validate, resetFields });
       <!-- 默认单行输入 -->
       <Input
         v-else
+        v-bind="getDynamicComponentProps(field)"
         v-model="model[field.prop]"
         :mode="field.inputMode || 'text'"
         :placeholder="field.placeholder || `请输入${field.label}`"
