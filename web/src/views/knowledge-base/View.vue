@@ -8,12 +8,14 @@ import { getKnowledgeChunkConfigs } from '@/api/knowledgeChunkConfig';
 import {
   getKnowledgeBase,
   getKnowledgeBaseChunks,
+  getKnowledgeBaseIndexes,
   getKnowledgeBaseDocuments,
   createKnowledgeBaseChunk,
   updateKnowledgeBaseChunk,
   deleteKnowledgeBaseChunk,
   type KnowledgeBase,
   type KnowledgeBaseChunk,
+  type KnowledgeBaseIndex,
 } from '@/api/knowledgeBase';
 
 type GridCoordinate = {
@@ -71,6 +73,12 @@ const chunks = ref<KnowledgeBaseChunk[]>([]);
 const chunkTotal = ref(0);
 const chunkPage = ref(1);
 const chunkPageSize = ref(10);
+const indexKeyword = ref('');
+const indexLoading = ref(false);
+const indexes = ref<KnowledgeBaseIndex[]>([]);
+const indexTotal = ref(0);
+const indexPage = ref(1);
+const indexPageSize = ref(10);
 const activeDocumentId = ref<number | null>(null);
 const manualEditorVisible = ref(false);
 const manualLoading = ref(false);
@@ -174,6 +182,25 @@ async function fetchChunks() {
     ElMessage.error('获取分片列表失败');
   } finally {
     chunkLoading.value = false;
+  }
+}
+
+async function fetchIndexes() {
+  if (!rowData.value?.id) return;
+  indexLoading.value = true;
+  try {
+    const res = await getKnowledgeBaseIndexes({
+      page: indexPage.value,
+      pageSize: indexPageSize.value,
+      knowledgeBaseId: rowData.value.id,
+      keyword: indexKeyword.value,
+    });
+    indexes.value = res.list;
+    indexTotal.value = res.total;
+  } catch {
+    ElMessage.error('获取索引内容失败');
+  } finally {
+    indexLoading.value = false;
   }
 }
 
@@ -1053,9 +1080,17 @@ function handleChunkSearch() {
   void fetchChunks();
 }
 
+function handleIndexSearch() {
+  indexPage.value = 1;
+  void fetchIndexes();
+}
+
 function handleTabChange(name: string | number) {
   if (name === 'chunks') {
     void fetchChunks();
+  }
+  if (name === 'indexes') {
+    void fetchIndexes();
   }
 }
 
@@ -1070,6 +1105,10 @@ watch(visible, async (value) => {
   chunkPage.value = 1;
   chunks.value = [];
   chunkTotal.value = 0;
+  indexKeyword.value = '';
+  indexPage.value = 1;
+  indexes.value = [];
+  indexTotal.value = 0;
   activeDocumentId.value = null;
   manualEditorVisible.value = false;
   manualCanvasReady.value = false;
@@ -1366,6 +1405,91 @@ onBeforeUnmount(() => {
           />
         </div>
       </el-tab-pane>
+
+      <el-tab-pane label="索引内容" name="indexes">
+        <div class="knowledge-base-view__chunk-toolbar">
+          <el-input
+            v-model="indexKeyword"
+            clearable
+            placeholder="搜索标题/索引文本"
+            @keyup.enter="handleIndexSearch"
+          />
+          <Button type="primary" icon="Search" :confirm="false" @click="handleIndexSearch">
+            查询
+          </Button>
+          <Button
+            :confirm="false"
+            @click="
+              indexKeyword = '';
+              handleIndexSearch();
+            "
+          >
+            重置
+          </Button>
+        </div>
+
+        <el-table v-loading="indexLoading" :data="indexes" border stripe>
+          <el-table-column prop="chunkIndex" label="序号" width="90" />
+          <el-table-column prop="title" label="标题" min-width="180" />
+          <el-table-column prop="indexText" label="索引文本" min-width="520">
+            <template #default="{ row }">
+              <pre class="knowledge-base-view__index-text">{{ row.indexText || '-' }}</pre>
+            </template>
+          </el-table-column>
+          <el-table-column prop="vectorStatus" label="索引状态" width="120">
+            <template #default="{ row }">
+              <el-tooltip
+                v-if="row.vectorError"
+                :content="row.vectorError"
+                placement="top"
+              >
+                <el-tag :type="getVectorStatusType(row.vectorStatus)">
+                  {{ getVectorStatusLabel(row.vectorStatus) }}
+                </el-tag>
+              </el-tooltip>
+              <el-tag v-else :type="getVectorStatusType(row.vectorStatus)">
+                {{ getVectorStatusLabel(row.vectorStatus) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="vectorId" label="Vector ID" min-width="260">
+            <template #default="{ row }">
+              <span class="knowledge-base-view__mono">{{ row.vectorId || '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="indexedContentHash" label="Hash" min-width="220">
+            <template #default="{ row }">
+              <el-tooltip
+                v-if="row.indexedContentHash && row.indexedContentHash !== row.currentContentHash"
+                content="当前索引文本与已写入 Hash 不一致，需要重新索引"
+                placement="top"
+              >
+                <el-tag type="warning">待更新</el-tag>
+              </el-tooltip>
+              <span class="knowledge-base-view__mono">
+                {{ row.indexedContentHash || row.currentContentHash || '-' }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="vectorizedAt" label="向量化时间" width="180">
+            <template #default="{ row }">
+              {{ row.vectorizedAt ? formatDateTime(row.vectorizedAt) : '-' }}
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <div class="knowledge-base-view__pagination">
+          <el-pagination
+            v-model:current-page="indexPage"
+            v-model:page-size="indexPageSize"
+            :total="indexTotal"
+            :page-sizes="[10, 20, 50]"
+            layout="total, sizes, prev, pager, next"
+            @current-change="fetchIndexes"
+            @size-change="handleIndexSearch"
+          />
+        </div>
+      </el-tab-pane>
     </el-tabs>
 
     <template #footer>
@@ -1571,6 +1695,27 @@ onBeforeUnmount(() => {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 4;
   line-clamp: 4;
+}
+
+.knowledge-base-view__index-text {
+  max-height: 180px;
+  padding: 8px;
+  margin: 0;
+  overflow: auto;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+  background: #fafafa;
+  color: #303133;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.knowledge-base-view__mono {
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 12px;
+  word-break: break-all;
 }
 
 .knowledge-base-view__pagination {

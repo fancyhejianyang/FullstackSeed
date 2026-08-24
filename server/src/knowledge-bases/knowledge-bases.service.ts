@@ -890,6 +890,48 @@ export class KnowledgeBasesService {
     return { list, total };
   }
 
+  async findIndexes(query: QueryKnowledgeBaseChunkDto) {
+    const { list, total } = await this.findChunks(query);
+    if (!list.length) return { list: [], total };
+
+    const baseIds = Array.from(new Set(list.map((chunk) => chunk.knowledgeBaseId)));
+    const documentIds = Array.from(new Set(list.map((chunk) => chunk.documentId)));
+    const [bases, documents] = await Promise.all([
+      this.baseRepository.find({ where: { id: In(baseIds) } }),
+      this.documentRepository.find({ where: { id: In(documentIds) } }),
+    ]);
+    const baseMap = new Map(bases.map((base) => [base.id, base]));
+    const documentMap = new Map(documents.map((document) => [document.id, document]));
+
+    return {
+      list: list.map((chunk) => {
+        const base = baseMap.get(chunk.knowledgeBaseId);
+        if (!base) {
+          throw new NotFoundException('知识库不存在');
+        }
+        const document = documentMap.get(chunk.documentId);
+        const indexText = this.buildVectorDocumentText(base, document, chunk);
+        return {
+          id: chunk.id,
+          knowledgeBaseId: chunk.knowledgeBaseId,
+          documentId: chunk.documentId,
+          chunkId: chunk.id,
+          chunkIndex: chunk.chunkIndex,
+          title: chunk.title || document?.title || base.name,
+          vectorId: chunk.vectorId,
+          vectorStatus: chunk.vectorStatus,
+          vectorError: chunk.vectorError,
+          vectorizedAt: chunk.vectorizedAt,
+          indexedContentHash: chunk.contentHash,
+          currentContentHash: this.buildContentHash(indexText),
+          indexText,
+          metadata: this.buildVectorMetadata(base, document, chunk),
+        };
+      }),
+      total,
+    };
+  }
+
   async findChunk(id: number) {
     const chunk = await this.chunkRepository.findOne({ where: { id } });
     if (!chunk) throw new NotFoundException('知识库分片不存在');

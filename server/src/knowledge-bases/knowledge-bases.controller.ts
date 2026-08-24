@@ -80,6 +80,13 @@ export class KnowledgeBasesController {
     return this.knowledgeBasesService.findChunks(query);
   }
 
+  @Get('indexes')
+  @RequirePermissions('KnowledgeBase.read')
+  @ApiOperation({ summary: '分页查询知识库索引内容' })
+  findIndexes(@Query() query: QueryKnowledgeBaseChunkDto) {
+    return this.knowledgeBasesService.findIndexes(query);
+  }
+
   @Get('chunks/:id')
   @RequirePermissions('KnowledgeBase.read')
   @ApiOperation({ summary: '知识库分片详情' })

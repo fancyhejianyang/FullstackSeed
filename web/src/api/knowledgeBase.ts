@@ -100,6 +100,23 @@ export interface KnowledgeBaseChunk {
   updatedAt: string;
 }
 
+export interface KnowledgeBaseIndex {
+  id: number;
+  knowledgeBaseId: number;
+  documentId: number;
+  chunkId: number;
+  chunkIndex: number;
+  title: string;
+  vectorId: string | null;
+  vectorStatus: string;
+  vectorError: string | null;
+  vectorizedAt: string | null;
+  indexedContentHash: string | null;
+  currentContentHash: string;
+  indexText: string;
+  metadata: Record<string, string | number | boolean | null>;
+}
+
 export interface KnowledgeBaseMineruTaskPayload {
   fileUrl: string;
   fileName?: string;
@@ -433,6 +450,13 @@ export function parseKnowledgeBaseDocument(
 export function getKnowledgeBaseChunks(params: QueryKnowledgeBaseChunkParams) {
   return request.get<unknown, ListResult<KnowledgeBaseChunk>>(
     '/knowledge-bases/chunks',
+    { params },
+  );
+}
+
+export function getKnowledgeBaseIndexes(params: QueryKnowledgeBaseChunkParams) {
+  return request.get<unknown, ListResult<KnowledgeBaseIndex>>(
+    '/knowledge-bases/indexes',
     { params },
   );
 }
