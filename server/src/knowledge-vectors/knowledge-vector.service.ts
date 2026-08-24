@@ -97,6 +97,7 @@ export class KnowledgeVectorService {
     if (!this.collectionPromise) {
       this.collectionPromise = this.getClient(config).getOrCreateCollection({
         name: config.collectionName,
+        embeddingFunction: null,
         metadata: {
           source: 'FullstackSeed',
           purpose: 'knowledge-base',

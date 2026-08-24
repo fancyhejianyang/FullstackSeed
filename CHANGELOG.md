@@ -1,5 +1,12 @@
 # CHANGELOG
 
+### 2026-08-24 禁用 Chroma 默认向量函数
+- 新增：无
+- 修改：
+  - `server/src/knowledge-vectors/knowledge-vector.service.ts`（获取或创建 Chroma Collection 时显式设置 `embeddingFunction: null`）
+- 删除：无
+- 说明：本项目由后端先调用大模型账号生成 embedding，再把向量数组写入 Chroma；不需要 Chroma JS 客户端加载 `@chroma-core/default-embed`，避免索引时报 “Cannot instantiate a collection with the DefaultEmbeddingFunction”。
+
 ### 2026-08-24 向量化配置支持维度设置
 - 新增：
   - `vector_configs.embeddingDimension`（向量维度，默认 768，可在向量化配置页调整）
