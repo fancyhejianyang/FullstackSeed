@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-08-24 收敛向量化配置单例读写逻辑
+- 新增：
+  - `GET /api/vector-configs/current`、`POST /api/vector-configs/current`（当前向量化配置读取与保存接口）
+- 修改：
+  - `server/src/vector-configs/vector-configs.service.ts`（向量化配置按单例表单处理，保存当前配置时清理其它旧配置；可用配置读取时保留最新启用项）
+  - `server/src/vector-configs/vector-configs.controller.ts`（新增当前配置接口）
+  - `server/src/ai-feature-configs/ai-feature-configs.service.ts`（同一 AI 功能类型只保留一个启用配置，`findEnabledByFeature` 自动收敛历史多启用数据）
+  - `web/src/api/vectorConfig.ts`、`web/src/views/vector-config/Index.vue`（向量化配置页改为直接读写当前配置接口）
+- 删除：无
+- 说明：后端同步适配“向量化配置为单份表单”的产品形态，避免仍按列表多配置逻辑读取导致历史多启用或取最新记录的不确定性。
+
 ### 2026-08-24 微调二级菜单缩进到 50px
 - 新增：无
 - 修改：

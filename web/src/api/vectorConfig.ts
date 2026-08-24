@@ -48,8 +48,16 @@ export function getVectorConfig(id: number) {
   return request.get<unknown, VectorConfig>(`/vector-configs/${id}`);
 }
 
+export function getCurrentVectorConfig() {
+  return request.get<unknown, VectorConfig | null>('/vector-configs/current');
+}
+
 export function createVectorConfig(data: VectorConfigForm) {
   return request.post<unknown, VectorConfig>('/vector-configs', data);
+}
+
+export function saveCurrentVectorConfig(data: VectorConfigForm) {
+  return request.post<unknown, VectorConfig>('/vector-configs/current', data);
 }
 
 export function updateVectorConfig(id: number, data: VectorConfigForm) {

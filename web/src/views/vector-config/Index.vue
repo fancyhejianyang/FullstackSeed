@@ -5,10 +5,8 @@ import PageContainer from '@/components/PageContainer.vue';
 import Button from '@/components/Button.vue';
 import Form, { type FormField } from '@/components/Form.vue';
 import {
-  createVectorConfig,
-  getVectorConfig,
-  getVectorConfigs,
-  updateVectorConfig,
+  getCurrentVectorConfig,
+  saveCurrentVectorConfig,
   type VectorConfig,
   type VectorConfigForm,
 } from '@/api/vectorConfig';
@@ -116,13 +114,12 @@ function fillForm(data: VectorConfig) {
 async function loadConfig() {
   loading.value = true;
   try {
-    const res = await getVectorConfigs({ page: 1, pageSize: 20 });
-    const target = res.list.find((item) => item.isEnabled) ?? res.list[0];
-    if (!target) {
+    const config = await getCurrentVectorConfig();
+    if (!config) {
       resetForm();
       return;
     }
-    fillForm(await getVectorConfig(target.id));
+    fillForm(config);
   } catch {
     ElMessage.error('获取向量化配置失败');
   } finally {
@@ -144,9 +141,7 @@ async function handleSubmit() {
   try {
     const payload = buildPayload();
     const isUpdate = !!currentId.value;
-    const saved = currentId.value
-      ? await updateVectorConfig(currentId.value, payload)
-      : await createVectorConfig(payload);
+    const saved = await saveCurrentVectorConfig(payload);
     fillForm(saved);
     ElMessage.success(isUpdate ? '保存成功' : '创建成功');
   } finally {

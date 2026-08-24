@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Like, Repository } from 'typeorm';
+import { In, Like, Not, Repository } from 'typeorm';
 import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
 import { MineruConfigsService } from '../mineru-configs/mineru-configs.service';
 import type { AiFeatureType } from './ai-feature-config.constants';
@@ -68,17 +68,25 @@ export class AiFeatureConfigsService {
     return config;
   }
 
-  findEnabledByFeature(featureType: AiFeatureType) {
-    return this.configRepository.findOne({
+  async findEnabledByFeature(featureType: AiFeatureType) {
+    const configs = await this.configRepository.find({
       where: { featureType, isEnabled: true },
       order: { id: 'DESC' },
+      take: 2,
     });
+    if (configs.length > 1) {
+      await this.disableOtherFeatureConfigs(featureType, configs[0].id);
+    }
+    return configs[0] ?? null;
   }
 
   async create(dto: CreateAiFeatureConfigDto) {
     const payload = await this.toEntityPayload(dto, true);
     const entity = this.configRepository.create(payload);
     this.assertExecutableConfig(entity);
+    if (entity.isEnabled) {
+      await this.disableOtherFeatureConfigs(entity.featureType);
+    }
     const saved = await this.configRepository.save(entity);
     return saved;
   }
@@ -87,6 +95,9 @@ export class AiFeatureConfigsService {
     const config = await this.findOne(id);
     Object.assign(config, await this.toEntityPayload(dto, false));
     this.assertExecutableConfig(config);
+    if (config.isEnabled) {
+      await this.disableOtherFeatureConfigs(config.featureType, config.id);
+    }
     return this.configRepository.save(config);
   }
 
@@ -164,6 +175,16 @@ export class AiFeatureConfigsService {
       payload.description = this.toNullableText(dto.description);
     }
     return payload;
+  }
+
+  private async disableOtherFeatureConfigs(
+    featureType: AiFeatureType,
+    excludeId?: number,
+  ) {
+    const where = excludeId
+      ? { id: Not(excludeId), featureType, isEnabled: true }
+      : { featureType, isEnabled: true };
+    await this.configRepository.update(where, { isEnabled: false });
   }
 
   private assertExecutableConfig(config: Partial<AiFeatureConfig>) {

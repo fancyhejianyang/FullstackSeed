@@ -32,6 +32,20 @@ export class VectorConfigsController {
     return this.vectorConfigsService.findAll(query);
   }
 
+  @Get('current')
+  @RequirePermissions('Menu.read')
+  @ApiOperation({ summary: '当前向量化配置' })
+  findCurrent() {
+    return this.vectorConfigsService.findCurrent();
+  }
+
+  @Post('current')
+  @RequirePermissions('Menu.read')
+  @ApiOperation({ summary: '保存当前向量化配置' })
+  saveCurrent(@Body() dto: CreateVectorConfigDto) {
+    return this.vectorConfigsService.saveCurrent(dto);
+  }
+
   @Get(':id')
   @RequirePermissions('Menu.read')
   @ApiOperation({ summary: '向量化配置详情' })

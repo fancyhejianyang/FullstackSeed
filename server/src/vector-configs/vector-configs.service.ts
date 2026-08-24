@@ -1,10 +1,6 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Like, Not, Repository } from 'typeorm';
+import { In, Not, Repository } from 'typeorm';
 import {
   CreateVectorConfigDto,
   QueryVectorConfigDto,
@@ -32,46 +28,53 @@ export class VectorConfigsService {
   ) {}
 
   async findAll(query: QueryVectorConfigDto) {
-    const page = query.page ?? 1;
-    const pageSize = query.pageSize ?? 10;
     const keyword = query.keyword?.trim();
-    const where = keyword
-      ? [
-          { name: Like(`%${keyword}%`) },
-          { chromaUrl: Like(`%${keyword}%`) },
-          { collectionName: Like(`%${keyword}%`) },
-        ]
-      : {};
-    const [list, total] = await this.configRepository.findAndCount({
-      where,
-      order: { id: 'DESC' },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    });
-    return { list: list.map((item) => this.toView(item)), total };
+    const current = await this.findCurrentEntity();
+    if (!current) return { list: [], total: 0 };
+    if (
+      keyword &&
+      ![current.name, current.chromaUrl, current.collectionName].some((item) =>
+        item.toLowerCase().includes(keyword.toLowerCase()),
+      )
+    ) {
+      return { list: [], total: 0 };
+    }
+    return { list: [this.toView(current)], total: 1 };
   }
 
   async findOne(id: number) {
     return this.toView(await this.findEntity(id));
   }
 
-  async create(dto: CreateVectorConfigDto) {
-    if (dto.isEnabled) {
-      await this.disableOtherConfigs();
+  async findCurrent() {
+    const config = await this.findCurrentEntity();
+    return config ? this.toView(config) : null;
+  }
+
+  async saveCurrent(dto: CreateVectorConfigDto | UpdateVectorConfigDto) {
+    const current = await this.findCurrentEntity();
+    if (!current) {
+      return this.create({
+        ...dto,
+        isEnabled: dto.isEnabled ?? true,
+      } as CreateVectorConfigDto);
     }
+    return this.update(current.id, dto);
+  }
+
+  async create(dto: CreateVectorConfigDto) {
     const config = await this.configRepository.save(
       this.configRepository.create(this.toEntityPayload(dto, true)),
     );
+    await this.removeOtherConfigs(config.id);
     return this.toView(config);
   }
 
   async update(id: number, dto: UpdateVectorConfigDto) {
     const config = await this.findEntity(id);
-    if (dto.isEnabled) {
-      await this.disableOtherConfigs(id);
-    }
     Object.assign(config, this.toEntityPayload(dto, false));
     const saved = await this.configRepository.save(config);
+    await this.removeOtherConfigs(saved.id);
     return this.toView(saved);
   }
 
@@ -98,11 +101,12 @@ export class VectorConfigsService {
     const configs = await this.configRepository.find({
       where: { isEnabled: true },
       order: { id: 'DESC' },
+      take: 2,
     });
-    if (configs.length > 1) {
-      throw new BadRequestException('当前存在多个已启用的向量化配置，请仅保留一个启用');
-    }
     if (configs[0]) {
+      if (configs.length > 1) {
+        await this.removeOtherConfigs(configs[0].id);
+      }
       return {
         id: configs[0].id,
         name: configs[0].name,
@@ -132,6 +136,13 @@ export class VectorConfigsService {
     const config = await this.configRepository.findOne({ where: { id } });
     if (!config) throw new NotFoundException('向量化配置不存在');
     return config;
+  }
+
+  private async findCurrentEntity() {
+    return this.configRepository.findOne({
+      where: {},
+      order: { isEnabled: 'DESC', id: 'DESC' },
+    });
   }
 
   private toEntityPayload(
@@ -164,9 +175,8 @@ export class VectorConfigsService {
     return payload;
   }
 
-  private async disableOtherConfigs(excludeId?: number) {
-    const where = excludeId ? { id: Not(excludeId), isEnabled: true } : { isEnabled: true };
-    await this.configRepository.update(where, { isEnabled: false });
+  private async removeOtherConfigs(keepId: number) {
+    await this.configRepository.softDelete({ id: Not(keepId) });
   }
 
   private toView(config: VectorConfig) {
