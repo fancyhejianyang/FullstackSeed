@@ -4,6 +4,7 @@ export interface KnowledgeAiProvider {
   id: number;
   name: string;
   apiUrl: string;
+  workspaceId: string;
   chatApiPath: string;
   models: string;
   textModels: string;
@@ -30,6 +31,7 @@ export interface QueryKnowledgeAiProviderParams {
 export interface KnowledgeAiProviderForm {
   name: string;
   apiUrl: string;
+  workspaceId?: string;
   chatApiPath?: string;
   secretKey?: string;
   models?: string;

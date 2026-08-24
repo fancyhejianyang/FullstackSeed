@@ -25,6 +25,7 @@ const formRef = ref<InstanceType<typeof Form>>();
 const form = reactive<KnowledgeAiProviderForm>({
   name: '',
   apiUrl: '',
+  workspaceId: '',
   chatApiPath: 'v1/chat/completions',
   secretKey: '',
   models: 'qwen-plus',
@@ -38,6 +39,12 @@ const form = reactive<KnowledgeAiProviderForm>({
 const fields: FormField[] = [
   { prop: 'name', label: '名称', type: 'input', placeholder: '如 OpenAI生产账号' },
   { prop: 'apiUrl', label: 'API 地址', type: 'input', placeholder: '如 https://api.openai.com' },
+  {
+    prop: 'workspaceId',
+    label: '业务空间',
+    type: 'input',
+    placeholder: '阿里云百炼 WorkspaceId；非阿里云可留空',
+  },
   {
     prop: 'chatApiPath',
     label: 'Chat 路径',
@@ -96,6 +103,7 @@ const rules: FormRules = {
 function resetForm() {
   form.name = '';
   form.apiUrl = '';
+  form.workspaceId = '';
   form.chatApiPath = 'v1/chat/completions';
   form.secretKey = '';
   form.models = 'qwen-plus';
@@ -109,6 +117,7 @@ function resetForm() {
 function fillForm(data: KnowledgeAiProvider) {
   form.name = data.name ?? '';
   form.apiUrl = data.apiUrl ?? '';
+  form.workspaceId = data.workspaceId ?? '';
   form.chatApiPath = data.chatApiPath || 'v1/chat/completions';
   form.secretKey = '';
   form.models = data.models || 'qwen-plus';

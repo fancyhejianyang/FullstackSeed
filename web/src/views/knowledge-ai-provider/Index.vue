@@ -33,7 +33,12 @@ const columns: TableColumn[] = [
 ];
 
 const searchFields: FormField[] = [
-  { prop: 'keyword', label: '关键词', type: 'input', placeholder: '名称/API地址/描述' },
+  {
+    prop: 'keyword',
+    label: '关键词',
+    type: 'input',
+    placeholder: '名称/API地址/业务空间/描述',
+  },
 ];
 
 const editVisible = ref(false);

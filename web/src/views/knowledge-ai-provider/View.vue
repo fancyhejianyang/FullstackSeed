@@ -48,6 +48,9 @@ function getModelLines(value?: string | null) {
         <el-descriptions-item label="API 地址">
           {{ rowData?.apiUrl || '-' }}
         </el-descriptions-item>
+        <el-descriptions-item label="业务空间">
+          {{ rowData?.workspaceId || '-' }}
+        </el-descriptions-item>
         <el-descriptions-item label="Chat API 路径">
           {{ rowData?.chatApiPath || '-' }}
         </el-descriptions-item>
@@ -121,4 +124,3 @@ function getModelLines(value?: string | null) {
   gap: 6px;
 }
 </style>
-

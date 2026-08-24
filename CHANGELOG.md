@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-08-24 大模型账号增加业务空间配置
+- 新增：
+  - `knowledge_ai_providers.workspaceId`（业务空间 / WorkspaceId，用于阿里云百炼 maas 专属域名）
+- 修改：
+  - `server/src/knowledge-ai-providers/`（DTO、实体、服务返回与搜索支持业务空间；构建阿里云 maas 请求地址时按 `workspaceId` 修正子域）
+  - `web/src/api/knowledgeAiProvider.ts`、`web/src/views/knowledge-ai-provider/`（大模型账号编辑、详情和搜索提示增加业务空间字段）
+- 删除：无
+- 说明：阿里云百炼专属地址中的 `{WorkspaceId}` 容易被误填为套餐名或应用名；单独配置业务空间后，后端会在请求前统一修正最终调用地址。
+
 ### 2026-08-24 适配阿里云 Qwen 文本向量参数
 - 新增：无
 - 修改：

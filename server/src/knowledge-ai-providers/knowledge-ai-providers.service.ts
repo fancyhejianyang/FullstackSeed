@@ -124,6 +124,7 @@ export class KnowledgeAiProvidersService {
       ? [
           { name: Like(`%${keyword}%`) },
           { apiUrl: Like(`%${keyword}%`) },
+          { workspaceId: Like(`%${keyword}%`) },
           { description: Like(`%${keyword}%`) },
         ]
       : {};
@@ -534,6 +535,9 @@ export class KnowledgeAiProvidersService {
     const payload: Partial<KnowledgeAiProvider> = {};
     if (dto.name !== undefined) payload.name = dto.name.trim();
     if (dto.apiUrl !== undefined) payload.apiUrl = dto.apiUrl.trim();
+    if (dto.workspaceId !== undefined) {
+      payload.workspaceId = dto.workspaceId.trim() || null;
+    }
     if (dto.chatApiPath !== undefined || isCreate) {
       payload.chatApiPath = (dto.chatApiPath || 'v1/chat/completions').trim();
     }
@@ -569,6 +573,7 @@ export class KnowledgeAiProvidersService {
       id: provider.id,
       name: provider.name,
       apiUrl: provider.apiUrl,
+      workspaceId: provider.workspaceId ?? '',
       chatApiPath: provider.chatApiPath,
       models: provider.models ?? '',
       textModels: provider.textModels ?? '',
@@ -583,14 +588,14 @@ export class KnowledgeAiProvidersService {
   }
 
   private buildChatUrl(provider: KnowledgeAiProvider) {
-    const apiUrl = provider.apiUrl.replace(/\/+$/, '');
+    const apiUrl = this.applyWorkspaceId(provider).replace(/\/+$/, '');
     const chatPath = provider.chatApiPath || 'v1/chat/completions';
     if (/\/chat\/completions$/.test(apiUrl)) return apiUrl;
     return this.appendApiPath(apiUrl, chatPath);
   }
 
   private buildEmbeddingUrl(provider: KnowledgeAiProvider) {
-    const apiUrl = provider.apiUrl.replace(/\/+$/, '');
+    const apiUrl = this.applyWorkspaceId(provider).replace(/\/+$/, '');
     if (/\/embeddings$/.test(apiUrl)) return apiUrl;
     if (/\/chat\/completions$/.test(apiUrl)) {
       return apiUrl.replace(/\/chat\/completions$/, '/embeddings');
@@ -608,6 +613,23 @@ export class KnowledgeAiProvidersService {
       cleanPath = cleanPath.replace(/^v1\/+/i, '');
     }
     return `${base}/${cleanPath}`;
+  }
+
+  private applyWorkspaceId(provider: KnowledgeAiProvider) {
+    const workspaceId = provider.workspaceId?.trim();
+    if (!workspaceId) return provider.apiUrl;
+    try {
+      const url = new URL(provider.apiUrl);
+      if (/\.maas\.aliyuncs\.com$/i.test(url.hostname)) {
+        const parts = url.hostname.split('.');
+        parts[0] = workspaceId;
+        url.hostname = parts.join('.');
+        return url.toString().replace(/\/+$/, '');
+      }
+    } catch {
+      return provider.apiUrl;
+    }
+    return provider.apiUrl;
   }
 
   private buildQuestionMessages(

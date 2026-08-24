@@ -24,6 +24,11 @@ export class CreateKnowledgeAiProviderDto {
 
   @IsString()
   @IsOptional()
+  @MaxLength(120)
+  workspaceId?: string;
+
+  @IsString()
+  @IsOptional()
   @MaxLength(200)
   chatApiPath?: string;
 
