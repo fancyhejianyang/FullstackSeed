@@ -1,112 +1,223 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
+import { ElMessage, type FormRules } from 'element-plus';
 import PageContainer from '@/components/PageContainer.vue';
 import Button from '@/components/Button.vue';
-import Table, { type TableColumn } from '@/components/Table.vue';
-import type { FormField } from '@/components/Form.vue';
-import { formatDateTime } from '@/utils/format';
+import Form, { type FormField } from '@/components/Form.vue';
 import {
-  batchDeleteVectorConfigs,
-  deleteVectorConfig,
+  createVectorConfig,
+  getVectorConfig,
   getVectorConfigs,
-  type QueryVectorConfigParams,
+  updateVectorConfig,
   type VectorConfig,
+  type VectorConfigForm,
 } from '@/api/vectorConfig';
-import Edit from './Edit.vue';
 
-const tableRef = ref<{
-  refresh: () => Promise<void>;
-  runBatchDelete: () => Promise<void>;
-}>();
+const formRef = ref<InstanceType<typeof Form>>();
+const loading = ref(false);
+const submitting = ref(false);
+const currentId = ref<number | null>(null);
+const tokenSet = ref(false);
+const loadedConfigName = ref('');
 
-const columns: TableColumn[] = [
-  { prop: 'name', label: '配置名称', minWidth: 180 },
-  { prop: 'vectorDbType', label: '数据库类型', width: 120 },
-  { prop: 'chromaUrl', label: '服务地址', minWidth: 220 },
-  { prop: 'collectionName', label: 'Collection', minWidth: 160 },
-  { prop: 'tenant', label: 'Tenant', minWidth: 140 },
-  { prop: 'database', label: 'Database', minWidth: 140 },
-  { prop: 'tokenSet', label: '令牌', width: 90, slot: true },
-  { prop: 'isEnabled', label: '状态', width: 90, slot: true },
-  { prop: 'updatedAt', label: '更新时间', width: 180, slot: true },
-];
+const form = reactive<VectorConfigForm>({
+  name: '本地 Chroma 向量配置',
+  vectorDbType: 'chroma',
+  chromaUrl: 'http://localhost:8000',
+  collectionName: 'knowledge_chunks',
+  tenant: 'default_tenant',
+  database: 'default_database',
+  token: '',
+  isEnabled: true,
+});
 
-const searchFields: FormField[] = [
-  { prop: 'keyword', label: '关键词', type: 'input', placeholder: '名称/地址/Collection' },
-];
+const vectorDbTypeOptions = [{ label: 'Chroma', value: 'chroma' }];
 
-const editVisible = ref(false);
-const editingRow = ref<VectorConfig | null>(null);
+const fields = computed<FormField[]>(() => [
+  { prop: 'name', label: '配置名称', type: 'input', placeholder: '如 本地 Chroma 向量配置' },
+  {
+    prop: 'vectorDbType',
+    label: '数据库类型',
+    type: 'select',
+    options: vectorDbTypeOptions,
+    componentProps: { clearable: false },
+  },
+  {
+    prop: 'chromaUrl',
+    label: 'Chroma 地址',
+    type: 'input',
+    placeholder: 'http://localhost:8000',
+  },
+  {
+    prop: 'collectionName',
+    label: 'Collection',
+    type: 'input',
+    placeholder: 'knowledge_chunks',
+  },
+  { prop: 'tenant', label: 'Tenant', type: 'input', placeholder: 'default_tenant' },
+  {
+    prop: 'database',
+    label: 'Database',
+    type: 'input',
+    placeholder: 'default_database',
+  },
+  {
+    prop: 'token',
+    label: '访问令牌',
+    type: 'input',
+    inputMode: 'password',
+    placeholder: tokenSet.value ? '已配置；留空表示不修改' : '本地服务通常可留空',
+  },
+  {
+    prop: 'isEnabled',
+    label: '是否启用',
+    component: 'Switch',
+    componentProps: { activeText: '启用', inactiveText: '停用' },
+  },
+]);
 
-function fetchConfigs(params: Record<string, unknown>) {
-  return getVectorConfigs(params as QueryVectorConfigParams);
+const rules: FormRules = {
+  name: [{ required: true, message: '请输入配置名称', trigger: 'blur' }],
+  chromaUrl: [{ required: true, message: '请输入 Chroma 地址', trigger: 'blur' }],
+};
+
+function resetForm() {
+  currentId.value = null;
+  tokenSet.value = false;
+  loadedConfigName.value = '';
+  Object.assign(form, {
+    name: '本地 Chroma 向量配置',
+    vectorDbType: 'chroma',
+    chromaUrl: 'http://localhost:8000',
+    collectionName: 'knowledge_chunks',
+    tenant: 'default_tenant',
+    database: 'default_database',
+    token: '',
+    isEnabled: true,
+  });
 }
 
-function openCreate() {
-  editingRow.value = null;
-  editVisible.value = true;
+function fillForm(data: VectorConfig) {
+  currentId.value = data.id;
+  tokenSet.value = !!data.tokenSet;
+  loadedConfigName.value = data.name;
+  Object.assign(form, {
+    name: data.name,
+    vectorDbType: data.vectorDbType,
+    chromaUrl: data.chromaUrl,
+    collectionName: data.collectionName || 'knowledge_chunks',
+    tenant: data.tenant || 'default_tenant',
+    database: data.database || 'default_database',
+    token: '',
+    isEnabled: !!data.isEnabled,
+  });
 }
 
-function handleEdit(row: VectorConfig) {
-  editingRow.value = row;
-  editVisible.value = true;
+async function loadConfig() {
+  loading.value = true;
+  try {
+    const res = await getVectorConfigs({ page: 1, pageSize: 20 });
+    const target = res.list.find((item) => item.isEnabled) ?? res.list[0];
+    if (!target) {
+      resetForm();
+      return;
+    }
+    fillForm(await getVectorConfig(target.id));
+  } catch {
+    ElMessage.error('获取向量化配置失败');
+  } finally {
+    loading.value = false;
+  }
 }
 
-function deleteRequest(row: VectorConfig) {
-  return deleteVectorConfig(row.id);
+function buildPayload() {
+  const payload: VectorConfigForm = { ...form };
+  if (currentId.value && !payload.token?.trim()) {
+    delete payload.token;
+  }
+  return payload;
 }
 
-async function batchDeleteRequest(payload: { ids: Array<string | number> }) {
-  await batchDeleteVectorConfigs(payload.ids);
+async function handleSubmit() {
+  await formRef.value?.validate();
+  submitting.value = true;
+  try {
+    const payload = buildPayload();
+    const isUpdate = !!currentId.value;
+    const saved = currentId.value
+      ? await updateVectorConfig(currentId.value, payload)
+      : await createVectorConfig(payload);
+    fillForm(saved);
+    ElMessage.success(isUpdate ? '保存成功' : '创建成功');
+  } finally {
+    submitting.value = false;
+  }
 }
+
+onMounted(loadConfig);
 </script>
 
 <template>
   <PageContainer title="向量化配置">
-    <Table
-      ref="tableRef"
-      :columns="columns"
-      :search-fields="searchFields"
-      :request="fetchConfigs"
-      :checkAble="true"
-      :show-view="false"
-      :delete-request="deleteRequest"
-      :batch-delete-request="batchDeleteRequest"
-      @edit="handleEdit"
-    >
-      <template #toolbar>
-        <Button type="primary" icon="Plus" @click="openCreate">新增配置</Button>
-        <Button
-          icon="Delete"
-          type="danger"
-          :confirm="false"
-          @click="tableRef?.runBatchDelete()"
-        >
-          批量删除
+    <div class="vector-config" v-loading="loading">
+      <div class="vector-config__header">
+        <div>
+          <h2>Chroma 向量服务</h2>
+        </div>
+        <el-tag :type="form.isEnabled ? 'success' : 'info'">
+          {{ form.isEnabled ? '启用中' : '已停用' }}
+        </el-tag>
+      </div>
+
+      <Form
+        ref="formRef"
+        v-model="form"
+        :fields="fields"
+        :rules="rules"
+        label-width="120px"
+      />
+
+      <div class="vector-config__footer">
+        <span class="vector-config__meta">
+          {{ loadedConfigName ? `当前配置：${loadedConfigName}` : '当前配置：尚未创建' }}
+        </span>
+        <Button type="primary" icon="Check" :loading="submitting" @click="handleSubmit">
+          保存配置
         </Button>
-      </template>
-
-      <template #column-tokenSet="{ row }">
-        <el-tag :type="row.tokenSet ? 'success' : 'info'">
-          {{ row.tokenSet ? '已配置' : '未配置' }}
-        </el-tag>
-      </template>
-
-      <template #column-isEnabled="{ row }">
-        <el-tag :type="row.isEnabled ? 'success' : 'info'">
-          {{ row.isEnabled ? '启用' : '停用' }}
-        </el-tag>
-      </template>
-
-      <template #column-updatedAt="{ row }">
-        {{ formatDateTime(row.updatedAt) }}
-      </template>
-    </Table>
-
-    <Edit
-      v-model:visible="editVisible"
-      :row="editingRow"
-      @success="tableRef?.refresh()"
-    />
+      </div>
+    </div>
   </PageContainer>
 </template>
+
+<style scoped>
+.vector-config {
+  max-width: 920px;
+}
+
+.vector-config__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.vector-config__header h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.vector-config__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 8px;
+}
+
+.vector-config__meta {
+  color: #909399;
+}
+</style>

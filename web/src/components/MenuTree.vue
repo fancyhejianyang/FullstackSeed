@@ -22,6 +22,10 @@ const props = withDefaults(
 function shouldShowIcon(item: MenuNode) {
   return props.level === 1 && !!item.icon;
 }
+
+function shouldReserveIconSpace() {
+  return props.level > 1;
+}
 </script>
 
 <template>
@@ -30,6 +34,7 @@ function shouldShowIcon(item: MenuNode) {
     <el-sub-menu v-if="item.children && item.children.length" :index="item.path || `sub-${item.id}`">
       <template #title>
         <el-icon v-if="shouldShowIcon(item)"><component :is="item.icon" /></el-icon>
+        <span v-else-if="shouldReserveIconSpace()" class="menu-tree__icon-space" />
         <span>{{ item.name }}</span>
       </template>
       <MenuTree :items="item.children" :level="props.level + 1" />
@@ -38,7 +43,18 @@ function shouldShowIcon(item: MenuNode) {
     <!-- 叶子菜单 -->
     <el-menu-item v-else :index="item.path">
       <el-icon v-if="shouldShowIcon(item)"><component :is="item.icon" /></el-icon>
+      <span v-else-if="shouldReserveIconSpace()" class="menu-tree__icon-space" />
       <template #title>{{ item.name }}</template>
     </el-menu-item>
   </template>
 </template>
+
+<style scoped>
+.menu-tree__icon-space {
+  display: inline-flex;
+  width: 18px;
+  height: 1px;
+  margin-right: 5px;
+  flex: 0 0 18px;
+}
+</style>
