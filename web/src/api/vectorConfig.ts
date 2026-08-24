@@ -9,6 +9,7 @@ export interface VectorConfig {
   providerId: number | null;
   providerName: string | null;
   model: string | null;
+  embeddingDimension: number;
   chromaUrl: string;
   collectionName: string;
   tenant: string;
@@ -35,6 +36,7 @@ export interface VectorConfigForm {
   vectorDbType?: VectorDbType;
   providerId?: number | '' | null;
   model?: string;
+  embeddingDimension?: number | '' | null;
   chromaUrl: string;
   collectionName?: string;
   tenant?: string;

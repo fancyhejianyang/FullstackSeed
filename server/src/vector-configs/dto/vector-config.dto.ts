@@ -36,6 +36,12 @@ export class CreateVectorConfigDto {
   @MaxLength(120)
   model?: string;
 
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  embeddingDimension?: number;
+
   @IsUrl({ require_tld: false })
   @MaxLength(500)
   chromaUrl: string;

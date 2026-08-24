@@ -27,6 +27,7 @@ export class KnowledgeEmbeddingService {
     return this.providersService.callEmbedding({
       target,
       input: normalized,
+      embeddingDimension: vectorConfig.embeddingDimension,
     });
   }
 

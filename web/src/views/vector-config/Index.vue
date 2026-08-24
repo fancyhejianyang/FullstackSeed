@@ -28,6 +28,7 @@ const form = reactive<VectorConfigForm>({
   vectorDbType: 'chroma',
   providerId: '',
   model: '',
+  embeddingDimension: 768,
   chromaUrl: 'http://localhost:8000',
   collectionName: 'knowledge_chunks',
   tenant: 'default_tenant',
@@ -78,6 +79,18 @@ const fields = computed<FormField[]>(() => [
       : '请先在大模型账号中维护向量模型列表',
   },
   {
+    prop: 'embeddingDimension',
+    label: '向量维度',
+    component: 'InputNumber',
+    placeholder: '默认 768',
+    componentProps: {
+      mode: 'integer',
+      min: 1,
+      required: true,
+      suffixText: '维',
+    },
+  },
+  {
     prop: 'chromaUrl',
     label: 'Chroma 地址',
     type: 'input',
@@ -115,6 +128,9 @@ const rules: FormRules = {
   name: [{ required: true, message: '请输入配置名称', trigger: 'blur' }],
   providerId: [{ required: true, message: '请选择大模型账号', trigger: 'change' }],
   model: [{ required: true, message: '请选择向量模型', trigger: 'change' }],
+  embeddingDimension: [
+    { required: true, message: '请输入向量维度', trigger: 'blur' },
+  ],
   chromaUrl: [{ required: true, message: '请输入 Chroma 地址', trigger: 'blur' }],
 };
 
@@ -127,6 +143,7 @@ function resetForm() {
     vectorDbType: 'chroma',
     providerId: '',
     model: '',
+    embeddingDimension: 768,
     chromaUrl: 'http://localhost:8000',
     collectionName: 'knowledge_chunks',
     tenant: 'default_tenant',
@@ -145,6 +162,7 @@ function fillForm(data: VectorConfig) {
     vectorDbType: data.vectorDbType,
     providerId: data.providerId ?? '',
     model: data.model ?? '',
+    embeddingDimension: data.embeddingDimension || 768,
     chromaUrl: data.chromaUrl,
     collectionName: data.collectionName || 'knowledge_chunks',
     tenant: data.tenant || 'default_tenant',
@@ -191,6 +209,9 @@ function buildPayload() {
   const payload: VectorConfigForm = { ...form };
   payload.providerId = Number(form.providerId);
   payload.model = form.model?.trim();
+  const dimension = Number(form.embeddingDimension);
+  payload.embeddingDimension =
+    Number.isFinite(dimension) && dimension > 0 ? Math.trunc(dimension) : 768;
   if (currentId.value && !payload.token?.trim()) {
     delete payload.token;
   }
@@ -259,6 +280,7 @@ onMounted(loadConfig);
           </p>
           <p class="vector-config__tip">
             当前知识库索引只处理文本分片，请选择文本向量模型；视觉/多模态向量模型不用于这里。
+            同一 Chroma Collection 的向量维度固定，切换模型或维度时请更换 Collection 或清空旧集合。
           </p>
         </div>
         <el-tag :type="form.isEnabled ? 'success' : 'info'">

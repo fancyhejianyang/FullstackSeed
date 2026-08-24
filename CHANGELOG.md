@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-08-24 向量化配置支持维度设置
+- 新增：
+  - `vector_configs.embeddingDimension`（向量维度，默认 768，可在向量化配置页调整）
+- 修改：
+  - `server/src/vector-configs/`（向量化配置保存、读取和环境兜底均返回维度配置）
+  - `server/src/knowledge-vectors/knowledge-embedding.service.ts`、`server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`（向量化调用时传入配置维度；阿里云 Qwen 文本向量按配置写入 `dimensions`，不再写死 1024）
+  - `web/src/api/vectorConfig.ts`、`web/src/views/vector-config/Index.vue`（向量化配置表单增加“向量维度”数字输入，默认 768，并提示 Chroma Collection 维度固定）
+- 删除：无
+- 说明：向量模型、向量维度和 Chroma Collection 必须一致；切换模型或维度时建议更换 Collection 名或清空旧集合后重新索引。
+
 ### 2026-08-24 大模型账号密钥支持掩码回显
 - 新增：无
 - 修改：

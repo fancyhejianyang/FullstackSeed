@@ -20,6 +20,7 @@ export interface UsableVectorConfig {
   providerId: number | null;
   providerName: string | null;
   model: string | null;
+  embeddingDimension: number;
   token: string | null;
   source: 'database' | 'env';
 }
@@ -130,6 +131,9 @@ export class VectorConfigsService {
         providerId: configs[0].providerId,
         providerName: configs[0].providerName,
         model: configs[0].model,
+        embeddingDimension: this.resolveEmbeddingDimension(
+          configs[0].embeddingDimension,
+        ),
         token: configs[0].token,
         source: 'database',
       };
@@ -145,6 +149,9 @@ export class VectorConfigsService {
       providerId: null,
       providerName: null,
       model: null,
+      embeddingDimension: this.resolveEmbeddingDimension(
+        Number(process.env.EMBEDDING_DIMENSION || 768),
+      ),
       token: process.env.CHROMA_TOKEN || null,
       source: 'env',
     };
@@ -182,6 +189,13 @@ export class VectorConfigsService {
       payload.model = dto.model.trim() || null;
     } else if (isCreate) {
       payload.model = null;
+    }
+    if (dto.embeddingDimension !== undefined) {
+      payload.embeddingDimension = this.resolveEmbeddingDimension(
+        dto.embeddingDimension,
+      );
+    } else if (isCreate) {
+      payload.embeddingDimension = 768;
     }
     if (dto.chromaUrl !== undefined) payload.chromaUrl = dto.chromaUrl.trim();
     if (dto.collectionName !== undefined) {
@@ -242,6 +256,9 @@ export class VectorConfigsService {
       providerId: config.providerId,
       providerName: config.providerName,
       model: config.model,
+      embeddingDimension: this.resolveEmbeddingDimension(
+        config.embeddingDimension,
+      ),
       chromaUrl: config.chromaUrl,
       collectionName: config.collectionName,
       tenant: config.tenant,
@@ -251,5 +268,12 @@ export class VectorConfigsService {
       createdAt: config.createdAt,
       updatedAt: config.updatedAt,
     };
+  }
+
+  private resolveEmbeddingDimension(value: unknown) {
+    const dimension = Number(value);
+    return Number.isFinite(dimension) && dimension > 0
+      ? Math.trunc(dimension)
+      : 768;
   }
 }

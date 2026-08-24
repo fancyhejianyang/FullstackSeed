@@ -98,6 +98,7 @@ export interface KnowledgeAiVisionOcrPayload {
 export interface KnowledgeAiEmbeddingPayload {
   target: KnowledgeAiChatTarget;
   input: string | string[];
+  embeddingDimension?: number | null;
 }
 
 export interface KnowledgeAiChatCallResult {
@@ -441,7 +442,13 @@ export class KnowledgeAiProvidersService {
     const batchSize = this.resolveEmbeddingBatchSize(payload.target);
     const embeddings: number[][] = [];
     for (const batch of this.chunkArray(input, batchSize)) {
-      embeddings.push(...(await this.callEmbeddingBatch(payload.target, batch)));
+      embeddings.push(
+        ...(await this.callEmbeddingBatch(
+          payload.target,
+          batch,
+          payload.embeddingDimension,
+        )),
+      );
     }
     return embeddings;
   }
@@ -449,6 +456,7 @@ export class KnowledgeAiProvidersService {
   private async callEmbeddingBatch(
     target: KnowledgeAiChatTarget,
     input: string[],
+    embeddingDimension?: number | null,
   ): Promise<number[][]> {
     const response = await fetch(target.url, {
       method: 'POST',
@@ -456,7 +464,9 @@ export class KnowledgeAiProvidersService {
         Authorization: `Bearer ${target.secretKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(this.buildEmbeddingRequestBody(target, input)),
+      body: JSON.stringify(
+        this.buildEmbeddingRequestBody(target, input, embeddingDimension),
+      ),
     });
 
     if (!response.ok) {
@@ -479,16 +489,24 @@ export class KnowledgeAiProvidersService {
   private buildEmbeddingRequestBody(
     target: KnowledgeAiChatTarget,
     input: string[],
+    embeddingDimension?: number | null,
   ): EmbeddingRequestBody {
     const body: EmbeddingRequestBody = {
       model: target.model,
       input,
     };
     if (this.shouldUseAliyunTextEmbeddingOptions(target)) {
-      body.dimensions = 1024;
+      body.dimensions = this.resolveEmbeddingDimension(embeddingDimension);
       body.encoding_format = 'float';
     }
     return body;
+  }
+
+  private resolveEmbeddingDimension(value?: number | null) {
+    const dimension = Number(value);
+    return Number.isFinite(dimension) && dimension > 0
+      ? Math.trunc(dimension)
+      : 768;
   }
 
   private shouldUseAliyunTextEmbeddingOptions(target: KnowledgeAiChatTarget) {
