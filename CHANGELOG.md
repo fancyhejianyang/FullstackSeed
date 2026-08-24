@@ -1,5 +1,12 @@
 # CHANGELOG
 
+### 2026-08-24 修正业务空间字段数据库类型
+- 新增：无
+- 修改：
+  - `server/src/knowledge-ai-providers/entities/knowledge-ai-provider.entity.ts`（`workspaceId` 显式声明为 `varchar`，避免 TypeORM 将可空字符串推断为 MySQL 不支持的 `Object` 类型）
+- 删除：无
+- 说明：`string | null` 字段在 TypeORM 元数据反射中可能无法自动推断列类型，MySQL 场景需要显式指定 `type`。
+
 ### 2026-08-24 大模型账号增加业务空间配置
 - 新增：
   - `knowledge_ai_providers.workspaceId`（业务空间 / WorkspaceId，用于阿里云百炼 maas 专属域名）

@@ -9,7 +9,7 @@ export class KnowledgeAiProvider extends BaseEntity {
   @Column({ length: 500 })
   apiUrl: string;
 
-  @Column({ length: 120, nullable: true })
+  @Column({ type: 'varchar', length: 120, nullable: true })
   workspaceId: string | null;
 
   @Column({ length: 200, default: 'v1/chat/completions' })
