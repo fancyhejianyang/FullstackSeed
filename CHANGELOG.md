@@ -1,5 +1,12 @@
 # CHANGELOG
 
+### 2026-08-24 适配阿里云 Qwen 文本向量参数
+- 新增：无
+- 修改：
+  - `server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`（阿里云 `qwen3.7-text-embedding`、`text-embedding-v3`、`text-embedding-v4` 调用 embedding 时自动补充 `dimensions: 1024` 和 `encoding_format: "float"`，腾讯混元等其它供应商保持通用请求体）
+- 删除：无
+- 说明：Qwen 文本向量示例要求传入向量维度和 float 编码格式；本次在后端调用层按模型自动补齐，避免影响已调通的腾讯混元向量模型。
+
 ### 2026-08-24 修正大模型接口路径重复拼接
 - 新增：无
 - 修改：

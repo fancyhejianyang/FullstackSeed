@@ -50,6 +50,13 @@ interface EmbeddingResponse {
   output?: unknown;
 }
 
+interface EmbeddingRequestBody {
+  model: string;
+  input: string[];
+  dimensions?: number;
+  encoding_format?: 'float';
+}
+
 export interface KnowledgeAiChatMessagePayload {
   role: 'system' | 'user' | 'assistant';
   content: string;
@@ -444,10 +451,7 @@ export class KnowledgeAiProvidersService {
         Authorization: `Bearer ${target.secretKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model: target.model,
-        input,
-      }),
+      body: JSON.stringify(this.buildEmbeddingRequestBody(target, input)),
     });
 
     if (!response.ok) {
@@ -465,6 +469,28 @@ export class KnowledgeAiProvidersService {
       );
     }
     return embeddings;
+  }
+
+  private buildEmbeddingRequestBody(
+    target: KnowledgeAiChatTarget,
+    input: string[],
+  ): EmbeddingRequestBody {
+    const body: EmbeddingRequestBody = {
+      model: target.model,
+      input,
+    };
+    if (this.shouldUseAliyunTextEmbeddingOptions(target)) {
+      body.dimensions = 1024;
+      body.encoding_format = 'float';
+    }
+    return body;
+  }
+
+  private shouldUseAliyunTextEmbeddingOptions(target: KnowledgeAiChatTarget) {
+    if (!/aliyuncs|dashscope/i.test(target.url)) return false;
+    return /^(qwen3\.7-text-embedding|text-embedding-v3|text-embedding-v4)$/i.test(
+      target.model.trim(),
+    );
   }
 
   private resolveEmbeddingBatchSize(target: KnowledgeAiChatTarget) {
