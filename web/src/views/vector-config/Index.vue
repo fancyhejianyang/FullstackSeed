@@ -47,10 +47,8 @@ const selectedProvider = computed(() =>
   providers.value.find((item) => item.id === Number(form.providerId)),
 );
 const modelOptions = computed(() =>
-  parseProviderModelOptions(
-    selectedProvider.value?.embeddingModels ||
-      selectedProvider.value?.models ||
-      '',
+  parseProviderModelOptions(selectedProvider.value?.embeddingModels || '').filter(
+    (item) => !isKnownUnsupportedTextEmbeddingModel(item.value),
   ),
 );
 
@@ -75,7 +73,9 @@ const fields = computed<FormField[]>(() => [
     label: '向量模型',
     type: 'select',
     options: modelOptions,
-    placeholder: '请选择向量模型',
+    placeholder: selectedProvider.value?.embeddingModels
+      ? '请选择向量模型'
+      : '请先在大模型账号中维护向量模型列表',
   },
   {
     prop: 'chromaUrl',
@@ -212,6 +212,18 @@ function parseProviderModelOptions(value: string) {
     });
 }
 
+function isKnownUnsupportedTextEmbeddingModel(model: string) {
+  const normalized = model.trim().toLowerCase();
+  return [
+    'vl-embedding',
+    'vision',
+    'image',
+    'video',
+    'multimodal',
+    'multi-modal',
+  ].some((keyword) => normalized.includes(keyword));
+}
+
 async function handleSubmit() {
   await formRef.value?.validate();
   submitting.value = true;
@@ -243,7 +255,10 @@ onMounted(loadConfig);
                 （{{ form.model }}）
               </span>
             </template>
-            <template v-else>请选择大模型账号和向量模型</template>
+          <template v-else>请选择大模型账号和向量模型</template>
+          </p>
+          <p class="vector-config__tip">
+            当前知识库索引只处理文本分片，请选择文本向量模型；视觉/多模态向量模型不用于这里。
           </p>
         </div>
         <el-tag :type="form.isEnabled ? 'success' : 'info'">

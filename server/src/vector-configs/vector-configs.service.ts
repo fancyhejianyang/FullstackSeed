@@ -215,6 +215,23 @@ export class VectorConfigsService {
     if (!config.providerId || !config.model?.trim()) {
       throw new BadRequestException('启用向量化配置时，请选择大模型账号和向量模型');
     }
+    if (this.isKnownUnsupportedTextEmbeddingModel(config.model)) {
+      throw new BadRequestException(
+        `当前知识库分片只支持文本向量模型，${config.model} 属于多模态/视觉向量模型，请改用 text-embedding-v4、text-embedding-v3 等文本向量模型`,
+      );
+    }
+  }
+
+  private isKnownUnsupportedTextEmbeddingModel(model: string) {
+    const normalized = model.trim().toLowerCase();
+    return [
+      'vl-embedding',
+      'vision',
+      'image',
+      'video',
+      'multimodal',
+      'multi-modal',
+    ].some((keyword) => normalized.includes(keyword));
   }
 
   private toView(config: VectorConfig) {

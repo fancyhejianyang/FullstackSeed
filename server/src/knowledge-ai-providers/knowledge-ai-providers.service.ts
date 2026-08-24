@@ -238,14 +238,15 @@ export class KnowledgeAiProvidersService {
     if (!provider.secretKey) {
       throw new BadRequestException('该大模型账号未配置密钥');
     }
+    const embeddingModels = provider.embeddingModels?.trim();
+    if (!embeddingModels) {
+      throw new BadRequestException('该大模型账号未配置向量模型列表');
+    }
 
     return {
       providerId: provider.id,
       providerName: provider.name,
-      model: this.resolveModel(
-        this.joinModelTexts(provider.embeddingModels, provider.models),
-        payload.model,
-      ),
+      model: this.resolveModel(embeddingModels, payload.model),
       url: this.buildEmbeddingUrl(provider),
       secretKey: provider.secretKey,
     };
@@ -425,14 +426,26 @@ export class KnowledgeAiProvidersService {
 
   async callEmbedding(payload: KnowledgeAiEmbeddingPayload): Promise<number[][]> {
     const input = Array.isArray(payload.input) ? payload.input : [payload.input];
-    const response = await fetch(payload.target.url, {
+    const batchSize = this.resolveEmbeddingBatchSize(payload.target);
+    const embeddings: number[][] = [];
+    for (const batch of this.chunkArray(input, batchSize)) {
+      embeddings.push(...(await this.callEmbeddingBatch(payload.target, batch)));
+    }
+    return embeddings;
+  }
+
+  private async callEmbeddingBatch(
+    target: KnowledgeAiChatTarget,
+    input: string[],
+  ): Promise<number[][]> {
+    const response = await fetch(target.url, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${payload.target.secretKey}`,
+        Authorization: `Bearer ${target.secretKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: payload.target.model,
+        model: target.model,
         input,
       }),
     });
@@ -440,7 +453,7 @@ export class KnowledgeAiProvidersService {
     if (!response.ok) {
       const errorText = await response.text();
       throw new BadRequestException(
-        `向量模型调用失败：${response.status} ${errorText}`,
+        `向量模型调用失败：${response.status} ${errorText}；当前模型 ${target.model}，请确认它是文本向量模型且在当前账号/地域可用`,
       );
     }
 
@@ -452,6 +465,18 @@ export class KnowledgeAiProvidersService {
       );
     }
     return embeddings;
+  }
+
+  private resolveEmbeddingBatchSize(target: KnowledgeAiChatTarget) {
+    return /dashscope|aliyuncs/i.test(target.url) ? 10 : 50;
+  }
+
+  private chunkArray<T>(items: T[], size: number) {
+    const chunks: T[][] = [];
+    for (let index = 0; index < items.length; index += size) {
+      chunks.push(items.slice(index, index + size));
+    }
+    return chunks;
   }
 
   private async findEntity(id: number) {

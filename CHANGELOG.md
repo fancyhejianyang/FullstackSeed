@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-08-24 收紧向量模型选择和调用批次
+- 新增：无
+- 修改：
+  - `server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`（向量化只读取大模型账号的向量模型列表；embedding 请求按供应商限制拆分小批次；错误提示补充当前模型）
+  - `server/src/vector-configs/vector-configs.service.ts`（启用向量化配置时拦截明显的视觉/多模态向量模型）
+  - `web/src/views/vector-config/Index.vue`（向量模型下拉只读取账号的向量模型字段，并过滤不适用于文本分片的视觉/多模态模型）
+- 删除：无
+- 说明：知识库当前是“文本分片 → 文本向量化”链路，`qwen3-vl-embedding` 等多模态模型不能直接用于本流程；阿里云等供应商的 embedding 批量限制也在调用层统一处理。
+
 ### 2026-08-24 将向量模型选择并入向量化配置
 - 新增：
   - `vector_configs.providerId/providerName/model`（向量化配置直接绑定大模型账号和向量模型）
