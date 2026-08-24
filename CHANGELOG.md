@@ -1,5 +1,12 @@
 # CHANGELOG
 
+### 2026-08-24 规范化大模型密钥输入
+- 新增：无
+- 修改：
+  - `server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`（保存和调用大模型密钥时自动移除误粘贴的 `Authorization:`、`Bearer ` 前缀，避免请求头变成重复 Bearer）
+- 删除：无
+- 说明：后端仍按 OpenAI 兼容 HTTP 调用方式发送 `Authorization: Bearer {key}`；本次主要增强密钥输入容错，便于排查 401。
+
 ### 2026-08-24 增强大模型调用错误配置摘要
 - 新增：无
 - 修改：

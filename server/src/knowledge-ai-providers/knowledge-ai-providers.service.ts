@@ -207,7 +207,7 @@ export class KnowledgeAiProvidersService {
         payload.model,
       ),
       url: this.buildChatUrl(provider),
-      secretKey: provider.secretKey,
+      secretKey: this.normalizeSecretKey(provider.secretKey),
     };
   }
 
@@ -233,7 +233,7 @@ export class KnowledgeAiProvidersService {
         payload.model,
       ),
       url: this.buildChatUrl(provider),
-      secretKey: provider.secretKey,
+      secretKey: this.normalizeSecretKey(provider.secretKey),
     };
   }
 
@@ -260,7 +260,7 @@ export class KnowledgeAiProvidersService {
       workspaceId: provider.workspaceId ?? null,
       model: this.resolveModel(embeddingModels, payload.model),
       url: this.buildEmbeddingUrl(provider),
-      secretKey: provider.secretKey,
+      secretKey: this.normalizeSecretKey(provider.secretKey),
     };
   }
 
@@ -564,7 +564,7 @@ export class KnowledgeAiProvidersService {
       payload.chatApiPath = (dto.chatApiPath || 'v1/chat/completions').trim();
     }
     if (dto.secretKey !== undefined) {
-      const secretKey = dto.secretKey.trim();
+      const secretKey = this.normalizeSecretKey(dto.secretKey);
       if (secretKey || isCreate) {
         payload.secretKey = secretKey || null;
       }
@@ -817,6 +817,14 @@ export class KnowledgeAiProvidersService {
   private toNullableText(value?: string) {
     const text = value?.trim() ?? '';
     return text || null;
+  }
+
+  private normalizeSecretKey(value?: string | null) {
+    return (value ?? '')
+      .trim()
+      .replace(/^authorization\s*:\s*/i, '')
+      .replace(/^bearer\s+/i, '')
+      .trim();
   }
 
   private async readChatStream(
