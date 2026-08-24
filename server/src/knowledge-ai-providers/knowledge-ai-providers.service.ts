@@ -77,6 +77,7 @@ export interface KnowledgeAiChatTargetPayload {
 export interface KnowledgeAiChatTarget {
   providerId: number;
   providerName: string;
+  workspaceId: string | null;
   model: string;
   url: string;
   secretKey: string;
@@ -200,6 +201,7 @@ export class KnowledgeAiProvidersService {
     return {
       providerId: provider.id,
       providerName: provider.name,
+      workspaceId: provider.workspaceId ?? null,
       model: this.resolveModel(
         this.joinModelTexts(provider.models, provider.textModels),
         payload.model,
@@ -225,6 +227,7 @@ export class KnowledgeAiProvidersService {
     return {
       providerId: provider.id,
       providerName: provider.name,
+      workspaceId: provider.workspaceId ?? null,
       model: this.resolveModel(
         this.joinModelTexts(provider.visionModels, provider.models),
         payload.model,
@@ -254,6 +257,7 @@ export class KnowledgeAiProvidersService {
     return {
       providerId: provider.id,
       providerName: provider.name,
+      workspaceId: provider.workspaceId ?? null,
       model: this.resolveModel(embeddingModels, payload.model),
       url: this.buildEmbeddingUrl(provider),
       secretKey: provider.secretKey,
@@ -288,7 +292,7 @@ export class KnowledgeAiProvidersService {
       if (!response.ok) {
         const errorText = await response.text();
         throw new BadRequestException(
-          `模型接口调用失败：${response.status} ${errorText}`,
+          `模型接口调用失败：${response.status} ${errorText}；${this.buildTargetDebugInfo(target)}`,
         );
       }
 
@@ -344,7 +348,7 @@ export class KnowledgeAiProvidersService {
       if (!response.ok) {
         const errorText = await response.text();
         throw new BadRequestException(
-          `模型接口调用失败：${response.status} ${errorText}`,
+          `模型接口调用失败：${response.status} ${errorText}；${this.buildTargetDebugInfo(payload.target)}`,
         );
       }
       if (!response.body) {
@@ -397,7 +401,7 @@ export class KnowledgeAiProvidersService {
       if (!response.ok) {
         const errorText = await response.text();
         throw new BadRequestException(
-          `视觉模型 OCR 调用失败：${response.status} ${errorText}`,
+          `视觉模型 OCR 调用失败：${response.status} ${errorText}；${this.buildTargetDebugInfo(payload.target)}`,
         );
       }
 
@@ -458,7 +462,7 @@ export class KnowledgeAiProvidersService {
     if (!response.ok) {
       const errorText = await response.text();
       throw new BadRequestException(
-        `向量模型调用失败：${response.status} ${errorText}；当前模型 ${target.model}，请求地址 ${target.url}，请确认它是文本向量模型且在当前账号/地域可用`,
+        `向量模型调用失败：${response.status} ${errorText}；${this.buildTargetDebugInfo(target)}，请确认它是文本向量模型且在当前账号/地域可用`,
       );
     }
 
@@ -504,6 +508,24 @@ export class KnowledgeAiProvidersService {
       chunks.push(items.slice(index, index + size));
     }
     return chunks;
+  }
+
+  private buildTargetDebugInfo(target: KnowledgeAiChatTarget) {
+    return [
+      `账号ID ${target.providerId}`,
+      `账号 ${target.providerName}`,
+      `业务空间 ${target.workspaceId || '-'}`,
+      `模型 ${target.model}`,
+      `请求地址 ${target.url}`,
+      `密钥 ${this.maskSecretKey(target.secretKey)}`,
+    ].join('，');
+  }
+
+  private maskSecretKey(secretKey: string | null | undefined) {
+    const text = secretKey?.trim() ?? '';
+    if (!text) return '未配置';
+    const suffix = text.length > 4 ? text.slice(-4) : text;
+    return `已配置，长度 ${text.length}，尾号 ${suffix}`;
   }
 
   private async findEntity(id: number) {
