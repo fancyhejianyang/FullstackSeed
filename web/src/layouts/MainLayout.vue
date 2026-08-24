@@ -135,6 +135,9 @@ async function handleLogout() {
 .layout__aside :deep(.el-sub-menu .el-menu) {
   background: #304156;
 }
+.layout__aside :deep(.el-sub-menu .el-menu-item) {
+  padding-left: 50px;
+}
 .layout__header {
   display: flex;
   align-items: center;
