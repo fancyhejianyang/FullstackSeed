@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-08-24 将向量模型选择并入向量化配置
+- 新增：
+  - `vector_configs.providerId/providerName/model`（向量化配置直接绑定大模型账号和向量模型）
+- 修改：
+  - `server/src/vector-configs/`（保存当前向量化配置时校验并保存大模型账号、向量模型；可用配置返回模型绑定信息）
+  - `server/src/knowledge-vectors/knowledge-embedding.service.ts`（向量生成改为读取向量化配置中的账号和模型，不再依赖 AI 功能配置的 embedding 记录）
+  - `server/src/knowledge-vectors/knowledge-vectors.module.ts`（移除不再需要的 AI 功能配置模块依赖）
+  - `web/src/api/vectorConfig.ts`、`web/src/views/vector-config/Index.vue`（向量化配置表单增加大模型账号和向量模型下拉；模型列表读取所选账号的向量模型列表）
+- 删除：无
+- 说明：分片配置只负责切分规则；向量化配置负责“选择向量模型 + 配置 Chroma 存储”，形成完整索引配置。
+
 ### 2026-08-24 明确向量模型配置与 Chroma 配置职责
 - 新增：无
 - 修改：

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, type FormRules } from 'element-plus';
 import PageContainer from '@/components/PageContainer.vue';
 import Button from '@/components/Button.vue';
@@ -11,9 +11,9 @@ import {
   type VectorConfigForm,
 } from '@/api/vectorConfig';
 import {
-  getAiFeatureConfigs,
-  type AiFeatureConfig,
-} from '@/api/aiFeatureConfig';
+  getKnowledgeAiProviders,
+  type KnowledgeAiProvider,
+} from '@/api/knowledgeAiProvider';
 
 const formRef = ref<InstanceType<typeof Form>>();
 const loading = ref(false);
@@ -21,11 +21,13 @@ const submitting = ref(false);
 const currentId = ref<number | null>(null);
 const tokenSet = ref(false);
 const loadedConfigName = ref('');
-const embeddingConfig = ref<AiFeatureConfig | null>(null);
+const providers = ref<KnowledgeAiProvider[]>([]);
 
 const form = reactive<VectorConfigForm>({
   name: '本地 Chroma 向量配置',
   vectorDbType: 'chroma',
+  providerId: '',
+  model: '',
   chromaUrl: 'http://localhost:8000',
   collectionName: 'knowledge_chunks',
   tenant: 'default_tenant',
@@ -35,6 +37,22 @@ const form = reactive<VectorConfigForm>({
 });
 
 const vectorDbTypeOptions = [{ label: 'Chroma', value: 'chroma' }];
+const providerOptions = computed(() =>
+  providers.value.map((item) => ({
+    label: item.name,
+    value: item.id,
+  })),
+);
+const selectedProvider = computed(() =>
+  providers.value.find((item) => item.id === Number(form.providerId)),
+);
+const modelOptions = computed(() =>
+  parseProviderModelOptions(
+    selectedProvider.value?.embeddingModels ||
+      selectedProvider.value?.models ||
+      '',
+  ),
+);
 
 const fields = computed<FormField[]>(() => [
   { prop: 'name', label: '配置名称', type: 'input', placeholder: '如 本地 Chroma 向量配置' },
@@ -44,6 +62,20 @@ const fields = computed<FormField[]>(() => [
     type: 'select',
     options: vectorDbTypeOptions,
     componentProps: { clearable: false },
+  },
+  {
+    prop: 'providerId',
+    label: '大模型账号',
+    type: 'select',
+    options: providerOptions,
+    placeholder: '请选择提供向量模型的大模型账号',
+  },
+  {
+    prop: 'model',
+    label: '向量模型',
+    type: 'select',
+    options: modelOptions,
+    placeholder: '请选择向量模型',
   },
   {
     prop: 'chromaUrl',
@@ -81,6 +113,8 @@ const fields = computed<FormField[]>(() => [
 
 const rules: FormRules = {
   name: [{ required: true, message: '请输入配置名称', trigger: 'blur' }],
+  providerId: [{ required: true, message: '请选择大模型账号', trigger: 'change' }],
+  model: [{ required: true, message: '请选择向量模型', trigger: 'change' }],
   chromaUrl: [{ required: true, message: '请输入 Chroma 地址', trigger: 'blur' }],
 };
 
@@ -91,6 +125,8 @@ function resetForm() {
   Object.assign(form, {
     name: '本地 Chroma 向量配置',
     vectorDbType: 'chroma',
+    providerId: '',
+    model: '',
     chromaUrl: 'http://localhost:8000',
     collectionName: 'knowledge_chunks',
     tenant: 'default_tenant',
@@ -107,6 +143,8 @@ function fillForm(data: VectorConfig) {
   Object.assign(form, {
     name: data.name,
     vectorDbType: data.vectorDbType,
+    providerId: data.providerId ?? '',
+    model: data.model ?? '',
     chromaUrl: data.chromaUrl,
     collectionName: data.collectionName || 'knowledge_chunks',
     tenant: data.tenant || 'default_tenant',
@@ -121,14 +159,12 @@ async function loadConfig() {
   try {
     const [config, embeddingResult] = await Promise.all([
       getCurrentVectorConfig(),
-      getAiFeatureConfigs({
+      getKnowledgeAiProviders({
         page: 1,
-        pageSize: 1,
-        featureType: 'embedding',
+        pageSize: 200,
       }),
     ]);
-    embeddingConfig.value =
-      embeddingResult.list.find((item) => item.isEnabled) ?? null;
+    providers.value = embeddingResult.list;
     if (!config) {
       resetForm();
       return;
@@ -141,12 +177,39 @@ async function loadConfig() {
   }
 }
 
+watch(
+  () => [form.providerId, providers.value.length],
+  () => {
+    const options = modelOptions.value;
+    if (options.length && !options.some((item) => item.value === form.model)) {
+      form.model = '';
+    }
+  },
+);
+
 function buildPayload() {
   const payload: VectorConfigForm = { ...form };
+  payload.providerId = Number(form.providerId);
+  payload.model = form.model?.trim();
   if (currentId.value && !payload.token?.trim()) {
     delete payload.token;
   }
   return payload;
+}
+
+function parseProviderModelOptions(value: string) {
+  return value
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => {
+      const [code, text] = item.split('#');
+      const value = code.trim();
+      return {
+        label: (text || code).trim(),
+        value,
+      };
+    });
 }
 
 async function handleSubmit() {
@@ -174,13 +237,13 @@ onMounted(loadConfig);
           <h2>Chroma 向量服务</h2>
           <p>
             向量模型：
-            <template v-if="embeddingConfig">
-              {{ embeddingConfig.name }}
-              <span v-if="embeddingConfig.providerName || embeddingConfig.model">
-                （{{ [embeddingConfig.providerName, embeddingConfig.model].filter(Boolean).join(' / ') }}）
+            <template v-if="form.providerId && form.model">
+              {{ selectedProvider?.name || '已选择账号' }}
+              <span>
+                （{{ form.model }}）
               </span>
             </template>
-            <template v-else>未启用 AI 功能配置 - 向量化</template>
+            <template v-else>请选择大模型账号和向量模型</template>
           </p>
         </div>
         <el-tag :type="form.isEnabled ? 'success' : 'info'">

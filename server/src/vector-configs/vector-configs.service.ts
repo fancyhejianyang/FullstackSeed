@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Not, Repository } from 'typeorm';
+import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
 import {
   CreateVectorConfigDto,
   QueryVectorConfigDto,
@@ -16,6 +17,9 @@ export interface UsableVectorConfig {
   collectionName: string;
   tenant: string;
   database: string;
+  providerId: number | null;
+  providerName: string | null;
+  model: string | null;
   token: string | null;
   source: 'database' | 'env';
 }
@@ -25,6 +29,7 @@ export class VectorConfigsService {
   constructor(
     @InjectRepository(VectorConfig)
     private readonly configRepository: Repository<VectorConfig>,
+    private readonly providersService: KnowledgeAiProvidersService,
   ) {}
 
   async findAll(query: QueryVectorConfigDto) {
@@ -33,9 +38,13 @@ export class VectorConfigsService {
     if (!current) return { list: [], total: 0 };
     if (
       keyword &&
-      ![current.name, current.chromaUrl, current.collectionName].some((item) =>
-        item.toLowerCase().includes(keyword.toLowerCase()),
-      )
+      ![
+        current.name,
+        current.providerName,
+        current.model,
+        current.chromaUrl,
+        current.collectionName,
+      ].some((item) => item?.toLowerCase().includes(keyword.toLowerCase()))
     ) {
       return { list: [], total: 0 };
     }
@@ -63,8 +72,10 @@ export class VectorConfigsService {
   }
 
   async create(dto: CreateVectorConfigDto) {
+    const payload = await this.toEntityPayload(dto, true);
+    this.assertUsableVectorConfig(payload);
     const config = await this.configRepository.save(
-      this.configRepository.create(this.toEntityPayload(dto, true)),
+      this.configRepository.create(payload),
     );
     await this.removeOtherConfigs(config.id);
     return this.toView(config);
@@ -72,7 +83,8 @@ export class VectorConfigsService {
 
   async update(id: number, dto: UpdateVectorConfigDto) {
     const config = await this.findEntity(id);
-    Object.assign(config, this.toEntityPayload(dto, false));
+    Object.assign(config, await this.toEntityPayload(dto, false));
+    this.assertUsableVectorConfig(config);
     const saved = await this.configRepository.save(config);
     await this.removeOtherConfigs(saved.id);
     return this.toView(saved);
@@ -115,6 +127,9 @@ export class VectorConfigsService {
         collectionName: configs[0].collectionName,
         tenant: configs[0].tenant,
         database: configs[0].database,
+        providerId: configs[0].providerId,
+        providerName: configs[0].providerName,
+        model: configs[0].model,
         token: configs[0].token,
         source: 'database',
       };
@@ -127,6 +142,9 @@ export class VectorConfigsService {
       collectionName: process.env.CHROMA_COLLECTION || 'knowledge_chunks',
       tenant: process.env.CHROMA_TENANT || 'default_tenant',
       database: process.env.CHROMA_DATABASE || 'default_database',
+      providerId: null,
+      providerName: null,
+      model: null,
       token: process.env.CHROMA_TOKEN || null,
       source: 'env',
     };
@@ -145,13 +163,26 @@ export class VectorConfigsService {
     });
   }
 
-  private toEntityPayload(
+  private async toEntityPayload(
     dto: CreateVectorConfigDto | UpdateVectorConfigDto,
     isCreate: boolean,
   ) {
     const payload: Partial<VectorConfig> = {};
     if (dto.name !== undefined) payload.name = dto.name.trim();
     if (dto.vectorDbType !== undefined) payload.vectorDbType = dto.vectorDbType;
+    if (dto.providerId !== undefined) {
+      const provider = await this.providersService.findOne(dto.providerId);
+      payload.providerId = provider.id;
+      payload.providerName = provider.name;
+    } else if (isCreate) {
+      payload.providerId = null;
+      payload.providerName = null;
+    }
+    if (dto.model !== undefined) {
+      payload.model = dto.model.trim() || null;
+    } else if (isCreate) {
+      payload.model = null;
+    }
     if (dto.chromaUrl !== undefined) payload.chromaUrl = dto.chromaUrl.trim();
     if (dto.collectionName !== undefined) {
       payload.collectionName = dto.collectionName.trim() || 'knowledge_chunks';
@@ -179,11 +210,21 @@ export class VectorConfigsService {
     await this.configRepository.softDelete({ id: Not(keepId) });
   }
 
+  private assertUsableVectorConfig(config: Partial<VectorConfig>) {
+    if (!config.isEnabled) return;
+    if (!config.providerId || !config.model?.trim()) {
+      throw new BadRequestException('启用向量化配置时，请选择大模型账号和向量模型');
+    }
+  }
+
   private toView(config: VectorConfig) {
     return {
       id: config.id,
       name: config.name,
       vectorDbType: config.vectorDbType,
+      providerId: config.providerId,
+      providerName: config.providerName,
+      model: config.model,
       chromaUrl: config.chromaUrl,
       collectionName: config.collectionName,
       tenant: config.tenant,

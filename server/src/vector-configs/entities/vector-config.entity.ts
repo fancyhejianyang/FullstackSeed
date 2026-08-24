@@ -9,6 +9,15 @@ export class VectorConfig extends BaseEntity {
   @Column({ length: 40, default: 'chroma' })
   vectorDbType: string;
 
+  @Column({ type: 'int', nullable: true })
+  providerId: number | null;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  providerName: string | null;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  model: string | null;
+
   @Column({ length: 500, default: 'http://localhost:8000' })
   chromaUrl: string;
 

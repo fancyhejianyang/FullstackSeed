@@ -25,6 +25,17 @@ export class CreateVectorConfigDto {
   @IsOptional()
   vectorDbType?: VectorDbType;
 
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  providerId?: number;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(120)
+  model?: string;
+
   @IsUrl({ require_tld: false })
   @MaxLength(500)
   chromaUrl: string;

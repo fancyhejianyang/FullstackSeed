@@ -1,11 +1,11 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-configs.service';
 import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
+import { VectorConfigsService } from '../vector-configs/vector-configs.service';
 
 @Injectable()
 export class KnowledgeEmbeddingService {
   constructor(
-    private readonly aiFeatureConfigsService: AiFeatureConfigsService,
+    private readonly vectorConfigsService: VectorConfigsService,
     private readonly providersService: KnowledgeAiProvidersService,
   ) {}
 
@@ -13,22 +13,16 @@ export class KnowledgeEmbeddingService {
     const normalized = texts.map((item) => item.trim()).filter(Boolean);
     if (!normalized.length) return [];
 
-    const embeddingFeatureConfig =
-      await this.aiFeatureConfigsService.findEnabledByFeature('embedding');
-    if (!embeddingFeatureConfig) {
+    const vectorConfig = await this.vectorConfigsService.findUsableConfig();
+    if (!vectorConfig.providerId || !vectorConfig.model) {
       throw new BadRequestException(
-        '请先在 AI 功能配置中创建并启用“向量化”配置，选择大模型账号和支持 embeddings 的向量模型',
-      );
-    }
-    if (!embeddingFeatureConfig.providerId || !embeddingFeatureConfig.model) {
-      throw new BadRequestException(
-        `AI 功能配置“${embeddingFeatureConfig.name}”缺少大模型账号或向量模型`,
+        '请先在向量化配置中选择大模型账号和支持 embeddings 的向量模型',
       );
     }
 
     const target = await this.providersService.resolveEmbeddingTarget({
-      id: embeddingFeatureConfig.providerId,
-      model: embeddingFeatureConfig.model,
+      id: vectorConfig.providerId,
+      model: vectorConfig.model,
     });
     return this.providersService.callEmbedding({
       target,

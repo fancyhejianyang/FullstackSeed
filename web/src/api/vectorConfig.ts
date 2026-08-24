@@ -6,6 +6,9 @@ export interface VectorConfig {
   id: number;
   name: string;
   vectorDbType: VectorDbType;
+  providerId: number | null;
+  providerName: string | null;
+  model: string | null;
   chromaUrl: string;
   collectionName: string;
   tenant: string;
@@ -30,6 +33,8 @@ export interface QueryVectorConfigParams {
 export interface VectorConfigForm {
   name: string;
   vectorDbType?: VectorDbType;
+  providerId?: number | '' | null;
+  model?: string;
   chromaUrl: string;
   collectionName?: string;
   tenant?: string;
