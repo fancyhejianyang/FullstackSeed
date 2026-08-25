@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-08-25 收口知识库检索辅助字段表达
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/Edit.vue`、`web/src/views/knowledge-base/View.vue`（将“口语化描述”改为“口语化说法”，并在输入占位中明确仅用于检索匹配）
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（向量索引文本中将命中关键字、口语化说法标记为检索辅助信息，不作为 AI 回答指令）
+- 删除：无
+- 说明：AI 功能配置继续承担系统提示词、规则和返回格式；知识库文档只保留检索召回所需的关键字、常见问法和匹配优先级，避免两处都像是在配置提示词。
+
 ### 2026-08-25 补充知识库索引说明文档
 - 新增：
   - `知识库索引实现过程.md`

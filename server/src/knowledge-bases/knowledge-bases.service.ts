@@ -1188,12 +1188,13 @@ export class KnowledgeBasesService {
     const hitKeywords = document?.hitKeywords || base.hitKeywords || '';
     const colloquialDescription =
       document?.colloquialDescription || base.colloquialDescription || '';
+    // 检索辅助信息只用于提升召回，不作为 AI 回答指令。
     return [
       `标题：${chunk.title || document?.title || base.name}`,
       `知识库：${base.name}`,
       document?.sourceName ? `来源：${document.sourceName}` : '',
-      hitKeywords ? `命中关键字：${hitKeywords}` : '',
-      colloquialDescription ? `口语化描述：${colloquialDescription}` : '',
+      hitKeywords ? `检索关键字：${hitKeywords}` : '',
+      colloquialDescription ? `常见问法/说法：${colloquialDescription}` : '',
       `匹配优先级：${document?.matchPriority ?? base.matchPriority ?? 0}`,
       '正文：',
       chunk.content,

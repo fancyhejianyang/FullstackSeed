@@ -68,10 +68,10 @@ const baseFields = computed<FormField[]>(() => [
   },
   {
     prop: 'colloquialDescription',
-    label: '口语化描述',
+    label: '口语化说法',
     type: 'textarea',
     rows: 3,
-    placeholder: '如用户可能会说的问法、简称、别名',
+    placeholder: '仅用于检索匹配，如用户可能会说的问法、简称、别名',
   },
   {
     prop: 'matchPriority',

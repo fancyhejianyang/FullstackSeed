@@ -1172,7 +1172,7 @@ onBeforeUnmount(() => {
           <el-descriptions-item label="命中关键字">
             {{ rowData?.hitKeywords || '-' }}
           </el-descriptions-item>
-          <el-descriptions-item label="口语化描述">
+          <el-descriptions-item label="口语化说法">
             {{ rowData?.colloquialDescription || '-' }}
           </el-descriptions-item>
           <el-descriptions-item label="匹配优先级">
