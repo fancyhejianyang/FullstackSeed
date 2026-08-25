@@ -1,5 +1,31 @@
 # CHANGELOG
 
+### 2026-08-25 补充知识库索引说明文档
+- 新增：
+  - `知识库索引实现过程.md`
+  - `知识库索引核心代码.md`
+- 修改：无
+- 删除：无
+- 说明：整理当前项目知识库索引从分片筛选、索引文本拼装、增量判断、向量化调用到 Chroma 写入和状态回写的实现过程，并摘取核心代码片段。
+
+### 2026-08-25 向量账号隐藏无关 Chat 路径
+- 新增：无
+- 修改：
+  - `server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`（向量模型接口地址独立拼接 `/v1/embeddings`，不再通过 Chat API 路径转换）
+  - `web/src/views/knowledge-ai-provider/View.vue`（仅配置向量模型的账号详情隐藏 Chat API 路径、通用模型、文本模型和视觉模型等无关项）
+- 删除：无
+- 说明：阿里云向量模型只需要 OpenAI 兼容 Base URL、业务空间、密钥、向量模型编码和向量维度；Chat API 路径只服务聊天/视觉调用，不参与向量化。
+
+### 2026-08-25 问答记录显示命中知识库
+- 新增：
+  - `knowledge_ai_chat_sessions.hitKnowledgeBaseNames`、`knowledge_ai_chat_messages.hitKnowledgeBaseNames`（保存每次问答检索命中的知识库名称）
+- 修改：
+  - `server/src/knowledge-ai-chat/`（知识库检索结果改为结构化返回参考正文和命中知识库名；普通问答与流式问答均写入命中知识库）
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（向量索引元数据补充知识库名称，便于向量命中时回填来源）
+  - `web/src/api/knowledgeAiChat.ts`、`web/src/views/knowledge-ai-record/Index.vue`（问答记录列表新增“命中知识库”列）
+- 删除：无
+- 说明：列表展示的是最近一轮问答实际检索命中的知识库名；未命中时显示 `-`，避免从 AI 回答文本中猜测来源。
+
 ### 2026-08-24 优化手动分片原文区域高度
 - 新增：无
 - 修改：
