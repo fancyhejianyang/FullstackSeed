@@ -2015,6 +2015,12 @@ export class KnowledgeBasesService implements OnModuleInit {
     content: string,
     parseMode: KnowledgeParseMode,
   ) {
+    const normalizedContent = content.trim();
+    if (!normalizedContent) {
+      throw new BadRequestException(
+        `${this.getParseModeLabel(parseMode)}结果缺少解析正文`,
+      );
+    }
     const current = await this.documentRepository.findOne({
       where: { knowledgeBaseId: base.id },
       order: { id: 'DESC' },
@@ -2032,14 +2038,14 @@ export class KnowledgeBasesService implements OnModuleInit {
     document.sourceType = base.contentType === 'text' ? 'text' : parseMode;
     document.sourceName =
       base.contentType === 'text' ? base.name : base.fileName || base.name;
-    document.content = content.trim();
+    document.content = normalizedContent;
     document.status = 'parsed';
     document.description = `${this.getParseModeLabel(parseMode)}完成，等待分片`;
     document.hitKeywords = base.hitKeywords;
     document.colloquialDescription = base.colloquialDescription;
     document.matchPriority = base.matchPriority;
     const saved = await this.documentRepository.save(document);
-    base.contentText = content.trim();
+    base.contentText = normalizedContent;
     return saved;
   }
 
@@ -2081,7 +2087,7 @@ export class KnowledgeBasesService implements OnModuleInit {
   ) {
     const content = markdown.trim();
     if (!content) {
-      throw new BadRequestException('MinerU 解析结果缺少 Markdown 正文');
+      throw new BadRequestException('MinerU 解析结果缺少解析正文');
     }
     document.content = content;
     document.status = 'parsed';

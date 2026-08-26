@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-08-26 兼容 MinerU 纯文本解析结果
+- 新增：无
+- 修改：
+  - `server/src/mineru-configs/mineru-configs.service.ts`（MinerU 查询结果正文识别补充纯文本、OCR 文本、嵌套文档/分页等字段）
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（保存知识库解析正文前拦截空内容，并将错误写入处理结果）
+- 删除：无
+- 说明：当 OCR 功能配置选择纯文本返回时，后端会把 `text/plainText/ocrText/resultText/contentText` 等字段归一为解析正文；若第三方成功状态下仍未返回正文，将明确报“解析结果缺少解析正文”，避免页面显示空白内容。
+
 ### 2026-08-26 MinerU 解析改由 OCR 功能配置驱动
 - 新增：无
 - 修改：

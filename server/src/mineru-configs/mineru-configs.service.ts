@@ -303,7 +303,26 @@ export class MineruConfigsService {
       'md_content',
       'resultMarkdown',
       'result_markdown',
+      'markdownContent',
+      'markdown_content',
+      'text',
+      'texts',
+      'plainText',
+      'plain_text',
+      'ocrText',
+      'ocr_text',
+      'recognizedText',
+      'recognized_text',
+      'extractText',
+      'extract_text',
+      'resultText',
+      'result_text',
+      'contentText',
+      'content_text',
+      'body',
       'content',
+      'data',
+      'result',
     ]);
     const status =
       this.findFirstString(candidates, [
@@ -364,6 +383,14 @@ export class MineruConfigsService {
         'payload',
         'output',
         'outputs',
+        'document',
+        'documents',
+        'page',
+        'pages',
+        'ocr',
+        'text',
+        'texts',
+        'content',
       ]) {
         if (record[key] !== undefined) queue.push(record[key]);
       }
