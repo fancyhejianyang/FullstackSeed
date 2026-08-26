@@ -29,12 +29,12 @@ const categoryTree = ref<KnowledgeBaseCategoryTreeNode[]>([]);
 
 const columns: TableColumn[] = [
   { prop: 'name', label: '名称', minWidth: 180 },
+  { prop: 'lastProcessMessage', label: '处理结果', width: 250, slot: true },
   { prop: 'categoryId', label: '所属分类', minWidth: 140, slot: true },
   { prop: 'hitKeywords', label: '命中关键字', minWidth: 180, slot: true },
   { prop: 'matchPriority', label: '匹配优先级', width: 110 },
   { prop: 'contentType', label: '内容类型', width: 110, slot: true },
   { prop: 'processStage', label: '处理阶段', width: 120, slot: true },
-  { prop: 'lastProcessMessage', label: '处理结果', minWidth: 220, slot: true },
   { prop: 'fileName', label: '文件', width: 250, slot: true },
   { prop: 'isEnabled', label: '状态', width: 90, slot: true },
   { prop: 'updatedAt', label: '更新时间', width: 180, slot: true },
