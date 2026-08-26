@@ -182,9 +182,10 @@ export class KnowledgeBasesService implements OnModuleInit {
     }
 
     if (base?.parseStatus === 'processing') {
+      const content = this.resolveMineruParsedContent(result);
       const savedDocument = await this.saveBaseDocument(
         base,
-        result.markdown,
+        content,
         KNOWLEDGE_PARSE_MODE.mineru,
       );
       await this.updateBaseProcess(base, {
@@ -220,6 +221,7 @@ export class KnowledgeBasesService implements OnModuleInit {
       document,
       result.markdown,
       document.sourceName,
+      result.raw,
     );
     await this.recordKnowledgeDocumentProcessLog(saved.document, {
       action: this.getParseLogAction(KNOWLEDGE_PARSE_MODE.mineru),
@@ -949,7 +951,12 @@ export class KnowledgeBasesService implements OnModuleInit {
         chunkCount: 0,
       };
     }
-    const saved = await this.applyThirdPartyMarkdown(document, result.markdown);
+    const saved = await this.applyThirdPartyMarkdown(
+      document,
+      result.markdown,
+      undefined,
+      result.raw,
+    );
     return {
       ...result,
       isCompleted: true,
@@ -1183,6 +1190,7 @@ export class KnowledgeBasesService implements OnModuleInit {
       document,
       result.markdown,
       dto.fileName || this.resolveFileName(dto.fileUrl),
+      result.raw,
     );
     await this.taskFileLogger.write('document.mineru.parse.success', {
       documentId: document.id,
@@ -1857,7 +1865,7 @@ export class KnowledgeBasesService implements OnModuleInit {
         taskId: task.taskId,
         markdownLength: result.markdown.length,
       });
-      return result.markdown;
+      return this.resolveMineruParsedContent(result);
     } catch (error) {
       document.status = 'failed';
       document.description =
@@ -1994,6 +2002,26 @@ export class KnowledgeBasesService implements OnModuleInit {
     }
   }
 
+  private buildMineruEmptyContentMessage(raw?: unknown) {
+    const rawSummary = this.buildMineruRawSummary(raw);
+    return rawSummary
+      ? `MinerU 解析结果缺少解析正文；MinerU 返回：${rawSummary}`
+      : 'MinerU 解析结果缺少解析正文';
+  }
+
+  private resolveMineruParsedContent(result: {
+    markdown: string;
+    raw?: unknown;
+  }) {
+    const content = result.markdown.trim();
+    if (!content) {
+      throw new BadRequestException(
+        this.buildMineruEmptyContentMessage(result.raw),
+      );
+    }
+    return content;
+  }
+
   private extractMineruTaskId(value?: string | null) {
     const match = value?.match(/任务ID：([^，,；;\s]+)/);
     return match?.[1] ?? '';
@@ -2084,10 +2112,11 @@ export class KnowledgeBasesService implements OnModuleInit {
     document: KnowledgeBaseDocument,
     markdown: string,
     fileName?: string,
+    raw?: unknown,
   ) {
     const content = markdown.trim();
     if (!content) {
-      throw new BadRequestException('MinerU 解析结果缺少解析正文');
+      throw new BadRequestException(this.buildMineruEmptyContentMessage(raw));
     }
     document.content = content;
     document.status = 'parsed';

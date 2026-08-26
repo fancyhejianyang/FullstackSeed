@@ -1,5 +1,12 @@
 # CHANGELOG
 
+### 2026-08-26 MinerU 空正文异常返回原始 JSON
+- 新增：无
+- 修改：
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（MinerU 返回成功但解析正文为空时，将第三方原始响应序列化后追加到异常消息和处理结果）
+- 删除：无
+- 说明：当列表出现“MinerU 解析结果缺少解析正文”时，处理结果会同步带出 MinerU 返回 JSON 摘要，方便判断是返回格式不匹配还是第三方未返回正文。
+
 ### 2026-08-26 调整知识库列表处理结果列
 - 新增：无
 - 修改：
