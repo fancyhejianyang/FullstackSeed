@@ -1692,7 +1692,6 @@ onBeforeUnmount(() => {
 
 .knowledge-base-view__chunk-content {
   line-height: 1.6;
-  white-space: pre-wrap;
   word-break: break-word;
 }
 
