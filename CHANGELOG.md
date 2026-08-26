@@ -1,5 +1,12 @@
 # CHANGELOG
 
+### 2026-08-26 优化 MinerU 配置复用
+- 新增：无
+- 修改：
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（Base 级 MinerU 解析移除重复启用配置读取，轮询时复用创建任务返回的 `configId`）
+- 删除：无
+- 说明：`createParseTask` 统一负责选择和校验 MinerU 配置，`waitForSuccess` 使用同一配置查询任务，避免同一次解析中重复读取启用配置或中途切换配置。
+
 ### 2026-08-25 收口知识库检索辅助字段表达
 - 新增：无
 - 修改：

@@ -1332,7 +1332,10 @@ export class KnowledgeBasesService {
       base.fileUrl,
       base.fileName,
     );
-    const result = await this.mineruConfigsService.waitForSuccess(task.taskId);
+    const result = await this.mineruConfigsService.waitForSuccess(
+      task.taskId,
+      task.configId,
+    );
     return result.markdown;
   }
 
