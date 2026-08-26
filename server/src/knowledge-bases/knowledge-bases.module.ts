@@ -6,6 +6,7 @@ import { KnowledgeBaseDocument } from './entities/knowledge-base-document.entity
 import { KnowledgeBase } from './entities/knowledge-base.entity';
 import { KnowledgeBasesController } from './knowledge-bases.controller';
 import { KnowledgeBasesService } from './knowledge-bases.service';
+import { KnowledgeTaskFileLogger } from './knowledge-task-file-logger.service';
 import { DocumentParsersModule } from '../document-parsers/document-parsers.module';
 import { MineruConfigsModule } from '../mineru-configs/mineru-configs.module';
 import { TaskQueueModule } from '../task-queue/task-queue.module';
@@ -29,6 +30,6 @@ import { LogRecordsModule } from '../log-records/log-records.module';
     ]),
   ],
   controllers: [KnowledgeBasesController],
-  providers: [KnowledgeBasesService],
+  providers: [KnowledgeBasesService, KnowledgeTaskFileLogger],
 })
 export class KnowledgeBasesModule {}

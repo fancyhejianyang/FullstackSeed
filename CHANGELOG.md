@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-08-26 增加知识库解析任务文件日志
+- 新增：
+  - `server/src/knowledge-bases/knowledge-task-file-logger.service.ts`（写入 `logs/knowledge-tasks.log`，用于排查解析任务提交、执行、MinerU 进度与结果）
+- 修改：
+  - `server/src/knowledge-bases/knowledge-bases.module.ts`（注册知识库任务文件日志服务）
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（Base 解析、文档解析、MinerU 任务创建、轮询进度、成功/失败与恢复任务均写入本地日志）
+- 删除：无
+- 说明：日志采用一行一条 JSON 的格式，文件位于后端运行目录 `logs/knowledge-tasks.log`；仅记录任务 ID、知识库/文档 ID、文件名、状态、进度、内容长度和错误信息，不写入解析正文。
+
 ### 2026-08-26 后端回写 MinerU 解析进度与异步任务日志
 - 新增：无
 - 修改：

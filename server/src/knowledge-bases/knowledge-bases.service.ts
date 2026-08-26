@@ -40,6 +40,7 @@ import { KnowledgeEmbeddingService } from '../knowledge-vectors/knowledge-embedd
 import { KnowledgeVectorService } from '../knowledge-vectors/knowledge-vector.service';
 import { LogRecordsService } from '../log-records/log-records.service';
 import type { Metadata } from 'chromadb';
+import { KnowledgeTaskFileLogger } from './knowledge-task-file-logger.service';
 
 export interface KnowledgeBaseCategoryTreeNode extends KnowledgeBaseCategory {
   children: KnowledgeBaseCategoryTreeNode[];
@@ -78,6 +79,7 @@ export class KnowledgeBasesService implements OnModuleInit {
     private readonly embeddingService: KnowledgeEmbeddingService,
     private readonly vectorService: KnowledgeVectorService,
     private readonly logRecordsService: LogRecordsService,
+    private readonly taskFileLogger: KnowledgeTaskFileLogger,
   ) {}
 
   async onModuleInit() {
@@ -97,6 +99,12 @@ export class KnowledgeBasesService implements OnModuleInit {
     for (const document of documents) {
       const taskId = this.extractMineruTaskId(document.description);
       if (!taskId) continue;
+      await this.taskFileLogger.write('mineru.resume.submit', {
+        documentId: document.id,
+        knowledgeBaseId: document.knowledgeBaseId,
+        taskId,
+        sourceName: document.sourceName,
+      });
       this.taskQueueService.add(
         'knowledge-base-document.resume-mineru',
         {
@@ -116,6 +124,12 @@ export class KnowledgeBasesService implements OnModuleInit {
     const document = await this.findDocument(documentId);
     const base = await this.baseRepository.findOne({
       where: { id: document.knowledgeBaseId },
+    });
+    await this.taskFileLogger.write('mineru.resume.start', {
+      documentId,
+      knowledgeBaseId: document.knowledgeBaseId,
+      taskId,
+      sourceName: document.sourceName,
     });
     let result: Awaited<ReturnType<MineruConfigsService['waitForSuccess']>>;
     try {
@@ -138,6 +152,12 @@ export class KnowledgeBasesService implements OnModuleInit {
           lastProcessMessage: errorMessage,
         });
       }
+      await this.taskFileLogger.write('mineru.resume.failed', {
+        documentId,
+        knowledgeBaseId: document.knowledgeBaseId,
+        taskId,
+        errorMessage,
+      });
       throw error;
     }
 
@@ -163,6 +183,12 @@ export class KnowledgeBasesService implements OnModuleInit {
           parseMode: KNOWLEDGE_PARSE_MODE.mineru,
         },
       });
+      await this.taskFileLogger.write('mineru.resume.base.success', {
+        documentId: savedDocument.id,
+        knowledgeBaseId: base.id,
+        taskId,
+        contentLength: result.markdown.length,
+      });
       return {
         documentId: savedDocument.id,
         knowledgeBaseId: base.id,
@@ -185,6 +211,13 @@ export class KnowledgeBasesService implements OnModuleInit {
         chunkCount: saved.chunkCount,
         parseMode: KNOWLEDGE_PARSE_MODE.mineru,
       },
+    });
+    await this.taskFileLogger.write('mineru.resume.document.success', {
+      documentId: saved.document.id,
+      knowledgeBaseId: saved.document.knowledgeBaseId,
+      taskId,
+      chunkCount: saved.chunkCount,
+      contentLength: result.markdown.length,
     });
     return {
       documentId: saved.document.id,
@@ -371,11 +404,21 @@ export class KnowledgeBasesService implements OnModuleInit {
       indexStatus: 'pending',
       lastProcessMessage: `${this.getParseModeLabel(parseMode)}任务已提交，等待执行`,
     });
-    return this.taskQueueService.add(
+    const task = this.taskQueueService.add(
       'knowledge-base.parse',
       { knowledgeBaseId: id, parseMode },
       () => this.executeParseBase(id, dto),
     );
+    await this.taskFileLogger.write('base.parse.submit', {
+      knowledgeBaseId: id,
+      knowledgeBaseName: base.name,
+      parseMode,
+      queueTaskId: task.taskId,
+      contentType: base.contentType,
+      fileName: base.fileName,
+      fileUrl: base.fileUrl,
+    });
+    return task;
   }
 
   private async executeParseBase(id: number, dto: ParseKnowledgeBaseDto = {}) {
@@ -387,6 +430,14 @@ export class KnowledgeBasesService implements OnModuleInit {
       chunkStatus: 'pending',
       indexStatus: 'pending',
       lastProcessMessage: `正在${this.getParseModeLabel(parseMode)}内容`,
+    });
+    await this.taskFileLogger.write('base.parse.start', {
+      knowledgeBaseId: id,
+      knowledgeBaseName: base.name,
+      parseMode,
+      contentType: base.contentType,
+      fileName: base.fileName,
+      fileUrl: base.fileUrl,
     });
     try {
       const content = await this.parseBaseContentByMode(base, parseMode);
@@ -404,6 +455,13 @@ export class KnowledgeBasesService implements OnModuleInit {
         message: `${this.getParseModeLabel(parseMode)}完成，等待分片`,
         data: { documentId: document.id, parseMode },
       });
+      await this.taskFileLogger.write('base.parse.success', {
+        knowledgeBaseId: id,
+        knowledgeBaseName: base.name,
+        documentId: document.id,
+        parseMode,
+        contentLength: content.length,
+      });
       return { id, documentId: document.id, processStage: 'parsed', parseMode };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '解析失败';
@@ -418,6 +476,12 @@ export class KnowledgeBasesService implements OnModuleInit {
         message: errorMessage,
         errorMessage,
         data: { parseMode },
+      });
+      await this.taskFileLogger.write('base.parse.failed', {
+        knowledgeBaseId: id,
+        knowledgeBaseName: base.name,
+        parseMode,
+        errorMessage,
       });
       throw error;
     }
@@ -810,15 +874,38 @@ export class KnowledgeBasesService implements OnModuleInit {
       dto.fileUrl,
       dto.fileName,
     );
-    return this.mineruConfigsService.createParseTask(
+    await this.taskFileLogger.write('document.mineru.createTask.start', {
+      documentId: id,
+      knowledgeBaseId: document.knowledgeBaseId,
+      fileName: dto.fileName,
+      fileUrl: dto.fileUrl,
+    });
+    const task = await this.mineruConfigsService.createParseTask(
       dto.fileUrl.trim(),
       dto.fileName?.trim(),
     );
+    await this.taskFileLogger.write('document.mineru.createTask.success', {
+      documentId: id,
+      knowledgeBaseId: document.knowledgeBaseId,
+      taskId: task.taskId,
+      configId: task.configId,
+      configName: task.configName,
+    });
+    return task;
   }
 
   async queryMineruTask(id: number, taskId: string) {
     const document = await this.findDocument(id);
     const result = await this.mineruConfigsService.queryParseTask(taskId);
+    await this.taskFileLogger.write('document.mineru.query', {
+      documentId: id,
+      knowledgeBaseId: document.knowledgeBaseId,
+      taskId,
+      status: result.status,
+      progress: result.progress,
+      message: result.message,
+      markdownLength: result.markdown.length,
+    });
     if (!this.mineruConfigsService.isSuccessStatus(result.status)) {
       return {
         ...result,
@@ -847,10 +934,24 @@ export class KnowledgeBasesService implements OnModuleInit {
       dto.fileName,
     );
     if (dto.waitForResult === false) {
+      await this.taskFileLogger.write('document.mineru.createTask.start', {
+        documentId: id,
+        knowledgeBaseId: document.knowledgeBaseId,
+        fileName: dto.fileName,
+        fileUrl: dto.fileUrl,
+      });
       const task = await this.mineruConfigsService.createParseTask(
         dto.fileUrl.trim(),
         dto.fileName?.trim(),
       );
+      await this.taskFileLogger.write('document.mineru.createTask.success', {
+        documentId: id,
+        knowledgeBaseId: document.knowledgeBaseId,
+        taskId: task.taskId,
+        configId: task.configId,
+        configName: task.configName,
+        waitForResult: false,
+      });
       return {
         ...task,
         documentId: id,
@@ -880,11 +981,20 @@ export class KnowledgeBasesService implements OnModuleInit {
     document.status = 'processing';
     document.description = `${this.getParseModeLabel(parseMode)}任务已提交，等待执行`;
     await this.documentRepository.save(document);
-    return this.taskQueueService.add(
+    const task = this.taskQueueService.add(
       'knowledge-base-document.parse',
       { documentId: id, parseMode },
       () => this.executeParseDocument(id, dto),
     );
+    await this.taskFileLogger.write('document.parse.submit', {
+      documentId: id,
+      knowledgeBaseId: document.knowledgeBaseId,
+      parseMode,
+      queueTaskId: task.taskId,
+      fileName: dto.fileName || document.sourceName,
+      fileUrl: dto.fileUrl,
+    });
+    return task;
   }
 
   private async executeParseDocument(
@@ -896,6 +1006,12 @@ export class KnowledgeBasesService implements OnModuleInit {
     document.status = 'processing';
     document.description = `正在${this.getParseModeLabel(parseMode)}内容`;
     await this.documentRepository.save(document);
+    await this.taskFileLogger.write('document.parse.start', {
+      documentId: id,
+      knowledgeBaseId: document.knowledgeBaseId,
+      parseMode,
+      sourceName: document.sourceName,
+    });
     try {
       const result = await this.parseDocumentByMode(document, dto, parseMode);
       await this.recordKnowledgeDocumentProcessLog(document, {
@@ -907,6 +1023,12 @@ export class KnowledgeBasesService implements OnModuleInit {
           knowledgeBaseId: document.knowledgeBaseId,
           parseMode,
         },
+      });
+      await this.taskFileLogger.write('document.parse.success', {
+        documentId: document.id,
+        knowledgeBaseId: document.knowledgeBaseId,
+        parseMode,
+        chunkCount: result.chunkCount,
       });
       return result;
     } catch (error) {
@@ -924,6 +1046,12 @@ export class KnowledgeBasesService implements OnModuleInit {
           knowledgeBaseId: document.knowledgeBaseId,
           parseMode,
         },
+      });
+      await this.taskFileLogger.write('document.parse.failed', {
+        documentId: document.id,
+        knowledgeBaseId: document.knowledgeBaseId,
+        parseMode,
+        errorMessage,
       });
       throw error;
     }
@@ -960,6 +1088,12 @@ export class KnowledgeBasesService implements OnModuleInit {
       ? `手动解析完成，共 ${chunkCount} 个分片`
       : '手动解析完成，等待手动分片';
     await this.documentRepository.save(saved);
+    await this.taskFileLogger.write('document.manual.parse.saved', {
+      documentId: saved.id,
+      knowledgeBaseId: saved.knowledgeBaseId,
+      contentLength: content.length,
+      chunkCount,
+    });
     return {
       document: saved,
       documentId: saved.id,
@@ -973,10 +1107,23 @@ export class KnowledgeBasesService implements OnModuleInit {
     document: KnowledgeBaseDocument,
     dto: ParseKnowledgeBaseDocumentDto,
   ) {
+    await this.taskFileLogger.write('document.mineru.createTask.start', {
+      documentId: document.id,
+      knowledgeBaseId: document.knowledgeBaseId,
+      fileName: dto.fileName,
+      fileUrl: dto.fileUrl,
+    });
     const task = await this.mineruConfigsService.createParseTask(
       dto.fileUrl.trim(),
       dto.fileName?.trim(),
     );
+    await this.taskFileLogger.write('document.mineru.createTask.success', {
+      documentId: document.id,
+      knowledgeBaseId: document.knowledgeBaseId,
+      taskId: task.taskId,
+      configId: task.configId,
+      configName: task.configName,
+    });
     document.status = 'processing';
     document.description = `MinerU 解析任务已创建，任务ID：${task.taskId}`;
     await this.documentRepository.save(document);
@@ -990,6 +1137,13 @@ export class KnowledgeBasesService implements OnModuleInit {
       result.markdown,
       dto.fileName || this.resolveFileName(dto.fileUrl),
     );
+    await this.taskFileLogger.write('document.mineru.parse.success', {
+      documentId: document.id,
+      knowledgeBaseId: document.knowledgeBaseId,
+      taskId: task.taskId,
+      chunkCount: saved.chunkCount,
+      markdownLength: result.markdown.length,
+    });
     return {
       ...result,
       documentId: document.id,
@@ -1605,10 +1759,25 @@ export class KnowledgeBasesService implements OnModuleInit {
   }
 
   private async parseBaseWithThirdParty(base: KnowledgeBase) {
+    await this.taskFileLogger.write('base.mineru.createTask.start', {
+      knowledgeBaseId: base.id,
+      knowledgeBaseName: base.name,
+      fileName: base.fileName,
+      fileUrl: base.fileUrl,
+    });
     const task = await this.mineruConfigsService.createParseTask(
       base.fileUrl,
       base.fileName,
     );
+    await this.taskFileLogger.write('base.mineru.createTask.success', {
+      knowledgeBaseId: base.id,
+      knowledgeBaseName: base.name,
+      taskId: task.taskId,
+      configId: task.configId,
+      configName: task.configName,
+      pollIntervalSeconds: task.pollIntervalSeconds,
+      timeoutMinutes: task.timeoutMinutes,
+    });
     const document = await this.markBaseDocumentParsing(
       base,
       task.taskId,
@@ -1628,12 +1797,26 @@ export class KnowledgeBasesService implements OnModuleInit {
             this.updateBaseMineruProgress(base, document, status),
         },
       );
+      await this.taskFileLogger.write('base.mineru.wait.success', {
+        knowledgeBaseId: base.id,
+        knowledgeBaseName: base.name,
+        documentId: document.id,
+        taskId: task.taskId,
+        markdownLength: result.markdown.length,
+      });
       return result.markdown;
     } catch (error) {
       document.status = 'failed';
       document.description =
         error instanceof Error ? error.message : 'MinerU 解析失败';
       await this.documentRepository.save(document);
+      await this.taskFileLogger.write('base.mineru.wait.failed', {
+        knowledgeBaseId: base.id,
+        knowledgeBaseName: base.name,
+        documentId: document.id,
+        taskId: task.taskId,
+        errorMessage: document.description,
+      });
       throw error;
     }
   }
@@ -1678,6 +1861,15 @@ export class KnowledgeBasesService implements OnModuleInit {
     },
   ) {
     const message = this.buildMineruProgressMessage(status);
+    await this.taskFileLogger.write('base.mineru.progress', {
+      knowledgeBaseId: base.id,
+      knowledgeBaseName: base.name,
+      documentId: document.id,
+      taskId: status.taskId,
+      status: status.status,
+      progress: status.progress,
+      message: status.message,
+    });
     await this.updateBaseProcess(base, {
       processStage: 'parsing',
       parseStatus: 'processing',
@@ -1698,6 +1890,14 @@ export class KnowledgeBasesService implements OnModuleInit {
     },
   ) {
     const message = this.buildMineruProgressMessage(status);
+    await this.taskFileLogger.write('document.mineru.progress', {
+      documentId: document.id,
+      knowledgeBaseId: document.knowledgeBaseId,
+      taskId: status.taskId,
+      status: status.status,
+      progress: status.progress,
+      message: status.message,
+    });
     document.status = 'processing';
     document.description = message;
     await this.documentRepository.save(document);
