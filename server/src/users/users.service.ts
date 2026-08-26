@@ -12,11 +12,7 @@ import * as bcrypt from 'bcrypt';
 import { User } from './entities/user.entity';
 import { Role } from '../roles/entities/role.entity';
 import { Permission } from '../permissions/entities/permission.entity';
-import {
-  CreateUserDto,
-  UpdateUserDto,
-  QueryUserDto,
-} from './dto/user.dto';
+import { CreateUserDto, UpdateUserDto, QueryUserDto } from './dto/user.dto';
 
 const STANDARD_ACTIONS = [
   ['read', '查看'],

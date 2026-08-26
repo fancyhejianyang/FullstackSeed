@@ -49,10 +49,7 @@ export class DemoController {
   @Patch(':id')
   @RequirePermissions('Demo.update')
   @ApiOperation({ summary: '更新示例' })
-  update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateDemoDto,
-  ) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateDemoDto) {
     return this.demoService.update(id, dto);
   }
 

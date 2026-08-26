@@ -31,9 +31,7 @@ export class AuthService {
   } {
     const roles = (user.roles ?? []).map((role) => role.code);
     const permissions = Array.from(
-      new Set(
-        (user.roles ?? []).flatMap((role) => role.permissionCodes ?? []),
-      ),
+      new Set((user.roles ?? []).flatMap((role) => role.permissionCodes ?? [])),
     );
     return { roles, permissions };
   }

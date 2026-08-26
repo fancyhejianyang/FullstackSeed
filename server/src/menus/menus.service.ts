@@ -19,30 +19,222 @@ type SeedMenu = Partial<Menu> & { parentPath?: string };
 // 内置菜单种子（path 对应前端路由）
 // isSystem=true 为系统固定菜单：仅超管可见、不可分配给角色；业务菜单 isSystem=false 可分配。
 const SEED_MENUS: SeedMenu[] = [
-  { name: '首页', path: '/', icon: 'HomeFilled', sort: 0, permissionCode: '', isSystem: false },
-  { name: '示例管理', path: '/demo', icon: 'Document', sort: 10, permissionCode: 'Demo.read', isSystem: false },
-  { name: '知识库管理', path: '/knowledge-bases', icon: 'Collection', sort: 20, permissionCode: 'KnowledgeBase.read', isSystem: false },
-  { name: '知识库分类', path: '/knowledge-bases/categories', icon: 'FolderOpened', sort: 10, permissionCode: 'KnowledgeBase.read', isSystem: false, parentPath: '/knowledge-bases' },
-  { name: '知识库列表', path: '/knowledge-bases/list', icon: 'Tickets', sort: 20, permissionCode: 'KnowledgeBase.read', isSystem: false, parentPath: '/knowledge-bases' },
-  { name: '账号管理', path: '/users', icon: 'User', sort: 30, permissionCode: 'User.read', isSystem: true },
-  { name: '角色管理', path: '/roles', icon: 'UserFilled', sort: 40, permissionCode: 'Role.read', isSystem: true },
-  { name: '权限管理', path: '/permissions', icon: 'Key', sort: 50, permissionCode: 'Permission.read', isSystem: true },
-  { name: '菜单管理', path: '/menus', icon: 'Menu', sort: 60, permissionCode: 'Menu.read', isSystem: true },
-  { name: '系统配置', path: '/system-config', icon: 'Setting', sort: 70, permissionCode: 'Menu.read', isSystem: true },
-  { name: '聊天管理', path: '/chat-management', icon: 'ChatDotRound', sort: 75, permissionCode: 'Menu.read', isSystem: true },
-  { name: '配置菜单', path: '/system-config/menu', icon: 'Operation', sort: 10, permissionCode: 'Menu.read', isSystem: true, parentPath: '/system-config' },
-  { name: 'AI 大模型账号', path: '/system-config/ai', icon: 'Connection', sort: 20, permissionCode: 'Menu.read', isSystem: true, parentPath: '/system-config' },
-  { name: 'AI 问答测试', path: '/chat-management/ai-chat', icon: '', sort: 10, permissionCode: 'Menu.read', isSystem: true, parentPath: '/chat-management' },
-  { name: '聊天应用', path: '/chat-management/apps', icon: '', sort: 20, permissionCode: 'Menu.read', isSystem: true, parentPath: '/chat-management' },
-  { name: 'AI 功能配置', path: '/chat-management/ai-configs', icon: '', sort: 30, permissionCode: 'Menu.read', isSystem: true, parentPath: '/chat-management' },
-  { name: '知识库检索配置', path: '/chat-management/retrieval-configs', icon: '', sort: 35, permissionCode: 'Menu.read', isSystem: true, parentPath: '/chat-management' },
-  { name: '问题记录', path: '/chat-management/records', icon: '', sort: 40, permissionCode: 'Menu.read', isSystem: true, parentPath: '/chat-management' },
-  { name: '微信 / 小程序', path: '/system-config/wechat', icon: 'ChatDotRound', sort: 50, permissionCode: 'Menu.read', isSystem: true, parentPath: '/system-config' },
-  { name: '日志记录', path: '/system-config/log-record', icon: 'Tickets', sort: 60, permissionCode: 'Menu.read', isSystem: true, parentPath: '/system-config' },
-  { name: '数据导入', path: '/system-config/data-import', icon: 'UploadFilled', sort: 70, permissionCode: 'Menu.read', isSystem: true, parentPath: '/system-config' },
-  { name: 'OSS/CDN 配置', path: '/system-config/storage', icon: 'FolderOpened', sort: 80, permissionCode: 'Menu.read', isSystem: true, parentPath: '/system-config' },
-  { name: 'MinerU 解析配置', path: '/system-config/mineru', icon: 'DocumentChecked', sort: 90, permissionCode: 'Menu.read', isSystem: true, parentPath: '/system-config' },
-  { name: '向量化配置', path: '/system-config/vector', icon: '', sort: 100, permissionCode: 'Menu.read', isSystem: true, parentPath: '/system-config' },
+  {
+    name: '首页',
+    path: '/',
+    icon: 'HomeFilled',
+    sort: 0,
+    permissionCode: '',
+    isSystem: false,
+  },
+  {
+    name: '示例管理',
+    path: '/demo',
+    icon: 'Document',
+    sort: 10,
+    permissionCode: 'Demo.read',
+    isSystem: false,
+  },
+  {
+    name: '知识库管理',
+    path: '/knowledge-bases',
+    icon: 'Collection',
+    sort: 20,
+    permissionCode: 'KnowledgeBase.read',
+    isSystem: false,
+  },
+  {
+    name: '知识库分类',
+    path: '/knowledge-bases/categories',
+    icon: 'FolderOpened',
+    sort: 10,
+    permissionCode: 'KnowledgeBase.read',
+    isSystem: false,
+    parentPath: '/knowledge-bases',
+  },
+  {
+    name: '知识库列表',
+    path: '/knowledge-bases/list',
+    icon: 'Tickets',
+    sort: 20,
+    permissionCode: 'KnowledgeBase.read',
+    isSystem: false,
+    parentPath: '/knowledge-bases',
+  },
+  {
+    name: '分片配置',
+    path: '/knowledge-bases/chunk-configs',
+    icon: '',
+    sort: 30,
+    permissionCode: 'KnowledgeBase.read',
+    isSystem: false,
+    parentPath: '/knowledge-bases',
+  },
+  {
+    name: '账号管理',
+    path: '/users',
+    icon: 'User',
+    sort: 30,
+    permissionCode: 'User.read',
+    isSystem: true,
+  },
+  {
+    name: '角色管理',
+    path: '/roles',
+    icon: 'UserFilled',
+    sort: 40,
+    permissionCode: 'Role.read',
+    isSystem: true,
+  },
+  {
+    name: '权限管理',
+    path: '/permissions',
+    icon: 'Key',
+    sort: 50,
+    permissionCode: 'Permission.read',
+    isSystem: true,
+  },
+  {
+    name: '菜单管理',
+    path: '/menus',
+    icon: 'Menu',
+    sort: 60,
+    permissionCode: 'Menu.read',
+    isSystem: true,
+  },
+  {
+    name: '系统配置',
+    path: '/system-config',
+    icon: 'Setting',
+    sort: 70,
+    permissionCode: 'Menu.read',
+    isSystem: true,
+  },
+  {
+    name: '聊天管理',
+    path: '/chat-management',
+    icon: 'ChatDotRound',
+    sort: 75,
+    permissionCode: 'Menu.read',
+    isSystem: true,
+  },
+  {
+    name: '配置菜单',
+    path: '/system-config/menu',
+    icon: 'Operation',
+    sort: 10,
+    permissionCode: 'Menu.read',
+    isSystem: true,
+    parentPath: '/system-config',
+  },
+  {
+    name: 'AI 大模型账号',
+    path: '/system-config/ai',
+    icon: 'Connection',
+    sort: 20,
+    permissionCode: 'Menu.read',
+    isSystem: true,
+    parentPath: '/system-config',
+  },
+  {
+    name: 'AI 问答测试',
+    path: '/chat-management/ai-chat',
+    icon: '',
+    sort: 10,
+    permissionCode: 'Menu.read',
+    isSystem: true,
+    parentPath: '/chat-management',
+  },
+  {
+    name: '聊天应用',
+    path: '/chat-management/apps',
+    icon: '',
+    sort: 20,
+    permissionCode: 'Menu.read',
+    isSystem: true,
+    parentPath: '/chat-management',
+  },
+  {
+    name: 'AI 功能配置',
+    path: '/chat-management/ai-configs',
+    icon: '',
+    sort: 30,
+    permissionCode: 'Menu.read',
+    isSystem: true,
+    parentPath: '/chat-management',
+  },
+  {
+    name: '知识库检索配置',
+    path: '/chat-management/retrieval-configs',
+    icon: '',
+    sort: 35,
+    permissionCode: 'Menu.read',
+    isSystem: true,
+    parentPath: '/chat-management',
+  },
+  {
+    name: '问题记录',
+    path: '/chat-management/records',
+    icon: '',
+    sort: 40,
+    permissionCode: 'Menu.read',
+    isSystem: true,
+    parentPath: '/chat-management',
+  },
+  {
+    name: '微信 / 小程序',
+    path: '/system-config/wechat',
+    icon: 'ChatDotRound',
+    sort: 50,
+    permissionCode: 'Menu.read',
+    isSystem: true,
+    parentPath: '/system-config',
+  },
+  {
+    name: '日志记录',
+    path: '/system-config/log-record',
+    icon: 'Tickets',
+    sort: 60,
+    permissionCode: 'Menu.read',
+    isSystem: true,
+    parentPath: '/system-config',
+  },
+  {
+    name: '数据导入',
+    path: '/system-config/data-import',
+    icon: 'UploadFilled',
+    sort: 70,
+    permissionCode: 'Menu.read',
+    isSystem: true,
+    parentPath: '/system-config',
+  },
+  {
+    name: 'OSS/CDN 配置',
+    path: '/system-config/storage',
+    icon: 'FolderOpened',
+    sort: 80,
+    permissionCode: 'Menu.read',
+    isSystem: true,
+    parentPath: '/system-config',
+  },
+  {
+    name: 'MinerU 解析配置',
+    path: '/system-config/mineru',
+    icon: 'DocumentChecked',
+    sort: 90,
+    permissionCode: 'Menu.read',
+    isSystem: true,
+    parentPath: '/system-config',
+  },
+  {
+    name: '向量化配置',
+    path: '/system-config/vector',
+    icon: '',
+    sort: 100,
+    permissionCode: 'Menu.read',
+    isSystem: true,
+    parentPath: '/system-config',
+  },
 ];
 
 // 锁定菜单路径：前端不限制操作，后端 API 对此类菜单统一做管理员身份校验
@@ -63,7 +255,9 @@ export class MenusService implements OnModuleInit {
   async onModuleInit() {
     for (const seed of SEED_MENUS) {
       const parent = seed.parentPath
-        ? await this.menuRepository.findOne({ where: { path: seed.parentPath } })
+        ? await this.menuRepository.findOne({
+            where: { path: seed.parentPath },
+          })
         : null;
       const { parentPath, ...menuSeed } = seed;
       const exist = await this.menuRepository.findOne({
@@ -144,7 +338,7 @@ export class MenusService implements OnModuleInit {
   private buildTree(list: Menu[]): MenuTreeNode[] {
     const map = new Map<number, MenuTreeNode>();
     const roots: MenuTreeNode[] = [];
-    list.forEach((m) => map.set(m.id, { ...(m as Menu), children: [] } as MenuTreeNode));
+    list.forEach((m) => map.set(m.id, { ...m, children: [] }));
     map.forEach((node) => {
       if (node.parentId && map.has(node.parentId)) {
         map.get(node.parentId)!.children.push(node);
@@ -196,8 +390,7 @@ export class MenusService implements OnModuleInit {
 
   private isLockedMenu(menu: Pick<Menu, 'path' | 'isSystem'>): boolean {
     return (
-      menu.isSystem ||
-      (!!menu.path && PROTECTED_MENU_PATHS.includes(menu.path))
+      menu.isSystem || (!!menu.path && PROTECTED_MENU_PATHS.includes(menu.path))
     );
   }
 

@@ -19,7 +19,9 @@ export class RolesService {
 
   private normalizePermissionCodes(codes: string[] | undefined): string[] {
     if (!codes) return [];
-    return Array.from(new Set(codes.map((code) => code.trim()).filter(Boolean)));
+    return Array.from(
+      new Set(codes.map((code) => code.trim()).filter(Boolean)),
+    );
   }
 
   /** 分页查询（含关联权限） */

@@ -27,7 +27,6 @@ export class CreatePermissionDto {
   @IsIn(['menu', 'button', 'api'])
   @IsOptional()
   type?: PermissionType;
-
 }
 
 export class UpdatePermissionDto extends PartialType(CreatePermissionDto) {}

@@ -53,10 +53,7 @@ export class UsersController {
   @Delete(':id')
   @RequirePermissions('User.delete')
   @ApiOperation({ summary: '删除用户' })
-  remove(
-    @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: AuthUser,
-  ) {
+  remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: AuthUser) {
     return this.usersService.remove(id, user.userId);
   }
 }

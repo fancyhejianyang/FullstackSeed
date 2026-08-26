@@ -19,9 +19,10 @@ export interface ApiResponse<T> {
  * 统一成功响应结构：{ statusCode, data, success, message, timestamp }
  */
 @Injectable()
-export class TransformInterceptor<T>
-  implements NestInterceptor<T, ApiResponse<T>>
-{
+export class TransformInterceptor<T> implements NestInterceptor<
+  T,
+  ApiResponse<T>
+> {
   intercept(
     context: ExecutionContext,
     next: CallHandler,

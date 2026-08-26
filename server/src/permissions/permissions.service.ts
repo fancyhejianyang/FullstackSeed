@@ -25,14 +25,17 @@ export class PermissionsService {
     const pageSize = query.pageSize ?? 10;
     const [list, total] = await this.permissionRepository.findAndCount({
       where: query.keyword
-        ? [{ code: Like(`%${query.keyword}%`) }, { name: Like(`%${query.keyword}%`) }]
+        ? [
+            { code: Like(`%${query.keyword}%`) },
+            { name: Like(`%${query.keyword}%`) },
+          ]
         : {},
       order: { id: 'DESC' },
       skip: (page - 1) * pageSize,
       take: pageSize,
     });
     // 锁定list 内字段
-    
+
     return {
       list: list.map(({ createdAt, updatedAt, deletedAt, ...rest }) => rest),
       total,

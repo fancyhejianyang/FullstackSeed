@@ -19,14 +19,20 @@ async function bootstrap() {
     origin:
       corsOrigin === '*'
         ? true
-        : corsOrigin.split(',').map((item) => item.trim()).filter(Boolean),
+        : corsOrigin
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean),
   });
 
   // 全局 API 前缀
   app.setGlobalPrefix('api');
 
   // 上传文件静态访问地址。上传接口返回完整 URL，业务表只保存可直接预览/下载的地址。
-  app.use('/uploads', require('express').static(join(process.cwd(), 'uploads')));
+  app.use(
+    '/uploads',
+    require('express').static(join(process.cwd(), 'uploads')),
+  );
 
   // 全局校验管道
   app.useGlobalPipes(
