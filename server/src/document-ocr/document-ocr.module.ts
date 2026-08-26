@@ -1,15 +1,9 @@
 import { Module } from '@nestjs/common';
-import { AiFeatureConfigsModule } from '../ai-feature-configs/ai-feature-configs.module';
-import { KnowledgeAiProvidersModule } from '../knowledge-ai-providers/knowledge-ai-providers.module';
-import { MineruConfigsModule } from '../mineru-configs/mineru-configs.module';
+import { KnowledgeChunkConfigsModule } from '../knowledge-chunk-configs/knowledge-chunk-configs.module';
 import { DocumentOcrService } from './document-ocr.service';
 
 @Module({
-  imports: [
-    AiFeatureConfigsModule,
-    KnowledgeAiProvidersModule,
-    MineruConfigsModule,
-  ],
+  imports: [KnowledgeChunkConfigsModule],
   providers: [DocumentOcrService],
   exports: [DocumentOcrService],
 })

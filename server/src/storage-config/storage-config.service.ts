@@ -86,7 +86,10 @@ export class StorageConfigService {
     return {
       enabled: false,
       provider: 'local',
-      publicBaseUrl: this.configService.get<string>('UPLOAD_PUBLIC_BASE_URL', ''),
+      publicBaseUrl: this.configService.get<string>(
+        'UPLOAD_PUBLIC_BASE_URL',
+        '',
+      ),
       bucket: '',
       region: '',
       endpoint: '',

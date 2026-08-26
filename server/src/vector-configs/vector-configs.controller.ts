@@ -63,7 +63,10 @@ export class VectorConfigsController {
   @Patch(':id')
   @RequirePermissions('Menu.read')
   @ApiOperation({ summary: '更新向量化配置' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateVectorConfigDto) {
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateVectorConfigDto,
+  ) {
     return this.vectorConfigsService.update(id, dto);
   }
 

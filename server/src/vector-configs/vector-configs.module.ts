@@ -6,7 +6,10 @@ import { VectorConfigsController } from './vector-configs.controller';
 import { VectorConfigsService } from './vector-configs.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([VectorConfig]), KnowledgeAiProvidersModule],
+  imports: [
+    TypeOrmModule.forFeature([VectorConfig]),
+    KnowledgeAiProvidersModule,
+  ],
   controllers: [VectorConfigsController],
   providers: [VectorConfigsService],
   exports: [VectorConfigsService],

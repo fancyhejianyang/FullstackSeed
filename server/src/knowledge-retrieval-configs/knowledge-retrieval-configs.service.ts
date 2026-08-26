@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Like, Repository } from 'typeorm';
 import { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-configs.service';
@@ -65,7 +69,9 @@ export class KnowledgeRetrievalConfigsService {
   }
 
   async create(dto: CreateKnowledgeRetrievalConfigDto) {
-    const entity = this.configRepository.create(await this.toEntityPayload(dto, true));
+    const entity = this.configRepository.create(
+      await this.toEntityPayload(dto, true),
+    );
     this.assertRerankOptions(entity);
     return this.configRepository.save(entity);
   }
@@ -129,15 +135,18 @@ export class KnowledgeRetrievalConfigsService {
         throw new BadRequestException('部分知识库不存在');
       }
       payload.knowledgeBaseIds = ids;
-      payload.knowledgeBaseNames = bases.map((item) => item.name).join('、') || null;
+      payload.knowledgeBaseNames =
+        bases.map((item) => item.name).join('、') || null;
     } else if (isCreate) {
       payload.knowledgeBaseIds = [];
       payload.knowledgeBaseNames = null;
     }
     if (dto.topK !== undefined || isCreate) payload.topK = dto.topK ?? 10;
-    if (dto.minScore !== undefined || isCreate) payload.minScore = dto.minScore ?? 0;
+    if (dto.minScore !== undefined || isCreate)
+      payload.minScore = dto.minScore ?? 0;
     if (dto.rrfK !== undefined || isCreate) payload.rrfK = dto.rrfK ?? 60;
-    if (dto.textWeight !== undefined || isCreate) payload.textWeight = dto.textWeight ?? 0.8;
+    if (dto.textWeight !== undefined || isCreate)
+      payload.textWeight = dto.textWeight ?? 0.8;
     if (dto.vectorWeight !== undefined || isCreate) {
       payload.vectorWeight = dto.vectorWeight ?? 1;
     }
@@ -160,7 +169,8 @@ export class KnowledgeRetrievalConfigsService {
         payload.rerankAiFeatureConfigName = null;
       }
     }
-    if (dto.isEnabled !== undefined || isCreate) payload.isEnabled = dto.isEnabled ?? true;
+    if (dto.isEnabled !== undefined || isCreate)
+      payload.isEnabled = dto.isEnabled ?? true;
     if (dto.description !== undefined) {
       payload.description = this.toNullableText(dto.description);
     }

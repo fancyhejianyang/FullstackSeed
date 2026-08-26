@@ -49,7 +49,10 @@ export class MineruConfigsController {
   @Patch(':id')
   @RequirePermissions('Menu.read')
   @ApiOperation({ summary: '更新 MinerU 配置' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateMineruConfigDto) {
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateMineruConfigDto,
+  ) {
     return this.mineruConfigsService.update(id, dto);
   }
 

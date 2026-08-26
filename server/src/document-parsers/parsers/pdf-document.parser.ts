@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { DocumentOcrService } from '../../document-ocr/document-ocr.service';
 import {
   type DocumentParseContentType,
@@ -30,6 +30,8 @@ type PdfParseModule =
 
 @Injectable()
 export class PdfDocumentParser implements DocumentParser {
+  private readonly logger = new Logger(PdfDocumentParser.name);
+
   constructor(private readonly documentOcrService: DocumentOcrService) {}
 
   supports(contentType: DocumentParseContentType) {
@@ -44,8 +46,14 @@ export class PdfDocumentParser implements DocumentParser {
     const pdfParse = this.loadPdfParse();
     const result = await pdfParse(context.file.buffer, { pageJoiner: '' });
     const text = this.normalizeText(result.text);
-    if (text) return text;
+    if (text) {
+      this.logger.debug(
+        `手动 PDF 解析命中普通文本，长度 ${text.length}，跳过 OCR`,
+      );
+      return text;
+    }
 
+    this.logger.debug('手动 PDF 普通文本为空，开始进入本地 OCR');
     const ocrResult = await this.documentOcrService.recognizePdf(context);
     return this.normalizeText(ocrResult.text);
   }

@@ -8,6 +8,7 @@ import {
   IsString,
   IsUrl,
   Min,
+  ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { PartialType } from '@nestjs/swagger';
@@ -79,7 +80,9 @@ export class CreateKnowledgeBaseDto {
   sort?: number;
 }
 
-export class UpdateKnowledgeBaseDto extends PartialType(CreateKnowledgeBaseDto) {}
+export class UpdateKnowledgeBaseDto extends PartialType(
+  CreateKnowledgeBaseDto,
+) {}
 
 export class ParseKnowledgeBaseDto {
   @IsIn(['manual', 'mineru'])
@@ -275,11 +278,85 @@ export class CreateKnowledgeBaseChunkDto {
   @Min(0)
   @IsOptional()
   sort?: number;
+
+  // 手动分片上下文重叠字段
+  @IsString()
+  @IsOptional()
+  coreContent?: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  manualStartOffset?: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  manualEndOffset?: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  contextBeforeLength?: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  contextAfterLength?: number;
 }
 
 export class UpdateKnowledgeBaseChunkDto extends PartialType(
   CreateKnowledgeBaseChunkDto,
 ) {}
+
+export class ManualKnowledgeBaseChunkDto {
+  @IsString()
+  @IsOptional()
+  title?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  content: string;
+
+  @IsString()
+  @IsOptional()
+  coreContent?: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  manualStartOffset?: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  manualEndOffset?: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  contextBeforeLength?: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  contextAfterLength?: number;
+}
+
+export class ReplaceKnowledgeBaseDocumentChunksDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ManualKnowledgeBaseChunkDto)
+  chunks: ManualKnowledgeBaseChunkDto[];
+}
 
 export class QueryKnowledgeBaseChunkDto {
   @Type(() => Number)

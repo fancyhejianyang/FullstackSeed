@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository, type FindOptionsWhere } from 'typeorm';
 import { createHash } from 'crypto';
@@ -126,11 +130,9 @@ export class KnowledgeBasesService {
         matchPriority: dto.matchPriority ?? 0,
         contentType,
         contentText:
-          contentType === 'text'
-            ? dto.contentText?.trim() || null
-            : null,
-        fileName: contentType === 'text' ? '' : dto.fileName?.trim() ?? '',
-        fileUrl: contentType === 'text' ? '' : dto.fileUrl?.trim() ?? '',
+          contentType === 'text' ? dto.contentText?.trim() || null : null,
+        fileName: contentType === 'text' ? '' : (dto.fileName?.trim() ?? ''),
+        fileUrl: contentType === 'text' ? '' : (dto.fileUrl?.trim() ?? ''),
         processStage: this.resolveInitialProcessStage(
           contentType,
           dto.contentText,
@@ -173,8 +175,7 @@ export class KnowledgeBasesService {
       base.hitKeywords = dto.hitKeywords.trim() || null;
     }
     if (dto.colloquialDescription !== undefined) {
-      base.colloquialDescription =
-        dto.colloquialDescription.trim() || null;
+      base.colloquialDescription = dto.colloquialDescription.trim() || null;
     }
     if (dto.matchPriority !== undefined) {
       base.matchPriority = dto.matchPriority;
@@ -286,8 +287,7 @@ export class KnowledgeBasesService {
       await this.updateBaseProcess(base, {
         processStage: 'failed',
         parseStatus: 'failed',
-        lastProcessMessage:
-          error instanceof Error ? error.message : '解析失败',
+        lastProcessMessage: error instanceof Error ? error.message : '解析失败',
       });
       throw error;
     }
@@ -337,13 +337,17 @@ export class KnowledgeBasesService {
         indexStatus: 'pending',
         lastProcessMessage: `分片完成，共 ${chunkCount} 个分片`,
       });
-      return { id, documentId: document.id, chunkCount, processStage: 'chunked' };
+      return {
+        id,
+        documentId: document.id,
+        chunkCount,
+        processStage: 'chunked',
+      };
     } catch (error) {
       await this.updateBaseProcess(base, {
         processStage: 'failed',
         chunkStatus: 'failed',
-        lastProcessMessage:
-          error instanceof Error ? error.message : '分片失败',
+        lastProcessMessage: error instanceof Error ? error.message : '分片失败',
       });
       throw error;
     }
@@ -386,7 +390,9 @@ export class KnowledgeBasesService {
         throw new BadRequestException('当前知识库没有可索引的分片');
       }
 
-      const documentIds = Array.from(new Set(chunks.map((chunk) => chunk.documentId)));
+      const documentIds = Array.from(
+        new Set(chunks.map((chunk) => chunk.documentId)),
+      );
       const documents = await this.documentRepository.find({
         where: { id: In(documentIds) },
       });
@@ -394,7 +400,11 @@ export class KnowledgeBasesService {
       const indexItems = chunks
         .map((chunk) => {
           const document = documentMap.get(chunk.documentId);
-          const vectorText = this.buildVectorDocumentText(base, document, chunk);
+          const vectorText = this.buildVectorDocumentText(
+            base,
+            document,
+            chunk,
+          );
           const contentHash = this.buildContentHash(vectorText);
           return {
             chunk,
@@ -462,8 +472,7 @@ export class KnowledgeBasesService {
       await this.updateBaseProcess(base, {
         processStage: 'indexed',
         indexStatus: 'success',
-        lastProcessMessage:
-          `索引完成：写入 ${indexItems.length} 个分片，跳过 ${chunks.length - indexItems.length} 个未变化分片`,
+        lastProcessMessage: `索引完成：写入 ${indexItems.length} 个分片，跳过 ${chunks.length - indexItems.length} 个未变化分片`,
       });
       return {
         id,
@@ -485,8 +494,7 @@ export class KnowledgeBasesService {
       await this.updateBaseProcess(base, {
         processStage: 'failed',
         indexStatus: 'failed',
-        lastProcessMessage:
-          error instanceof Error ? error.message : '索引失败',
+        lastProcessMessage: error instanceof Error ? error.message : '索引失败',
       });
       throw error;
     }
@@ -498,7 +506,9 @@ export class KnowledgeBasesService {
       .orderBy('category.sort', 'ASC')
       .addOrderBy('category.id', 'ASC');
     if (query.parentId) {
-      qb.andWhere('category.parentId = :parentId', { parentId: query.parentId });
+      qb.andWhere('category.parentId = :parentId', {
+        parentId: query.parentId,
+      });
     }
     if (query.keyword?.trim()) {
       qb.andWhere(
@@ -680,10 +690,7 @@ export class KnowledgeBasesService {
     return this.executeDocumentThirdPartyParse(document, dto);
   }
 
-  async parseDocument(
-    id: number,
-    dto: ParseKnowledgeBaseDocumentRequestDto,
-  ) {
+  async parseDocument(id: number, dto: ParseKnowledgeBaseDocumentRequestDto) {
     const parseMode = this.resolveParseMode(dto.parseMode);
     const document = await this.findDocument(id);
     if (parseMode === KNOWLEDGE_PARSE_MODE.mineru && !dto.fileUrl) {
@@ -722,7 +729,8 @@ export class KnowledgeBasesService {
       return await this.parseDocumentByMode(document, dto, parseMode);
     } catch (error) {
       document.status = 'failed';
-      document.description = error instanceof Error ? error.message : '解析失败';
+      document.description =
+        error instanceof Error ? error.message : '解析失败';
       await this.documentRepository.save(document);
       throw error;
     }
@@ -815,15 +823,20 @@ export class KnowledgeBasesService {
           ? base.categoryId
           : document.categoryId;
     await this.assertCategoryExists(categoryId);
-    if (dto.knowledgeBaseId !== undefined) document.knowledgeBaseId = dto.knowledgeBaseId;
+    if (dto.knowledgeBaseId !== undefined)
+      document.knowledgeBaseId = dto.knowledgeBaseId;
     if (dto.knowledgeBaseId !== undefined || dto.categoryId !== undefined) {
       document.categoryId = categoryId ?? null;
     }
     if (dto.title !== undefined) document.title = dto.title.trim();
-    if (dto.sourceType !== undefined) document.sourceType = dto.sourceType.trim() || 'manual';
-    if (dto.sourceName !== undefined) document.sourceName = dto.sourceName.trim();
-    if (dto.content !== undefined) document.content = dto.content.trim() || null;
-    if (dto.status !== undefined) document.status = dto.status.trim() || 'draft';
+    if (dto.sourceType !== undefined)
+      document.sourceType = dto.sourceType.trim() || 'manual';
+    if (dto.sourceName !== undefined)
+      document.sourceName = dto.sourceName.trim();
+    if (dto.content !== undefined)
+      document.content = dto.content.trim() || null;
+    if (dto.status !== undefined)
+      document.status = dto.status.trim() || 'draft';
     if (dto.description !== undefined) {
       document.description = dto.description.trim() || null;
     }
@@ -831,8 +844,7 @@ export class KnowledgeBasesService {
       document.hitKeywords = dto.hitKeywords.trim() || null;
     }
     if (dto.colloquialDescription !== undefined) {
-      document.colloquialDescription =
-        dto.colloquialDescription.trim() || null;
+      document.colloquialDescription = dto.colloquialDescription.trim() || null;
     }
     if (dto.matchPriority !== undefined) {
       document.matchPriority = dto.matchPriority;
@@ -894,14 +906,20 @@ export class KnowledgeBasesService {
     const { list, total } = await this.findChunks(query);
     if (!list.length) return { list: [], total };
 
-    const baseIds = Array.from(new Set(list.map((chunk) => chunk.knowledgeBaseId)));
-    const documentIds = Array.from(new Set(list.map((chunk) => chunk.documentId)));
+    const baseIds = Array.from(
+      new Set(list.map((chunk) => chunk.knowledgeBaseId)),
+    );
+    const documentIds = Array.from(
+      new Set(list.map((chunk) => chunk.documentId)),
+    );
     const [bases, documents] = await Promise.all([
       this.baseRepository.find({ where: { id: In(baseIds) } }),
       this.documentRepository.find({ where: { id: In(documentIds) } }),
     ]);
     const baseMap = new Map(bases.map((base) => [base.id, base]));
-    const documentMap = new Map(documents.map((document) => [document.id, document]));
+    const documentMap = new Map(
+      documents.map((document) => [document.id, document]),
+    );
 
     return {
       list: list.map((chunk) => {
@@ -1210,6 +1228,7 @@ export class KnowledgeBasesService {
   ): Metadata {
     return {
       knowledgeBaseId: chunk.knowledgeBaseId,
+      knowledgeBaseName: base.name,
       categoryId: chunk.categoryId ?? 0,
       documentId: chunk.documentId,
       chunkId: chunk.id,
@@ -1230,7 +1249,9 @@ export class KnowledgeBasesService {
   }
 
   private async deleteVectorsByCondition(
-    where: FindOptionsWhere<KnowledgeBaseChunk> | FindOptionsWhere<KnowledgeBaseChunk>[],
+    where:
+      | FindOptionsWhere<KnowledgeBaseChunk>
+      | FindOptionsWhere<KnowledgeBaseChunk>[],
   ) {
     const chunks = await this.chunkRepository.find({ where });
     await this.deleteVectorsByIds(
@@ -1248,9 +1269,7 @@ export class KnowledgeBasesService {
   private buildCategoryTree(list: KnowledgeBaseCategory[]) {
     const map = new Map<number, KnowledgeBaseCategoryTreeNode>();
     const roots: KnowledgeBaseCategoryTreeNode[] = [];
-    list.forEach((item) =>
-      map.set(item.id, { ...(item as KnowledgeBaseCategory), children: [] }),
-    );
+    list.forEach((item) => map.set(item.id, { ...item, children: [] }));
     map.forEach((node) => {
       if (node.parentId && map.has(node.parentId)) {
         map.get(node.parentId)!.children.push(node);
@@ -1416,8 +1435,7 @@ export class KnowledgeBasesService {
     document.knowledgeBaseId = base.id;
     document.categoryId = base.categoryId;
     document.title = base.name;
-    document.sourceType =
-      base.contentType === 'text' ? 'text' : parseMode;
+    document.sourceType = base.contentType === 'text' ? 'text' : parseMode;
     document.sourceName =
       base.contentType === 'text' ? base.name : base.fileName || base.name;
     document.content = content.trim();
@@ -1481,10 +1499,9 @@ export class KnowledgeBasesService {
       });
       document.hitKeywords = document.hitKeywords || base?.hitKeywords || null;
       document.colloquialDescription =
-        document.colloquialDescription ||
-        base?.colloquialDescription ||
-        null;
-      document.matchPriority = document.matchPriority || base?.matchPriority || 0;
+        document.colloquialDescription || base?.colloquialDescription || null;
+      document.matchPriority =
+        document.matchPriority || base?.matchPriority || 0;
     }
     let saved = await this.documentRepository.save(document);
     await this.syncBaseParsedContent(saved, content);
@@ -1574,7 +1591,9 @@ export class KnowledgeBasesService {
       }
       if (current) chunks.push(current);
       if (paragraph.length > chunkSize) {
-        chunks.push(...this.splitByLength(paragraph, chunkSize, overlap, deadline));
+        chunks.push(
+          ...this.splitByLength(paragraph, chunkSize, overlap, deadline),
+        );
         current = '';
       } else {
         current = paragraph;
@@ -1596,9 +1615,7 @@ export class KnowledgeBasesService {
 
   private assertChunkDeadline(deadline: number) {
     if (Date.now() <= deadline) return;
-    throw new BadRequestException(
-      '自动分片超时，请调大超时时间或改用手动分片',
-    );
+    throw new BadRequestException('自动分片超时，请调大超时时间或改用手动分片');
   }
 
   private assertSupportedDocumentFile(fileUrl: string, fileName?: string) {
@@ -1652,7 +1669,10 @@ export class KnowledgeBasesService {
     }
   }
 
-  private collectDescendantIds(list: KnowledgeBaseCategory[], parentId: number) {
+  private collectDescendantIds(
+    list: KnowledgeBaseCategory[],
+    parentId: number,
+  ) {
     const childrenMap = new Map<number, KnowledgeBaseCategory[]>();
     list.forEach((item) => {
       if (!item.parentId) return;

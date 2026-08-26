@@ -25,6 +25,7 @@ import { MineruConfigsModule } from './mineru-configs/mineru-configs.module';
 import { ExternalAppsModule } from './external-apps/external-apps.module';
 import { AiFeatureConfigsModule } from './ai-feature-configs/ai-feature-configs.module';
 import { KnowledgeRetrievalConfigsModule } from './knowledge-retrieval-configs/knowledge-retrieval-configs.module';
+import { KnowledgeChunkConfigsModule } from './knowledge-chunk-configs/knowledge-chunk-configs.module';
 import { VectorConfigsModule } from './vector-configs/vector-configs.module';
 
 @Module({
@@ -117,6 +118,7 @@ import { VectorConfigsModule } from './vector-configs/vector-configs.module';
     KnowledgeAiProvidersModule,
     AiFeatureConfigsModule,
     KnowledgeRetrievalConfigsModule,
+    KnowledgeChunkConfigsModule,
     VectorConfigsModule,
     KnowledgeAiChatModule,
     ExternalAppsModule,

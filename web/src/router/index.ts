@@ -51,6 +51,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '知识库文档', permission: 'KnowledgeBase.read' },
       },
       {
+        path: 'knowledge-bases/chunk-configs',
+        name: 'knowledge-chunk-configs',
+        component: () => import('@/views/knowledge-chunk-config/Index.vue'),
+        meta: { title: '分片配置', permission: 'KnowledgeBase.read' },
+      },
+      {
         path: 'users',
         name: 'users',
         component: () => import('@/views/user/Index.vue'),

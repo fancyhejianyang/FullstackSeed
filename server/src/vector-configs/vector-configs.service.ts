@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Not, Repository } from 'typeorm';
 import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
@@ -215,7 +219,8 @@ export class VectorConfigsService {
     }
     if (dto.token !== undefined) payload.token = dto.token.trim() || null;
     if (dto.isEnabled !== undefined) payload.isEnabled = dto.isEnabled;
-    if (isCreate && payload.vectorDbType === undefined) payload.vectorDbType = 'chroma';
+    if (isCreate && payload.vectorDbType === undefined)
+      payload.vectorDbType = 'chroma';
     if (isCreate && payload.isEnabled === undefined) payload.isEnabled = false;
     return payload;
   }
@@ -227,7 +232,9 @@ export class VectorConfigsService {
   private assertUsableVectorConfig(config: Partial<VectorConfig>) {
     if (!config.isEnabled) return;
     if (!config.providerId || !config.model?.trim()) {
-      throw new BadRequestException('启用向量化配置时，请选择大模型账号和向量模型');
+      throw new BadRequestException(
+        '启用向量化配置时，请选择大模型账号和向量模型',
+      );
     }
     if (this.isKnownUnsupportedTextEmbeddingModel(config.model)) {
       throw new BadRequestException(

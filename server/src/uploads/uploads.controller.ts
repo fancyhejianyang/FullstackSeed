@@ -32,7 +32,10 @@ export class UploadsController {
     if (!file) {
       throw new BadRequestException('请上传文件');
     }
-    return this.uploadsService.saveFile(file, this.resolvePublicOrigin(request));
+    return this.uploadsService.saveFile(
+      file,
+      this.resolvePublicOrigin(request),
+    );
   }
 
   private resolvePublicOrigin(request?: UploadRequest) {

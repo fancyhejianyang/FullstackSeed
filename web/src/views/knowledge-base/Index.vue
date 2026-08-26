@@ -30,21 +30,19 @@ const categoryTree = ref<KnowledgeBaseCategoryTreeNode[]>([]);
 const columns: TableColumn[] = [
   { prop: 'name', label: '名称', minWidth: 180 },
   { prop: 'categoryId', label: '所属分类', minWidth: 140, slot: true },
-  { prop: 'code', label: '编码', minWidth: 140 },
   { prop: 'hitKeywords', label: '命中关键字', minWidth: 180, slot: true },
   { prop: 'matchPriority', label: '匹配优先级', width: 110 },
   { prop: 'contentType', label: '内容类型', width: 110, slot: true },
   { prop: 'processStage', label: '处理阶段', width: 120, slot: true },
   { prop: 'lastProcessMessage', label: '处理结果', minWidth: 220, slot: true },
-  { prop: 'fileName', label: '文件', minWidth: 180, slot: true },
+  { prop: 'fileName', label: '文件', width: 250, slot: true },
   { prop: 'isEnabled', label: '状态', width: 90, slot: true },
   { prop: 'updatedAt', label: '更新时间', width: 180, slot: true },
 ];
 
 const searchFields: FormField[] = [
-  { prop: 'keyword', label: '关键词', type: 'input', placeholder: '名称/编码' },
+  { prop: 'keyword', label: '关键词', type: 'input', placeholder: '名称/关键字' },
 ];
-
 
 const editVisible = ref(false);
 const viewVisible = ref(false);
@@ -156,13 +154,17 @@ function isProcessing(row: KnowledgeBase, action: string) {
   return processingKey.value === `${action}:${row.id}`;
 }
 
-
 async function runProcess(
   row: KnowledgeBase,
   action: 'parse' | 'chunk' | 'index',
 ) {
-  const parseMode = action === 'parse' ? await chooseParseMode() : undefined;
-  if (action === 'parse' && !parseMode) return;
+  let parseMode: KnowledgeBaseParseMode | undefined;
+  if (action === 'parse') {
+    const chosen = await chooseParseMode();
+    // 用户取消或关闭弹窗时终止流程
+    if (!chosen) return;
+    parseMode = chosen;
+  }
   const actionMap = {
     parse: {
       label: parseMode === 'mineru' ? 'MinerU 解析' : '手动解析',
@@ -219,6 +221,7 @@ onMounted(fetchCategories);
       :delete-request="deleteRequest"
       :batch-delete-request="batchDeleteRequest"
       :show-actions="false"
+      :fit="false"
       action-width="380"
       perm-module="knowledgeBase"
     >
@@ -277,9 +280,20 @@ onMounted(fetchCategories);
       </template>
 
       <template #column-fileName="{ row }">
-        <el-link v-if="row.fileUrl" type="primary" :href="row.fileUrl" target="_blank">
-          {{ row.fileName || '下载文件' }}
-        </el-link>
+        <el-tooltip
+          v-if="row.fileUrl"
+          :content="row.fileName || '下载文件'"
+          placement="top"
+        >
+          <el-link
+            type="primary"
+            :href="row.fileUrl"
+            target="_blank"
+            class="knowledge-base-index__file-link"
+          >
+            {{ row.fileName || '下载文件' }}
+          </el-link>
+        </el-tooltip>
         <span v-else>-</span>
       </template>
 
@@ -355,5 +369,14 @@ onMounted(fetchCategories);
   word-break: break-word;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.knowledge-base-index__file-link {
+  max-width: 250px;
+  overflow: hidden;
+  vertical-align: middle;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

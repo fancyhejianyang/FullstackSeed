@@ -28,7 +28,6 @@ const fillingForm = ref(false);
 const form = reactive({
   categoryId: '' as string | number,
   name: '',
-  code: '',
   hitKeywords: '',
   colloquialDescription: '',
   matchPriority: 0,
@@ -58,7 +57,6 @@ const baseFields = computed<FormField[]>(() => [
     placeholder: '请选择所属分类',
   },
   { prop: 'name', label: '名称', type: 'input' },
-  { prop: 'code', label: '编码', type: 'input' },
   {
     prop: 'hitKeywords',
     label: '命中关键字',
@@ -178,7 +176,6 @@ function resetForm() {
   Object.assign(form, {
     categoryId: '',
     name: '',
-    code: '',
     hitKeywords: '',
     colloquialDescription: '',
     matchPriority: 0,
@@ -196,7 +193,6 @@ function fillForm(row: KnowledgeBase) {
   Object.assign(form, {
     categoryId: row.categoryId ?? '',
     name: row.name ?? '',
-    code: row.code ?? '',
     hitKeywords: row.hitKeywords ?? '',
     colloquialDescription: row.colloquialDescription ?? '',
     matchPriority: row.matchPriority ?? 0,
@@ -249,7 +245,6 @@ async function handleSubmit() {
     const payload = {
       categoryId: Number(form.categoryId),
       name: form.name,
-      code: form.code,
       hitKeywords: form.hitKeywords,
       colloquialDescription: form.colloquialDescription,
       matchPriority: Number(form.matchPriority || 0),

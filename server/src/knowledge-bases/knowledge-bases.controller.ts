@@ -25,6 +25,7 @@ import {
   QueryKnowledgeBaseChunkDto,
   QueryKnowledgeBaseDocumentDto,
   QueryKnowledgeBaseDto,
+  ReplaceKnowledgeBaseDocumentChunksDto,
   UpdateKnowledgeBaseCategoryDto,
   UpdateKnowledgeBaseChunkDto,
   UpdateKnowledgeBaseDocumentDto,
@@ -184,6 +185,16 @@ export class KnowledgeBasesController {
     @Body() dto: ParseKnowledgeBaseDocumentRequestDto,
   ) {
     return this.knowledgeBasesService.parseDocument(id, dto);
+  }
+
+  @Post('documents/:id/chunks/manual')
+  @RequirePermissions('KnowledgeBase.update')
+  @ApiOperation({ summary: '手动覆盖知识库文档分片' })
+  replaceDocumentChunks(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ReplaceKnowledgeBaseDocumentChunksDto,
+  ) {
+    return this.knowledgeBasesService.replaceDocumentChunks(id, dto);
   }
 
   @Post('chunks')

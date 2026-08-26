@@ -18,7 +18,10 @@ export class StoredFilesService {
 
   constructor(private readonly storageConfigService: StorageConfigService) {}
 
-  async read(fileUrl: string, fileName?: string | null): Promise<StoredFileContent> {
+  async read(
+    fileUrl: string,
+    fileName?: string | null,
+  ): Promise<StoredFileContent> {
     const url = fileUrl?.trim();
     if (!url) {
       throw new BadRequestException('文件 URL 不能为空');
@@ -37,14 +40,20 @@ export class StoredFilesService {
     }
 
     const readableUrl = await this.storageConfigService.resolveReadableUrl(url);
-    return this.readRemoteFile(readableUrl, fileName || this.resolveFileName(url));
+    return this.readRemoteFile(
+      readableUrl,
+      fileName || this.resolveFileName(url),
+    );
   }
 
   private async resolveLocalUploadPath(fileUrl: string) {
     const pathname = await this.resolveLocalUploadPathname(fileUrl);
     if (!pathname) return '';
 
-    const relativePath = decodeURIComponent(pathname).replace(/^\/uploads\/?/, '');
+    const relativePath = decodeURIComponent(pathname).replace(
+      /^\/uploads\/?/,
+      '',
+    );
     const normalizedPath = normalize(relativePath);
     const targetPath = resolve(join(this.uploadRoot, normalizedPath));
     if (!targetPath.startsWith(this.uploadRoot)) {

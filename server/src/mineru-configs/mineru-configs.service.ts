@@ -138,7 +138,9 @@ export class MineruConfigsService {
       throw new BadRequestException('未找到已启用的 MinerU 配置');
     }
     if (configs.length > 1) {
-      throw new BadRequestException('当前存在多个已启用的 MinerU 配置，请仅保留一个启用');
+      throw new BadRequestException(
+        '当前存在多个已启用的 MinerU 配置，请仅保留一个启用',
+      );
     }
     const config = configs[0];
     if (!config.token) {
@@ -168,24 +170,27 @@ export class MineruConfigsService {
       Math.max(config.timeoutMinutes * 60 + 600, 3600),
     );
     const resolvedFileName = fileName || this.resolveFileName(fileUrl);
-    const response = await fetch(this.buildUrl(config.baseUrl, config.createTaskPath), {
-      method: 'POST',
-      headers: this.buildHeaders(config),
-      body: JSON.stringify({
-        url: readableFileUrl,
-        file_url: readableFileUrl,
-        files: [
-          {
-            url: readableFileUrl,
-            file_name: resolvedFileName,
-          },
-        ],
-        model_version: config.modelVersion,
-        is_ocr: !!config.isOcr,
-        enable_formula: !!config.enableFormula,
-        enable_table: !!config.enableTable,
-      }),
-    });
+    const response = await fetch(
+      this.buildUrl(config.baseUrl, config.createTaskPath),
+      {
+        method: 'POST',
+        headers: this.buildHeaders(config),
+        body: JSON.stringify({
+          url: readableFileUrl,
+          file_url: readableFileUrl,
+          files: [
+            {
+              url: readableFileUrl,
+              file_name: resolvedFileName,
+            },
+          ],
+          model_version: config.modelVersion,
+          is_ocr: !!config.isOcr,
+          enable_formula: !!config.enableFormula,
+          enable_table: !!config.enableTable,
+        }),
+      },
+    );
     const data = await this.readJson<MineruCreateTaskResponse>(response);
     const taskId = this.extractTaskId(data);
     if (!taskId) {
@@ -303,7 +308,8 @@ export class MineruConfigsService {
       payload.modelVersion = dto.modelVersion?.trim() || 'vlm';
     }
     if (dto.createTaskPath !== undefined || isCreate) {
-      payload.createTaskPath = dto.createTaskPath?.trim() || '/api/v4/extract/task';
+      payload.createTaskPath =
+        dto.createTaskPath?.trim() || '/api/v4/extract/task';
     }
     if (dto.queryTaskPath !== undefined || isCreate) {
       payload.queryTaskPath =

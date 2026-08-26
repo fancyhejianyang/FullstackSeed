@@ -1,5 +1,10 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { ChromaClient, type Collection, type Metadata, type Where } from 'chromadb';
+import {
+  ChromaClient,
+  type Collection,
+  type Metadata,
+  type Where,
+} from 'chromadb';
 import { VectorConfigsService } from '../vector-configs/vector-configs.service';
 
 export interface KnowledgeVectorUpsertItem {
@@ -67,12 +72,14 @@ export class KnowledgeVectorService {
         where: options.where,
         include: ['documents', 'metadatas', 'distances'],
       });
-      return result.rows()[0]?.map((row) => ({
-        id: row.id,
-        document: row.document ?? '',
-        metadata: row.metadata ?? {},
-        score: this.distanceToScore(row.distance),
-      })) ?? [];
+      return (
+        result.rows()[0]?.map((row) => ({
+          id: row.id,
+          document: row.document ?? '',
+          metadata: row.metadata ?? {},
+          score: this.distanceToScore(row.distance),
+        })) ?? []
+      );
     } catch (error) {
       throw new BadRequestException(
         `Chroma 向量检索失败：${this.getErrorMessage(error)}`,
@@ -107,7 +114,9 @@ export class KnowledgeVectorService {
     return this.collectionPromise;
   }
 
-  private getClient(config: Awaited<ReturnType<VectorConfigsService['findUsableConfig']>>) {
+  private getClient(
+    config: Awaited<ReturnType<VectorConfigsService['findUsableConfig']>>,
+  ) {
     if (this.client) return this.client;
     const url = this.parseChromaUrl(config.chromaUrl);
     const headers = config.token
