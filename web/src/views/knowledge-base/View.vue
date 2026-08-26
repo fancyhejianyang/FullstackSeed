@@ -1691,13 +1691,9 @@ onBeforeUnmount(() => {
 }
 
 .knowledge-base-view__chunk-content {
-  display: -webkit-box;
-  overflow: hidden;
   line-height: 1.6;
+  white-space: pre-wrap;
   word-break: break-word;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
-  line-clamp: 4;
 }
 
 .knowledge-base-view__index-text {

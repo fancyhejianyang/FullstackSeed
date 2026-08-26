@@ -1,5 +1,12 @@
 # CHANGELOG
 
+### 2026-08-26 分片内容查看自动撑开
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/View.vue`（移除分片内容单元格 4 行裁切限制，按内容自然换行撑开）
+- 删除：无
+- 说明：知识库详情的“分片内容”Tab 中，长分片正文会完整展示，不再被固定行数截断。
+
 ### 2026-08-26 支持读取 MinerU 结果压缩包正文
 - 新增：
   - `server/package.json`、`server/package-lock.json`（后端显式引入 `jszip`，用于读取 MinerU 结果压缩包）
