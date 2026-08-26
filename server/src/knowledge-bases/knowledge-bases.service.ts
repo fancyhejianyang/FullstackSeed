@@ -41,6 +41,8 @@ import { KnowledgeVectorService } from '../knowledge-vectors/knowledge-vector.se
 import { LogRecordsService } from '../log-records/log-records.service';
 import type { Metadata } from 'chromadb';
 import { KnowledgeTaskFileLogger } from './knowledge-task-file-logger.service';
+import { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-configs.service';
+import type { AiFeatureConfig } from '../ai-feature-configs/entities/ai-feature-config.entity';
 
 export interface KnowledgeBaseCategoryTreeNode extends KnowledgeBaseCategory {
   children: KnowledgeBaseCategoryTreeNode[];
@@ -80,10 +82,26 @@ export class KnowledgeBasesService implements OnModuleInit {
     private readonly vectorService: KnowledgeVectorService,
     private readonly logRecordsService: LogRecordsService,
     private readonly taskFileLogger: KnowledgeTaskFileLogger,
+    private readonly aiFeatureConfigsService: AiFeatureConfigsService,
   ) {}
 
   async onModuleInit() {
     await this.resumeProcessingMineruDocuments();
+  }
+
+  private async resolveMineruOcrFeatureConfig(): Promise<AiFeatureConfig> {
+    const config =
+      await this.aiFeatureConfigsService.findEnabledByFeature('ocr');
+    if (!config) {
+      throw new BadRequestException('请先配置并启用 OCR 功能配置');
+    }
+    if (!config.useMineru) {
+      throw new BadRequestException('当前 OCR 功能配置未启用 MinerU');
+    }
+    if (!config.mineruConfigId) {
+      throw new BadRequestException('OCR 功能配置缺少 MinerU 配置');
+    }
+    return config;
   }
 
   private async resumeProcessingMineruDocuments() {
@@ -133,7 +151,9 @@ export class KnowledgeBasesService implements OnModuleInit {
     });
     let result: Awaited<ReturnType<MineruConfigsService['waitForSuccess']>>;
     try {
+      const ocrConfig = await this.resolveMineruOcrFeatureConfig();
       result = await this.mineruConfigsService.waitForSuccess(taskId, {
+        configId: ocrConfig.mineruConfigId,
         onProgress: (status) =>
           base
             ? this.updateBaseMineruProgress(base, document, status)
@@ -869,6 +889,7 @@ export class KnowledgeBasesService implements OnModuleInit {
 
   async createMineruTask(id: number, dto: CreateKnowledgeBaseMineruTaskDto) {
     const document = await this.findDocument(id);
+    const ocrConfig = await this.resolveMineruOcrFeatureConfig();
     await this.assertSupportedDocumentFileForDocument(
       document,
       dto.fileUrl,
@@ -879,10 +900,15 @@ export class KnowledgeBasesService implements OnModuleInit {
       knowledgeBaseId: document.knowledgeBaseId,
       fileName: dto.fileName,
       fileUrl: dto.fileUrl,
+      ocrFeatureConfigId: ocrConfig.id,
+      ocrFeatureConfigName: ocrConfig.name,
+      mineruConfigId: ocrConfig.mineruConfigId,
+      mineruConfigName: ocrConfig.mineruConfigName,
     });
     const task = await this.mineruConfigsService.createParseTask(
       dto.fileUrl.trim(),
       dto.fileName?.trim(),
+      ocrConfig.mineruConfigId,
     );
     await this.taskFileLogger.write('document.mineru.createTask.success', {
       documentId: id,
@@ -896,11 +922,19 @@ export class KnowledgeBasesService implements OnModuleInit {
 
   async queryMineruTask(id: number, taskId: string) {
     const document = await this.findDocument(id);
-    const result = await this.mineruConfigsService.queryParseTask(taskId);
+    const ocrConfig = await this.resolveMineruOcrFeatureConfig();
+    const result = await this.mineruConfigsService.queryParseTaskByConfig(
+      taskId,
+      ocrConfig.mineruConfigId!,
+    );
     await this.taskFileLogger.write('document.mineru.query', {
       documentId: id,
       knowledgeBaseId: document.knowledgeBaseId,
       taskId,
+      ocrFeatureConfigId: ocrConfig.id,
+      ocrFeatureConfigName: ocrConfig.name,
+      mineruConfigId: ocrConfig.mineruConfigId,
+      mineruConfigName: ocrConfig.mineruConfigName,
       status: result.status,
       progress: result.progress,
       message: result.message,
@@ -929,6 +963,7 @@ export class KnowledgeBasesService implements OnModuleInit {
     dto: ParseKnowledgeBaseDocumentDto,
   ) {
     const document = await this.findDocument(id);
+    const ocrConfig = await this.resolveMineruOcrFeatureConfig();
     await this.assertSupportedDocumentFileForDocument(
       document,
       dto.fileUrl,
@@ -940,10 +975,15 @@ export class KnowledgeBasesService implements OnModuleInit {
         knowledgeBaseId: document.knowledgeBaseId,
         fileName: dto.fileName,
         fileUrl: dto.fileUrl,
+        ocrFeatureConfigId: ocrConfig.id,
+        ocrFeatureConfigName: ocrConfig.name,
+        mineruConfigId: ocrConfig.mineruConfigId,
+        mineruConfigName: ocrConfig.mineruConfigName,
       });
       const task = await this.mineruConfigsService.createParseTask(
         dto.fileUrl.trim(),
         dto.fileName?.trim(),
+        ocrConfig.mineruConfigId,
       );
       await this.taskFileLogger.write('document.mineru.createTask.success', {
         documentId: id,
@@ -1108,15 +1148,21 @@ export class KnowledgeBasesService implements OnModuleInit {
     document: KnowledgeBaseDocument,
     dto: ParseKnowledgeBaseDocumentDto,
   ) {
+    const ocrConfig = await this.resolveMineruOcrFeatureConfig();
     await this.taskFileLogger.write('document.mineru.createTask.start', {
       documentId: document.id,
       knowledgeBaseId: document.knowledgeBaseId,
       fileName: dto.fileName,
       fileUrl: dto.fileUrl,
+      ocrFeatureConfigId: ocrConfig.id,
+      ocrFeatureConfigName: ocrConfig.name,
+      mineruConfigId: ocrConfig.mineruConfigId,
+      mineruConfigName: ocrConfig.mineruConfigName,
     });
     const task = await this.mineruConfigsService.createParseTask(
       dto.fileUrl.trim(),
       dto.fileName?.trim(),
+      ocrConfig.mineruConfigId,
     );
     await this.taskFileLogger.write('document.mineru.createTask.success', {
       documentId: document.id,
@@ -1760,15 +1806,21 @@ export class KnowledgeBasesService implements OnModuleInit {
   }
 
   private async parseBaseWithThirdParty(base: KnowledgeBase) {
+    const ocrConfig = await this.resolveMineruOcrFeatureConfig();
     await this.taskFileLogger.write('base.mineru.createTask.start', {
       knowledgeBaseId: base.id,
       knowledgeBaseName: base.name,
       fileName: base.fileName,
       fileUrl: base.fileUrl,
+      ocrFeatureConfigId: ocrConfig.id,
+      ocrFeatureConfigName: ocrConfig.name,
+      mineruConfigId: ocrConfig.mineruConfigId,
+      mineruConfigName: ocrConfig.mineruConfigName,
     });
     const task = await this.mineruConfigsService.createParseTask(
       base.fileUrl,
       base.fileName,
+      ocrConfig.mineruConfigId,
     );
     await this.taskFileLogger.write('base.mineru.createTask.success', {
       knowledgeBaseId: base.id,

@@ -13,6 +13,7 @@ import { TaskQueueModule } from '../task-queue/task-queue.module';
 import { KnowledgeChunkConfigsModule } from '../knowledge-chunk-configs/knowledge-chunk-configs.module';
 import { KnowledgeVectorsModule } from '../knowledge-vectors/knowledge-vectors.module';
 import { LogRecordsModule } from '../log-records/log-records.module';
+import { AiFeatureConfigsModule } from '../ai-feature-configs/ai-feature-configs.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { LogRecordsModule } from '../log-records/log-records.module';
     KnowledgeChunkConfigsModule,
     KnowledgeVectorsModule,
     LogRecordsModule,
+    AiFeatureConfigsModule,
     TypeOrmModule.forFeature([
       KnowledgeBase,
       KnowledgeBaseCategory,

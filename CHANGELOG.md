@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-08-26 MinerU 解析改由 OCR 功能配置驱动
+- 新增：无
+- 修改：
+  - `server/src/knowledge-bases/knowledge-bases.module.ts`（知识库模块引入 AI 功能配置模块）
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（MinerU 解析、查询和重启恢复先读取已启用的 OCR 功能配置，再使用其绑定的 MinerU 配置创建/查询任务）
+- 删除：无
+- 说明：知识库第三方解析不再直接依赖全局启用的 MinerU 配置；后台需启用一条“功能类型 = OCR、OCR 引擎 = MinerU”的 AI 功能配置，并在其中选择 MinerU 配置，解析日志会记录 OCR 功能配置与实际 MinerU 配置，便于排查。
+
 ### 2026-08-26 兼容 MinerU 查询响应结构
 - 新增：无
 - 修改：
