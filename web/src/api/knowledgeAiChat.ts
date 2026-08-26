@@ -9,6 +9,7 @@ export interface KnowledgeAiChatSession {
   messageCount: number;
   lastQuestion: string | null;
   lastAnswer: string | null;
+  hitKnowledgeBaseNames: string | null;
   isSuccess: boolean;
   errorMessage: string | null;
   elapsedMilliseconds: number;
@@ -25,6 +26,7 @@ export interface KnowledgeAiChatMessage {
   systemPrompt: string | null;
   question: string;
   answer: string | null;
+  hitKnowledgeBaseNames: string | null;
   isSuccess: boolean;
   errorMessage: string | null;
   elapsedMilliseconds: number;
@@ -51,6 +53,7 @@ export interface QueryKnowledgeAiChatSessionParams {
 export interface AskKnowledgeAiPayload {
   providerId?: number;
   aiFeatureConfigId?: number;
+  retrievalConfigId?: number;
   model?: string;
   question: string;
   sessionId?: number;
@@ -102,6 +105,14 @@ export type KnowledgeAiChatStreamEvent =
   | {
       event: 'delta';
       data: { content: string };
+    }
+  | {
+      event: 'retrieval';
+      data: {
+        retrievalConfigId: number | null;
+        hasReference: boolean;
+        referenceLength: number;
+      };
     }
   | {
       event: 'error';

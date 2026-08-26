@@ -15,6 +15,17 @@ const visible = defineModel<boolean>('visible', { required: true });
 const loading = ref(false);
 const detail = ref<KnowledgeAiProvider | null>(null);
 const rowData = computed(() => detail.value);
+const isEmbeddingOnlyProvider = computed(() => {
+  const data = rowData.value;
+  if (!data) return false;
+  const defaultChatModels = ['qwen-plus'];
+  return (
+    getModelLines(data.embeddingModels).length > 0 &&
+    getModelLines(data.textModels).length === 0 &&
+    getModelLines(data.visionModels).length === 0 &&
+    getModelLines(data.models).every((item) => defaultChatModels.includes(item))
+  );
+});
 
 watch(visible, async (value) => {
   if (!value) {
@@ -36,6 +47,10 @@ function getModelLines(value?: string | null) {
     .map((item) => item.trim())
     .filter(Boolean);
 }
+
+function shouldShowModelGroup(value?: string | null) {
+  return !isEmbeddingOnlyProvider.value && getModelLines(value).length > 0;
+}
 </script>
 
 <template>
@@ -51,7 +66,7 @@ function getModelLines(value?: string | null) {
         <el-descriptions-item label="业务空间">
           {{ rowData?.workspaceId || '-' }}
         </el-descriptions-item>
-        <el-descriptions-item label="Chat API 路径">
+        <el-descriptions-item v-if="!isEmbeddingOnlyProvider" label="Chat API 路径">
           {{ rowData?.chatApiPath || '-' }}
         </el-descriptions-item>
         <el-descriptions-item label="密钥">
@@ -64,29 +79,26 @@ function getModelLines(value?: string | null) {
             {{ rowData?.isEnabled ? '启用' : '停用' }}
           </el-tag>
         </el-descriptions-item>
-        <el-descriptions-item label="模型列表">
-          <div v-if="getModelLines(rowData?.models).length" class="ai-provider-view__models">
+        <el-descriptions-item v-if="shouldShowModelGroup(rowData?.models)" label="模型列表">
+          <div class="ai-provider-view__models">
             <el-tag v-for="line in getModelLines(rowData?.models)" :key="line" type="info">
               {{ line }}
             </el-tag>
           </div>
-          <span v-else>-</span>
         </el-descriptions-item>
-        <el-descriptions-item label="文本模型">
-          <div v-if="getModelLines(rowData?.textModels).length" class="ai-provider-view__models">
+        <el-descriptions-item v-if="shouldShowModelGroup(rowData?.textModels)" label="文本模型">
+          <div class="ai-provider-view__models">
             <el-tag v-for="line in getModelLines(rowData?.textModels)" :key="line" type="info">
               {{ line }}
             </el-tag>
           </div>
-          <span v-else>-</span>
         </el-descriptions-item>
-        <el-descriptions-item label="视觉模型">
-          <div v-if="getModelLines(rowData?.visionModels).length" class="ai-provider-view__models">
+        <el-descriptions-item v-if="shouldShowModelGroup(rowData?.visionModels)" label="视觉模型">
+          <div class="ai-provider-view__models">
             <el-tag v-for="line in getModelLines(rowData?.visionModels)" :key="line" type="info">
               {{ line }}
             </el-tag>
           </div>
-          <span v-else>-</span>
         </el-descriptions-item>
         <el-descriptions-item label="向量模型">
           <div

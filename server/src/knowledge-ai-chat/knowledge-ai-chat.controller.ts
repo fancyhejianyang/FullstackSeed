@@ -28,7 +28,9 @@ import { KnowledgeAiChatService } from './knowledge-ai-chat.service';
 @ApiTags('KnowledgeAiChat')
 @Controller('knowledge-ai-chat')
 export class KnowledgeAiChatController {
-  constructor(private readonly knowledgeAiChatService: KnowledgeAiChatService) {}
+  constructor(
+    private readonly knowledgeAiChatService: KnowledgeAiChatService,
+  ) {}
 
   @Get('sessions')
   @ApiBearerAuth()
@@ -81,7 +83,11 @@ export class KnowledgeAiChatController {
     };
 
     try {
-      await this.knowledgeAiChatService.askStream(dto, { writeEvent }, req.externalApp);
+      await this.knowledgeAiChatService.askStream(
+        dto,
+        { writeEvent },
+        req.externalApp,
+      );
     } catch (error) {
       writeEvent('error', {
         message: error instanceof Error ? error.message : 'AI 流式调用失败',

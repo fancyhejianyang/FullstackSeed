@@ -28,6 +28,7 @@ const columns: TableColumn[] = [
   { prop: 'title', label: '会话标题', minWidth: 220 },
   { prop: 'providerName', label: '大模型账号', minWidth: 160 },
   { prop: 'model', label: '模型', minWidth: 140 },
+  { prop: 'hitKnowledgeBaseNames', label: '命中知识库', minWidth: 180, slot: true },
   { prop: 'messageCount', label: '轮次', width: 90 },
   { prop: 'isSuccess', label: '状态', width: 90, slot: true },
   { prop: 'lastQuestion', label: '最近问题', minWidth: 220 },
@@ -40,7 +41,7 @@ const searchFields: FormField[] = [
     prop: 'keyword',
     label: '关键词',
     type: 'input',
-    placeholder: '标题/账号/模型/问题/回答',
+    placeholder: '标题/账号/模型/知识库/问题/回答',
   },
 ];
 
@@ -50,6 +51,13 @@ function fetchSessions(params: Record<string, unknown>) {
 
 function deleteRequest(row: KnowledgeAiChatSession) {
   return deleteKnowledgeAiChatSession(row.id);
+}
+
+function getHitKnowledgeBaseNames(row: KnowledgeAiChatSession) {
+  return (row.hitKnowledgeBaseNames || '')
+    .split('、')
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 async function batchDeleteRequest(payload: { ids: Array<string | number> }) {
@@ -97,6 +105,20 @@ async function handleView(row: KnowledgeAiChatSession) {
         </el-tag>
       </template>
 
+      <template #column-hitKnowledgeBaseNames="{ row }">
+        <div v-if="getHitKnowledgeBaseNames(row).length" class="ai-record__hit-bases">
+          <el-tag
+            v-for="name in getHitKnowledgeBaseNames(row)"
+            :key="name"
+            type="success"
+            effect="light"
+          >
+            {{ name }}
+          </el-tag>
+        </div>
+        <span v-else>-</span>
+      </template>
+
       <template #column-elapsedMilliseconds="{ row }">
         {{ row.elapsedMilliseconds }} ms
       </template>
@@ -134,6 +156,12 @@ async function handleView(row: KnowledgeAiChatSession) {
 .ai-record__message {
   padding: 14px 0;
   border-bottom: 1px solid #ebeef5;
+}
+
+.ai-record__hit-bases {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .ai-record__question {

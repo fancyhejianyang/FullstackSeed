@@ -300,7 +300,9 @@ export class KnowledgeAiProvidersService {
       const data = (await response.json()) as ChatCompletionResponse;
       const answer = this.extractResponseContent(data);
       if (!answer) {
-        throw new BadRequestException('模型接口响应缺少 choices[0].message.content');
+        throw new BadRequestException(
+          '模型接口响应缺少 choices[0].message.content',
+        );
       }
 
       return {
@@ -437,8 +439,12 @@ export class KnowledgeAiProvidersService {
     }
   }
 
-  async callEmbedding(payload: KnowledgeAiEmbeddingPayload): Promise<number[][]> {
-    const input = Array.isArray(payload.input) ? payload.input : [payload.input];
+  async callEmbedding(
+    payload: KnowledgeAiEmbeddingPayload,
+  ): Promise<number[][]> {
+    const input = Array.isArray(payload.input)
+      ? payload.input
+      : [payload.input];
     const batchSize = this.resolveEmbeddingBatchSize(payload.target);
     const embeddings: number[][] = [];
     for (const batch of this.chunkArray(input, batchSize)) {
@@ -570,7 +576,9 @@ export class KnowledgeAiProvidersService {
       throw new BadRequestException('未找到已启用的大模型账号');
     }
     if (providers.length > 1) {
-      throw new BadRequestException('当前存在多个已启用的大模型账号，请仅保留一个启用');
+      throw new BadRequestException(
+        '当前存在多个已启用的大模型账号，请仅保留一个启用',
+      );
     }
     return providers[0];
   }
@@ -648,10 +656,7 @@ export class KnowledgeAiProvidersService {
     if (/\/chat\/completions$/.test(apiUrl)) {
       return apiUrl.replace(/\/chat\/completions$/, '/embeddings');
     }
-    return this.buildChatUrl(provider).replace(
-      /\/chat\/completions$/,
-      '/embeddings',
-    );
+    return this.appendApiPath(apiUrl, 'v1/embeddings');
   }
 
   private appendApiPath(baseUrl: string, path: string) {

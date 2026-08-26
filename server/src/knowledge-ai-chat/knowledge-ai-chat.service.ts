@@ -16,9 +16,16 @@ import {
 } from './dto/knowledge-ai-chat.dto';
 import { KnowledgeAiChatMessage } from './entities/knowledge-ai-chat-message.entity';
 import { KnowledgeAiChatSession } from './entities/knowledge-ai-chat-session.entity';
+import { KnowledgeAiChatRetrievalService } from './knowledge-ai-chat-retrieval.service';
 
 export interface KnowledgeAiChatStreamWriter {
   writeEvent: (event: string, data: unknown) => void;
+}
+
+interface KnowledgeRetrievalState {
+  configId: number | null;
+  context: string;
+  knowledgeBaseNames: string[];
 }
 
 @Injectable()
@@ -30,6 +37,7 @@ export class KnowledgeAiChatService {
     private readonly messageRepository: Repository<KnowledgeAiChatMessage>,
     private readonly featureConfigsService: AiFeatureConfigsService,
     private readonly providersService: KnowledgeAiProvidersService,
+    private readonly retrievalService: KnowledgeAiChatRetrievalService,
   ) {}
 
   async findSessions(query: QueryKnowledgeAiChatSessionDto) {
@@ -42,6 +50,7 @@ export class KnowledgeAiChatService {
           { ...baseWhere, title: Like(`%${keyword}%`) },
           { ...baseWhere, providerName: Like(`%${keyword}%`) },
           { ...baseWhere, model: Like(`%${keyword}%`) },
+          { ...baseWhere, hitKnowledgeBaseNames: Like(`%${keyword}%`) },
           { ...baseWhere, lastQuestion: Like(`%${keyword}%`) },
           { ...baseWhere, lastAnswer: Like(`%${keyword}%`) },
         ]
@@ -68,10 +77,19 @@ export class KnowledgeAiChatService {
     const { config } = await this.resolveChatFeature(dto, {
       allowDtoConfig: true,
     });
+    const retrievalConfigId = dto.retrievalConfigId ?? null;
+    const retrieval = await this.buildRetrievalState(
+      dto.question,
+      retrievalConfigId,
+    );
     const result = await this.providersService.callChat({
       id: dto.providerId ?? config?.providerId ?? undefined,
       model: dto.model ?? config?.model ?? undefined,
-      question: dto.question,
+      question: this.buildQuestionContent(dto.question, {
+        configId: retrievalConfigId,
+        context: retrieval.context,
+        knowledgeBaseNames: retrieval.knowledgeBaseNames,
+      }),
       systemPrompt: this.buildSystemMessageContent(dto.systemPrompt, config),
     });
 
@@ -88,6 +106,9 @@ export class KnowledgeAiChatService {
         systemPrompt: this.buildSystemMessageContent(dto.systemPrompt, config),
         question: dto.question.trim(),
         answer: result.answer || null,
+        hitKnowledgeBaseNames: this.serializeKnowledgeBaseNames(
+          retrieval.knowledgeBaseNames,
+        ),
         isSuccess: result.isSuccess,
         errorMessage: result.errorMessage,
         elapsedMilliseconds: result.elapsedMilliseconds,
@@ -100,6 +121,9 @@ export class KnowledgeAiChatService {
     session.messageCount += 1;
     session.lastQuestion = dto.question.trim();
     session.lastAnswer = result.answer || null;
+    session.hitKnowledgeBaseNames = this.serializeKnowledgeBaseNames(
+      retrieval.knowledgeBaseNames,
+    );
     session.isSuccess = result.isSuccess;
     session.errorMessage = result.errorMessage;
     session.elapsedMilliseconds = result.elapsedMilliseconds;
@@ -134,14 +158,31 @@ export class KnowledgeAiChatService {
       retrievalConfigName: externalApp?.retrievalConfigName ?? null,
     });
 
-    const messages = await this.buildStreamMessages(dto, config);
+    const retrieval = await this.buildRetrievalState(
+      dto.question,
+      externalApp?.retrievalConfigId ?? dto.retrievalConfigId ?? null,
+    );
+    writer.writeEvent('retrieval', {
+      retrievalConfigId: retrieval.configId,
+      hasReference: Boolean(retrieval.context),
+      referenceLength: retrieval.context.length,
+    });
+
+    const messages = await this.buildStreamMessages(dto, config, retrieval);
     const result = await this.providersService.callChatStream({
       target,
       messages,
       onDelta: (content) => writer.writeEvent('delta', { content }),
     });
 
-    const message = await this.saveMessage(dto, session, target, result, config);
+    const message = await this.saveMessage(
+      dto,
+      session,
+      target,
+      result,
+      config,
+      retrieval,
+    );
     writer.writeEvent(result.isSuccess ? 'done' : 'error', {
       sessionId: session.id,
       messageId: message.id,
@@ -236,6 +277,7 @@ export class KnowledgeAiChatService {
         messageCount: 0,
         lastQuestion: null,
         lastAnswer: null,
+        hitKnowledgeBaseNames: null,
         isSuccess: true,
         errorMessage: null,
         elapsedMilliseconds: 0,
@@ -251,6 +293,7 @@ export class KnowledgeAiChatService {
   private async buildStreamMessages(
     dto: AskKnowledgeAiDto,
     config?: AiFeatureConfig | null,
+    retrieval?: KnowledgeRetrievalState,
   ): Promise<KnowledgeAiChatMessagePayload[]> {
     const messages: KnowledgeAiChatMessagePayload[] = [
       {
@@ -271,8 +314,27 @@ export class KnowledgeAiChatService {
         }
       }
     }
-    messages.push({ role: 'user', content: dto.question.trim() });
+    messages.push({
+      role: 'user',
+      content: this.buildQuestionContent(dto.question, retrieval ?? null),
+    });
     return messages;
+  }
+
+  private async buildRetrievalState(
+    question: string,
+    configId?: number | null,
+  ): Promise<KnowledgeRetrievalState> {
+    const normalizedConfigId = configId ?? null;
+    const result = await this.retrievalService.buildReferenceResult(
+      question,
+      normalizedConfigId,
+    );
+    return {
+      configId: normalizedConfigId,
+      context: result.context,
+      knowledgeBaseNames: result.knowledgeBaseNames,
+    };
   }
 
   private async saveMessage(
@@ -287,7 +349,11 @@ export class KnowledgeAiChatService {
       elapsedMilliseconds: number;
     },
     config?: AiFeatureConfig | null,
+    retrieval?: KnowledgeRetrievalState,
   ) {
+    const hitKnowledgeBaseNames = this.serializeKnowledgeBaseNames(
+      retrieval?.knowledgeBaseNames ?? [],
+    );
     const message = await this.messageRepository.save(
       this.messageRepository.create({
         sessionId: session.id,
@@ -297,6 +363,7 @@ export class KnowledgeAiChatService {
         systemPrompt: this.buildSystemMessageContent(dto.systemPrompt, config),
         question: dto.question.trim(),
         answer: result.answer || null,
+        hitKnowledgeBaseNames,
         isSuccess: result.isSuccess,
         errorMessage: result.errorMessage,
         elapsedMilliseconds: result.elapsedMilliseconds,
@@ -309,11 +376,19 @@ export class KnowledgeAiChatService {
     session.messageCount += 1;
     session.lastQuestion = dto.question.trim();
     session.lastAnswer = result.answer || null;
+    session.hitKnowledgeBaseNames = hitKnowledgeBaseNames;
     session.isSuccess = result.isSuccess;
     session.errorMessage = result.errorMessage;
     session.elapsedMilliseconds = result.elapsedMilliseconds;
     await this.sessionRepository.save(session);
     return message;
+  }
+
+  private serializeKnowledgeBaseNames(names: string[]) {
+    const uniqueNames = Array.from(
+      new Set(names.map((item) => item.trim()).filter(Boolean)),
+    );
+    return uniqueNames.length ? uniqueNames.join('、') : null;
   }
 
   private async resolveChatFeature(
@@ -329,11 +404,11 @@ export class KnowledgeAiChatService {
     const useRequestTarget = !options.externalApp;
     const target = await this.providersService.resolveChatTarget({
       id: useRequestTarget
-        ? dto.providerId ?? config?.providerId ?? undefined
-        : config?.providerId ?? undefined,
+        ? (dto.providerId ?? config?.providerId ?? undefined)
+        : (config?.providerId ?? undefined),
       model: useRequestTarget
-        ? dto.model ?? config?.model ?? undefined
-        : config?.model ?? undefined,
+        ? (dto.model ?? config?.model ?? undefined)
+        : (config?.model ?? undefined),
     });
     return { target, config };
   }
@@ -350,6 +425,32 @@ export class KnowledgeAiChatService {
       this.buildResponseFormatInstruction(config?.responseFormat),
     ].filter(Boolean);
     return parts.join('\n\n');
+  }
+
+  private buildQuestionContent(
+    question: string,
+    retrieval?: KnowledgeRetrievalState | null,
+  ) {
+    const trimmedQuestion = question.trim();
+    if (!retrieval?.configId) return trimmedQuestion;
+    if (!retrieval.context) {
+      return [
+        '当前问题已启用知识库检索，但没有检索到任何可用参考资料。',
+        '你必须只基于知识库参考资料回答，严禁使用互联网常识、模型训练知识或自行推测。',
+        '因此本次应明确回答：知识库中未找到相关内容，无法确认。',
+        '',
+        `用户问题：\n${trimmedQuestion}`,
+      ].join('\n');
+    }
+    return [
+      '你必须只依据以下知识库参考资料回答用户问题。',
+      '严禁使用互联网常识、模型训练知识或自行推测补充答案。',
+      '如果参考资料不足以回答，请明确说明“知识库中未找到相关内容，无法确认”。',
+      '',
+      `知识库参考资料：\n${retrieval.context}`,
+      '',
+      `用户问题：\n${trimmedQuestion}`,
+    ].join('\n');
   }
 
   private buildResponseFormatInstruction(format?: string | null) {

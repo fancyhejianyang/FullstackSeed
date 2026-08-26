@@ -12,11 +12,17 @@ interface RetrievalCandidate {
   key: string;
   title: string;
   content: string;
+  knowledgeBaseName: string;
   sourceName: string;
   hitKeywords: string;
   colloquialDescription: string;
   matchPriority: number;
   score: number;
+}
+
+export interface KnowledgeRetrievalResult {
+  context: string;
+  knowledgeBaseNames: string[];
 }
 
 @Injectable()
@@ -34,14 +40,22 @@ export class KnowledgeAiChatRetrievalService {
   ) {}
 
   async buildReferenceContext(question: string, configId?: number | null) {
-    if (!configId) return '';
+    return (await this.buildReferenceResult(question, configId)).context;
+  }
 
-    const config = await this.retrievalConfigsService.findUsableConfig(configId);
+  async buildReferenceResult(
+    question: string,
+    configId?: number | null,
+  ): Promise<KnowledgeRetrievalResult> {
+    if (!configId) return { context: '', knowledgeBaseNames: [] };
+
+    const config =
+      await this.retrievalConfigsService.findUsableConfig(configId);
     const baseIds = await this.resolveKnowledgeBaseIds(
       config.knowledgeBaseIds ?? [],
       config.categoryIds ?? [],
     );
-    if (!baseIds.length) return '';
+    if (!baseIds.length) return { context: '', knowledgeBaseNames: [] };
 
     const retrievalMode = config.retrievalMode || 'hybrid';
     const textWeight = Number(config.textWeight ?? 0.8);
@@ -73,20 +87,31 @@ export class KnowledgeAiChatRetrievalService {
       .sort((a, b) => b.score - a.score || b.matchPriority - a.matchPriority)
       .slice(0, config.topK || 10);
 
-    if (!scored.length) return '';
+    if (!scored.length) return { context: '', knowledgeBaseNames: [] };
 
-    return scored
-      .map((candidate, index) => {
-        const source = candidate.sourceName ? `来源：${candidate.sourceName}\n` : '';
-        return [
-          `[${index + 1}] ${candidate.title}`,
-          source,
-          this.truncate(candidate.content, 900),
-        ]
-        .filter(Boolean)
-        .join('\n');
-      })
-      .join('\n\n');
+    return {
+      context: scored
+        .map((candidate, index) => {
+          const source = candidate.sourceName
+            ? `来源：${candidate.sourceName}\n`
+            : '';
+          return [
+            `[${index + 1}] ${candidate.title}`,
+            source,
+            this.truncate(candidate.content, 900),
+          ]
+            .filter(Boolean)
+            .join('\n');
+        })
+        .join('\n\n'),
+      knowledgeBaseNames: Array.from(
+        new Set(
+          scored
+            .map((candidate) => candidate.knowledgeBaseName)
+            .filter(Boolean),
+        ),
+      ),
+    };
   }
 
   private mergeCandidates(
@@ -170,6 +195,7 @@ export class KnowledgeAiChatRetrievalService {
             key: `chunk:${chunk.id}`,
             title: chunk.title || document?.title || base?.name || '知识片段',
             content: chunk.content,
+            knowledgeBaseName: base?.name || '',
             sourceName: document?.sourceName || base?.name || '',
             hitKeywords: document?.hitKeywords || base?.hitKeywords || '',
             colloquialDescription:
@@ -189,6 +215,7 @@ export class KnowledgeAiChatRetrievalService {
           key: `document:${document.id}`,
           title: document.title,
           content: document.content || '',
+          knowledgeBaseName: baseMap.get(document.knowledgeBaseId)?.name || '',
           sourceName: document.sourceName,
           hitKeywords: document.hitKeywords || '',
           colloquialDescription: document.colloquialDescription || '',
@@ -202,6 +229,7 @@ export class KnowledgeAiChatRetrievalService {
           key: `base:${base.id}`,
           title: base.name,
           content: base.contentText || '',
+          knowledgeBaseName: base.name,
           sourceName: base.name,
           hitKeywords: base.hitKeywords || '',
           colloquialDescription: base.colloquialDescription || '',
@@ -226,16 +254,27 @@ export class KnowledgeAiChatRetrievalService {
         topK,
         where: { knowledgeBaseId: { $in: baseIds } },
       });
+      const bases = await this.knowledgeBaseRepository.find({
+        where: { id: In(baseIds) },
+      });
+      const baseMap = new Map(bases.map((item) => [item.id, item.name]));
       return results
         .map((item) => {
           const metadata = item.metadata ?? {};
+          const knowledgeBaseId = Number(metadata.knowledgeBaseId || 0);
           return this.toCandidate({
             key: `chunk:${Number(metadata.chunkId || 0)}`,
-            title: String(metadata.title || '知识片段'),
+            title: this.metadataToString(metadata.title, '知识片段'),
             content: item.document || '',
-            sourceName: String(metadata.sourceName || ''),
-            hitKeywords: String(metadata.hitKeywords || ''),
-            colloquialDescription: String(metadata.colloquialDescription || ''),
+            knowledgeBaseName:
+              this.metadataToString(metadata.knowledgeBaseName) ||
+              baseMap.get(knowledgeBaseId) ||
+              '',
+            sourceName: this.metadataToString(metadata.sourceName),
+            hitKeywords: this.metadataToString(metadata.hitKeywords),
+            colloquialDescription: this.metadataToString(
+              metadata.colloquialDescription,
+            ),
             matchPriority: Number(metadata.matchPriority || 0),
             score:
               item.score * 10 * vectorWeight +
@@ -259,7 +298,8 @@ export class KnowledgeAiChatRetrievalService {
   private buildSearchTerms(question: string) {
     const normalized = question.toLowerCase().trim();
     const terms = new Set<string>();
-    for (const item of normalized.match(/[a-z0-9_]{2,}|[\u4e00-\u9fa5]{2,}/g) ?? []) {
+    for (const item of normalized.match(/[a-z0-9_]{2,}|[\u4e00-\u9fa5]{2,}/g) ??
+      []) {
       terms.add(item);
       if (/^[\u4e00-\u9fa5]+$/.test(item) && item.length > 2) {
         for (let index = 0; index < item.length - 1 && index < 30; index += 1) {
@@ -294,5 +334,11 @@ export class KnowledgeAiChatRetrievalService {
 
   private truncate(value: string, maxLength: number) {
     return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
+  }
+
+  private metadataToString(value: unknown, fallback = '') {
+    return typeof value === 'string' || typeof value === 'number'
+      ? String(value)
+      : fallback;
   }
 }

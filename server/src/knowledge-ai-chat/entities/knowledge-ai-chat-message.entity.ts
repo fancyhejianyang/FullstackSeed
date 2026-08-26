@@ -24,6 +24,9 @@ export class KnowledgeAiChatMessage extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   answer: string | null;
 
+  @Column({ type: 'text', nullable: true })
+  hitKnowledgeBaseNames: string | null;
+
   @Column({ type: 'tinyint', default: true })
   isSuccess: boolean;
 

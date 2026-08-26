@@ -70,4 +70,3 @@ export class AiFeatureConfigsController {
     return this.configsService.batchRemove(dto.ids);
   }
 }
-

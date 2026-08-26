@@ -114,9 +114,7 @@ function fillForm(data: ExternalApp) {
   form.aiFeatureConfigId =
     data.aiFeatureConfigId ??
     (chatConfigs.value.length === 1 ? chatConfigs.value[0].id : null);
-  form.retrievalConfigId =
-    data.retrievalConfigId ??
-    (retrievalConfigs.value.length === 1 ? retrievalConfigs.value[0].id : null);
+  form.retrievalConfigId = data.retrievalConfigId ?? null;
   form.isEnabled = !!data.isEnabled;
   form.description = data.description ?? '';
 }

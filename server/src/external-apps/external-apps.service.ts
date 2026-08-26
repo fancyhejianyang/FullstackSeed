@@ -60,10 +60,14 @@ export class ExternalAppsService {
     const appId = dto.appId?.trim() || (await this.generateAppId());
     await this.assertAppIdUnique(appId);
     const config = dto.aiFeatureConfigId
-      ? await this.featureConfigsService.findUsableChatConfig(dto.aiFeatureConfigId)
+      ? await this.featureConfigsService.findUsableChatConfig(
+          dto.aiFeatureConfigId,
+        )
       : null;
     const retrievalConfig = dto.retrievalConfigId
-      ? await this.retrievalConfigsService.findUsableConfig(dto.retrievalConfigId)
+      ? await this.retrievalConfigsService.findUsableConfig(
+          dto.retrievalConfigId,
+        )
       : null;
     return this.externalAppRepository.save(
       this.externalAppRepository.create({
@@ -96,14 +100,18 @@ export class ExternalAppsService {
     if (dto.domain !== undefined) app.domain = this.toNullableText(dto.domain);
     if (dto.aiFeatureConfigId !== undefined) {
       const config = dto.aiFeatureConfigId
-        ? await this.featureConfigsService.findUsableChatConfig(dto.aiFeatureConfigId)
+        ? await this.featureConfigsService.findUsableChatConfig(
+            dto.aiFeatureConfigId,
+          )
         : null;
       app.aiFeatureConfigId = config?.id ?? null;
       app.aiFeatureConfigName = config?.name ?? null;
     }
     if (dto.retrievalConfigId !== undefined) {
       const retrievalConfig = dto.retrievalConfigId
-        ? await this.retrievalConfigsService.findUsableConfig(dto.retrievalConfigId)
+        ? await this.retrievalConfigsService.findUsableConfig(
+            dto.retrievalConfigId,
+          )
         : null;
       app.retrievalConfigId = retrievalConfig?.id ?? null;
       app.retrievalConfigName = retrievalConfig?.name ?? null;
@@ -150,9 +158,10 @@ export class ExternalAppsService {
     }
     this.assertDomainAllowed(app, requestDomain);
     if (app.retrievalConfigId) {
-      const retrievalConfig = await this.retrievalConfigsService.findUsableConfig(
-        app.retrievalConfigId,
-      );
+      const retrievalConfig =
+        await this.retrievalConfigsService.findUsableConfig(
+          app.retrievalConfigId,
+        );
       app.retrievalConfigName = retrievalConfig.name;
     }
     return app;

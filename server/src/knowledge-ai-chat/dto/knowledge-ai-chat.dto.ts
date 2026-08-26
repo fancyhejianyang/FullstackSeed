@@ -34,6 +34,12 @@ export class AskKnowledgeAiDto {
   @IsInt()
   @Min(1)
   @IsOptional()
+  retrievalConfigId?: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @IsOptional()
   sessionId?: number;
 
   @IsString()
