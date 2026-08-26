@@ -117,11 +117,15 @@ function getFeatureLabel(value: AiFeatureType) {
       </template>
 
       <template #column-executeMode="{ row }">
-        {{ row.featureType === 'ocr' && row.useMineru ? 'MinerU' : '模型' }}
+        {{ ['ocr', 'documentParse'].includes(row.featureType) && row.useMineru ? 'MinerU' : '模型' }}
       </template>
 
       <template #column-providerName="{ row }">
-        {{ row.featureType === 'ocr' && row.useMineru ? row.mineruConfigName || '-' : row.providerName || '-' }}
+        {{
+          ['ocr', 'documentParse'].includes(row.featureType) && row.useMineru
+            ? row.mineruConfigName || '-'
+            : row.providerName || '-'
+        }}
       </template>
 
       <template #column-model="{ row }">

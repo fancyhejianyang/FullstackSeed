@@ -30,7 +30,10 @@ export class CreateAiFeatureConfigDto {
 
   @ValidateIf(
     (dto: CreateAiFeatureConfigDto) =>
-      !(dto.featureType === 'ocr' && dto.useMineru),
+      !(
+        (dto.featureType === 'ocr' || dto.featureType === 'documentParse') &&
+        dto.useMineru
+      ),
   )
   @Type(() => Number)
   @IsInt()
@@ -39,7 +42,10 @@ export class CreateAiFeatureConfigDto {
 
   @ValidateIf(
     (dto: CreateAiFeatureConfigDto) =>
-      !(dto.featureType === 'ocr' && dto.useMineru),
+      !(
+        (dto.featureType === 'ocr' || dto.featureType === 'documentParse') &&
+        dto.useMineru
+      ),
   )
   @IsString()
   @IsNotEmpty()
@@ -64,7 +70,8 @@ export class CreateAiFeatureConfigDto {
 
   @ValidateIf(
     (dto: CreateAiFeatureConfigDto) =>
-      dto.featureType === 'ocr' && !!dto.useMineru,
+      (dto.featureType === 'ocr' || dto.featureType === 'documentParse') &&
+      !!dto.useMineru,
   )
   @Type(() => Number)
   @IsInt()

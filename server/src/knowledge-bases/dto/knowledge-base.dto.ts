@@ -85,9 +85,9 @@ export class UpdateKnowledgeBaseDto extends PartialType(
 ) {}
 
 export class ParseKnowledgeBaseDto {
-  @IsIn(['manual', 'ocr', 'mineru'])
+  @IsIn(['manual', 'ai', 'ocr', 'mineru'])
   @IsOptional()
-  parseMode?: 'manual' | 'ocr' | 'mineru';
+  parseMode?: 'manual' | 'ai' | 'ocr' | 'mineru';
 }
 
 export class QueryKnowledgeBaseDto {
@@ -412,9 +412,9 @@ export class ParseKnowledgeBaseDocumentDto extends CreateKnowledgeBaseMineruTask
 }
 
 export class ParseKnowledgeBaseDocumentRequestDto {
-  @IsIn(['manual', 'ocr', 'mineru'])
+  @IsIn(['manual', 'ai', 'ocr', 'mineru'])
   @IsOptional()
-  parseMode?: 'manual' | 'ocr' | 'mineru';
+  parseMode?: 'manual' | 'ai' | 'ocr' | 'mineru';
 
   @IsUrl({ require_tld: false })
   @IsOptional()

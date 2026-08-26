@@ -53,6 +53,7 @@ export interface KnowledgeBaseCategoryTreeNode extends KnowledgeBaseCategory {
 
 const KNOWLEDGE_PARSE_MODE = {
   manual: 'manual',
+  ai: 'ai',
   ocr: 'ocr',
   mineru: 'mineru',
 } as const;
@@ -111,6 +112,36 @@ export class KnowledgeBasesService implements OnModuleInit {
     return config;
   }
 
+  private async resolveDocumentParseFeatureConfig(): Promise<AiFeatureConfig> {
+    const config =
+      await this.aiFeatureConfigsService.findEnabledByFeature('documentParse');
+    if (!config) {
+      throw new BadRequestException('请先配置并启用文档解析功能配置');
+    }
+    if (config.useMineru && !config.mineruConfigId) {
+      throw new BadRequestException('文档解析功能配置缺少 MinerU 配置');
+    }
+    if (!config.useMineru && (!config.providerId || !config.model?.trim())) {
+      throw new BadRequestException('文档解析功能配置缺少大模型账号或模型');
+    }
+    return config;
+  }
+
+  private async resolveEnabledMineruParseConfig(): Promise<AiFeatureConfig | null> {
+    const [documentParseConfig, ocrConfig] = await Promise.all([
+      this.aiFeatureConfigsService.findEnabledByFeature('documentParse'),
+      this.aiFeatureConfigsService.findEnabledByFeature('ocr'),
+    ]);
+    const config = [documentParseConfig, ocrConfig].find(
+      (item) => item?.useMineru,
+    );
+    if (!config) return null;
+    if (!config.mineruConfigId) {
+      throw new BadRequestException('AI 模型解析启用了 MinerU，但缺少 MinerU 配置');
+    }
+    return config;
+  }
+
   private async resolveMineruOcrFeatureConfig(): Promise<AiFeatureConfig> {
     const config = await this.resolveOcrFeatureConfig();
     if (!config.useMineru) {
@@ -122,7 +153,11 @@ export class KnowledgeBasesService implements OnModuleInit {
   private async resumeProcessingMineruDocuments() {
     const documents = await this.documentRepository.find({
       where: {
-        sourceType: In([KNOWLEDGE_PARSE_MODE.ocr, KNOWLEDGE_PARSE_MODE.mineru]),
+        sourceType: In([
+          KNOWLEDGE_PARSE_MODE.ai,
+          KNOWLEDGE_PARSE_MODE.ocr,
+          KNOWLEDGE_PARSE_MODE.mineru,
+        ]),
         status: 'processing',
         description: Like('%任务ID：%'),
       },
@@ -176,7 +211,7 @@ export class KnowledgeBasesService implements OnModuleInit {
       });
     } catch (error) {
       const errorMessage =
-        error instanceof Error ? error.message : 'OCR 解析恢复失败';
+        error instanceof Error ? error.message : 'AI 模型解析恢复失败';
       document.status = 'failed';
       document.description = errorMessage;
       await this.documentRepository.save(document);
@@ -201,22 +236,22 @@ export class KnowledgeBasesService implements OnModuleInit {
       const savedDocument = await this.saveBaseDocument(
         base,
         content,
-        KNOWLEDGE_PARSE_MODE.ocr,
+        KNOWLEDGE_PARSE_MODE.ai,
       );
       await this.updateBaseProcess(base, {
         processStage: 'parsed',
         parseStatus: 'success',
         chunkStatus: 'pending',
         indexStatus: 'pending',
-        lastProcessMessage: 'OCR 解析恢复完成，等待分片',
+        lastProcessMessage: 'AI 模型解析恢复完成，等待分片',
       });
       await this.recordKnowledgeProcessLog(base, {
-        action: this.getParseLogAction(KNOWLEDGE_PARSE_MODE.ocr),
+        action: this.getParseLogAction(KNOWLEDGE_PARSE_MODE.ai),
         isSuccess: true,
-        message: 'OCR 解析恢复完成，等待分片',
+        message: 'AI 模型解析恢复完成，等待分片',
         data: {
           documentId: savedDocument.id,
-          parseMode: KNOWLEDGE_PARSE_MODE.ocr,
+          parseMode: KNOWLEDGE_PARSE_MODE.ai,
         },
       });
       await this.taskFileLogger.write('mineru.resume.base.success', {
@@ -239,14 +274,14 @@ export class KnowledgeBasesService implements OnModuleInit {
       result.raw,
     );
     await this.recordKnowledgeDocumentProcessLog(saved.document, {
-      action: this.getParseLogAction(KNOWLEDGE_PARSE_MODE.ocr),
+      action: this.getParseLogAction(KNOWLEDGE_PARSE_MODE.ai),
       isSuccess: true,
-      message: 'OCR 解析恢复完成',
+      message: 'AI 模型解析恢复完成',
       data: {
         documentId: saved.document.id,
         knowledgeBaseId: saved.document.knowledgeBaseId,
         chunkCount: saved.chunkCount,
-        parseMode: KNOWLEDGE_PARSE_MODE.ocr,
+        parseMode: KNOWLEDGE_PARSE_MODE.ai,
       },
     });
     await this.taskFileLogger.write('mineru.resume.document.success', {
@@ -1028,16 +1063,20 @@ export class KnowledgeBasesService implements OnModuleInit {
   async parseDocument(id: number, dto: ParseKnowledgeBaseDocumentRequestDto) {
     const parseMode = this.resolveParseMode(dto.parseMode);
     const document = await this.findDocument(id);
-    if (parseMode === KNOWLEDGE_PARSE_MODE.ocr && !dto.fileUrl) {
+    if (
+      parseMode === KNOWLEDGE_PARSE_MODE.ai &&
+      !dto.fileUrl &&
+      document.sourceType !== 'text'
+    ) {
       document.status = 'failed';
-      document.description = 'OCR 解析需要提供文件 URL';
+      document.description = 'AI 模型解析需要提供文件 URL';
       await this.documentRepository.save(document);
-      throw new BadRequestException('OCR 解析需要提供文件 URL');
+      throw new BadRequestException('AI 模型解析需要提供文件 URL');
     }
-    if (parseMode === KNOWLEDGE_PARSE_MODE.ocr) {
+    if (parseMode === KNOWLEDGE_PARSE_MODE.ai && dto.fileUrl) {
       await this.assertSupportedDocumentFileForDocument(
         document,
-        dto.fileUrl!,
+        dto.fileUrl,
         dto.fileName,
       );
     }
@@ -1125,8 +1164,8 @@ export class KnowledgeBasesService implements OnModuleInit {
     dto: ParseKnowledgeBaseDocumentRequestDto,
     parseMode: KnowledgeParseMode,
   ) {
-    if (parseMode === KNOWLEDGE_PARSE_MODE.ocr) {
-      return this.executeDocumentOcrParse(document, {
+    if (parseMode === KNOWLEDGE_PARSE_MODE.ai) {
+      return this.executeDocumentAiModelParse(document, {
         fileUrl: dto.fileUrl!,
         fileName: dto.fileName,
         waitForResult: dto.waitForResult,
@@ -1166,15 +1205,100 @@ export class KnowledgeBasesService implements OnModuleInit {
     };
   }
 
-  private async executeDocumentOcrParse(
+  private async executeDocumentAiModelParse(
     document: KnowledgeBaseDocument,
     dto: ParseKnowledgeBaseDocumentDto,
   ) {
-    const ocrConfig = await this.resolveOcrFeatureConfig();
-    if (ocrConfig.useMineru) {
-      return this.executeDocumentThirdPartyParse(document, dto, ocrConfig);
+    const mineruConfig = await this.resolveEnabledMineruParseConfig();
+    if (mineruConfig && dto.fileUrl?.trim()) {
+      return this.executeDocumentThirdPartyParse(document, dto, mineruConfig);
     }
-    return this.executeDocumentVisionOcrParse(document, dto, ocrConfig);
+    const fileName = dto.fileName?.trim() || document.sourceName;
+    const contentType = this.resolveAiModelParseContentType(
+      document.sourceType,
+      fileName,
+      document.content,
+    );
+    if (contentType === 'pdf' || contentType === 'image') {
+      return this.executeDocumentVisionOcrParse(
+        document,
+        dto,
+        await this.resolveOcrFeatureConfig(),
+      );
+    }
+    return this.executeDocumentTextModelParse(
+      document,
+      dto,
+      contentType,
+      await this.resolveDocumentParseFeatureConfig(),
+    );
+  }
+
+  private async executeDocumentTextModelParse(
+    document: KnowledgeBaseDocument,
+    dto: ParseKnowledgeBaseDocumentDto,
+    contentType: 'text' | 'word',
+    config: AiFeatureConfig,
+  ) {
+    const fileName = dto.fileName?.trim() || document.sourceName;
+    const sourceContent = await this.resolveDocumentTextModelSourceContent(
+      document,
+      dto,
+      contentType,
+    );
+    const result = await this.providersService.callChat({
+      id: config.providerId!,
+      model: config.model!,
+      systemPrompt:
+        config.systemPrompt ||
+        '你是文档解析助手。请将输入内容整理为适合知识库保存的正文。',
+      question: this.buildDocumentParseQuestion({
+        content: sourceContent,
+        fileName,
+        contentType,
+        rules: config.rules,
+        responseFormat: config.responseFormat,
+      }),
+    });
+    if (!result.isSuccess) {
+      throw new BadRequestException(result.errorMessage || '文档解析模型调用失败');
+    }
+    const content = result.answer.trim();
+    if (!content) {
+      throw new BadRequestException('文档解析模型结果缺少解析正文');
+    }
+    document.content = content;
+    document.status = 'parsed';
+    document.sourceType = KNOWLEDGE_PARSE_MODE.ai;
+    document.sourceName = fileName || document.sourceName;
+    let saved = await this.documentRepository.save(document);
+    await this.syncBaseParsedContent(saved, content);
+    await this.deleteVectorsByCondition({ documentId: saved.id });
+    await this.chunkRepository.softDelete({ documentId: saved.id });
+    const chunkCount = await this.saveDocumentChunks(saved);
+    saved.description = chunkCount
+      ? `AI 模型解析完成，共 ${chunkCount} 个分片`
+      : 'AI 模型解析完成，等待手动分片';
+    saved = await this.documentRepository.save(saved);
+    await this.taskFileLogger.write('document.ai-text-parse.success', {
+      documentId: saved.id,
+      knowledgeBaseId: saved.knowledgeBaseId,
+      providerId: result.providerId,
+      providerName: result.providerName,
+      model: result.model,
+      contentType,
+      sourceContentLength: sourceContent.length,
+      contentLength: content.length,
+      chunkCount,
+      elapsedMilliseconds: result.elapsedMilliseconds,
+    });
+    return {
+      document: saved,
+      documentId: saved.id,
+      isCompleted: true,
+      chunkCount,
+      parseMode: KNOWLEDGE_PARSE_MODE.ai,
+    };
   }
 
   private async executeDocumentVisionOcrParse(
@@ -1184,7 +1308,7 @@ export class KnowledgeBasesService implements OnModuleInit {
   ) {
     const fileUrl = dto.fileUrl?.trim();
     if (!fileUrl) {
-      throw new BadRequestException('OCR 解析需要提供文件 URL');
+      throw new BadRequestException('AI 模型解析需要提供文件 URL');
     }
     const fileName = dto.fileName?.trim() || document.sourceName;
     const contentType = this.resolveOcrContentType(document.sourceType, fileName);
@@ -1217,6 +1341,8 @@ export class KnowledgeBasesService implements OnModuleInit {
       target,
       imageDataUrls,
       systemPrompt: ocrConfig.systemPrompt,
+      rules: ocrConfig.rules,
+      responseFormat: ocrConfig.responseFormat,
     });
     if (!result.isSuccess) {
       throw new BadRequestException(
@@ -1229,7 +1355,7 @@ export class KnowledgeBasesService implements OnModuleInit {
     }
     document.content = content;
     document.status = 'parsed';
-    document.sourceType = KNOWLEDGE_PARSE_MODE.ocr;
+    document.sourceType = KNOWLEDGE_PARSE_MODE.ai;
     document.sourceName = fileName;
     let saved = await this.documentRepository.save(document);
     await this.syncBaseParsedContent(saved, content);
@@ -1237,8 +1363,8 @@ export class KnowledgeBasesService implements OnModuleInit {
     await this.chunkRepository.softDelete({ documentId: saved.id });
     const chunkCount = await this.saveDocumentChunks(saved);
     saved.description = chunkCount
-      ? `OCR 解析完成，共 ${chunkCount} 个分片`
-      : 'OCR 解析完成，等待手动分片';
+      ? `AI 模型解析完成，共 ${chunkCount} 个分片`
+      : 'AI 模型解析完成，等待手动分片';
     saved = await this.documentRepository.save(saved);
     await this.taskFileLogger.write('document.vision-ocr.success', {
       documentId: saved.id,
@@ -1256,7 +1382,7 @@ export class KnowledgeBasesService implements OnModuleInit {
       documentId: saved.id,
       isCompleted: true,
       chunkCount,
-      parseMode: KNOWLEDGE_PARSE_MODE.ocr,
+      parseMode: KNOWLEDGE_PARSE_MODE.ai,
     };
   }
 
@@ -1290,7 +1416,7 @@ export class KnowledgeBasesService implements OnModuleInit {
       configName: task.configName,
     });
     document.status = 'processing';
-    document.description = `OCR 解析任务已创建，任务ID：${task.taskId}`;
+    document.description = `AI 模型解析任务已创建，任务ID：${task.taskId}`;
     await this.documentRepository.save(document);
     const result = await this.mineruConfigsService.waitForSuccess(task.taskId, {
       configId: task.configId,
@@ -1324,7 +1450,7 @@ export class KnowledgeBasesService implements OnModuleInit {
       documentId: document.id,
       isCompleted: true,
       chunkCount: saved.chunkCount,
-      parseMode: KNOWLEDGE_PARSE_MODE.ocr,
+      parseMode: KNOWLEDGE_PARSE_MODE.ai,
     };
   }
 
@@ -1832,18 +1958,19 @@ export class KnowledgeBasesService implements OnModuleInit {
   }
 
   private resolveParseMode(mode?: string | null): KnowledgeParseMode {
-    return mode === KNOWLEDGE_PARSE_MODE.ocr ||
+    return mode === KNOWLEDGE_PARSE_MODE.ai ||
+      mode === KNOWLEDGE_PARSE_MODE.ocr ||
       mode === KNOWLEDGE_PARSE_MODE.mineru
-      ? KNOWLEDGE_PARSE_MODE.ocr
+      ? KNOWLEDGE_PARSE_MODE.ai
       : KNOWLEDGE_PARSE_MODE.manual;
   }
 
   private getParseModeLabel(mode: KnowledgeParseMode) {
-    return mode === KNOWLEDGE_PARSE_MODE.manual ? '手动解析' : 'OCR 解析';
+    return mode === KNOWLEDGE_PARSE_MODE.manual ? '手动解析' : 'AI 模型解析';
   }
 
   private getParseLogAction(mode: KnowledgeParseMode) {
-    return mode === KNOWLEDGE_PARSE_MODE.manual ? 'manualParse' : 'ocrParse';
+    return mode === KNOWLEDGE_PARSE_MODE.manual ? 'manualParse' : 'aiModelParse';
   }
 
   private async recordKnowledgeProcessLog(
@@ -1915,7 +2042,10 @@ export class KnowledgeBasesService implements OnModuleInit {
       if (!content) {
         throw new BadRequestException('文本知识库缺少文本内容');
       }
-      return content;
+      if (parseMode === KNOWLEDGE_PARSE_MODE.manual) {
+        return content;
+      }
+      return this.parseBaseWithAiModelConfig(base);
     }
     if (!base.fileUrl) {
       throw new BadRequestException('文件知识库缺少上传文件');
@@ -1931,15 +2061,27 @@ export class KnowledgeBasesService implements OnModuleInit {
       });
     }
 
-    return this.parseBaseWithOcrConfig(base);
+    return this.parseBaseWithAiModelConfig(base);
   }
 
-  private async parseBaseWithOcrConfig(base: KnowledgeBase) {
-    const ocrConfig = await this.resolveOcrFeatureConfig();
-    if (ocrConfig.useMineru) {
-      return this.parseBaseWithThirdParty(base, ocrConfig);
+  private async parseBaseWithAiModelConfig(base: KnowledgeBase) {
+    const mineruConfig = await this.resolveEnabledMineruParseConfig();
+    if (mineruConfig && base.fileUrl) {
+      return this.parseBaseWithThirdParty(base, mineruConfig);
     }
-    return this.parseBaseWithVisionOcr(base, ocrConfig);
+    const contentType = this.resolveAiModelParseContentType(
+      base.contentType,
+      base.fileName || base.fileUrl,
+      base.contentText,
+    );
+    if (contentType === 'pdf' || contentType === 'image') {
+      return this.parseBaseWithVisionOcr(base, await this.resolveOcrFeatureConfig());
+    }
+    return this.parseBaseWithDocumentModel(
+      base,
+      contentType,
+      await this.resolveDocumentParseFeatureConfig(),
+    );
   }
 
   private async parseBaseWithVisionOcr(
@@ -1947,7 +2089,7 @@ export class KnowledgeBasesService implements OnModuleInit {
     ocrConfig: AiFeatureConfig,
   ) {
     if (!base.fileUrl) {
-      throw new BadRequestException('OCR 解析缺少文件 URL');
+      throw new BadRequestException('AI 模型解析缺少文件 URL');
     }
     const contentType = this.resolveOcrContentType(
       base.contentType,
@@ -1982,6 +2124,8 @@ export class KnowledgeBasesService implements OnModuleInit {
       target,
       imageDataUrls,
       systemPrompt: ocrConfig.systemPrompt,
+      rules: ocrConfig.rules,
+      responseFormat: ocrConfig.responseFormat,
     });
     if (!result.isSuccess) {
       throw new BadRequestException(
@@ -1999,6 +2143,50 @@ export class KnowledgeBasesService implements OnModuleInit {
       providerName: result.providerName,
       model: result.model,
       imageCount: imageDataUrls.length,
+      contentLength: content.length,
+      elapsedMilliseconds: result.elapsedMilliseconds,
+    });
+    return content;
+  }
+
+  private async parseBaseWithDocumentModel(
+    base: KnowledgeBase,
+    contentType: 'text' | 'word',
+    config: AiFeatureConfig,
+  ) {
+    const sourceContent = await this.resolveBaseTextModelSourceContent(
+      base,
+      contentType,
+    );
+    const result = await this.providersService.callChat({
+      id: config.providerId!,
+      model: config.model!,
+      systemPrompt:
+        config.systemPrompt ||
+        '你是文档解析助手。请将输入内容整理为适合知识库保存的正文。',
+      question: this.buildDocumentParseQuestion({
+        content: sourceContent,
+        fileName: base.fileName || base.name,
+        contentType,
+        rules: config.rules,
+        responseFormat: config.responseFormat,
+      }),
+    });
+    if (!result.isSuccess) {
+      throw new BadRequestException(result.errorMessage || '文档解析模型调用失败');
+    }
+    const content = result.answer.trim();
+    if (!content) {
+      throw new BadRequestException('文档解析模型结果缺少解析正文');
+    }
+    await this.taskFileLogger.write('base.ai-text-parse.success', {
+      knowledgeBaseId: base.id,
+      knowledgeBaseName: base.name,
+      providerId: result.providerId,
+      providerName: result.providerName,
+      model: result.model,
+      contentType,
+      sourceContentLength: sourceContent.length,
       contentLength: content.length,
       elapsedMilliseconds: result.elapsedMilliseconds,
     });
@@ -2043,7 +2231,7 @@ export class KnowledgeBasesService implements OnModuleInit {
     await this.updateBaseProcess(base, {
       processStage: 'parsing',
       parseStatus: 'processing',
-      lastProcessMessage: `OCR 解析任务已创建，任务ID：${task.taskId}`,
+      lastProcessMessage: `AI 模型解析任务已创建，任务ID：${task.taskId}`,
     });
     try {
       const result = await this.mineruConfigsService.waitForSuccess(
@@ -2074,7 +2262,7 @@ export class KnowledgeBasesService implements OnModuleInit {
     } catch (error) {
       document.status = 'failed';
       document.description =
-        error instanceof Error ? error.message : 'OCR 解析失败';
+        error instanceof Error ? error.message : 'AI 模型解析失败';
       await this.documentRepository.save(document);
       await this.taskFileLogger.write('base.mineru.wait.failed', {
         knowledgeBaseId: base.id,
@@ -2106,10 +2294,10 @@ export class KnowledgeBasesService implements OnModuleInit {
     document.knowledgeBaseId = base.id;
     document.categoryId = base.categoryId;
     document.title = base.name;
-    document.sourceType = KNOWLEDGE_PARSE_MODE.ocr;
+    document.sourceType = KNOWLEDGE_PARSE_MODE.ai;
     document.sourceName = fileName || base.fileName || base.name;
     document.status = 'processing';
-    document.description = `OCR 解析任务已创建，任务ID：${taskId}`;
+    document.description = `AI 模型解析任务已创建，任务ID：${taskId}`;
     document.hitKeywords = base.hitKeywords;
     document.colloquialDescription = base.colloquialDescription;
     document.matchPriority = base.matchPriority;
@@ -2195,7 +2383,7 @@ export class KnowledgeBasesService implements OnModuleInit {
         ? ''
         : `，进度：${status.progress}%`;
     const remoteMessage = status.message ? `，${status.message}` : '';
-    return `OCR 解析中，任务ID：${status.taskId}${remoteStatus}${progress}${remoteMessage}`;
+    return `AI 模型解析中，任务ID：${status.taskId}${remoteStatus}${progress}${remoteMessage}`;
   }
 
   private buildMineruRawSummary(value: unknown) {
@@ -2210,8 +2398,8 @@ export class KnowledgeBasesService implements OnModuleInit {
   private buildMineruEmptyContentMessage(raw?: unknown) {
     const rawSummary = this.buildMineruRawSummary(raw);
     return rawSummary
-      ? `OCR 解析结果缺少解析正文；MinerU 返回：${rawSummary}`
-      : 'OCR 解析结果缺少解析正文';
+      ? `AI 模型解析结果缺少解析正文；MinerU 返回：${rawSummary}`
+      : 'AI 模型解析结果缺少解析正文';
   }
 
   private resolveMineruParsedContent(result: {
@@ -2384,7 +2572,7 @@ export class KnowledgeBasesService implements OnModuleInit {
     }
     document.content = content;
     document.status = 'parsed';
-    document.sourceType = KNOWLEDGE_PARSE_MODE.ocr;
+    document.sourceType = KNOWLEDGE_PARSE_MODE.ai;
     if (fileName) document.sourceName = fileName;
     if (!document.hitKeywords || !document.colloquialDescription) {
       const base = await this.baseRepository.findOne({
@@ -2402,8 +2590,8 @@ export class KnowledgeBasesService implements OnModuleInit {
     await this.chunkRepository.softDelete({ documentId: saved.id });
     const chunkCount = await this.saveDocumentChunks(saved);
     saved.description = chunkCount
-      ? `OCR 解析完成，共 ${chunkCount} 个分片`
-      : 'OCR 解析完成，等待手动分片';
+      ? `AI 模型解析完成，共 ${chunkCount} 个分片`
+      : 'AI 模型解析完成，等待手动分片';
     saved = await this.documentRepository.save(saved);
     return { document: saved, chunkCount };
   }
@@ -2415,6 +2603,86 @@ export class KnowledgeBasesService implements OnModuleInit {
     if (document.sourceType === 'word') return 'word';
     if (document.sourceType === 'image') return 'image';
     return 'text';
+  }
+
+  private resolveAiModelParseContentType(
+    sourceType?: string | null,
+    fileName?: string | null,
+    contentText?: string | null,
+  ): 'text' | 'pdf' | 'word' | 'image' {
+    if (sourceType === 'pdf') return 'pdf';
+    if (sourceType === 'word') return 'word';
+    if (sourceType === 'image') return 'image';
+    if (sourceType === 'text') return 'text';
+    const name = (fileName || '').toLowerCase();
+    if (name.endsWith('.pdf')) return 'pdf';
+    if (/\.(docx?|wps)$/.test(name)) return 'word';
+    if (/\.(png|jpe?g|webp|bmp)$/.test(name)) return 'image';
+    if (/\.(txt|md)$/.test(name) || contentText?.trim()) return 'text';
+    return 'text';
+  }
+
+  private async resolveDocumentTextModelSourceContent(
+    document: KnowledgeBaseDocument,
+    dto: ParseKnowledgeBaseDocumentDto,
+    contentType: 'text' | 'word',
+  ) {
+    if (contentType === 'text') {
+      const content = document.content?.trim();
+      if (!content) throw new BadRequestException('文本内容为空，无法进行文档解析');
+      return content;
+    }
+    const fileUrl = dto.fileUrl?.trim();
+    if (!fileUrl) throw new BadRequestException('Word 文档解析需要提供文件 URL');
+    return this.documentParsersService.parse({
+      contentType,
+      fileUrl,
+      fileName: dto.fileName?.trim() || document.sourceName,
+    });
+  }
+
+  private async resolveBaseTextModelSourceContent(
+    base: KnowledgeBase,
+    contentType: 'text' | 'word',
+  ) {
+    if (contentType === 'text') {
+      const content = base.contentText?.trim();
+      if (!content) throw new BadRequestException('文本知识库缺少文本内容');
+      return content;
+    }
+    if (!base.fileUrl) throw new BadRequestException('Word 文档解析需要提供文件 URL');
+    return this.documentParsersService.parse({
+      contentType,
+      fileUrl: base.fileUrl,
+      fileName: base.fileName,
+    });
+  }
+
+  private buildDocumentParseQuestion(params: {
+    content: string;
+    fileName?: string | null;
+    contentType: 'text' | 'word';
+    rules?: string | null;
+    responseFormat?: string | null;
+  }) {
+    const formatMap: Record<string, string> = {
+      text: '纯文本',
+      markdown: 'Markdown',
+      json: 'JSON',
+    };
+    return [
+      `文件名称：${params.fileName || '-'}`,
+      `文件类型：${params.contentType === 'word' ? 'Word' : '文本'}`,
+      `返回格式：${formatMap[params.responseFormat || 'text'] || '纯文本'}`,
+      params.rules ? `业务规则：${params.rules}` : '',
+      '请整理以下文档正文，保留可用于知识库检索和回答的有效内容。',
+      '如果内容中包含“（链接：URL）”，必须保留在对应语句后面，不要移除链接。',
+      '只返回整理后的正文，不要输出解释。',
+      '',
+      params.content,
+    ]
+      .filter((item) => item !== '')
+      .join('\n');
   }
 
   private resolveOcrContentType(

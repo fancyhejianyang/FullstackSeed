@@ -94,6 +94,8 @@ export interface KnowledgeAiVisionOcrPayload {
   target: KnowledgeAiChatTarget;
   imageDataUrls: string[];
   systemPrompt?: string | null;
+  rules?: string | null;
+  responseFormat?: string | null;
 }
 
 export interface KnowledgeAiEmbeddingPayload {
@@ -777,13 +779,27 @@ export class KnowledgeAiProvidersService {
     const prompt =
       payload.systemPrompt?.trim() ||
       '你是 OCR 文档识别助手。请识别图片中的全部文字，保持原文顺序，适合保存为知识库正文。';
+    const formatMap: Record<string, string> = {
+      text: '纯文本',
+      markdown: 'Markdown',
+      json: 'JSON',
+    };
+    const responseFormat = formatMap[payload.responseFormat || 'markdown'] || 'Markdown';
     return [
       {
         role: 'user',
         content: [
           {
             type: 'text',
-            text: `${prompt}\n\n请识别以下图片中的文字。只返回识别结果，可用 Markdown 保留标题、列表和表格结构，不要添加解释。`,
+            text: [
+              prompt,
+              payload.rules ? `业务规则：${payload.rules}` : '',
+              `返回格式：${responseFormat}`,
+              '请识别以下图片中的文字。只返回识别结果，不要添加解释。',
+              '如果返回 Markdown，可保留标题、列表和表格结构。',
+            ]
+              .filter(Boolean)
+              .join('\n'),
           },
           ...payload.imageDataUrls.map((url) => ({
             type: 'image_url',

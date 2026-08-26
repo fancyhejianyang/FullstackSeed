@@ -192,7 +192,10 @@ export class AiFeatureConfigsService {
   }
 
   private assertExecutableConfig(config: Partial<AiFeatureConfig>) {
-    if (config.featureType === 'ocr' && config.useMineru) {
+    if (
+      ['ocr', 'documentParse'].includes(config.featureType ?? '') &&
+      config.useMineru
+    ) {
       if (!config.mineruConfigId) {
         throw new BadRequestException('请选择 MinerU 配置');
       }

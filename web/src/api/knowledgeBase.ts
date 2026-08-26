@@ -158,7 +158,7 @@ export interface KnowledgeBaseProcessResult {
   name?: string;
 }
 
-export type KnowledgeBaseParseMode = 'manual' | 'ocr' | 'mineru';
+export type KnowledgeBaseParseMode = 'manual' | 'ai' | 'ocr' | 'mineru';
 
 export interface ParseKnowledgeBasePayload {
   parseMode?: KnowledgeBaseParseMode;

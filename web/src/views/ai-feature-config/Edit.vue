@@ -72,7 +72,8 @@ const selectedProvider = computed(() =>
   providers.value.find((item) => item.id === Number(form.providerId)),
 );
 
-const isMineruOcr = computed(() => form.featureType === 'ocr' && !!form.useMineru);
+const isParseFeature = computed(() => ['ocr', 'documentParse'].includes(form.featureType));
+const isMineruParseFeature = computed(() => isParseFeature.value && !!form.useMineru);
 
 const modelOptions = computed(() => getModelOptions(selectedProvider.value, form.featureType));
 
@@ -93,19 +94,19 @@ const fields = computed<FormField[]>(() => {
     },
   ];
 
-  if (form.featureType === 'ocr') {
+  if (isParseFeature.value) {
     baseFields.push({
       prop: 'useMineru',
-      label: 'OCR 引擎',
+      label: form.featureType === 'ocr' ? 'OCR 引擎' : '解析引擎',
       component: 'Switch',
       componentProps: {
         activeText: 'MinerU',
-        inactiveText: '视觉模型',
+        inactiveText: form.featureType === 'ocr' ? '视觉模型' : 'AI 模型',
       },
     });
   }
 
-  if (isMineruOcr.value) {
+  if (isMineruParseFeature.value) {
     baseFields.push({
       prop: 'mineruConfigId',
       label: 'MinerU 配置',
@@ -115,7 +116,7 @@ const fields = computed<FormField[]>(() => {
     });
   }
 
-  if (!isMineruOcr.value) {
+  if (!isMineruParseFeature.value) {
     baseFields.push(
       {
         prop: 'providerId',
@@ -140,8 +141,8 @@ const fields = computed<FormField[]>(() => {
       label: '提示词',
       type: 'textarea',
       rows: 5,
-      placeholder: isMineruOcr.value
-        ? '使用 MinerU 时可作为 OCR 配置说明保留'
+      placeholder: isMineruParseFeature.value
+        ? '使用 MinerU 时可作为解析配置说明保留'
         : '该功能默认系统提示词，可被测试请求临时覆盖',
     },
     {
@@ -174,7 +175,7 @@ const fields = computed<FormField[]>(() => {
 const rules = computed<FormRules>(() => ({
   name: [{ required: true, message: '请输入配置名称', trigger: 'blur' }],
   featureType: [{ required: true, message: '请选择功能类型', trigger: 'change' }],
-  ...(isMineruOcr.value
+  ...(isMineruParseFeature.value
     ? {
         mineruConfigId: [{ required: true, message: '请选择 MinerU 配置', trigger: 'change' }],
       }
@@ -202,7 +203,10 @@ watch(visible, async (value) => {
 watch(
   () => [form.featureType, form.providerId, form.useMineru, providers.value.length],
   () => {
-    if (isMineruOcr.value) {
+    if (!isParseFeature.value) {
+      form.useMineru = false;
+    }
+    if (isMineruParseFeature.value) {
       form.providerId = '';
       form.model = '';
       return;
@@ -256,10 +260,10 @@ function buildPayload(): AiFeatureConfigForm {
   return {
     name: form.name.trim(),
     featureType: form.featureType,
-    providerId: isMineruOcr.value ? null : Number(form.providerId),
-    model: isMineruOcr.value ? '' : form.model?.trim(),
+    providerId: isMineruParseFeature.value ? null : Number(form.providerId),
+    model: isMineruParseFeature.value ? '' : form.model?.trim(),
     useMineru: !!form.useMineru,
-    mineruConfigId: isMineruOcr.value ? Number(form.mineruConfigId) : null,
+    mineruConfigId: isMineruParseFeature.value ? Number(form.mineruConfigId) : null,
     systemPrompt: form.systemPrompt?.trim(),
     rules: form.rules?.trim(),
     responseFormat: form.responseFormat,

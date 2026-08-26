@@ -1,5 +1,18 @@
 # CHANGELOG
 
+### 2026-08-26 文档解析升级为 AI 模型解析入口
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/Index.vue`（解析模式弹窗将“OCR 解析”改为“AI 模型解析”，提交 `parseMode=ai`）
+  - `web/src/api/knowledgeBase.ts`（解析模式类型补充 `ai`，保留 `ocr/mineru` 兼容旧调用）
+  - `web/src/views/ai-feature-config/Edit.vue`、`web/src/views/ai-feature-config/Index.vue`（文档解析配置也支持选择 MinerU 引擎）
+  - `server/src/ai-feature-configs/dto/ai-feature-config.dto.ts`、`server/src/ai-feature-configs/ai-feature-configs.service.ts`（允许文档解析功能配置绑定 MinerU）
+  - `server/src/knowledge-bases/dto/knowledge-base.dto.ts`（解析 DTO 支持 `ai` 模式）
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（AI 模型解析按配置和文件类型分流：MinerU 优先全格式解析；未启用 MinerU 时，PDF/图片走 OCR 配置，Word/文本走文档解析配置）
+  - `server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`（视觉 OCR 调用补充规则和返回格式提示）
+- 删除：无
+- 说明：知识库点击解析后，高层入口统一为“手动解析 / AI 模型解析”；AI 模型解析内部根据 MinerU 开关和文件类型选择真实执行链路，Word 会先用本地解析保留链接，再交给文档解析模型整理。
+
 ### 2026-08-26 文档解析模式改为 OCR 配置驱动
 - 新增：无
 - 修改：
