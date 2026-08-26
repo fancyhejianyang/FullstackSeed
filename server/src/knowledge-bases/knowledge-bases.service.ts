@@ -905,6 +905,7 @@ export class KnowledgeBasesService implements OnModuleInit {
       progress: result.progress,
       message: result.message,
       markdownLength: result.markdown.length,
+      rawSummary: this.buildMineruRawSummary(result.raw),
     });
     if (!this.mineruConfigsService.isSuccessStatus(result.status)) {
       return {
@@ -1858,6 +1859,7 @@ export class KnowledgeBasesService implements OnModuleInit {
       status: string;
       progress: number | null;
       message: string;
+      raw?: unknown;
     },
   ) {
     const message = this.buildMineruProgressMessage(status);
@@ -1869,6 +1871,7 @@ export class KnowledgeBasesService implements OnModuleInit {
       status: status.status,
       progress: status.progress,
       message: status.message,
+      rawSummary: this.buildMineruRawSummary(status.raw),
     });
     await this.updateBaseProcess(base, {
       processStage: 'parsing',
@@ -1887,6 +1890,7 @@ export class KnowledgeBasesService implements OnModuleInit {
       status: string;
       progress: number | null;
       message: string;
+      raw?: unknown;
     },
   ) {
     const message = this.buildMineruProgressMessage(status);
@@ -1897,6 +1901,7 @@ export class KnowledgeBasesService implements OnModuleInit {
       status: status.status,
       progress: status.progress,
       message: status.message,
+      rawSummary: this.buildMineruRawSummary(status.raw),
     });
     document.status = 'processing';
     document.description = message;
@@ -1926,6 +1931,15 @@ export class KnowledgeBasesService implements OnModuleInit {
         : `，进度：${status.progress}%`;
     const remoteMessage = status.message ? `，${status.message}` : '';
     return `MinerU 解析中，任务ID：${status.taskId}${remoteStatus}${progress}${remoteMessage}`;
+  }
+
+  private buildMineruRawSummary(value: unknown) {
+    if (value === undefined) return null;
+    try {
+      return JSON.stringify(value).slice(0, 2000);
+    } catch {
+      return 'MinerU 原始响应无法序列化';
+    }
   }
 
   private extractMineruTaskId(value?: string | null) {

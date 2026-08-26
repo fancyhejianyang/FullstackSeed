@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-08-26 兼容 MinerU 查询响应结构
+- 新增：无
+- 修改：
+  - `server/src/mineru-configs/mineru-configs.service.ts`（MinerU 查询任务结果兼容 `data/result/task/payload` 等嵌套结构，并识别 `state/task_status/msg/md_content` 等字段）
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（MinerU 查询进度日志追加 `rawSummary` 原始响应摘要，便于排查第三方返回结构）
+- 删除：无
+- 说明：当 MinerU 查询接口返回空 `status/progress/message` 时，后端日志会额外记录原始响应摘要，用于确认任务是否仍在处理、已成功或返回了非预期结构。
+
 ### 2026-08-26 增加知识库解析任务文件日志
 - 新增：
   - `server/src/knowledge-bases/knowledge-task-file-logger.service.ts`（写入 `logs/knowledge-tasks.log`，用于排查解析任务提交、执行、MinerU 进度与结果）

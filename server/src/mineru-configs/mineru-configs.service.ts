@@ -28,16 +28,7 @@ interface MineruCreateTaskResponse {
 }
 
 interface MineruQueryTaskResponse {
-  status?: string;
-  progress?: number;
-  message?: string;
-  markdown?: string;
-  data?: {
-    status?: string;
-    progress?: number;
-    message?: string;
-    markdown?: string;
-  };
+  [key: string]: unknown;
 }
 
 export interface MineruTaskStatus {
@@ -239,13 +230,13 @@ export class MineruConfigsService {
       headers: this.buildHeaders(config),
     });
     const data = await this.readJson<MineruQueryTaskResponse>(response);
-    const payload = data.data ?? data;
+    const payload = this.normalizeQueryTaskPayload(data);
     return {
       taskId,
-      status: payload.status || '',
-      progress: payload.progress ?? null,
-      message: payload.message || '',
-      markdown: payload.markdown || '',
+      status: payload.status,
+      progress: payload.progress,
+      message: payload.message,
+      markdown: payload.markdown,
       raw: data,
     };
   }
@@ -267,7 +258,9 @@ export class MineruConfigsService {
     while (Date.now() - startedAt <= timeoutMs) {
       const result = await this.queryParseTaskWithConfig(config, taskId);
       await options?.onProgress?.(result);
-      if (this.isSuccessStatus(result.status)) return result;
+      if (this.isSuccessStatus(result.status) || result.markdown) {
+        return { ...result, status: result.status || 'success' };
+      }
       if (this.isFailedStatus(result.status)) {
         throw new BadRequestException(result.message || 'MinerU 解析任务失败');
       }
@@ -277,9 +270,14 @@ export class MineruConfigsService {
   }
 
   isSuccessStatus(status: string) {
-    return ['success', 'succeeded', 'completed', 'done'].includes(
-      status.toLowerCase(),
-    );
+    return [
+      'success',
+      'succeeded',
+      'completed',
+      'done',
+      'finish',
+      'finished',
+    ].includes(status.toLowerCase());
   }
 
   isFailedStatus(status: string) {
@@ -294,6 +292,124 @@ export class MineruConfigsService {
       throw new NotFoundException('MinerU 配置不存在');
     }
     return config;
+  }
+
+  private normalizeQueryTaskPayload(data: unknown) {
+    const candidates = this.collectObjectCandidates(data);
+    const markdown = this.findFirstString(candidates, [
+      'markdown',
+      'md',
+      'mdContent',
+      'md_content',
+      'resultMarkdown',
+      'result_markdown',
+      'content',
+    ]);
+    const status =
+      this.findFirstString(candidates, [
+        'status',
+        'state',
+        'taskStatus',
+        'task_status',
+        'jobStatus',
+        'job_status',
+        'extractStatus',
+        'extract_status',
+      ]) || (markdown ? 'success' : '');
+    return {
+      status,
+      progress: this.findFirstNumber(candidates, [
+        'progress',
+        'percent',
+        'percentage',
+        'process',
+        'processedPercent',
+        'processed_percent',
+      ]),
+      message: this.findFirstString(candidates, [
+        'message',
+        'msg',
+        'errorMessage',
+        'error_message',
+        'errorMsg',
+        'error_msg',
+        'desc',
+        'description',
+      ]),
+      markdown,
+    };
+  }
+
+  private collectObjectCandidates(value: unknown) {
+    const result: Array<Record<string, unknown>> = [];
+    const visited = new Set<unknown>();
+    const queue: unknown[] = [value];
+    while (queue.length && result.length < 80) {
+      const current = queue.shift();
+      if (!current || typeof current !== 'object' || visited.has(current)) {
+        continue;
+      }
+      visited.add(current);
+      if (Array.isArray(current)) {
+        queue.push(...(current as unknown[]));
+        continue;
+      }
+      const record = current as Record<string, unknown>;
+      result.push(record);
+      for (const key of [
+        'data',
+        'result',
+        'task',
+        'tasks',
+        'payload',
+        'output',
+        'outputs',
+      ]) {
+        if (record[key] !== undefined) queue.push(record[key]);
+      }
+    }
+    return result;
+  }
+
+  private findFirstString(
+    candidates: Array<Record<string, unknown>>,
+    keys: string[],
+  ) {
+    for (const item of candidates) {
+      for (const key of keys) {
+        const value = item[key];
+        if (typeof value === 'string' && value.trim()) return value.trim();
+        if (
+          value &&
+          typeof value === 'object' &&
+          !Array.isArray(value) &&
+          'message' in value
+        ) {
+          const message = (value as { message?: unknown }).message;
+          if (typeof message === 'string' && message.trim()) {
+            return message.trim();
+          }
+        }
+      }
+    }
+    return '';
+  }
+
+  private findFirstNumber(
+    candidates: Array<Record<string, unknown>>,
+    keys: string[],
+  ) {
+    for (const item of candidates) {
+      for (const key of keys) {
+        const value = item[key];
+        if (typeof value === 'number' && Number.isFinite(value)) return value;
+        if (typeof value === 'string') {
+          const parsed = Number(value.replace('%', '').trim());
+          if (Number.isFinite(parsed)) return parsed;
+        }
+      }
+    }
+    return null;
   }
 
   private async disableOtherConfigs(currentId?: number) {
