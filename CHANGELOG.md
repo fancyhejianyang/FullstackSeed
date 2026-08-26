@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-08-26 支持读取 MinerU 结果压缩包正文
+- 新增：
+  - `server/package.json`、`server/package-lock.json`（后端显式引入 `jszip`，用于读取 MinerU 结果压缩包）
+- 修改：
+  - `server/src/mineru-configs/mineru-configs.service.ts`（MinerU 查询结果识别 `full_zip_url` 等结果包地址，正文为空时下载 zip 并提取 `.md/.markdown/.txt` 内容）
+- 删除：无
+- 说明：当 MinerU 查询接口只返回 `full_zip_url` 而不直接返回正文时，后端会自动读取结果包中的 Markdown/TXT 文件作为解析正文，避免“解析完成但内容为空”。
+
 ### 2026-08-26 MinerU 空正文异常返回原始 JSON
 - 新增：无
 - 修改：

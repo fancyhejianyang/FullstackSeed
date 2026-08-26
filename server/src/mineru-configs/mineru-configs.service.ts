@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Like, Not, Repository } from 'typeorm';
+import JSZip from 'jszip';
 import {
   CreateMineruConfigDto,
   QueryMineruConfigDto,
@@ -37,6 +38,7 @@ export interface MineruTaskStatus {
   progress: number | null;
   message: string;
   markdown: string;
+  resultZipUrl: string;
   raw: unknown;
 }
 
@@ -230,13 +232,14 @@ export class MineruConfigsService {
       headers: this.buildHeaders(config),
     });
     const data = await this.readJson<MineruQueryTaskResponse>(response);
-    const payload = this.normalizeQueryTaskPayload(data);
+    const payload = await this.normalizeQueryTaskPayload(data);
     return {
       taskId,
       status: payload.status,
       progress: payload.progress,
       message: payload.message,
       markdown: payload.markdown,
+      resultZipUrl: payload.resultZipUrl,
       raw: data,
     };
   }
@@ -294,9 +297,9 @@ export class MineruConfigsService {
     return config;
   }
 
-  private normalizeQueryTaskPayload(data: unknown) {
+  private async normalizeQueryTaskPayload(data: unknown) {
     const candidates = this.collectObjectCandidates(data);
-    const markdown = this.findFirstString(candidates, [
+    let markdown = this.findFirstString(candidates, [
       'markdown',
       'md',
       'mdContent',
@@ -324,6 +327,19 @@ export class MineruConfigsService {
       'data',
       'result',
     ]);
+    const resultZipUrl = this.findFirstUrl(candidates, [
+      'full_zip_url',
+      'fullZipUrl',
+      'zip_url',
+      'zipUrl',
+      'result_zip_url',
+      'resultZipUrl',
+      'download_url',
+      'downloadUrl',
+    ]);
+    if (!markdown && resultZipUrl) {
+      markdown = await this.extractTextFromResultZip(resultZipUrl);
+    }
     const status =
       this.findFirstString(candidates, [
         'status',
@@ -356,6 +372,7 @@ export class MineruConfigsService {
         'description',
       ]),
       markdown,
+      resultZipUrl,
     };
   }
 
@@ -420,6 +437,52 @@ export class MineruConfigsService {
       }
     }
     return '';
+  }
+
+  private findFirstUrl(
+    candidates: Array<Record<string, unknown>>,
+    keys: string[],
+  ) {
+    const value = this.findFirstString(candidates, keys);
+    if (!value) return '';
+    return value.replace(/^<|>$/g, '').replace(/\\+$/g, '').trim();
+  }
+
+  private async extractTextFromResultZip(zipUrl: string) {
+    const response = await fetch(zipUrl);
+    if (!response.ok) {
+      throw new BadRequestException(
+        `MinerU 结果包下载失败：${response.status} ${await response.text()}`,
+      );
+    }
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const zip = await JSZip.loadAsync(buffer);
+    const files = Object.values(zip.files)
+      .filter((file) => !file.dir && this.isReadableMineruResultFile(file.name))
+      .sort((a, b) => {
+        const priorityA = this.getMineruResultFilePriority(a.name);
+        const priorityB = this.getMineruResultFilePriority(b.name);
+        return priorityA - priorityB || a.name.localeCompare(b.name);
+      });
+    const texts: string[] = [];
+    for (const file of files) {
+      const text = (await file.async('string')).trim();
+      if (text) texts.push(text);
+    }
+    return texts.join('\n\n').trim();
+  }
+
+  private isReadableMineruResultFile(fileName: string) {
+    const normalized = fileName.replace(/\\/g, '/').toLowerCase();
+    if (normalized.includes('__macosx/')) return false;
+    return /\.(md|markdown|txt)$/.test(normalized);
+  }
+
+  private getMineruResultFilePriority(fileName: string) {
+    const normalized = fileName.toLowerCase();
+    if (/\.(md|markdown)$/.test(normalized)) return 0;
+    if (/\.txt$/.test(normalized)) return 1;
+    return 9;
   }
 
   private findFirstNumber(
