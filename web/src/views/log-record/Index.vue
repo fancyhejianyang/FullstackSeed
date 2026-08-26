@@ -34,6 +34,7 @@ const moduleOptions = computed(() =>
 const columns: TableColumn[] = [
   { prop: 'moduleName', label: '模块', width: 140 },
   { prop: 'action', label: '操作', width: 120 },
+  { prop: 'result', label: '结果', width: 90, slot: true },
   { prop: 'recordId', label: '记录ID', width: 120 },
   { prop: 'operatorName', label: '操作人', width: 140 },
   { prop: 'summary', label: '摘要', minWidth: 220 },
@@ -58,6 +59,13 @@ const searchFields: FormField[] = [
 
 function fetchLogs(params: Record<string, unknown>) {
   return getLogRecords(params as QueryLogRecordParams);
+}
+
+function getLogResult(row: LogRecordItem) {
+  const status = row.afterData?.status;
+  if (status === 'success') return { label: '成功', type: 'success' as const };
+  if (status === 'failed') return { label: '失败', type: 'danger' as const };
+  return null;
 }
 
 async function fetchModuleConfigs() {
@@ -133,6 +141,17 @@ onMounted(fetchModuleConfigs);
 
       <template #column-createdAt="{ row }">
         {{ formatDateTime((row as LogRecordItem).createdAt) }}
+      </template>
+
+      <template #column-result="{ row }">
+        <el-tag
+          v-if="getLogResult(row as LogRecordItem)"
+          :type="getLogResult(row as LogRecordItem)?.type"
+          size="small"
+        >
+          {{ getLogResult(row as LogRecordItem)?.label }}
+        </el-tag>
+        <span v-else>-</span>
       </template>
     </Table>
 

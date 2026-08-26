@@ -21,6 +21,68 @@ export interface ScannedLogModule {
   actions: ScannedLogApi[];
 }
 
+const INTERNAL_METHOD = 'INTERNAL';
+
+const INTERNAL_LOG_MODULES: ScannedLogModule[] = [
+  {
+    moduleId: 'async-tasks',
+    moduleName: '异步任务',
+    modelName: 'TaskQueue',
+    tableName: 'task_queue',
+    routePath: '/internal/async-tasks',
+    sourceFile: 'internal',
+    isSystem: false,
+    actions: [
+      createInternalAction('success', '任务成功', '/internal/async-tasks/success'),
+      createInternalAction('failed', '任务失败', '/internal/async-tasks/failed'),
+    ],
+  },
+  {
+    moduleId: 'knowledge-processing',
+    moduleName: '知识库处理',
+    modelName: 'KnowledgeBase',
+    tableName: 'knowledge_bases',
+    routePath: '/internal/knowledge-processing',
+    sourceFile: 'internal',
+    isSystem: false,
+    actions: [
+      createInternalAction(
+        'manualParse',
+        '手动解析',
+        '/internal/knowledge-processing/manual-parse',
+      ),
+      createInternalAction(
+        'mineruParse',
+        'MinerU 解析',
+        '/internal/knowledge-processing/mineru-parse',
+      ),
+      createInternalAction('chunk', '分片', '/internal/knowledge-processing/chunk'),
+      createInternalAction('index', '索引', '/internal/knowledge-processing/index'),
+    ],
+  },
+  {
+    moduleId: 'ai-model-calls',
+    moduleName: '大模型调用',
+    modelName: 'KnowledgeAiProvider',
+    tableName: 'knowledge_ai_providers',
+    routePath: '/internal/ai-model-calls',
+    sourceFile: 'internal',
+    isSystem: false,
+    actions: [
+      createInternalAction(
+        'visionOcr',
+        '视觉 OCR',
+        '/internal/ai-model-calls/vision-ocr',
+      ),
+      createInternalAction(
+        'embedding',
+        '向量化',
+        '/internal/ai-model-calls/embedding',
+      ),
+    ],
+  },
+];
+
 const HTTP_METHOD_MAP: Record<string, string> = {
   Get: 'GET',
   Post: 'POST',
@@ -106,7 +168,23 @@ export function scanLogApiModules(): ScannedLogModule[] {
     .map((file) => scanControllerFile(srcRoot, file))
     .filter((item): item is ScannedLogModule => Boolean(item));
 
-  return modules.sort((a, b) => a.moduleName.localeCompare(b.moduleName));
+  return [...modules, ...INTERNAL_LOG_MODULES].sort((a, b) =>
+    a.moduleName.localeCompare(b.moduleName),
+  );
+}
+
+function createInternalAction(
+  action: string,
+  label: string,
+  path: string,
+): ScannedLogApi {
+  return {
+    action,
+    label,
+    method: INTERNAL_METHOD,
+    path,
+    pathPattern: createPathPattern(path),
+  };
 }
 
 function resolveSourceRoot() {

@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Like, Repository } from 'typeorm';
 import { KnowledgeAiProvider } from './entities/knowledge-ai-provider.entity';
+import { LogRecordsService } from '../log-records/log-records.service';
 import {
   CreateKnowledgeAiProviderDto,
   QueryKnowledgeAiProviderDto,
@@ -116,6 +117,7 @@ export class KnowledgeAiProvidersService {
   constructor(
     @InjectRepository(KnowledgeAiProvider)
     private readonly providerRepository: Repository<KnowledgeAiProvider>,
+    private readonly logRecordsService: LogRecordsService,
   ) {}
 
   async findAll(query: QueryKnowledgeAiProviderDto) {
@@ -415,6 +417,12 @@ export class KnowledgeAiProvidersService {
           `视觉模型 OCR 响应缺少识别内容：${this.stringifyForError(data)}`,
         );
       }
+      await this.recordAiModelCall('visionOcr', {
+        target: payload.target,
+        isSuccess: true,
+        elapsedMilliseconds: Date.now() - startedAt,
+        inputCount: payload.imageDataUrls.length,
+      });
 
       return {
         isSuccess: true,
@@ -426,6 +434,14 @@ export class KnowledgeAiProvidersService {
         elapsedMilliseconds: Date.now() - startedAt,
       };
     } catch (error) {
+      await this.recordAiModelCall('visionOcr', {
+        target: payload.target,
+        isSuccess: false,
+        elapsedMilliseconds: Date.now() - startedAt,
+        inputCount: payload.imageDataUrls.length,
+        errorMessage:
+          error instanceof Error ? error.message : '视觉模型 OCR 调用失败',
+      });
       return {
         isSuccess: false,
         providerId: payload.target.providerId,
@@ -442,21 +458,42 @@ export class KnowledgeAiProvidersService {
   async callEmbedding(
     payload: KnowledgeAiEmbeddingPayload,
   ): Promise<number[][]> {
+    const startedAt = Date.now();
     const input = Array.isArray(payload.input)
       ? payload.input
       : [payload.input];
-    const batchSize = this.resolveEmbeddingBatchSize(payload.target);
-    const embeddings: number[][] = [];
-    for (const batch of this.chunkArray(input, batchSize)) {
-      embeddings.push(
-        ...(await this.callEmbeddingBatch(
-          payload.target,
-          batch,
-          payload.embeddingDimension,
-        )),
-      );
+    try {
+      const batchSize = this.resolveEmbeddingBatchSize(payload.target);
+      const embeddings: number[][] = [];
+      for (const batch of this.chunkArray(input, batchSize)) {
+        embeddings.push(
+          ...(await this.callEmbeddingBatch(
+            payload.target,
+            batch,
+            payload.embeddingDimension,
+          )),
+        );
+      }
+      await this.recordAiModelCall('embedding', {
+        target: payload.target,
+        isSuccess: true,
+        elapsedMilliseconds: Date.now() - startedAt,
+        inputCount: input.length,
+        embeddingDimension: payload.embeddingDimension ?? null,
+      });
+      return embeddings;
+    } catch (error) {
+      await this.recordAiModelCall('embedding', {
+        target: payload.target,
+        isSuccess: false,
+        elapsedMilliseconds: Date.now() - startedAt,
+        inputCount: input.length,
+        embeddingDimension: payload.embeddingDimension ?? null,
+        errorMessage:
+          error instanceof Error ? error.message : '向量模型调用失败',
+      });
+      throw error;
     }
-    return embeddings;
   }
 
   private async callEmbeddingBatch(
@@ -524,6 +561,40 @@ export class KnowledgeAiProvidersService {
 
   private resolveEmbeddingBatchSize(target: KnowledgeAiChatTarget) {
     return /dashscope|aliyuncs/i.test(target.url) ? 10 : 50;
+  }
+
+  private async recordAiModelCall(
+    action: 'visionOcr' | 'embedding',
+    payload: {
+      target: KnowledgeAiChatTarget;
+      isSuccess: boolean;
+      elapsedMilliseconds: number;
+      inputCount: number;
+      embeddingDimension?: number | null;
+      errorMessage?: string | null;
+    },
+  ) {
+    const actionLabel = action === 'embedding' ? '向量化' : '视觉 OCR';
+    await this.logRecordsService
+      .recordInternalAction({
+        moduleId: 'ai-model-calls',
+        action,
+        recordId: payload.target.providerId,
+        summary: `${payload.target.providerName} / ${payload.target.model}：${actionLabel}${payload.isSuccess ? '成功' : '失败'}`,
+        isSuccess: payload.isSuccess,
+        errorMessage: payload.errorMessage ?? null,
+        afterData: {
+          providerId: payload.target.providerId,
+          providerName: payload.target.providerName,
+          workspaceId: payload.target.workspaceId,
+          model: payload.target.model,
+          url: payload.target.url,
+          inputCount: payload.inputCount,
+          embeddingDimension: payload.embeddingDimension ?? null,
+          elapsedMilliseconds: payload.elapsedMilliseconds,
+        },
+      })
+      .catch(() => undefined);
   }
 
   private chunkArray<T>(items: T[], size: number) {

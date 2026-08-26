@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import { LogRecordsService } from '../log-records/log-records.service';
 
 export type TaskQueueStatus = 'pending' | 'running' | 'success' | 'failed';
 
@@ -23,6 +24,8 @@ export class TaskQueueService {
     handler: () => Promise<unknown>;
   }> = [];
   private running = false;
+
+  constructor(private readonly logRecordsService: LogRecordsService) {}
 
   add(
     name: string,
@@ -76,7 +79,30 @@ export class TaskQueueService {
         error instanceof Error ? error.message : '任务执行失败';
     } finally {
       record.finishedAt = new Date().toISOString();
+      await this.recordTaskLog(record);
     }
+  }
+
+  private async recordTaskLog(record: TaskQueueRecord) {
+    await this.logRecordsService
+      .recordInternalAction({
+        moduleId: 'async-tasks',
+        action: record.status === 'failed' ? 'failed' : 'success',
+        recordId: record.id,
+        summary: `${record.name} ${record.status === 'failed' ? '执行失败' : '执行成功'}`,
+        isSuccess: record.status !== 'failed',
+        errorMessage: record.errorMessage ?? null,
+        afterData: {
+          taskId: record.id,
+          name: record.name,
+          payload: record.payload ?? null,
+          result: record.result ?? null,
+          createdAt: record.createdAt,
+          startedAt: record.startedAt ?? null,
+          finishedAt: record.finishedAt ?? null,
+        },
+      })
+      .catch(() => undefined);
   }
 
   private toResult(record: TaskQueueRecord) {

@@ -37,6 +37,7 @@ import { KnowledgeChunkConfigsService } from '../knowledge-chunk-configs/knowled
 import type { KnowledgeChunkConfig } from '../knowledge-chunk-configs/entities/knowledge-chunk-config.entity';
 import { KnowledgeEmbeddingService } from '../knowledge-vectors/knowledge-embedding.service';
 import { KnowledgeVectorService } from '../knowledge-vectors/knowledge-vector.service';
+import { LogRecordsService } from '../log-records/log-records.service';
 import type { Metadata } from 'chromadb';
 
 export interface KnowledgeBaseCategoryTreeNode extends KnowledgeBaseCategory {
@@ -75,6 +76,7 @@ export class KnowledgeBasesService {
     private readonly chunkConfigsService: KnowledgeChunkConfigsService,
     private readonly embeddingService: KnowledgeEmbeddingService,
     private readonly vectorService: KnowledgeVectorService,
+    private readonly logRecordsService: LogRecordsService,
   ) {}
 
   async findBases(query: QueryKnowledgeBaseDto) {
@@ -282,12 +284,26 @@ export class KnowledgeBasesService {
         indexStatus: 'pending',
         lastProcessMessage: `${this.getParseModeLabel(parseMode)}完成，等待分片`,
       });
+      await this.recordKnowledgeProcessLog(base, {
+        action: this.getParseLogAction(parseMode),
+        isSuccess: true,
+        message: `${this.getParseModeLabel(parseMode)}完成，等待分片`,
+        data: { documentId: document.id, parseMode },
+      });
       return { id, documentId: document.id, processStage: 'parsed', parseMode };
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '解析失败';
       await this.updateBaseProcess(base, {
         processStage: 'failed',
         parseStatus: 'failed',
-        lastProcessMessage: error instanceof Error ? error.message : '解析失败',
+        lastProcessMessage: errorMessage,
+      });
+      await this.recordKnowledgeProcessLog(base, {
+        action: this.getParseLogAction(parseMode),
+        isSuccess: false,
+        message: errorMessage,
+        errorMessage,
+        data: { parseMode },
       });
       throw error;
     }
@@ -337,6 +353,12 @@ export class KnowledgeBasesService {
         indexStatus: 'pending',
         lastProcessMessage: `分片完成，共 ${chunkCount} 个分片`,
       });
+      await this.recordKnowledgeProcessLog(base, {
+        action: 'chunk',
+        isSuccess: true,
+        message: `分片完成，共 ${chunkCount} 个分片`,
+        data: { documentId: document.id, chunkCount },
+      });
       return {
         id,
         documentId: document.id,
@@ -344,10 +366,17 @@ export class KnowledgeBasesService {
         processStage: 'chunked',
       };
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '分片失败';
       await this.updateBaseProcess(base, {
         processStage: 'failed',
         chunkStatus: 'failed',
-        lastProcessMessage: error instanceof Error ? error.message : '分片失败',
+        lastProcessMessage: errorMessage,
+      });
+      await this.recordKnowledgeProcessLog(base, {
+        action: 'chunk',
+        isSuccess: false,
+        message: errorMessage,
+        errorMessage,
       });
       throw error;
     }
@@ -427,6 +456,16 @@ export class KnowledgeBasesService {
           indexStatus: 'success',
           lastProcessMessage: `索引已是最新状态，共 ${chunks.length} 个分片无需重建`,
         });
+        await this.recordKnowledgeProcessLog(base, {
+          action: 'index',
+          isSuccess: true,
+          message: `索引已是最新状态，共 ${chunks.length} 个分片无需重建`,
+          data: {
+            chunkCount: chunks.length,
+            indexedCount: 0,
+            skippedCount: chunks.length,
+          },
+        });
         return {
           id,
           chunkCount: chunks.length,
@@ -474,6 +513,16 @@ export class KnowledgeBasesService {
         indexStatus: 'success',
         lastProcessMessage: `索引完成：写入 ${indexItems.length} 个分片，跳过 ${chunks.length - indexItems.length} 个未变化分片`,
       });
+      await this.recordKnowledgeProcessLog(base, {
+        action: 'index',
+        isSuccess: true,
+        message: `索引完成：写入 ${indexItems.length} 个分片，跳过 ${chunks.length - indexItems.length} 个未变化分片`,
+        data: {
+          chunkCount: chunks.length,
+          indexedCount: indexItems.length,
+          skippedCount: chunks.length - indexItems.length,
+        },
+      });
       return {
         id,
         chunkCount: chunks.length,
@@ -491,10 +540,18 @@ export class KnowledgeBasesService {
           },
         );
       }
+      const errorMessage = error instanceof Error ? error.message : '索引失败';
       await this.updateBaseProcess(base, {
         processStage: 'failed',
         indexStatus: 'failed',
-        lastProcessMessage: error instanceof Error ? error.message : '索引失败',
+        lastProcessMessage: errorMessage,
+      });
+      await this.recordKnowledgeProcessLog(base, {
+        action: 'index',
+        isSuccess: false,
+        message: errorMessage,
+        errorMessage,
+        data: { processingChunkIds },
       });
       throw error;
     }
@@ -726,12 +783,34 @@ export class KnowledgeBasesService {
     document.description = `正在${this.getParseModeLabel(parseMode)}内容`;
     await this.documentRepository.save(document);
     try {
-      return await this.parseDocumentByMode(document, dto, parseMode);
+      const result = await this.parseDocumentByMode(document, dto, parseMode);
+      await this.recordKnowledgeDocumentProcessLog(document, {
+        action: this.getParseLogAction(parseMode),
+        isSuccess: true,
+        message: `${this.getParseModeLabel(parseMode)}完成`,
+        data: {
+          documentId: document.id,
+          knowledgeBaseId: document.knowledgeBaseId,
+          parseMode,
+        },
+      });
+      return result;
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '解析失败';
       document.status = 'failed';
-      document.description =
-        error instanceof Error ? error.message : '解析失败';
+      document.description = errorMessage;
       await this.documentRepository.save(document);
+      await this.recordKnowledgeDocumentProcessLog(document, {
+        action: this.getParseLogAction(parseMode),
+        isSuccess: false,
+        message: errorMessage,
+        errorMessage,
+        data: {
+          documentId: document.id,
+          knowledgeBaseId: document.knowledgeBaseId,
+          parseMode,
+        },
+      });
       throw error;
     }
   }
@@ -1316,6 +1395,70 @@ export class KnowledgeBasesService {
 
   private getParseModeLabel(mode: KnowledgeParseMode) {
     return mode === KNOWLEDGE_PARSE_MODE.mineru ? 'MinerU 解析' : '手动解析';
+  }
+
+  private getParseLogAction(mode: KnowledgeParseMode) {
+    return mode === KNOWLEDGE_PARSE_MODE.mineru ? 'mineruParse' : 'manualParse';
+  }
+
+  private async recordKnowledgeProcessLog(
+    base: KnowledgeBase,
+    payload: {
+      action: string;
+      isSuccess: boolean;
+      message: string;
+      errorMessage?: string | null;
+      data?: Record<string, unknown>;
+    },
+  ) {
+    await this.logRecordsService
+      .recordInternalAction({
+        moduleId: 'knowledge-processing',
+        action: payload.action,
+        recordId: base.id,
+        summary: `${base.name}：${payload.message}`,
+        isSuccess: payload.isSuccess,
+        errorMessage: payload.errorMessage ?? null,
+        afterData: {
+          knowledgeBaseId: base.id,
+          knowledgeBaseName: base.name,
+          processStage: base.processStage,
+          parseStatus: base.parseStatus,
+          chunkStatus: base.chunkStatus,
+          indexStatus: base.indexStatus,
+          ...(payload.data ?? {}),
+        },
+      })
+      .catch(() => undefined);
+  }
+
+  private async recordKnowledgeDocumentProcessLog(
+    document: KnowledgeBaseDocument,
+    payload: {
+      action: string;
+      isSuccess: boolean;
+      message: string;
+      errorMessage?: string | null;
+      data?: Record<string, unknown>;
+    },
+  ) {
+    await this.logRecordsService
+      .recordInternalAction({
+        moduleId: 'knowledge-processing',
+        action: payload.action,
+        recordId: document.knowledgeBaseId || document.id,
+        summary: `${document.title}：${payload.message}`,
+        isSuccess: payload.isSuccess,
+        errorMessage: payload.errorMessage ?? null,
+        afterData: {
+          documentId: document.id,
+          documentTitle: document.title,
+          knowledgeBaseId: document.knowledgeBaseId,
+          status: document.status,
+          ...(payload.data ?? {}),
+        },
+      })
+      .catch(() => undefined);
   }
 
   private async parseBaseContentByMode(

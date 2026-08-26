@@ -20,5 +20,6 @@ import { LogRecordsService } from './log-records.service';
       useClass: LogRecordsInterceptor,
     },
   ],
+  exports: [LogRecordsService],
 })
 export class LogRecordsModule {}

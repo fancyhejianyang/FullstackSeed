@@ -11,6 +11,7 @@ import { MineruConfigsModule } from '../mineru-configs/mineru-configs.module';
 import { TaskQueueModule } from '../task-queue/task-queue.module';
 import { KnowledgeChunkConfigsModule } from '../knowledge-chunk-configs/knowledge-chunk-configs.module';
 import { KnowledgeVectorsModule } from '../knowledge-vectors/knowledge-vectors.module';
+import { LogRecordsModule } from '../log-records/log-records.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { KnowledgeVectorsModule } from '../knowledge-vectors/knowledge-vectors.m
     TaskQueueModule,
     KnowledgeChunkConfigsModule,
     KnowledgeVectorsModule,
+    LogRecordsModule,
     TypeOrmModule.forFeature([
       KnowledgeBase,
       KnowledgeBaseCategory,

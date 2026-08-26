@@ -56,6 +56,19 @@ interface LogApiSourceGroup {
   sources: LogApiSource[];
 }
 
+export interface InternalLogActionPayload {
+  moduleId: string;
+  action: string;
+  recordId?: string | number | null;
+  summary?: string | null;
+  beforeData?: Record<string, unknown> | null;
+  afterData?: Record<string, unknown> | null;
+  isSuccess?: boolean;
+  errorMessage?: string | null;
+  operatorId?: number | null;
+  operatorName?: string;
+}
+
 @Injectable()
 export class LogRecordsService implements OnModuleInit {
   constructor(
@@ -216,6 +229,40 @@ export class LogRecordsService implements OnModuleInit {
     );
   }
 
+  async recordInternalAction(payload: InternalLogActionPayload) {
+    const source = await this.findEnabledInternalSource(
+      payload.moduleId,
+      payload.action,
+    );
+    if (!source) return;
+
+    const summary =
+      payload.summary ??
+      `${source.actionLabel}${payload.isSuccess === false ? '失败' : '成功'}`;
+    await this.logRecordRepository.save(
+      this.logRecordRepository.create({
+        moduleId: source.moduleId,
+        moduleName: source.moduleName,
+        action: source.action,
+        recordId:
+          payload.recordId === null || payload.recordId === undefined
+            ? ''
+            : String(payload.recordId),
+        operatorId: payload.operatorId ?? null,
+        operatorName: payload.operatorName ?? 'system',
+        summary,
+        beforeData: payload.beforeData ?? null,
+        afterData: {
+          ...(payload.afterData ?? {}),
+          status: payload.isSuccess === false ? 'failed' : 'success',
+          errorMessage: payload.errorMessage ?? null,
+        },
+        ip: '',
+        userAgent: 'internal',
+      }),
+    );
+  }
+
   private async syncScannedApiSources() {
     const scannedModules = scanLogApiModules();
     if (!scannedModules.length) return;
@@ -330,6 +377,25 @@ export class LogRecordsService implements OnModuleInit {
       source,
       relativePath: path.slice(source.routePath.length),
     };
+  }
+
+  private async findEnabledInternalSource(moduleId: string, action: string) {
+    await this.ensureApiSourcesPersisted();
+    const source = await this.logApiSourceRepository.findOne({
+      where: {
+        moduleId,
+        action,
+        method: 'INTERNAL',
+        isEnabled: true,
+        isSystem: false,
+      },
+    });
+    if (!source) return null;
+
+    const config = await this.logModuleConfigRepository.findOne({
+      where: { moduleId: source.moduleId },
+    });
+    return config?.enabled ? source : null;
   }
 
   private normalizePath(url: string) {
