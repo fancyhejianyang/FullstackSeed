@@ -466,7 +466,10 @@ export class MineruConfigsService {
       });
     const texts: string[] = [];
     for (const file of files) {
-      const text = (await file.async('string')).trim();
+      const rawText = await file.async('string');
+      const text = this.isHtmlMineruResultFile(file.name)
+        ? this.convertHtmlToLinkedText(rawText).trim()
+        : rawText.trim();
       if (text) texts.push(text);
     }
     return texts.join('\n\n').trim();
@@ -475,14 +478,66 @@ export class MineruConfigsService {
   private isReadableMineruResultFile(fileName: string) {
     const normalized = fileName.replace(/\\/g, '/').toLowerCase();
     if (normalized.includes('__macosx/')) return false;
-    return /\.(md|markdown|txt)$/.test(normalized);
+    return /\.(html?|md|markdown|txt)$/.test(normalized);
+  }
+
+  private isHtmlMineruResultFile(fileName: string) {
+    return /\.html?$/i.test(fileName);
   }
 
   private getMineruResultFilePriority(fileName: string) {
     const normalized = fileName.toLowerCase();
-    if (/\.(md|markdown)$/.test(normalized)) return 0;
-    if (/\.txt$/.test(normalized)) return 1;
+    if (/\.html?$/.test(normalized)) return 0;
+    if (/\.(md|markdown)$/.test(normalized)) return 1;
+    if (/\.txt$/.test(normalized)) return 2;
     return 9;
+  }
+
+  private convertHtmlToLinkedText(html?: string) {
+    if (!html) return '';
+    const withLinks = html.replace(
+      /<a\b[^>]*href=(["'])(.*?)\1[^>]*>([\s\S]*?)<\/a>/gi,
+      (_match, _quote: string, href: string, label: string) => {
+        const text = this.decodeHtml(this.stripTags(label)).trim();
+        const link = this.cleanHref(href);
+        if (!text) return link ? `（链接：${link}）` : '';
+        return link ? `${text}（链接：${link}）` : text;
+      },
+    );
+    return this.decodeHtml(
+      withLinks
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<li\b[^>]*>/gi, '- ')
+        .replace(/<\/(p|div|li|h[1-6]|tr|table)>/gi, '\n')
+        .replace(/<[^>]+>/g, ''),
+    );
+  }
+
+  private stripTags(value: string) {
+    return value.replace(/<[^>]+>/g, '');
+  }
+
+  private decodeHtml(value: string) {
+    return value
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;/gi, "'")
+      .replace(/&#x([0-9a-f]+);/gi, (_match, hex: string) =>
+        String.fromCodePoint(parseInt(hex, 16)),
+      )
+      .replace(/&#(\d+);/g, (_match, code: string) =>
+        String.fromCodePoint(Number(code)),
+      );
+  }
+
+  private cleanHref(href: string) {
+    const decoded = this.decodeHtml(href).trim();
+    const match = decoded.match(/https?:\/\/[^\s"'<>）)]+/i);
+    const link = match?.[0] || decoded;
+    return link.replace(/[，。,.;；]+$/g, '').trim();
   }
 
   private findFirstNumber(

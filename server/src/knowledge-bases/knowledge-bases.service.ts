@@ -1186,9 +1186,18 @@ export class KnowledgeBasesService implements OnModuleInit {
       onProgress: (status) =>
         this.updateDocumentMineruProgress(document, status),
     });
+    const content = await this.enhanceMineruWordContentWithSourceLinks({
+      content: result.markdown,
+      contentType: document.sourceType,
+      fileUrl: dto.fileUrl,
+      fileName: dto.fileName || this.resolveFileName(dto.fileUrl),
+      knowledgeBaseId: document.knowledgeBaseId,
+      documentId: document.id,
+      taskId: task.taskId,
+    });
     const saved = await this.applyThirdPartyMarkdown(
       document,
-      result.markdown,
+      content,
       dto.fileName || this.resolveFileName(dto.fileUrl),
       result.raw,
     );
@@ -1865,7 +1874,16 @@ export class KnowledgeBasesService implements OnModuleInit {
         taskId: task.taskId,
         markdownLength: result.markdown.length,
       });
-      return this.resolveMineruParsedContent(result);
+      const content = this.resolveMineruParsedContent(result);
+      return this.enhanceMineruWordContentWithSourceLinks({
+        content,
+        contentType: base.contentType,
+        fileUrl: base.fileUrl,
+        fileName: base.fileName,
+        knowledgeBaseId: base.id,
+        documentId: document.id,
+        taskId: task.taskId,
+      });
     } catch (error) {
       document.status = 'failed';
       document.description =
@@ -2020,6 +2038,65 @@ export class KnowledgeBasesService implements OnModuleInit {
       );
     }
     return content;
+  }
+
+  private async enhanceMineruWordContentWithSourceLinks(params: {
+    content: string;
+    contentType?: string | null;
+    fileUrl?: string | null;
+    fileName?: string | null;
+    knowledgeBaseId?: number;
+    documentId?: number;
+    taskId?: string;
+  }) {
+    if (!this.shouldExtractSourceWordLinks(params)) return params.content;
+    try {
+      const linkedContent = await this.documentParsersService.parse({
+        contentType: 'word',
+        fileUrl: params.fileUrl ?? undefined,
+        fileName: params.fileName ?? undefined,
+      });
+      if (!this.hasLinkedText(linkedContent)) return params.content;
+      await this.taskFileLogger.write('mineru.word.links.enhanced', {
+        knowledgeBaseId: params.knowledgeBaseId,
+        documentId: params.documentId,
+        taskId: params.taskId,
+        fileName: params.fileName,
+        mineruContentLength: params.content.length,
+        linkedContentLength: linkedContent.length,
+      });
+      return linkedContent;
+    } catch (error) {
+      await this.taskFileLogger.write('mineru.word.links.failed', {
+        knowledgeBaseId: params.knowledgeBaseId,
+        documentId: params.documentId,
+        taskId: params.taskId,
+        fileName: params.fileName,
+        errorMessage:
+          error instanceof Error ? error.message : 'Word 链接兜底提取失败',
+      });
+      return params.content;
+    }
+  }
+
+  private shouldExtractSourceWordLinks(params: {
+    content: string;
+    contentType?: string | null;
+    fileUrl?: string | null;
+    fileName?: string | null;
+  }) {
+    if (this.hasLinkedText(params.content)) return false;
+    const fileName = params.fileName?.toLowerCase() ?? '';
+    const fileUrl = params.fileUrl?.toLowerCase() ?? '';
+    return (
+      params.contentType === 'word' ||
+      fileName.endsWith('.docx') ||
+      fileUrl.includes('.docx')
+    );
+  }
+
+  private hasLinkedText(content?: string | null) {
+    return !!content?.includes('（链接：');
   }
 
   private extractMineruTaskId(value?: string | null) {

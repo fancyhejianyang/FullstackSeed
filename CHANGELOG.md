@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-08-26 保留 MinerU Word 超链接
+- 新增：无
+- 修改：
+  - `server/src/mineru-configs/mineru-configs.service.ts`（读取 MinerU 结果包时优先识别 HTML 文件，并将 `<a href>` 转成 `文字（链接：URL）`）
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（MinerU 解析 Word/docx 后若正文缺少链接信息，使用原始 Word 本地解析兜底补回超链接文本）
+- 删除：无
+- 说明：Word 经 MinerU 解析后若输出为纯文本，系统会尽量从结果包 HTML 或原始 docx 中恢复超链接，避免知识库正文丢失链接地址。
+
 ### 2026-08-26 分片内容展示保持紧凑
 - 新增：无
 - 修改：
