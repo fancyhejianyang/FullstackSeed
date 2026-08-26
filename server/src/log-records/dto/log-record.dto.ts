@@ -1,8 +1,8 @@
 import { Type } from 'class-transformer';
 import {
   ArrayUnique,
+  IsBoolean,
   IsArray,
-  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -40,10 +40,15 @@ export class LogModuleConfigDto {
   @IsString()
   moduleId: string;
 
+  @IsBoolean()
+  @IsOptional()
+  enabled?: boolean;
+
   @IsArray()
   @ArrayUnique()
-  @IsIn(['read', 'create', 'update', 'delete', 'batchDelete'], { each: true })
-  actions: string[];
+  @IsString({ each: true })
+  @IsOptional()
+  actions?: string[];
 }
 
 export class UpdateLogModuleConfigDto {

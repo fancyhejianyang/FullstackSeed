@@ -35,12 +35,13 @@ export interface LogModuleConfigItem {
   moduleName: string;
   modelName: string;
   tableName: string;
+  routePath: string;
   enabled: boolean;
   enabledActions: LogAction[];
   actions: LogModuleActionConfig[];
 }
 
-export type LogAction = 'read' | 'create' | 'update' | 'delete' | 'batchDelete';
+export type LogAction = string;
 
 export interface LogModuleActionConfig {
   action: LogAction;
@@ -52,7 +53,8 @@ export interface LogModuleActionConfig {
 
 export interface LogModuleConfigPayload {
   moduleId: string;
-  actions: LogAction[];
+  enabled: boolean;
+  actions?: LogAction[];
 }
 
 export function getLogRecords(params: QueryLogRecordParams) {

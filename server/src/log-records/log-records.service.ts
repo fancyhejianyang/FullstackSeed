@@ -1,15 +1,13 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { MODULE_MODEL_MAP } from '../module-models/module-models.map';
-import {
-  LogModuleConfigDto,
-  QueryLogRecordDto,
-} from './dto/log-record.dto';
+import { LogModuleConfigDto, QueryLogRecordDto } from './dto/log-record.dto';
+import { LogApiSource } from './entities/log-api-source.entity';
 import { LogModuleConfig } from './entities/log-module-config.entity';
 import { LogRecord } from './entities/log-record.entity';
+import { scanLogApiModules } from './log-api-scanner';
 
-type LogAction = 'read' | 'create' | 'update' | 'delete' | 'batchDelete';
+type LogAction = string;
 
 export interface LogModuleActionConfig {
   action: LogAction;
@@ -24,6 +22,7 @@ export interface LogModuleConfigItem {
   moduleName: string;
   modelName: string;
   tableName: string;
+  routePath: string;
   enabled: boolean;
   enabledActions: LogAction[];
   actions: LogModuleActionConfig[];
@@ -43,34 +42,34 @@ interface LoggableRequest {
   };
 }
 
-const ACTION_LABEL_MAP: Record<LogAction, string> = {
-  read: '查看',
-  create: '新增',
-  update: '编辑',
-  delete: '删除',
-  batchDelete: '批量删除',
-};
+interface LogApiMatch {
+  source: LogApiSource;
+  relativePath: string;
+}
 
-const LOG_ACTIONS: Array<{
-  action: LogAction;
-  method: string;
-  pathSuffix: string;
-}> = [
-  { action: 'read', method: 'GET', pathSuffix: '/:id' },
-  { action: 'create', method: 'POST', pathSuffix: '' },
-  { action: 'update', method: 'PATCH', pathSuffix: '/:id' },
-  { action: 'delete', method: 'DELETE', pathSuffix: '/:id' },
-  { action: 'batchDelete', method: 'POST', pathSuffix: '/batch-delete' },
-];
+interface LogApiSourceGroup {
+  moduleId: string;
+  moduleName: string;
+  modelName: string;
+  tableName: string;
+  routePath: string;
+  sources: LogApiSource[];
+}
 
 @Injectable()
-export class LogRecordsService {
+export class LogRecordsService implements OnModuleInit {
   constructor(
     @InjectRepository(LogRecord)
     private readonly logRecordRepository: Repository<LogRecord>,
     @InjectRepository(LogModuleConfig)
     private readonly logModuleConfigRepository: Repository<LogModuleConfig>,
+    @InjectRepository(LogApiSource)
+    private readonly logApiSourceRepository: Repository<LogApiSource>,
   ) {}
+
+  async onModuleInit() {
+    await this.syncScannedApiSources();
+  }
 
   async findAll(query: QueryLogRecordDto) {
     const page = query.page ?? 1;
@@ -99,55 +98,91 @@ export class LogRecordsService {
   }
 
   async findModuleConfigs(): Promise<LogModuleConfigItem[]> {
+    await this.ensureApiSourcesPersisted();
+
     const configs = await this.logModuleConfigRepository.find();
     const configMap = new Map(configs.map((item) => [item.moduleId, item]));
-    return Object.values(MODULE_MODEL_MAP).map((meta) => {
-      const enabledActions = this.normalizeEnabledActions(
-        configMap.get(meta.moduleId),
-      );
+    const groups = await this.findVisibleApiSourceGroups();
+
+    return groups.map((group) => {
+      const config = configMap.get(group.moduleId);
+      const enabled = Boolean(config?.enabled);
+      const enabledActions = enabled
+        ? this.normalizeActions(
+            group.sources
+              .filter((source) => source.isEnabled)
+              .map((source) => source.action),
+          )
+        : [];
+
       return {
-        moduleId: meta.moduleId,
-        moduleName: meta.moduleName,
-        modelName: meta.modelName,
-        tableName: meta.tableName,
-        enabled: enabledActions.length > 0,
+        moduleId: group.moduleId,
+        moduleName: group.moduleName,
+        modelName: group.modelName,
+        tableName: group.tableName,
+        routePath: group.routePath,
+        enabled,
         enabledActions,
-        actions: LOG_ACTIONS.map((item) => ({
-          action: item.action,
-          label: ACTION_LABEL_MAP[item.action],
-          method: item.method,
-          path: `${meta.routePath}${item.pathSuffix}`,
-          enabled: enabledActions.includes(item.action),
+        actions: group.sources.map((source) => ({
+          action: source.action,
+          label: source.actionLabel,
+          method: source.method,
+          path: source.apiPath,
+          enabled: enabled && source.isEnabled,
         })),
       };
     });
   }
 
   async updateModuleConfigs(configs: LogModuleConfigDto[]) {
+    await this.ensureApiSourcesPersisted();
+
+    const groups = await this.findVisibleApiSourceGroups();
+    const groupMap = new Map(groups.map((group) => [group.moduleId, group]));
     const configMap = new Map(
       configs.map((config) => [
         config.moduleId.trim().toLowerCase(),
-        this.normalizeActions(config.actions),
+        {
+          enabled: Boolean(config.enabled ?? config.actions?.length),
+          actions: this.normalizeActions(config.actions ?? []),
+        },
       ]),
     );
     const invalid = Array.from(configMap.keys()).filter(
-      (moduleId) => !MODULE_MODEL_MAP[moduleId],
+      (moduleId) => !groupMap.has(moduleId),
     );
     if (invalid.length) {
       throw new BadRequestException(`未知模块：${invalid.join(', ')}`);
     }
 
-    for (const meta of Object.values(MODULE_MODEL_MAP)) {
-      const enabledActions = configMap.get(meta.moduleId) ?? [];
+    for (const group of groups) {
+      const current = configMap.get(group.moduleId);
+      const enabled = current?.enabled ?? false;
+      const actionSet = new Set(current?.actions ?? []);
+      const hasActionLimit = actionSet.size > 0;
+
+      for (const source of group.sources) {
+        source.isEnabled =
+          enabled && (!hasActionLimit || actionSet.has(source.action));
+      }
+      await this.logApiSourceRepository.save(group.sources);
+
+      const enabledActions = enabled
+        ? this.normalizeActions(
+            group.sources
+              .filter((source) => source.isEnabled)
+              .map((source) => source.action),
+          )
+        : [];
       const exist = await this.logModuleConfigRepository.findOne({
-        where: { moduleId: meta.moduleId },
+        where: { moduleId: group.moduleId },
       });
       await this.logModuleConfigRepository.save({
         ...(exist ?? {}),
-        moduleId: meta.moduleId,
-        moduleName: meta.moduleName,
-        modelName: meta.modelName,
-        enabled: enabledActions.length > 0,
+        moduleId: group.moduleId,
+        moduleName: group.moduleName,
+        modelName: group.modelName,
+        enabled,
         enabledActions,
       });
     }
@@ -156,23 +191,23 @@ export class LogRecordsService {
   }
 
   async recordRequestLog(request: LoggableRequest, response: unknown) {
-    const matched = this.matchModule(request);
+    const matched = await this.matchMonitoredApi(request);
     if (!matched) return;
 
     const config = await this.logModuleConfigRepository.findOne({
-      where: { moduleId: matched.meta.moduleId },
+      where: { moduleId: matched.source.moduleId },
     });
-    if (!this.isActionEnabled(config, matched.action)) return;
+    if (!config?.enabled) return;
 
     await this.logRecordRepository.save(
       this.logRecordRepository.create({
-        moduleId: matched.meta.moduleId,
-        moduleName: matched.meta.moduleName,
-        action: matched.action,
+        moduleId: matched.source.moduleId,
+        moduleName: matched.source.moduleName,
+        action: matched.source.action,
         recordId: this.resolveRecordId(request, response, matched.relativePath),
         operatorId: request.user?.userId ?? null,
         operatorName: request.user?.username ?? '',
-        summary: this.buildSummary(matched.meta.moduleName, matched.action),
+        summary: this.buildSummary(matched.source),
         beforeData: null,
         afterData: null,
         ip: request.ip ?? '',
@@ -181,21 +216,120 @@ export class LogRecordsService {
     );
   }
 
-  private matchModule(request: LoggableRequest) {
+  private async syncScannedApiSources() {
+    const scannedModules = scanLogApiModules();
+    if (!scannedModules.length) return;
+
+    const [existingSources, moduleConfigs] = await Promise.all([
+      this.logApiSourceRepository.find(),
+      this.logModuleConfigRepository.find(),
+    ]);
+    const existingMap = new Map(
+      existingSources.map((source) => [
+        this.buildSourceKey(source.method, source.apiPath),
+        source,
+      ]),
+    );
+    const configMap = new Map(
+      moduleConfigs.map((config) => [config.moduleId, config]),
+    );
+    const scannedKeys = new Set<string>();
+    const nextSources: LogApiSource[] = [];
+
+    for (const module of scannedModules) {
+      const moduleConfig = configMap.get(module.moduleId);
+      for (const api of module.actions) {
+        const key = this.buildSourceKey(api.method, api.path);
+        scannedKeys.add(key);
+        const exist = existingMap.get(key);
+        nextSources.push(
+          this.logApiSourceRepository.create({
+            ...(exist ?? {}),
+            moduleId: module.moduleId,
+            moduleName: module.moduleName,
+            modelName: module.modelName,
+            tableName: module.tableName,
+            routePath: module.routePath,
+            sourceFile: module.sourceFile,
+            method: api.method,
+            apiPath: api.path,
+            action: api.action,
+            actionLabel: api.label,
+            isSystem: module.isSystem,
+            isEnabled: module.isSystem
+              ? false
+              : (exist?.isEnabled ?? Boolean(moduleConfig?.enabled)),
+          }),
+        );
+      }
+    }
+
+    await this.logApiSourceRepository.save(nextSources);
+
+    const obsoleteSources = existingSources.filter(
+      (source) =>
+        !scannedKeys.has(this.buildSourceKey(source.method, source.apiPath)) &&
+        source.isEnabled,
+    );
+    if (obsoleteSources.length) {
+      await this.logApiSourceRepository.save(
+        obsoleteSources.map((source) => ({ ...source, isEnabled: false })),
+      );
+    }
+  }
+
+  private async ensureApiSourcesPersisted() {
+    const count = await this.logApiSourceRepository.count();
+    if (!count) {
+      await this.syncScannedApiSources();
+    }
+  }
+
+  private async findVisibleApiSourceGroups(): Promise<LogApiSourceGroup[]> {
+    const sources = await this.logApiSourceRepository.find({
+      where: { isSystem: false },
+      order: { moduleName: 'ASC', routePath: 'ASC', apiPath: 'ASC' },
+    });
+    const groupMap = new Map<string, LogApiSourceGroup>();
+
+    for (const source of sources) {
+      const exist = groupMap.get(source.moduleId);
+      if (exist) {
+        exist.sources.push(source);
+        continue;
+      }
+      groupMap.set(source.moduleId, {
+        moduleId: source.moduleId,
+        moduleName: source.moduleName,
+        modelName: source.modelName,
+        tableName: source.tableName,
+        routePath: source.routePath,
+        sources: [source],
+      });
+    }
+
+    return Array.from(groupMap.values());
+  }
+
+  private async matchMonitoredApi(
+    request: LoggableRequest,
+  ): Promise<LogApiMatch | null> {
+    await this.ensureApiSourcesPersisted();
+
     const path = this.normalizePath(request.originalUrl ?? request.url ?? '');
-    const metas = Object.values(MODULE_MODEL_MAP).sort(
-      (a, b) => b.routePath.length - a.routePath.length,
-    );
-    const meta = metas.find(
-      (item) => path === item.routePath || path.startsWith(`${item.routePath}/`),
-    );
-    if (!meta) return null;
+    const method = request.method.toUpperCase();
+    const candidates = await this.logApiSourceRepository.find({
+      where: { method, isEnabled: true, isSystem: false },
+    });
+    const source = candidates
+      .sort((a, b) => b.apiPath.length - a.apiPath.length)
+      .find((item) => this.createPathPattern(item.apiPath).test(path));
 
-    const relativePath = path.slice(meta.routePath.length);
-    const action = this.resolveAction(request.method, relativePath);
-    if (!action) return null;
-
-    return { meta, action, relativePath };
+    if (!source) return null;
+    return {
+      source,
+      relativePath: path.slice(source.routePath.length),
+    };
   }
 
   private normalizePath(url: string) {
@@ -204,23 +338,6 @@ export class LogRecordsService {
       ? pathname.slice('/api'.length) || '/'
       : pathname;
     return path || '/';
-  }
-
-  private resolveAction(method: string, relativePath: string): LogAction | null {
-    const normalizedMethod = method.toUpperCase();
-    if (normalizedMethod === 'GET') {
-      return relativePath && relativePath !== '/' ? 'read' : null;
-    }
-    if (normalizedMethod === 'POST') {
-      return relativePath === '/batch-delete' ? 'batchDelete' : 'create';
-    }
-    if (normalizedMethod === 'PATCH' || normalizedMethod === 'PUT') {
-      return 'update';
-    }
-    if (normalizedMethod === 'DELETE') {
-      return 'delete';
-    }
-    return null;
   }
 
   private resolveRecordId(
@@ -250,8 +367,8 @@ export class LogRecordsService {
     return this.getObjectId(maybe.data);
   }
 
-  private buildSummary(moduleName: string, action: LogAction) {
-    return `${ACTION_LABEL_MAP[action]}${moduleName}`;
+  private buildSummary(source: LogApiSource) {
+    return source.actionLabel || `${source.action}${source.moduleName}`;
   }
 
   private getHeader(request: LoggableRequest, key: string) {
@@ -260,30 +377,19 @@ export class LogRecordsService {
     return value;
   }
 
-  private normalizeEnabledActions(config: LogModuleConfig | undefined) {
-    if (!config) return [];
-    return this.normalizeActions(
-      config.enabledActions?.length
-        ? config.enabledActions
-        : config.enabled
-          ? LOG_ACTIONS.map((item) => item.action)
-          : [],
-    );
-  }
-
   private normalizeActions(actions: string[]): LogAction[] {
-    const validActions = new Set<LogAction>(
-      LOG_ACTIONS.map((item) => item.action),
-    );
-    return Array.from(new Set(actions)).filter((action): action is LogAction =>
-      validActions.has(action as LogAction),
+    return Array.from(
+      new Set(actions.map((item) => item.trim()).filter(Boolean)),
     );
   }
 
-  private isActionEnabled(
-    config: LogModuleConfig | null,
-    action: LogAction,
-  ): boolean {
-    return this.normalizeEnabledActions(config ?? undefined).includes(action);
+  private buildSourceKey(method: string, apiPath: string) {
+    return `${method.toUpperCase()} ${apiPath}`;
+  }
+
+  private createPathPattern(route: string) {
+    const escaped = route.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = escaped.replace(/:([A-Za-z0-9_]+)/g, '[^/]+');
+    return new RegExp(`^${pattern}$`);
   }
 }

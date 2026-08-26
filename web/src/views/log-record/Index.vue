@@ -10,7 +10,6 @@ import {
   getLogModuleConfigs,
   getLogRecords,
   updateLogModuleConfigs,
-  type LogAction,
   type LogModuleConfigItem,
   type LogModuleConfigPayload,
   type LogRecordItem,
@@ -23,8 +22,7 @@ const configVisible = ref(false);
 const configLoading = ref(false);
 const savingConfig = ref(false);
 const moduleConfigs = ref<LogModuleConfigItem[]>([]);
-const activeModulePanels = ref<string[]>([]);
-const selectedActionsMap = ref<Record<string, LogAction[]>>({});
+const selectedModuleIds = ref<string[]>([]);
 
 const moduleOptions = computed(() =>
   moduleConfigs.value.map((item) => ({
@@ -71,11 +69,8 @@ async function openConfig() {
   configLoading.value = true;
   try {
     await fetchModuleConfigs();
-    selectedActionsMap.value = Object.fromEntries(
-      moduleConfigs.value.map((item) => [item.moduleId, item.enabledActions]),
-    );
-    activeModulePanels.value = moduleConfigs.value
-      .filter((item) => item.enabledActions.length > 0)
+    selectedModuleIds.value = moduleConfigs.value
+      .filter((item) => item.enabled)
       .map((item) => item.moduleId);
   } finally {
     configLoading.value = false;
@@ -85,48 +80,20 @@ async function openConfig() {
 async function saveConfig() {
   savingConfig.value = true;
   try {
-    const configs: LogModuleConfigPayload[] = Object.entries(
-      selectedActionsMap.value,
-    ).map(([moduleId, actions]) => ({ moduleId, actions }));
+    const selected = new Set(selectedModuleIds.value);
+    const configs: LogModuleConfigPayload[] = moduleConfigs.value.map((item) => ({
+      moduleId: item.moduleId,
+      enabled: selected.has(item.moduleId),
+    }));
     moduleConfigs.value = await updateLogModuleConfigs(configs);
-    selectedActionsMap.value = Object.fromEntries(
-      moduleConfigs.value.map((item) => [item.moduleId, item.enabledActions]),
-    );
+    selectedModuleIds.value = moduleConfigs.value
+      .filter((item) => item.enabled)
+      .map((item) => item.moduleId);
     configVisible.value = false;
     ElMessage.success('配置已保存');
     await tableRef.value?.refresh();
   } finally {
     savingConfig.value = false;
-  }
-}
-
-function getModuleActions(moduleId: string) {
-  return selectedActionsMap.value[moduleId] ?? [];
-}
-
-function setModuleActions(moduleId: string, actions: LogAction[]) {
-  selectedActionsMap.value = {
-    ...selectedActionsMap.value,
-    [moduleId]: actions,
-  };
-}
-
-function isModuleChecked(item: LogModuleConfigItem) {
-  return getModuleActions(item.moduleId).length === item.actions.length;
-}
-
-function isModuleIndeterminate(item: LogModuleConfigItem) {
-  const count = getModuleActions(item.moduleId).length;
-  return count > 0 && count < item.actions.length;
-}
-
-function handleModuleCheck(item: LogModuleConfigItem, checked: boolean) {
-  setModuleActions(
-    item.moduleId,
-    checked ? item.actions.map((api) => api.action) : [],
-  );
-  if (checked && !activeModulePanels.value.includes(item.moduleId)) {
-    activeModulePanels.value = [...activeModulePanels.value, item.moduleId];
   }
 }
 
@@ -171,94 +138,84 @@ onMounted(fetchModuleConfigs);
 
     <Dialog
       v-model="configVisible"
-      title="日志统计配置"
-      width="720px"
+      title="操作日志模块配置"
+      width="900px"
       :confirm-loading="savingConfig"
       @confirm="saveConfig"
     >
       <el-skeleton v-if="configLoading" :rows="5" animated />
-      <el-collapse v-else v-model="activeModulePanels">
-        <el-collapse-item
-          v-for="item in moduleConfigs"
-          :key="item.moduleId"
-          :name="item.moduleId"
-        >
-          <template #title>
-            <div class="log-record__module-head" @click.stop>
-              <el-checkbox
-                :model-value="isModuleChecked(item)"
-                :indeterminate="isModuleIndeterminate(item)"
-                @change="(checked: boolean) => handleModuleCheck(item, checked)"
-              >
-                <span class="log-record__config-name">{{ item.moduleName }}</span>
-                <span class="log-record__config-meta">{{ item.tableName }}</span>
-              </el-checkbox>
-            </div>
-          </template>
+      <div v-else class="log-record__config">
+        <p class="log-record__config-tip">
+          这里按业务模块配置日志开关，不按单个 API 配置；具体 API
+          路径和操作会写入日志明细，取消勾选不会删除历史日志。
+        </p>
 
-          <el-checkbox-group
-            :model-value="getModuleActions(item.moduleId)"
-            @update:model-value="(actions: LogAction[]) => setModuleActions(item.moduleId, actions)"
+        <el-checkbox-group
+          v-model="selectedModuleIds"
+          class="log-record__module-grid"
+        >
+          <el-checkbox
+            v-for="item in moduleConfigs"
+            :key="item.moduleId"
+            :label="item.moduleId"
+            class="log-record__module-check"
           >
-            <div class="log-record__api-list">
-              <el-checkbox
-                v-for="api in item.actions"
-                :key="api.action"
-                :label="api.action"
-                class="log-record__api-item"
-              >
-                <span class="log-record__api-label">{{ api.label }}</span>
-                <el-tag size="small" effect="plain">{{ api.method }}</el-tag>
-                <span class="log-record__api-path">{{ api.path }}</span>
-              </el-checkbox>
-            </div>
-          </el-checkbox-group>
-        </el-collapse-item>
-      </el-collapse>
+            <span class="log-record__config-name">{{ item.moduleName }}</span>
+            <span class="log-record__config-meta">{{ item.moduleId }}</span>
+          </el-checkbox>
+        </el-checkbox-group>
+      </div>
     </Dialog>
   </PageContainer>
 </template>
 
 <style scoped>
-.log-record__module-head {
-  display: flex;
-  align-items: center;
-  width: 100%;
-}
-
 .log-record__module-filter {
   width: 180px;
 }
 
+.log-record__config {
+  max-height: 560px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.log-record__config-tip {
+  margin: 0 0 14px;
+  color: #606266;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.log-record__module-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.log-record__module-check {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 34px;
+  margin-right: 0;
+  padding: 0 10px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+}
+
+.log-record__module-check :deep(.el-checkbox__label) {
+  min-width: 0;
+}
+
 .log-record__config-name {
   margin-right: 8px;
+  color: #303133;
+  font-weight: 500;
 }
 
 .log-record__config-meta {
   color: #909399;
-  font-size: 12px;
-}
-
-.log-record__api-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 4px 0 6px 28px;
-}
-
-.log-record__api-item {
-  height: 24px;
-}
-
-.log-record__api-label {
-  display: inline-block;
-  min-width: 72px;
-  font-weight: 500;
-}
-
-.log-record__api-path {
-  margin-left: 8px;
-  color: #606266;
   font-size: 12px;
 }
 </style>
