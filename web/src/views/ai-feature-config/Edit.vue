@@ -76,6 +76,12 @@ const isMineruOcr = computed(() => form.featureType === 'ocr' && !!form.useMiner
 
 const modelOptions = computed(() => getModelOptions(selectedProvider.value, form.featureType));
 
+const modelPlaceholder = computed(() => {
+  if (form.featureType === 'ocr') return '请选择视觉模型';
+  if (form.featureType === 'embedding') return '请选择向量模型';
+  return '请选择模型';
+});
+
 const fields = computed<FormField[]>(() => {
   const baseFields: FormField[] = [
     { prop: 'name', label: '配置名称', type: 'input', placeholder: '如 聊天默认配置' },
@@ -122,7 +128,7 @@ const fields = computed<FormField[]>(() => {
         label: '模型',
         type: 'select',
         options: modelOptions,
-        placeholder: '请选择模型',
+        placeholder: modelPlaceholder.value,
       },
     );
   }
@@ -203,7 +209,7 @@ watch(
     }
     form.mineruConfigId = '';
     const options = modelOptions.value;
-    if (options.length && !options.some((item) => item.value === form.model)) {
+    if (selectedProvider.value && !options.some((item) => item.value === form.model)) {
       form.model = '';
     }
   },
@@ -286,7 +292,7 @@ function getModelText(provider: KnowledgeAiProvider | undefined, featureType: Ai
     return joinModelTexts(provider.models, provider.textModels);
   }
   if (featureType === 'ocr') {
-    return joinModelTexts(provider.visionModels, provider.models);
+    return provider.visionModels || '';
   }
   if (featureType === 'embedding') {
     return joinModelTexts(provider.embeddingModels, provider.models);
