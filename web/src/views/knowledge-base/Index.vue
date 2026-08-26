@@ -167,7 +167,7 @@ async function runProcess(
   }
   const actionMap = {
     parse: {
-      label: parseMode === 'mineru' ? 'MinerU 解析' : '手动解析',
+      label: parseMode === 'ocr' ? 'OCR 解析' : '手动解析',
       request: (id: number) => parseKnowledgeBase(id, { parseMode }),
     },
     chunk: { label: '分片', request: chunkKnowledgeBase },
@@ -186,16 +186,16 @@ async function runProcess(
 async function chooseParseMode(): Promise<KnowledgeBaseParseMode | null> {
   try {
     await ElMessageBox.confirm(
-      '请选择本次解析方式。手动解析优先走系统内置逻辑；MinerU 解析会调用第三方配置。',
+      '请选择本次解析方式。手动解析优先走系统内置逻辑；OCR 解析会读取已启用的 OCR 功能配置，并按配置使用视觉模型或 MinerU。',
       '选择解析模式',
       {
-        confirmButtonText: 'MinerU 解析',
+        confirmButtonText: 'OCR 解析',
         cancelButtonText: '手动解析',
         distinguishCancelAndClose: true,
         type: 'info',
       },
     );
-    return 'mineru';
+    return 'ocr';
   } catch (action) {
     return action === 'cancel' ? 'manual' : null;
   }

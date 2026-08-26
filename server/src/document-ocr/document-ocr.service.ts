@@ -115,6 +115,23 @@ export class DocumentOcrService implements OnModuleInit, OnModuleDestroy {
     return this.recognizeImageWithLocalOcr(context);
   }
 
+  async buildVisionOcrImageDataUrls(context: DocumentParseContext) {
+    if (!context.file?.buffer.length) {
+      throw new BadRequestException('视觉模型 OCR 缺少文件内容');
+    }
+    if (context.contentType === 'image') {
+      const mimeType = context.file.mimeType || 'image/png';
+      return [`data:${mimeType};base64,${context.file.buffer.toString('base64')}`];
+    }
+    if (context.contentType === 'pdf') {
+      const maxPages = await this.resolvePdfOcrMaxPages();
+      return this.renderPdfPages(context.file.buffer, maxPages);
+    }
+    throw new BadRequestException(
+      '视觉模型 OCR 仅支持图片或 PDF，请在 OCR 配置中切换 MinerU，或选择手动解析',
+    );
+  }
+
   private async recognizeImageWithLocalOcr(
     context: DocumentParseContext,
   ): Promise<OcrRecognizeResult> {

@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-08-26 文档解析模式改为 OCR 配置驱动
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/Index.vue`（解析模式弹窗将“MinerU 解析”改为“OCR 解析”，提交 `parseMode=ocr`）
+  - `web/src/api/knowledgeBase.ts`（解析模式类型补充 `ocr`，保留 `mineru` 兼容旧调用）
+  - `server/src/knowledge-bases/dto/knowledge-base.dto.ts`（解析 DTO 支持 `ocr` 模式）
+  - `server/src/knowledge-bases/knowledge-bases.module.ts`（知识库模块引入视觉模型 OCR 所需服务）
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（OCR 模式读取启用的 AI 功能配置，按配置分流到视觉模型 OCR 或 MinerU）
+  - `server/src/document-ocr/document-ocr.service.ts`（提供视觉模型 OCR 所需的图片/PDF 图片输入构建能力）
+- 删除：无
+- 说明：知识库点击解析后，高层模式统一为“手动解析 / OCR 解析”；OCR 解析由 AI 功能配置决定实际引擎，启用 MinerU 时走 MinerU，未启用 MinerU 时走配置的大模型视觉模型。
+
 ### 2026-08-26 OCR 配置读取视觉模型列表
 - 新增：无
 - 修改：
