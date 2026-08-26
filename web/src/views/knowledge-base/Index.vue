@@ -10,7 +10,6 @@ import {
   batchDeleteKnowledgeBases,
   chunkKnowledgeBase,
   deleteKnowledgeBase,
-  getKnowledgeBase,
   getKnowledgeBaseCategoryTree,
   getKnowledgeBases,
   indexKnowledgeBase,
@@ -46,11 +45,6 @@ const searchFields: FormField[] = [
   { prop: 'keyword', label: '关键词', type: 'input', placeholder: '名称/编码' },
 ];
 
-const processingStageMap = {
-  parse: 'parsing',
-  chunk: 'chunking',
-  index: 'indexing',
-} as const;
 
 const editVisible = ref(false);
 const viewVisible = ref(false);
@@ -162,32 +156,6 @@ function isProcessing(row: KnowledgeBase, action: string) {
   return processingKey.value === `${action}:${row.id}`;
 }
 
-function sleep(ms: number) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
-async function waitForProcessDone(
-  row: KnowledgeBase,
-  action: 'parse' | 'chunk' | 'index',
-) {
-  const processingStage = processingStageMap[action];
-  const maxAttempts = 600;
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    await sleep(3000);
-    const latest = await getKnowledgeBase(row.id);
-    await tableRef.value?.refresh();
-    if (latest.processStage !== processingStage) {
-      if (latest.processStage === 'failed') {
-        ElMessage.error(latest.lastProcessMessage || '处理失败');
-      } else {
-        ElMessage.success(latest.lastProcessMessage || '处理完成');
-      }
-      return;
-    }
-  }
-  await tableRef.value?.refresh();
-  ElMessage.warning('任务仍在处理中，可稍后刷新列表查看结果');
-}
 
 async function runProcess(
   row: KnowledgeBase,
@@ -208,7 +176,6 @@ async function runProcess(
     await actionMap[action].request(row.id);
     ElMessage.success(`${actionMap[action].label}任务已提交`);
     await tableRef.value?.refresh();
-    await waitForProcessDone(row, action);
   } finally {
     processingKey.value = '';
   }

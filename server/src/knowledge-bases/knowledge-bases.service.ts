@@ -1332,11 +1332,58 @@ export class KnowledgeBasesService {
       base.fileUrl,
       base.fileName,
     );
-    const result = await this.mineruConfigsService.waitForSuccess(
+    const document = await this.markBaseDocumentParsing(
+      base,
       task.taskId,
-      task.configId,
+      base.fileName,
     );
-    return result.markdown;
+    await this.updateBaseProcess(base, {
+      processStage: 'parsing',
+      parseStatus: 'processing',
+      lastProcessMessage: `MinerU 解析任务已创建，任务ID：${task.taskId}`,
+    });
+    try {
+      const result = await this.mineruConfigsService.waitForSuccess(
+        task.taskId,
+        task.configId,
+      );
+      return result.markdown;
+    } catch (error) {
+      document.status = 'failed';
+      document.description =
+        error instanceof Error ? error.message : 'MinerU 解析失败';
+      await this.documentRepository.save(document);
+      throw error;
+    }
+  }
+
+  private async markBaseDocumentParsing(
+    base: KnowledgeBase,
+    taskId: string,
+    fileName?: string | null,
+  ) {
+    const current = await this.documentRepository.findOne({
+      where: { knowledgeBaseId: base.id },
+      order: { id: 'DESC' },
+    });
+    const document =
+      current ??
+      this.documentRepository.create({
+        knowledgeBaseId: base.id,
+        categoryId: base.categoryId,
+        sort: 0,
+      });
+    document.knowledgeBaseId = base.id;
+    document.categoryId = base.categoryId;
+    document.title = base.name;
+    document.sourceType = KNOWLEDGE_PARSE_MODE.mineru;
+    document.sourceName = fileName || base.fileName || base.name;
+    document.status = 'processing';
+    document.description = `MinerU 解析任务已创建，任务ID：${taskId}`;
+    document.hitKeywords = base.hitKeywords;
+    document.colloquialDescription = base.colloquialDescription;
+    document.matchPriority = base.matchPriority;
+    return this.documentRepository.save(document);
   }
 
   private async findBaseDocument(knowledgeBaseId: number) {
@@ -1375,7 +1422,7 @@ export class KnowledgeBasesService {
       base.contentType === 'text' ? base.name : base.fileName || base.name;
     document.content = content.trim();
     document.status = 'parsed';
-    document.description = null;
+    document.description = `${this.getParseModeLabel(parseMode)}完成，等待分片`;
     document.hitKeywords = base.hitKeywords;
     document.colloquialDescription = base.colloquialDescription;
     document.matchPriority = base.matchPriority;
