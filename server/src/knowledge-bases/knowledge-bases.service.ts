@@ -2,9 +2,10 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository, type FindOptionsWhere } from 'typeorm';
+import { In, Like, Repository, type FindOptionsWhere } from 'typeorm';
 import { createHash } from 'crypto';
 import {
   BatchDeleteKnowledgeBaseDto,
@@ -60,7 +61,7 @@ type KnowledgeParseMode =
   (typeof KNOWLEDGE_PARSE_MODE)[keyof typeof KNOWLEDGE_PARSE_MODE];
 
 @Injectable()
-export class KnowledgeBasesService {
+export class KnowledgeBasesService implements OnModuleInit {
   constructor(
     @InjectRepository(KnowledgeBase)
     private readonly baseRepository: Repository<KnowledgeBase>,
@@ -78,6 +79,119 @@ export class KnowledgeBasesService {
     private readonly vectorService: KnowledgeVectorService,
     private readonly logRecordsService: LogRecordsService,
   ) {}
+
+  async onModuleInit() {
+    await this.resumeProcessingMineruDocuments();
+  }
+
+  private async resumeProcessingMineruDocuments() {
+    const documents = await this.documentRepository.find({
+      where: {
+        sourceType: KNOWLEDGE_PARSE_MODE.mineru,
+        status: 'processing',
+        description: Like('%任务ID：%'),
+      },
+      order: { id: 'ASC' },
+    });
+
+    for (const document of documents) {
+      const taskId = this.extractMineruTaskId(document.description);
+      if (!taskId) continue;
+      this.taskQueueService.add(
+        'knowledge-base-document.resume-mineru',
+        {
+          documentId: document.id,
+          knowledgeBaseId: document.knowledgeBaseId,
+          taskId,
+        },
+        () => this.executeResumeMineruDocument(document.id, taskId),
+      );
+    }
+  }
+
+  private async executeResumeMineruDocument(
+    documentId: number,
+    taskId: string,
+  ) {
+    const document = await this.findDocument(documentId);
+    const base = await this.baseRepository.findOne({
+      where: { id: document.knowledgeBaseId },
+    });
+    let result: Awaited<ReturnType<MineruConfigsService['waitForSuccess']>>;
+    try {
+      result = await this.mineruConfigsService.waitForSuccess(taskId, {
+        onProgress: (status) =>
+          base
+            ? this.updateBaseMineruProgress(base, document, status)
+            : this.updateDocumentMineruProgress(document, status),
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'MinerU 解析恢复失败';
+      document.status = 'failed';
+      document.description = errorMessage;
+      await this.documentRepository.save(document);
+      if (base) {
+        await this.updateBaseProcess(base, {
+          processStage: 'failed',
+          parseStatus: 'failed',
+          lastProcessMessage: errorMessage,
+        });
+      }
+      throw error;
+    }
+
+    if (base?.parseStatus === 'processing') {
+      const savedDocument = await this.saveBaseDocument(
+        base,
+        result.markdown,
+        KNOWLEDGE_PARSE_MODE.mineru,
+      );
+      await this.updateBaseProcess(base, {
+        processStage: 'parsed',
+        parseStatus: 'success',
+        chunkStatus: 'pending',
+        indexStatus: 'pending',
+        lastProcessMessage: 'MinerU 解析恢复完成，等待分片',
+      });
+      await this.recordKnowledgeProcessLog(base, {
+        action: this.getParseLogAction(KNOWLEDGE_PARSE_MODE.mineru),
+        isSuccess: true,
+        message: 'MinerU 解析恢复完成，等待分片',
+        data: {
+          documentId: savedDocument.id,
+          parseMode: KNOWLEDGE_PARSE_MODE.mineru,
+        },
+      });
+      return {
+        documentId: savedDocument.id,
+        knowledgeBaseId: base.id,
+        processStage: 'parsed',
+      };
+    }
+
+    const saved = await this.applyThirdPartyMarkdown(
+      document,
+      result.markdown,
+      document.sourceName,
+    );
+    await this.recordKnowledgeDocumentProcessLog(saved.document, {
+      action: this.getParseLogAction(KNOWLEDGE_PARSE_MODE.mineru),
+      isSuccess: true,
+      message: 'MinerU 解析恢复完成',
+      data: {
+        documentId: saved.document.id,
+        knowledgeBaseId: saved.document.knowledgeBaseId,
+        chunkCount: saved.chunkCount,
+        parseMode: KNOWLEDGE_PARSE_MODE.mineru,
+      },
+    });
+    return {
+      documentId: saved.document.id,
+      knowledgeBaseId: saved.document.knowledgeBaseId,
+      chunkCount: saved.chunkCount,
+    };
+  }
 
   async findBases(query: QueryKnowledgeBaseDto) {
     const page = query.page ?? 1;
@@ -866,10 +980,11 @@ export class KnowledgeBasesService {
     document.status = 'processing';
     document.description = `MinerU 解析任务已创建，任务ID：${task.taskId}`;
     await this.documentRepository.save(document);
-    const result = await this.mineruConfigsService.waitForSuccess(
-      task.taskId,
-      task.configId,
-    );
+    const result = await this.mineruConfigsService.waitForSuccess(task.taskId, {
+      configId: task.configId,
+      onProgress: (status) =>
+        this.updateDocumentMineruProgress(document, status),
+    });
     const saved = await this.applyThirdPartyMarkdown(
       document,
       result.markdown,
@@ -1507,7 +1622,11 @@ export class KnowledgeBasesService {
     try {
       const result = await this.mineruConfigsService.waitForSuccess(
         task.taskId,
-        task.configId,
+        {
+          configId: task.configId,
+          onProgress: (status) =>
+            this.updateBaseMineruProgress(base, document, status),
+        },
       );
       return result.markdown;
     } catch (error) {
@@ -1546,6 +1665,72 @@ export class KnowledgeBasesService {
     document.colloquialDescription = base.colloquialDescription;
     document.matchPriority = base.matchPriority;
     return this.documentRepository.save(document);
+  }
+
+  private async updateBaseMineruProgress(
+    base: KnowledgeBase,
+    document: KnowledgeBaseDocument,
+    status: {
+      taskId: string;
+      status: string;
+      progress: number | null;
+      message: string;
+    },
+  ) {
+    const message = this.buildMineruProgressMessage(status);
+    await this.updateBaseProcess(base, {
+      processStage: 'parsing',
+      parseStatus: 'processing',
+      lastProcessMessage: message,
+    });
+    document.status = 'processing';
+    document.description = message;
+    await this.documentRepository.save(document);
+  }
+
+  private async updateDocumentMineruProgress(
+    document: KnowledgeBaseDocument,
+    status: {
+      taskId: string;
+      status: string;
+      progress: number | null;
+      message: string;
+    },
+  ) {
+    const message = this.buildMineruProgressMessage(status);
+    document.status = 'processing';
+    document.description = message;
+    await this.documentRepository.save(document);
+
+    const base = await this.baseRepository.findOne({
+      where: { id: document.knowledgeBaseId },
+    });
+    if (!base) return;
+    await this.updateBaseProcess(base, {
+      processStage: 'parsing',
+      parseStatus: 'processing',
+      lastProcessMessage: message,
+    });
+  }
+
+  private buildMineruProgressMessage(status: {
+    taskId: string;
+    status: string;
+    progress: number | null;
+    message: string;
+  }) {
+    const remoteStatus = status.status ? `，状态：${status.status}` : '';
+    const progress =
+      status.progress === null || status.progress === undefined
+        ? ''
+        : `，进度：${status.progress}%`;
+    const remoteMessage = status.message ? `，${status.message}` : '';
+    return `MinerU 解析中，任务ID：${status.taskId}${remoteStatus}${progress}${remoteMessage}`;
+  }
+
+  private extractMineruTaskId(value?: string | null) {
+    const match = value?.match(/任务ID：([^，,；;\s]+)/);
+    return match?.[1] ?? '';
   }
 
   private async findBaseDocument(knowledgeBaseId: number) {

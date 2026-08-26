@@ -253,9 +253,9 @@ export class LogRecordsService implements OnModuleInit {
         summary,
         beforeData: payload.beforeData ?? null,
         afterData: {
-          ...(payload.afterData ?? {}),
           status: payload.isSuccess === false ? 'failed' : 'success',
           errorMessage: payload.errorMessage ?? null,
+          ...(payload.afterData ?? {}),
         },
         ip: '',
         userAgent: 'internal',

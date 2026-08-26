@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-08-26 后端回写 MinerU 解析进度与异步任务日志
+- 新增：无
+- 修改：
+  - `server/src/mineru-configs/mineru-configs.service.ts`（MinerU 等待结果支持进度回调，保留原有 `configId` 调用兼容）
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（MinerU 解析轮询期间持续回写知识库主表与文档处理结果；服务重启后自动恢复带任务 ID 的解析中文档）
+  - `server/src/task-queue/task-queue.service.ts`（异步任务提交、执行中、成功、失败均按日志配置写入内部操作日志）
+  - `server/src/log-records/log-api-scanner.ts`、`server/src/log-records/log-records.service.ts`（日志扫描源补充文档处理异步任务提交/执行中动作，并保留内部任务真实状态）
+- 删除：无
+- 说明：知识库列表不再只能看到“任务已创建”，后端轮询 MinerU 时会同步更新进度/消息；日志模块勾选“文档处理异步任务”后，可查看任务提交、执行中和最终结果记录；重启服务后，历史“解析中”的 MinerU 任务会根据已落库任务 ID 继续查询并落最终状态。
+
 ### 2026-08-26 操作日志支持内部动作记录
 - 新增：无
 - 修改：

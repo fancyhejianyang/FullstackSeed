@@ -58,6 +58,11 @@ export interface MineruCreateTaskResult {
   raw: unknown;
 }
 
+interface MineruWaitForSuccessOptions {
+  configId?: number | null;
+  onProgress?: (result: MineruTaskStatus) => void | Promise<void>;
+}
+
 @Injectable()
 export class MineruConfigsService {
   constructor(
@@ -245,15 +250,23 @@ export class MineruConfigsService {
     };
   }
 
-  async waitForSuccess(taskId: string, configId?: number | null) {
-    const config = configId
-      ? await this.findUsableEntity(configId)
+  async waitForSuccess(
+    taskId: string,
+    configIdOrOptions?: number | null | MineruWaitForSuccessOptions,
+  ) {
+    const options =
+      typeof configIdOrOptions === 'object'
+        ? configIdOrOptions
+        : { configId: configIdOrOptions };
+    const config = options?.configId
+      ? await this.findUsableEntity(options.configId)
       : await this.findEnabledEntity();
     const startedAt = Date.now();
     const timeoutMs = config.timeoutMinutes * 60 * 1000;
     const intervalMs = config.pollIntervalSeconds * 1000;
     while (Date.now() - startedAt <= timeoutMs) {
       const result = await this.queryParseTaskWithConfig(config, taskId);
+      await options?.onProgress?.(result);
       if (this.isSuccessStatus(result.status)) return result;
       if (this.isFailedStatus(result.status)) {
         throw new BadRequestException(result.message || 'MinerU 解析任务失败');

@@ -26,15 +26,33 @@ const INTERNAL_METHOD = 'INTERNAL';
 const INTERNAL_LOG_MODULES: ScannedLogModule[] = [
   {
     moduleId: 'async-tasks',
-    moduleName: '异步任务',
+    moduleName: '文档处理异步任务',
     modelName: 'TaskQueue',
     tableName: 'task_queue',
     routePath: '/internal/async-tasks',
     sourceFile: 'internal',
     isSystem: false,
     actions: [
-      createInternalAction('success', '任务成功', '/internal/async-tasks/success'),
-      createInternalAction('failed', '任务失败', '/internal/async-tasks/failed'),
+      createInternalAction(
+        'submitted',
+        '任务提交',
+        '/internal/async-tasks/submitted',
+      ),
+      createInternalAction(
+        'running',
+        '任务执行中',
+        '/internal/async-tasks/running',
+      ),
+      createInternalAction(
+        'success',
+        '任务成功',
+        '/internal/async-tasks/success',
+      ),
+      createInternalAction(
+        'failed',
+        '任务失败',
+        '/internal/async-tasks/failed',
+      ),
     ],
   },
   {
@@ -56,8 +74,16 @@ const INTERNAL_LOG_MODULES: ScannedLogModule[] = [
         'MinerU 解析',
         '/internal/knowledge-processing/mineru-parse',
       ),
-      createInternalAction('chunk', '分片', '/internal/knowledge-processing/chunk'),
-      createInternalAction('index', '索引', '/internal/knowledge-processing/index'),
+      createInternalAction(
+        'chunk',
+        '分片',
+        '/internal/knowledge-processing/chunk',
+      ),
+      createInternalAction(
+        'index',
+        '索引',
+        '/internal/knowledge-processing/index',
+      ),
     ],
   },
   {

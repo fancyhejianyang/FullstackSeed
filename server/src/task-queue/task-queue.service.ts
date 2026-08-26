@@ -41,6 +41,7 @@ export class TaskQueueService {
     };
     this.tasks.set(record.id, record);
     this.queue.push({ record, handler });
+    void this.recordTaskLog(record, 'submitted');
     void this.drain();
     return this.toResult(record);
   }
@@ -70,6 +71,7 @@ export class TaskQueueService {
   ) {
     record.status = 'running';
     record.startedAt = new Date().toISOString();
+    await this.recordTaskLog(record, 'running');
     try {
       record.result = await handler();
       record.status = 'success';
@@ -83,18 +85,29 @@ export class TaskQueueService {
     }
   }
 
-  private async recordTaskLog(record: TaskQueueRecord) {
+  private async recordTaskLog(
+    record: TaskQueueRecord,
+    action: 'submitted' | TaskQueueStatus = record.status,
+  ) {
+    const labelMap: Record<string, string> = {
+      pending: '等待中',
+      submitted: '已提交',
+      running: '执行中',
+      success: '执行成功',
+      failed: '执行失败',
+    };
     await this.logRecordsService
       .recordInternalAction({
         moduleId: 'async-tasks',
-        action: record.status === 'failed' ? 'failed' : 'success',
+        action,
         recordId: record.id,
-        summary: `${record.name} ${record.status === 'failed' ? '执行失败' : '执行成功'}`,
+        summary: `${record.name} ${labelMap[action]}`,
         isSuccess: record.status !== 'failed',
         errorMessage: record.errorMessage ?? null,
         afterData: {
           taskId: record.id,
           name: record.name,
+          status: record.status,
           payload: record.payload ?? null,
           result: record.result ?? null,
           createdAt: record.createdAt,
