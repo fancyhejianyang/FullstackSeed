@@ -209,7 +209,7 @@ onMounted(async () => {
       @selection-change="handleSelectionChange"
     >
       <el-table-column type="selection" width="48" />
-      <el-table-column prop="name" label="菜单名称" width="150">
+      <el-table-column prop="name" label="菜单名称" width="180">
         <template #default="{ row }">
           <el-icon v-if="isTopMenu(row) && row.icon" class="menu-icon">
             <component :is="row.icon" />

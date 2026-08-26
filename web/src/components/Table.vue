@@ -65,6 +65,8 @@ const props = withDefaults(
     autoRefreshOnDelete?: boolean;
     // 内置批量删除成功后是否自动刷新
     autoRefreshOnBatchDelete?: boolean;
+    // 是否自动撑满容器；设为 false 时按列宽产生横向滚动
+    fit?: boolean;
   }>(),
   {
     searchFields: () => [],
@@ -80,6 +82,7 @@ const props = withDefaults(
     rowKey: 'id',
     autoRefreshOnDelete: true,
     autoRefreshOnBatchDelete: true,
+    fit: true,
   },
 );
 
@@ -336,6 +339,7 @@ onMounted(fetchData);
       :data="list"
       border
       stripe
+      :fit="props.fit"
       @selection-change="handleSelectionChange"
       @row-click="handleRowClick"
     >

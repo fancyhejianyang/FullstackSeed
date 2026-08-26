@@ -411,10 +411,6 @@ onMounted(fetchModules);
                 class="data-import__field-item"
               >
                 <span class="data-import__field-name">{{ field.label }}</span>
-                <span class="data-import__field-prop">{{ field.prop }}</span>
-                <el-tag size="small" type="info">
-                  {{ getFieldTypeLabel(field) }}
-                </el-tag>
                 <el-tag v-if="field.required" size="small" type="danger">
                   必填
                 </el-tag>

@@ -75,6 +75,7 @@
 | `deleteRequest` | `(row) => Promise<unknown>` | — | 删除 API；传入后由组件负责二次确认 + 执行 + 自动刷新 |
 | `batchDeleteRequest` | `({ids,rows}) => Promise<unknown>` | — | 批量删除 API；同上 |
 | `autoRefreshOnDelete` / `autoRefreshOnBatchDelete` | `boolean` | `true` | 删除成功后是否自动刷新 |
+| `fit` | `boolean` | `true` | 是否自动撑满容器；设为 `false` 时按列宽产生横向滚动 |
 
 ### Emits
 

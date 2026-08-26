@@ -9,7 +9,7 @@
  * - `prefixText` / `suffixText` 用于单位、币种等轻量展示，宽度默认撑满
  * - 暴露 `validate()`，业务表单可在提交前主动触发组件内置校验
  */
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import {
   numberRangeRule,
   requiredRule,
@@ -49,6 +49,7 @@ const props = withDefaults(
 
 const model = defineModel<number | null>({ default: null });
 const error = ref('');
+const draftValue = ref(formatDraftValue(model.value));
 
 const emit = defineEmits<{
   input: [value: number | null];
@@ -60,28 +61,40 @@ const emit = defineEmits<{
   validate: [result: true | string];
 }>();
 
-const displayValue = computed(() => model.value ?? '');
+const displayValue = computed(() => draftValue.value);
+
+watch(model, (value) => {
+  const nextValue = formatDraftValue(value);
+  if (draftValue.value !== nextValue) {
+    draftValue.value = nextValue;
+  }
+});
 
 function handleInput(value: string | number) {
-  const parsed = parseValue(String(value), false);
+  const normalized = normalizeInput(String(value));
+  draftValue.value = normalized;
+  const parsed = parseValue(normalized, false);
   model.value = typeof parsed === 'number' ? parsed : null;
   emit('input', model.value);
 }
 
 function handleChange(value: string | number) {
   model.value = parseValue(String(value), true) as number | null;
+  draftValue.value = formatDraftValue(model.value);
   validate();
   emit('change', model.value);
 }
 
 function handleBlur(event: FocusEvent) {
-  model.value = parseValue(String(model.value ?? ''), true) as number | null;
+  model.value = parseValue(draftValue.value, true) as number | null;
+  draftValue.value = formatDraftValue(model.value);
   validate();
   emit('blur', event);
 }
 
 function handleClear() {
   model.value = null;
+  draftValue.value = '';
   error.value = '';
   emit('clear');
 }
@@ -92,10 +105,7 @@ function handleEnter() {
 
 function parseValue(value: string, final: boolean) {
   // 输入中保留未完成的数字形态，最终确认时再落成 null，避免用户无法输入负数/小数。
-  const normalized =
-    props.mode === 'integer'
-      ? normalizeInteger(value)
-      : normalizeNumber(value, props.mode === 'money' ? props.precision : undefined);
+  const normalized = normalizeInput(value);
   if (normalized === '' || normalized === '-' || normalized === '.') {
     return final ? null : normalized;
   }
@@ -106,6 +116,16 @@ function parseValue(value: string, final: boolean) {
   if (typeof props.min === 'number') numeric = Math.max(props.min, numeric);
   if (typeof props.max === 'number') numeric = Math.min(props.max, numeric);
   return numeric;
+}
+
+function normalizeInput(value: string) {
+  return props.mode === 'integer'
+    ? normalizeInteger(value)
+    : normalizeNumber(value, props.mode === 'money' ? props.precision : undefined);
+}
+
+function formatDraftValue(value: number | null) {
+  return value === null || value === undefined ? '' : String(value);
 }
 
 function normalizeInteger(value: string) {
