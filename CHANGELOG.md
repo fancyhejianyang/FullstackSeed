@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-08-28 解析与分片流程解耦
+- 新增：无
+- 修改：
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（手动解析、AI 模型解析、视觉 OCR、MinerU 解析完成后只保存正文并清理旧分片/向量，不再自动生成分片）
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（解析成功后的知识库和文档状态统一为“解析完成，等待分片”，独立分片接口作为后续处理入口）
+- 删除：无
+- 说明：知识库处理流程统一为“解析 → 分片 → 索引”，解析结果不会隐式进入分片或索引阶段。
+
 ### 2026-08-26 文档解析升级为 AI 模型解析入口
 - 新增：无
 - 修改：

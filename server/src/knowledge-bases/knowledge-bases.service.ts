@@ -514,6 +514,7 @@ export class KnowledgeBasesService implements OnModuleInit {
     try {
       const content = await this.parseBaseContentByMode(base, parseMode);
       const document = await this.saveBaseDocument(base, content, parseMode);
+      await this.resetDocumentChunks(document.id);
       await this.updateBaseProcess(base, {
         processStage: 'parsed',
         parseStatus: 'success',
@@ -1183,24 +1184,19 @@ export class KnowledgeBasesService implements OnModuleInit {
     document.sourceType = KNOWLEDGE_PARSE_MODE.manual;
     const saved = await this.documentRepository.save(document);
     await this.syncBaseParsedContent(saved, content);
-    await this.deleteVectorsByCondition({ documentId: saved.id });
-    await this.chunkRepository.softDelete({ documentId: saved.id });
-    const chunkCount = await this.saveDocumentChunks(saved);
-    saved.description = chunkCount
-      ? `手动解析完成，共 ${chunkCount} 个分片`
-      : '手动解析完成，等待手动分片';
+    await this.resetDocumentChunks(saved.id);
+    saved.description = '手动解析完成，等待分片';
     await this.documentRepository.save(saved);
     await this.taskFileLogger.write('document.manual.parse.saved', {
       documentId: saved.id,
       knowledgeBaseId: saved.knowledgeBaseId,
       contentLength: content.length,
-      chunkCount,
     });
     return {
       document: saved,
       documentId: saved.id,
       isCompleted: true,
-      chunkCount,
+      chunkCount: 0,
       parseMode,
     };
   }
@@ -1273,12 +1269,8 @@ export class KnowledgeBasesService implements OnModuleInit {
     document.sourceName = fileName || document.sourceName;
     let saved = await this.documentRepository.save(document);
     await this.syncBaseParsedContent(saved, content);
-    await this.deleteVectorsByCondition({ documentId: saved.id });
-    await this.chunkRepository.softDelete({ documentId: saved.id });
-    const chunkCount = await this.saveDocumentChunks(saved);
-    saved.description = chunkCount
-      ? `AI 模型解析完成，共 ${chunkCount} 个分片`
-      : 'AI 模型解析完成，等待手动分片';
+    await this.resetDocumentChunks(saved.id);
+    saved.description = 'AI 模型解析完成，等待分片';
     saved = await this.documentRepository.save(saved);
     await this.taskFileLogger.write('document.ai-text-parse.success', {
       documentId: saved.id,
@@ -1289,14 +1281,13 @@ export class KnowledgeBasesService implements OnModuleInit {
       contentType,
       sourceContentLength: sourceContent.length,
       contentLength: content.length,
-      chunkCount,
       elapsedMilliseconds: result.elapsedMilliseconds,
     });
     return {
       document: saved,
       documentId: saved.id,
       isCompleted: true,
-      chunkCount,
+      chunkCount: 0,
       parseMode: KNOWLEDGE_PARSE_MODE.ai,
     };
   }
@@ -1359,12 +1350,8 @@ export class KnowledgeBasesService implements OnModuleInit {
     document.sourceName = fileName;
     let saved = await this.documentRepository.save(document);
     await this.syncBaseParsedContent(saved, content);
-    await this.deleteVectorsByCondition({ documentId: saved.id });
-    await this.chunkRepository.softDelete({ documentId: saved.id });
-    const chunkCount = await this.saveDocumentChunks(saved);
-    saved.description = chunkCount
-      ? `AI 模型解析完成，共 ${chunkCount} 个分片`
-      : 'AI 模型解析完成，等待手动分片';
+    await this.resetDocumentChunks(saved.id);
+    saved.description = 'AI 模型解析完成，等待分片';
     saved = await this.documentRepository.save(saved);
     await this.taskFileLogger.write('document.vision-ocr.success', {
       documentId: saved.id,
@@ -1374,14 +1361,13 @@ export class KnowledgeBasesService implements OnModuleInit {
       model: result.model,
       imageCount: imageDataUrls.length,
       contentLength: content.length,
-      chunkCount,
       elapsedMilliseconds: result.elapsedMilliseconds,
     });
     return {
       document: saved,
       documentId: saved.id,
       isCompleted: true,
-      chunkCount,
+      chunkCount: 0,
       parseMode: KNOWLEDGE_PARSE_MODE.ai,
     };
   }
@@ -1913,6 +1899,23 @@ export class KnowledgeBasesService implements OnModuleInit {
   private async deleteVectorsByIds(vectorIds: string[]) {
     if (!vectorIds.length) return;
     await this.vectorService.deleteChunks(vectorIds);
+  }
+
+  private async resetDocumentChunks(documentId: number) {
+    await this.deleteVectorsByCondition({ documentId });
+    await this.chunkRepository.softDelete({ documentId });
+    const document = await this.findDocument(documentId);
+    const base = await this.baseRepository.findOne({
+      where: { id: document.knowledgeBaseId },
+    });
+    if (!base) return;
+    await this.updateBaseProcess(base, {
+      processStage: 'parsed',
+      parseStatus: 'success',
+      chunkStatus: 'pending',
+      indexStatus: 'pending',
+      lastProcessMessage: '解析完成，等待分片',
+    });
   }
 
   private buildCategoryTree(list: KnowledgeBaseCategory[]) {
@@ -2586,14 +2589,10 @@ export class KnowledgeBasesService implements OnModuleInit {
     }
     let saved = await this.documentRepository.save(document);
     await this.syncBaseParsedContent(saved, content);
-    await this.deleteVectorsByCondition({ documentId: saved.id });
-    await this.chunkRepository.softDelete({ documentId: saved.id });
-    const chunkCount = await this.saveDocumentChunks(saved);
-    saved.description = chunkCount
-      ? `AI 模型解析完成，共 ${chunkCount} 个分片`
-      : 'AI 模型解析完成，等待手动分片';
+    await this.resetDocumentChunks(saved.id);
+    saved.description = 'AI 模型解析完成，等待分片';
     saved = await this.documentRepository.save(saved);
-    return { document: saved, chunkCount };
+    return { document: saved, chunkCount: 0 };
   }
 
   private resolveDocumentManualContentType(
