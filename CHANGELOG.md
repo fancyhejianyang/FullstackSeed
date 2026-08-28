@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-08-28 统一解析正文格式以兼容自动和手动分片
+- 新增：无
+- 修改：
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（统一规范手动解析、AI 解析和 MinerU 解析产生的正文换行、空格与段落格式）
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（自动分片统一读取标准化正文，同时保留手动分片的原文坐标和链接内容）
+- 删除：无
+- 说明：纯文本、PDF、Word、图片 OCR 结果均可作为 Markdown 兼容的普通正文参与自动分片和手动分片。
+
 ### 2026-08-28 解析与分片流程解耦
 - 新增：无
 - 修改：

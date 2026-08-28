@@ -1179,7 +1179,7 @@ export class KnowledgeBasesService implements OnModuleInit {
       fileUrl: dto.fileUrl,
       fileName: document.sourceName,
     });
-    document.content = content.trim();
+    document.content = this.normalizeParsedContent(content);
     document.status = 'parsed';
     document.sourceType = KNOWLEDGE_PARSE_MODE.manual;
     const saved = await this.documentRepository.save(document);
@@ -1259,7 +1259,7 @@ export class KnowledgeBasesService implements OnModuleInit {
     if (!result.isSuccess) {
       throw new BadRequestException(result.errorMessage || '文档解析模型调用失败');
     }
-    const content = result.answer.trim();
+    const content = this.normalizeParsedContent(result.answer);
     if (!content) {
       throw new BadRequestException('文档解析模型结果缺少解析正文');
     }
@@ -1340,7 +1340,7 @@ export class KnowledgeBasesService implements OnModuleInit {
         result.errorMessage || '视觉模型 OCR 调用失败',
       );
     }
-    const content = result.answer.trim();
+    const content = this.normalizeParsedContent(result.answer);
     if (!content) {
       throw new BadRequestException('视觉模型 OCR 结果缺少解析正文');
     }
@@ -2498,7 +2498,7 @@ export class KnowledgeBasesService implements OnModuleInit {
     content: string,
     parseMode: KnowledgeParseMode,
   ) {
-    const normalizedContent = content.trim();
+    const normalizedContent = this.normalizeParsedContent(content);
     if (!normalizedContent) {
       throw new BadRequestException(
         `${this.getParseModeLabel(parseMode)}结果缺少解析正文`,
@@ -2569,7 +2569,7 @@ export class KnowledgeBasesService implements OnModuleInit {
     fileName?: string,
     raw?: unknown,
   ) {
-    const content = markdown.trim();
+    const content = this.normalizeParsedContent(markdown);
     if (!content) {
       throw new BadRequestException(this.buildMineruEmptyContentMessage(raw));
     }
@@ -2712,7 +2712,7 @@ export class KnowledgeBasesService implements OnModuleInit {
     config: KnowledgeChunkConfig,
     deadline: number,
   ): string[] {
-    const text = content.trim();
+    const text = this.normalizeParsedContent(content);
     if (!text) return [];
     const chunkSize = config.chunkSize || 1200;
     const overlap = Math.min(config.chunkOverlap || 0, chunkSize - 1);
@@ -2720,6 +2720,15 @@ export class KnowledgeBasesService implements OnModuleInit {
       return this.splitByParagraph(text, chunkSize, overlap, deadline);
     }
     return this.splitByLength(text, chunkSize, overlap, deadline);
+  }
+
+  private normalizeParsedContent(content: string) {
+    return content
+      .replace(/\r\n?/g, '\n')
+      .replace(/\u00a0/g, ' ')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
   }
 
   private splitByLength(
