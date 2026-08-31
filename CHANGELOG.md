@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-08-31 手动 Word 解析支持 .doc
+- 新增：
+  - `server/package.json`、`server/package-lock.json`（加入 `word-extractor`，用于读取旧版二进制 Word 文件）
+- 修改：
+  - `server/src/document-parsers/parsers/word-document.parser.ts`（业务层继续统一使用 `word` 类型，`.docx` 走 `mammoth`，`.doc` 走 `word-extractor`，并统一输出正文）
+- 删除：无
+- 说明：手动解析不再因 `.doc` 扩展名直接要求使用 MinerU；该依赖支持 Buffer 输入，不要求安装 Office 或系统级转换工具。
+
 ### 2026-08-28 统一解析正文格式以兼容自动和手动分片
 - 新增：无
 - 修改：

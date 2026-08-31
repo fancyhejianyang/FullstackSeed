@@ -5,6 +5,14 @@ import {
   type DocumentParser,
 } from '../types';
 
+type WordExtractorDocument = {
+  getBody: () => string;
+};
+
+type WordExtractorClass = new () => {
+  extract: (source: Buffer) => Promise<WordExtractorDocument>;
+};
+
 @Injectable()
 export class WordDocumentParser implements DocumentParser {
   supports(contentType: DocumentParseContentType) {
@@ -15,9 +23,12 @@ export class WordDocumentParser implements DocumentParser {
     if (!context.file?.buffer.length) {
       throw new BadRequestException('Word 解析缺少文件内容');
     }
+    if (this.isDoc(context.file.fileName)) {
+      return this.parseLegacyDoc(context.file.buffer);
+    }
     if (!this.isDocx(context.file.fileName)) {
       throw new BadRequestException(
-        '手动 Word 解析目前支持 .docx；.doc 请使用 MinerU 解析',
+        '手动 Word 解析仅支持 .doc 或 .docx 文件',
       );
     }
     const mammoth = this.loadMammoth();
@@ -38,6 +49,27 @@ export class WordDocumentParser implements DocumentParser {
     return (fileName || '').toLowerCase().endsWith('.docx');
   }
 
+  private isDoc(fileName?: string | null) {
+    return (fileName || '').toLowerCase().endsWith('.doc');
+  }
+
+  private async parseLegacyDoc(buffer: Buffer) {
+    const WordExtractor = this.loadWordExtractor();
+    let result: WordExtractorDocument;
+    try {
+      result = await new WordExtractor().extract(buffer);
+    } catch {
+      throw new BadRequestException(
+        '手动 Word 解析失败，无法读取 .doc 文件内容',
+      );
+    }
+    const text = this.normalizeText(result.getBody());
+    if (!text) {
+      throw new BadRequestException('Word 文档未提取到正文内容');
+    }
+    return text;
+  }
+
   private loadMammoth(): {
     extractRawText: (input: { buffer: Buffer }) => Promise<{ value: string }>;
     convertToHtml: (input: { buffer: Buffer }) => Promise<{ value: string }>;
@@ -55,6 +87,18 @@ export class WordDocumentParser implements DocumentParser {
     } catch {
       throw new BadRequestException(
         '手动 Word 解析依赖 mammoth 未安装，请安装依赖后重试',
+      );
+    }
+  }
+
+  private loadWordExtractor(): WordExtractorClass {
+    try {
+      // word-extractor 没有内置 TypeScript 类型，运行时加载可保持解析器模块解耦。
+      const requireFn = eval('require') as NodeRequire;
+      return requireFn('word-extractor') as WordExtractorClass;
+    } catch {
+      throw new BadRequestException(
+        '手动 .doc 解析依赖 word-extractor 未安装，请安装依赖后重试',
       );
     }
   }
