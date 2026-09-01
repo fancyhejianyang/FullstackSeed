@@ -346,6 +346,21 @@ export function createKnowledgeBaseCategory(
   );
 }
 
+/** 生成下一个知识库分类编码（层级 + 序号：顶级 CAT_001，非顶级=父编码_001） */
+export function getNextKnowledgeBaseCategoryCode(parentId?: number) {
+  return request.get<unknown, { code: string }>(
+    '/knowledge-bases/categories/next-code',
+    { params: { parentId: parentId ?? undefined } },
+  );
+}
+
+/** 生成下一个知识库编码（所属分类编码 + 序号，未选分类时前缀 KB） */
+export function getNextKnowledgeBaseCode(categoryId?: number) {
+  return request.get<unknown, { code: string }>('/knowledge-bases/next-code', {
+    params: { categoryId: categoryId ?? undefined },
+  });
+}
+
 export function updateKnowledgeBaseCategory(
   id: number,
   data: Partial<KnowledgeBaseCategoryForm>,

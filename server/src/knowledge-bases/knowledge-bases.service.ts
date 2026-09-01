@@ -5,7 +5,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Like, Repository, type FindOptionsWhere } from 'typeorm';
+import { In, IsNull, Like, Repository, type FindOptionsWhere } from 'typeorm';
 import { createHash } from 'crypto';
 import {
   BatchDeleteKnowledgeBaseDto,
@@ -838,6 +838,55 @@ export class KnowledgeBasesService implements OnModuleInit {
     const category = await this.categoryRepository.findOne({ where: { id } });
     if (!category) throw new NotFoundException('知识库分类不存在');
     return category;
+  }
+
+  /**
+   * 生成下一个分类编码（层级 + 序号）：
+   * 顶级 = CAT_001 / CAT_002 …；非顶级 = 父分类编码_001 / _002 …
+   */
+  async nextCategoryCode(parentId?: number | null) {
+    let prefix = 'CAT';
+    if (parentId) {
+      const parent = await this.findCategory(parentId);
+      prefix = parent.code?.trim() || `CAT_${parent.id}`;
+    }
+    const siblings = await this.categoryRepository.find({
+      where: parentId ? { parentId } : { parentId: IsNull() },
+      select: ['code'],
+    });
+    return { code: this.nextSequentialCode(siblings, prefix) };
+  }
+
+  /**
+   * 生成下一个知识库编码（所属分类编码 + 序号）：
+   * 未选分类时兜底前缀 KB；有分类则 = 分类编码_001 / _002 …
+   */
+  async nextBaseCode(categoryId?: number | null) {
+    let prefix = 'KB';
+    if (categoryId) {
+      const category = await this.findCategory(categoryId);
+      prefix = category.code?.trim() || `CAT_${category.id}`;
+    }
+    const bases = await this.baseRepository.find({
+      where: categoryId ? { categoryId } : { categoryId: IsNull() },
+      select: ['code'],
+    });
+    return { code: this.nextSequentialCode(bases, prefix) };
+  }
+
+  /** 取同前缀下最大序号 + 1，格式化为 3 位零填充，如 CAT_001 */
+  private nextSequentialCode(
+    existing: Array<{ code?: string | null }>,
+    prefix: string,
+  ): string {
+    const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`^${escaped}_(\\d+)$`);
+    let max = 0;
+    for (const item of existing) {
+      const match = regex.exec(item.code ?? '');
+      if (match) max = Math.max(max, Number(match[1]));
+    }
+    return `${prefix}_${String(max + 1).padStart(3, '0')}`;
   }
 
   async createCategory(dto: CreateKnowledgeBaseCategoryDto) {

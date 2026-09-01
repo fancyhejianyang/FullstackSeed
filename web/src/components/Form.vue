@@ -62,7 +62,11 @@ const props = withDefaults(
 // v-model 绑定表单数据对象
 const model = defineModel<Record<string, any>>({ required: true });
 
-defineEmits<{ enter: [] }>();
+defineEmits<{
+  enter: [];
+  /** 默认单行输入失焦时透传，载荷为 (字段 prop, 原生事件)，供业务页做自动填充等 */
+  blur: [prop: string, event: FocusEvent];
+}>();
 
 const formRef = ref<FormInstance>();
 
@@ -196,6 +200,7 @@ defineExpose({ validate, resetFields });
         :placeholder="field.placeholder || `请输入${field.label}`"
         clearable
         @enter="$emit('enter')"
+        @blur="$emit('blur', field.prop, $event)"
       />
     </el-form-item>
     <!-- 额外操作区（如搜索栏的查询/重置按钮） -->

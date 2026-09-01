@@ -10,6 +10,7 @@ import {
   createKnowledgeBaseCategory,
   deleteKnowledgeBaseCategory,
   getKnowledgeBaseCategoryTree,
+  getNextKnowledgeBaseCategoryCode,
   updateKnowledgeBaseCategory,
   type KnowledgeBaseCategoryTreeNode,
 } from '@/api/knowledgeBase';
@@ -45,7 +46,12 @@ const fields = computed<FormField[]>(() => [
     options: parentOptions.value,
   },
   { prop: 'name', label: '名称', type: 'input' },
-  { prop: 'code', label: '编码', type: 'input' },
+  {
+    prop: 'code',
+    label: '编码',
+    type: 'input',
+    placeholder: '留空时输入名称后失焦自动生成',
+  },
   { prop: 'description', label: '描述', type: 'textarea', rows: 3 },
   { prop: 'sort', label: '排序', component: 'InputNumber', componentProps: { min: 0 } },
 ]);
@@ -118,6 +124,22 @@ function openEdit(row: KnowledgeBaseCategoryTreeNode) {
     sort: row.sort,
   });
   visible.value = true;
+}
+
+/**
+ * 名称失焦时自动生成编码（层级 + 序号）：
+ * 仅当编码为空且名称为空时跳过，已手动填写的编码不会被覆盖。
+ */
+async function handleFieldBlur(prop: string) {
+  if (prop !== 'name') return;
+  if (!form.name.trim() || form.code.trim()) return;
+  try {
+    const parentId = form.parentId ? Number(form.parentId) : undefined;
+    const { code } = await getNextKnowledgeBaseCategoryCode(parentId);
+    form.code = code;
+  } catch {
+    // request 拦截器已统一提示，这里无需重复弹错
+  }
 }
 
 async function save() {
@@ -246,6 +268,7 @@ onMounted(fetchCategories);
         :fields="fields"
         :rules="rules"
         label-width="90px"
+        @blur="handleFieldBlur"
       />
     </Dialog>
   </PageContainer>

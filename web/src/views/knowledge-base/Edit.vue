@@ -7,6 +7,7 @@ import UploadFile from '@/components/UploadFile.vue';
 import {
   createKnowledgeBase,
   getKnowledgeBaseCategoryTree,
+  getNextKnowledgeBaseCode,
   updateKnowledgeBase,
   type KnowledgeBase,
   type KnowledgeBaseCategoryTreeNode,
@@ -28,6 +29,7 @@ const fillingForm = ref(false);
 const form = reactive({
   categoryId: '' as string | number,
   name: '',
+  code: '',
   hitKeywords: '',
   colloquialDescription: '',
   matchPriority: 0,
@@ -57,6 +59,12 @@ const baseFields = computed<FormField[]>(() => [
     placeholder: '请选择所属分类',
   },
   { prop: 'name', label: '名称', type: 'input' },
+  {
+    prop: 'code',
+    label: '编码',
+    type: 'input',
+    placeholder: '留空时输入名称后失焦自动生成',
+  },
   {
     prop: 'hitKeywords',
     label: '命中关键字',
@@ -176,6 +184,7 @@ function resetForm() {
   Object.assign(form, {
     categoryId: '',
     name: '',
+    code: '',
     hitKeywords: '',
     colloquialDescription: '',
     matchPriority: 0,
@@ -193,6 +202,7 @@ function fillForm(row: KnowledgeBase) {
   Object.assign(form, {
     categoryId: row.categoryId ?? '',
     name: row.name ?? '',
+    code: row.code ?? '',
     hitKeywords: row.hitKeywords ?? '',
     colloquialDescription: row.colloquialDescription ?? '',
     matchPriority: row.matchPriority ?? 0,
@@ -237,6 +247,22 @@ watch(
   },
 );
 
+/**
+ * 名称失焦时自动生成编码（所属分类编码 + 序号）：
+ * 仅当编码为空且名称为空时跳过，已手动填写的编码不会被覆盖。
+ */
+async function handleFieldBlur(prop: string) {
+  if (prop !== 'name') return;
+  if (!form.name.trim() || form.code.trim()) return;
+  try {
+    const categoryId = form.categoryId ? Number(form.categoryId) : undefined;
+    const { code } = await getNextKnowledgeBaseCode(categoryId);
+    form.code = code;
+  } catch {
+    // request 拦截器已统一提示，这里无需重复弹错
+  }
+}
+
 async function handleSubmit() {
   await baseFormRef.value?.validate();
   await contentFormRef.value?.validate();
@@ -245,6 +271,7 @@ async function handleSubmit() {
     const payload = {
       categoryId: Number(form.categoryId),
       name: form.name,
+      code: form.code,
       hitKeywords: form.hitKeywords,
       colloquialDescription: form.colloquialDescription,
       matchPriority: Number(form.matchPriority || 0),
@@ -286,6 +313,7 @@ onMounted(fetchCategories);
         v-model="form"
         :fields="baseFields"
         :rules="rules"
+        @blur="handleFieldBlur"
         label-width="100px"
       />
       <div class="knowledge-base-edit__section knowledge-base-edit__section--next">

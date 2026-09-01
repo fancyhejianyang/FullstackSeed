@@ -1,5 +1,18 @@
 # CHANGELOG
 
+### 2026-09-01 知识库分类 / 知识库编码自动生成（层级 + 序号，名称失焦触发）
+- 新增：
+  - `server/src/knowledge-bases/dto/knowledge-base.dto.ts`（新增 `QueryNextCategoryCodeDto` / `QueryNextBaseCodeDto`）
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（新增 `nextCategoryCode` / `nextBaseCode` / `nextSequentialCode`：顶级分类 `CAT_001` 起、非顶级继承父编码，知识库取所属分类编码 + 3 位序号，未选分类兜底前缀 `KB`）
+  - `server/src/knowledge-bases/knowledge-bases.controller.ts`（新增 `GET /knowledge-bases/categories/next-code`、`GET /knowledge-bases/next-code`，权限 `KnowledgeBase.create`，声明在 `@Get(':id')` 之前避免被捕获）
+  - `web/src/api/knowledgeBase.ts`（新增 `getNextKnowledgeBaseCategoryCode` / `getNextKnowledgeBaseCode`）
+  - `web/src/components/Form.vue`（默认单行输入新增 `blur` 事件透传，载荷 `(prop, event)`，向后兼容）
+  - `web/src/views/knowledge-base/Categories.vue`（分类弹窗：名称失焦且编码为空时自动生成编码）
+  - `web/src/views/knowledge-base/Edit.vue`（知识库弹窗：新增「编码」字段，名称失焦且编码为空时自动生成，创建/更新 payload 带上 code）
+- 修改：无
+- 删除：无
+- 说明：编码为空时才自动填充，已手动填写的编码不会被覆盖；生成接口仅统计未软删数据下的同前缀最大序号 + 1，跨父级互不影响。
+
 ### 2026-08-31 新增知识库演示准备清单
 - 新增：
   - `MD/知识库准备.md`（整理电商零售客服场景下的知识库分类、文档素材和录入顺序）

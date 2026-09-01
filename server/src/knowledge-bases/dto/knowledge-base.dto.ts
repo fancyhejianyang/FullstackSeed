@@ -156,6 +156,22 @@ export class QueryKnowledgeBaseCategoryDto {
   keyword?: string;
 }
 
+export class QueryNextCategoryCodeDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  parentId?: number;
+}
+
+export class QueryNextBaseCodeDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  categoryId?: number;
+}
+
 export class CreateKnowledgeBaseDocumentDto {
   @Type(() => Number)
   @IsInt()
