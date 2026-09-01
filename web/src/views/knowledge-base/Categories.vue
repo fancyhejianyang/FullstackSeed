@@ -35,7 +35,6 @@ const form = reactive({
   name: '',
   code: '',
   description: '',
-  sort: 0,
 });
 
 const fields = computed<FormField[]>(() => [
@@ -53,7 +52,6 @@ const fields = computed<FormField[]>(() => [
     placeholder: '留空时输入名称后失焦自动生成',
   },
   { prop: 'description', label: '描述', type: 'textarea', rows: 3 },
-  { prop: 'sort', label: '排序', component: 'InputNumber', componentProps: { min: 0 } },
 ]);
 
 const rules: FormRules = {
@@ -97,7 +95,6 @@ function openCreate() {
     name: '',
     code: '',
     description: '',
-    sort: 0,
   });
   visible.value = true;
 }
@@ -109,7 +106,6 @@ function openCreateChild(row: KnowledgeBaseCategoryTreeNode) {
     name: '',
     code: '',
     description: '',
-    sort: 0,
   });
   visible.value = true;
 }
@@ -121,7 +117,6 @@ function openEdit(row: KnowledgeBaseCategoryTreeNode) {
     name: row.name,
     code: row.code,
     description: row.description ?? '',
-    sort: row.sort,
   });
   visible.value = true;
 }
@@ -151,7 +146,6 @@ async function save() {
       name: form.name,
       code: form.code,
       description: form.description,
-      sort: form.sort,
     };
     if (editingRow.value) {
       await updateKnowledgeBaseCategory(editingRow.value.id, payload);
@@ -246,7 +240,6 @@ onMounted(fetchCategories);
         <el-table-column prop="name" label="名称" min-width="180" />
         <el-table-column prop="code" label="编码" min-width="140" />
         <el-table-column prop="description" label="描述" min-width="220" />
-        <el-table-column prop="sort" label="排序" width="90" />
         <el-table-column prop="updatedAt" label="更新时间" width="180">
           <template #default="{ row }">
             {{ row.updatedAt ? formatDateTime(row.updatedAt) : '-' }}

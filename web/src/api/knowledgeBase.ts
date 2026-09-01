@@ -211,12 +211,11 @@ export type KnowledgeBaseForm = Pick<
   | 'fileName'
   | 'fileUrl'
   | 'isEnabled'
-  | 'sort'
 >;
 
 export type KnowledgeBaseCategoryForm = Pick<
   KnowledgeBaseCategory,
-  'parentId' | 'name' | 'code' | 'description' | 'sort'
+  'parentId' | 'name' | 'code' | 'description'
 >;
 
 export type KnowledgeBaseDocumentForm = Pick<
@@ -232,7 +231,6 @@ export type KnowledgeBaseDocumentForm = Pick<
   | 'hitKeywords'
   | 'colloquialDescription'
   | 'matchPriority'
-  | 'sort'
 >;
 
 export type KnowledgeBaseChunkForm = Pick<

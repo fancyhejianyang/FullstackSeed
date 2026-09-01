@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-09-01 移除知识库分类 / 知识库 / 文档的排序字段（改为按创建顺序展示）
+- 新增：无
+- 修改：
+  - `server/src/knowledge-bases/dto/knowledge-base.dto.ts`（`CreateKnowledgeBaseDto` / `CreateKnowledgeBaseCategoryDto` / `CreateKnowledgeBaseDocumentDto` 移除 `sort`，`CreateKnowledgeBaseChunkDto` 的 `sort` 保留——分片顺序内部自动管理）
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（`findBases` / `findCategories` / `findDocuments` 排序改为仅按 `id`（创建顺序），移除 `create/update` 中对 `sort` 的写入与赋值）
+  - `web/src/views/knowledge-base/Categories.vue`（移除分类表单「排序」输入项、列表「排序」列及表单状态 / payload 中的 `sort`）
+  - `web/src/api/knowledgeBase.ts`（`KnowledgeBaseForm` / `KnowledgeBaseCategoryForm` / `KnowledgeBaseDocumentForm` 移除 `sort`，`KnowledgeBaseChunkForm` 保留）
+- 删除：无
+- 说明：菜单排序（`menu`）保留——它决定侧边栏显示顺序，有实际意义；知识库分类 / 知识库 / 文档改为按创建顺序展示；实体 `sort` 列保留（避免破坏表结构），不再参与排序与表单。
+
 ### 2026-09-01 知识库分类 / 知识库编码自动生成（层级 + 序号，名称失焦触发）
 - 新增：
   - `server/src/knowledge-bases/dto/knowledge-base.dto.ts`（新增 `QueryNextCategoryCodeDto` / `QueryNextBaseCodeDto`）

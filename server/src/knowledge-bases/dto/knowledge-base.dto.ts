@@ -72,12 +72,6 @@ export class CreateKnowledgeBaseDto {
   @IsBoolean()
   @IsOptional()
   isEnabled?: boolean;
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  @IsOptional()
-  sort?: number;
 }
 
 export class UpdateKnowledgeBaseDto extends PartialType(
@@ -132,12 +126,6 @@ export class CreateKnowledgeBaseCategoryDto {
   @IsString()
   @IsOptional()
   description?: string;
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  @IsOptional()
-  sort?: number;
 }
 
 export class UpdateKnowledgeBaseCategoryDto extends PartialType(
@@ -221,12 +209,6 @@ export class CreateKnowledgeBaseDocumentDto {
   @Min(0)
   @IsOptional()
   matchPriority?: number;
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  @IsOptional()
-  sort?: number;
 }
 
 export class UpdateKnowledgeBaseDocumentDto extends PartialType(

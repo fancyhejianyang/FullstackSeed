@@ -303,8 +303,7 @@ export class KnowledgeBasesService implements OnModuleInit {
     const pageSize = query.pageSize ?? 10;
     const qb = this.baseRepository
       .createQueryBuilder('base')
-      .orderBy('base.sort', 'ASC')
-      .addOrderBy('base.id', 'DESC')
+      .orderBy('base.id', 'DESC')
       .skip((page - 1) * pageSize)
       .take(pageSize);
     if (query.keyword?.trim()) {
@@ -366,7 +365,6 @@ export class KnowledgeBasesService implements OnModuleInit {
         containsImages: false,
         allowFileUpload: contentType !== 'text',
         isEnabled: dto.isEnabled ?? true,
-        sort: dto.sort ?? 0,
       }),
     );
   }
@@ -435,7 +433,6 @@ export class KnowledgeBasesService implements OnModuleInit {
       base.lastProcessMessage = null;
     }
     if (dto.isEnabled !== undefined) base.isEnabled = dto.isEnabled;
-    if (dto.sort !== undefined) base.sort = dto.sort;
     const saved = await this.baseRepository.save(base);
     if (!contentChanged && retrievalMetadataChanged) {
       await this.markBaseIndexPendingByBaseId(saved.id);
@@ -811,8 +808,7 @@ export class KnowledgeBasesService implements OnModuleInit {
   async findCategories(query: QueryKnowledgeBaseCategoryDto) {
     const qb = this.categoryRepository
       .createQueryBuilder('category')
-      .orderBy('category.sort', 'ASC')
-      .addOrderBy('category.id', 'ASC');
+      .orderBy('category.id', 'ASC');
     if (query.parentId) {
       qb.andWhere('category.parentId = :parentId', {
         parentId: query.parentId,
@@ -897,7 +893,6 @@ export class KnowledgeBasesService implements OnModuleInit {
         name: dto.name.trim(),
         code: dto.code?.trim() ?? '',
         description: dto.description?.trim() || null,
-        sort: dto.sort ?? 0,
       }),
     );
   }
@@ -911,7 +906,6 @@ export class KnowledgeBasesService implements OnModuleInit {
     if (dto.description !== undefined) {
       category.description = dto.description.trim() || null;
     }
-    if (dto.sort !== undefined) category.sort = dto.sort;
     return this.categoryRepository.save(category);
   }
 
@@ -937,8 +931,7 @@ export class KnowledgeBasesService implements OnModuleInit {
     const pageSize = query.pageSize ?? 10;
     const qb = this.documentRepository
       .createQueryBuilder('document')
-      .orderBy('document.sort', 'ASC')
-      .addOrderBy('document.id', 'DESC')
+      .orderBy('document.id', 'DESC')
       .skip((page - 1) * pageSize)
       .take(pageSize);
     if (query.knowledgeBaseId) {
@@ -984,7 +977,6 @@ export class KnowledgeBasesService implements OnModuleInit {
         hitKeywords: dto.hitKeywords?.trim() || null,
         colloquialDescription: dto.colloquialDescription?.trim() || null,
         matchPriority: dto.matchPriority ?? 0,
-        sort: dto.sort ?? 0,
       }),
     );
   }
@@ -1533,7 +1525,6 @@ export class KnowledgeBasesService implements OnModuleInit {
     if (dto.matchPriority !== undefined) {
       document.matchPriority = dto.matchPriority;
     }
-    if (dto.sort !== undefined) document.sort = dto.sort;
     const saved = await this.documentRepository.save(document);
     await this.chunkRepository.update(
       { documentId: saved.id },
