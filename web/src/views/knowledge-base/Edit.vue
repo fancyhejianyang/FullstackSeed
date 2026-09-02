@@ -350,7 +350,10 @@ onMounted(fetchCategories);
 
 <style scoped>
 .knowledge-base-edit {
-  max-width: 960px;
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  box-sizing: border-box;
 }
 
 .knowledge-base-edit__section {
