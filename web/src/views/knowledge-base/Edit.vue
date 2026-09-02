@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, type FormRules } from 'element-plus';
 import Button from '@/components/Button.vue';
 import Form, { type FormField } from '@/components/Form.vue';
+import Input from '@/components/Input.vue';
 import UploadFile from '@/components/UploadFile.vue';
 import {
   createKnowledgeBase,
@@ -24,6 +25,7 @@ const baseFormRef = ref<InstanceType<typeof Form>>();
 const contentFormRef = ref<InstanceType<typeof Form>>();
 const categoryTree = ref<KnowledgeBaseCategoryTreeNode[]>([]);
 const fillingForm = ref(false);
+const textSourceMode = ref<'input' | 'upload'>('input');
 
 const form = reactive({
   categoryId: '' as string | number,
@@ -97,9 +99,7 @@ const contentFields = computed<FormField[]>(() => [
     ? {
         prop: 'contentText',
         label: '文本内容',
-        type: 'textarea',
-        rows: 8,
-        placeholder: '请输入知识库文本内容',
+        slot: true,
       }
     : {
         prop: 'contentFile',
@@ -139,7 +139,9 @@ const rules: FormRules = {
 };
 
 const fileAccept = computed(() =>
-  form.contentType === 'pdf'
+  form.contentType === 'text'
+    ? '.txt,.md'
+    : form.contentType === 'pdf'
     ? '.pdf'
     : form.contentType === 'image'
       ? '.png,.jpg,.jpeg,.webp,.bmp'
@@ -147,12 +149,14 @@ const fileAccept = computed(() =>
 );
 
 const uploadDragText = computed(() => {
+  if (form.contentType === 'text') return '上传 TXT / Markdown 文件';
   if (form.contentType === 'pdf') return '上传 PDF 文件';
   if (form.contentType === 'image') return '上传图片文件';
   return '上传 Word 文件';
 });
 
 function getUploadLabel(contentType: KnowledgeBase['contentType']) {
+  if (contentType === 'text') return '文本文件';
   if (contentType === 'pdf') return '上传 PDF';
   if (contentType === 'image') return '上传图片';
   return '上传 Word';
@@ -173,6 +177,7 @@ async function fetchCategories() {
 }
 
 function resetForm() {
+  textSourceMode.value = 'input';
   Object.assign(form, {
     categoryId: '',
     name: '',
@@ -190,6 +195,7 @@ function resetForm() {
 
 function fillForm(row: KnowledgeBase) {
   fillingForm.value = true;
+  textSourceMode.value = 'input';
   Object.assign(form, {
     categoryId: row.categoryId ?? '',
     name: row.name ?? '',
@@ -226,6 +232,7 @@ watch(
       form.fileName = '';
       form.fileUrl = '';
       form.contentFile = '';
+      textSourceMode.value = 'input';
       return;
     }
     form.contentText = '';
@@ -236,6 +243,13 @@ watch(
     }
   },
 );
+
+watch(textSourceMode, (value) => {
+  if (value !== 'input') return;
+  form.fileName = '';
+  form.fileUrl = '';
+  form.contentFile = '';
+});
 
 async function handleSubmit() {
   await baseFormRef.value?.validate();
@@ -298,6 +312,34 @@ onMounted(fetchCategories);
         :rules="rules"
         label-width="100px"
       >
+        <template #field-contentText>
+          <div class="knowledge-base-edit__text-source">
+            <el-radio-group v-model="textSourceMode" size="small">
+              <el-radio-button label="input">直接录入</el-radio-button>
+              <el-radio-button label="upload">上传 TXT / MD</el-radio-button>
+            </el-radio-group>
+
+            <Input
+              v-if="textSourceMode === 'input'"
+              v-model="form.contentText"
+              mode="textarea"
+              :rows="8"
+              placeholder="请输入知识库文本内容"
+            />
+            <UploadFile
+              v-else
+              v-model="form.fileUrl"
+              v-model:name="form.fileName"
+              v-model:content="form.contentText"
+              :accept="fileAccept"
+              :drag-text="uploadDragText"
+              read-text
+            />
+            <div v-if="textSourceMode === 'upload'" class="knowledge-base-edit__text-tip">
+              上传后会读取 TXT / Markdown 正文并保存为文本内容，文件名仅用于本次上传展示。
+            </div>
+          </div>
+        </template>
         <template #field-contentFile>
           <UploadFile
             v-model="form.fileUrl"
@@ -342,5 +384,26 @@ onMounted(fetchCategories);
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.knowledge-base-edit__text-source {
+  width: 100%;
+}
+
+.knowledge-base-edit__text-source > .el-radio-group {
+  margin-bottom: 8px;
+}
+
+.knowledge-base-edit__text-source :deep(.input-wrapper),
+.knowledge-base-edit__text-source :deep(.el-textarea),
+.knowledge-base-edit__text-source :deep(.upload-file) {
+  width: 100%;
+}
+
+.knowledge-base-edit__text-tip {
+  margin-top: 6px;
+  color: #909399;
+  font-size: 12px;
+  line-height: 1.4;
 }
 </style>

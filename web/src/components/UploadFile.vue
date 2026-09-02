@@ -5,6 +5,7 @@
  * 核心能力：
  * - 默认未上传时显示拖拽上传区，上传后隐藏拖拽区，仅展示文件名与移除按钮
  * - v-model 保存后端返回的文件 URL，`v-model:name` 保存原始文件名
+ * - `v-model:content` 可选保存上传文件的文本内容，供文本类业务直接使用
  * - 默认调用统一上传接口，后端未来切 OSS 时不影响组件和业务字段
  * - 文件名按钮内置下载能力，可下载当前 URL
  * - 可通过 `uploadRequest` 覆盖上传实现，适配直传或特殊业务
@@ -22,6 +23,7 @@ const props = withDefaults(
     maxSizeMb?: number;
     disabled?: boolean;
     dragText?: string;
+    readText?: boolean;
     uploadRequest?: (file: File) => Promise<UploadResult>;
   }>(),
   {
@@ -29,11 +31,13 @@ const props = withDefaults(
     maxSizeMb: 20,
     disabled: false,
     dragText: '将文件拖到此处，或点击上传',
+    readText: false,
   },
 );
 
 const model = defineModel<string | null>({ default: '' });
 const name = defineModel<string>('name', { default: '' });
+const content = defineModel<string>('content', { default: '' });
 const error = ref('');
 const uploading = ref(false);
 
@@ -54,6 +58,10 @@ async function handleChange(file: UploadFile) {
     const result = await (props.uploadRequest ?? uploadFile)(file.raw);
     name.value = result.originalName || file.name;
     model.value = result.url;
+    if (props.readText) {
+      // 读取浏览器选中的原始文件，避免业务层再次请求本地/OSS URL，且兼容统一上传接口。
+      content.value = await file.raw.text();
+    }
     emit('change', result.url, name.value, file);
   } finally {
     uploading.value = false;
@@ -63,6 +71,7 @@ async function handleChange(file: UploadFile) {
 function handleRemove() {
   name.value = '';
   model.value = '';
+  content.value = '';
   error.value = '';
   emit('remove');
   emit('change', '', '');

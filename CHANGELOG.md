@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-09-02 支持知识库文本上传 TXT / Markdown
+- 新增：无
+- 修改：
+  - `web/src/components/UploadFile.vue`（增加可选文本读取能力，上传成功后通过 `v-model:content` 回传原始正文）
+  - `web/src/views/knowledge-base/Edit.vue`（文本类型增加「直接录入 / 上传 TXT / MD」模式，上传后回填 `contentText` 并沿用现有文本解析链路）
+- 删除：无
+- 说明：上传仍统一调用 `/api/uploads`；`.txt` / `.md` 文件内容在浏览器读取后提交为 `contentText`，不新增知识库内容类型，也不改变 PDF、Word、图片的上传逻辑。
+
 ### 2026-09-02 将匹配优先级默认值调整为 1
 - 新增：无
 - 修改：
