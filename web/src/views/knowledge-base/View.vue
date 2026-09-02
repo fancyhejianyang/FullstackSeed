@@ -92,7 +92,19 @@ const manualPixiHostRef = ref<HTMLDivElement>();
 const manualContextOverlap = ref(DEFAULT_MANUAL_CONTEXT_OVERLAP);
 const manualMaxChunks = ref(500);
 const manualCanvasReady = ref(false);
-const parsedContent = computed(() => rowData.value?.contentText?.trim() || '');
+const parsedContent = computed(() =>
+  normalizeParsedContentForDisplay(rowData.value?.contentText || ''),
+);
+
+/** 内容 Tab 只做展示层换行兼容，不改动数据库中的原始正文。 */
+function normalizeParsedContentForDisplay(content: string) {
+  return content
+    .replace(/\r\n?/g, '\n')
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\n')
+    .trim();
+}
 // 仅允许 http(s) 协议的文件地址，避免注入 javascript: 等危险链接
 const safeFileUrl = computed(() => {
   const url = rowData.value?.fileUrl || '';
