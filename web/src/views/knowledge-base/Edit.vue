@@ -115,8 +115,20 @@ const rules: FormRules = {
   contentText: [
     {
       validator: (_rule, value, callback) => {
-        if (form.contentType === 'text' && !String(value || '').trim()) {
+        if (
+          form.contentType === 'text' &&
+          textSourceMode.value === 'input' &&
+          !String(value || '').trim()
+        ) {
           callback(new Error('请输入文本内容'));
+          return;
+        }
+        if (
+          form.contentType === 'text' &&
+          textSourceMode.value === 'upload' &&
+          !form.fileUrl
+        ) {
+          callback(new Error('请上传 TXT / MD 文件'));
           return;
         }
         callback();
@@ -245,10 +257,13 @@ watch(
 );
 
 watch(textSourceMode, (value) => {
-  if (value !== 'input') return;
-  form.fileName = '';
-  form.fileUrl = '';
-  form.contentFile = '';
+  if (value === 'input') {
+    form.fileName = '';
+    form.fileUrl = '';
+    form.contentFile = '';
+    return;
+  }
+  form.contentText = '';
 });
 
 async function handleSubmit() {
@@ -263,9 +278,22 @@ async function handleSubmit() {
       colloquialDescription: form.colloquialDescription,
       matchPriority: Number(form.matchPriority || 1),
       contentType: form.contentType,
-      contentText: form.contentType === 'text' ? form.contentText : undefined,
-      fileName: form.contentType === 'text' ? undefined : form.fileName,
-      fileUrl: form.contentType === 'text' ? undefined : form.fileUrl,
+      contentText:
+        form.contentType === 'text' && textSourceMode.value === 'input'
+          ? form.contentText
+          : undefined,
+      fileName:
+        form.contentType === 'text'
+          ? textSourceMode.value === 'upload'
+            ? form.fileName
+            : undefined
+          : form.fileName,
+      fileUrl:
+        form.contentType === 'text'
+          ? textSourceMode.value === 'upload'
+            ? form.fileUrl
+            : undefined
+          : form.fileUrl,
       isEnabled: form.isEnabled,
     };
     if (props.row) {
@@ -330,13 +358,11 @@ onMounted(fetchCategories);
               v-else
               v-model="form.fileUrl"
               v-model:name="form.fileName"
-              v-model:content="form.contentText"
               :accept="fileAccept"
               :drag-text="uploadDragText"
-              read-text
             />
             <div v-if="textSourceMode === 'upload'" class="knowledge-base-edit__text-tip">
-              上传后会读取 TXT / Markdown 正文并保存为文本内容，文件名仅用于本次上传展示。
+              文件先通过统一上传接口保存，提交后由后端读取正文，避免大文件重复放入请求体。
             </div>
           </div>
         </template>

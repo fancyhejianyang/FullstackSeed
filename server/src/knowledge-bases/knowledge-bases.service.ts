@@ -7,6 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Like, Repository, type FindOptionsWhere } from 'typeorm';
 import { createHash } from 'crypto';
+import { extname } from 'node:path';
 import {
   BatchDeleteKnowledgeBaseDto,
   CreateKnowledgeBaseCategoryDto,
@@ -339,6 +340,11 @@ export class KnowledgeBasesService implements OnModuleInit {
   async createBase(dto: CreateKnowledgeBaseDto) {
     await this.assertRequiredCategory(dto.categoryId);
     const contentType = dto.contentType ?? 'text';
+    const textFileUrl =
+      contentType === 'text' ? dto.fileUrl?.trim() || '' : '';
+    const contentText = textFileUrl
+      ? await this.readTextSource(textFileUrl, dto.fileName)
+      : dto.contentText?.trim() || null;
     return this.baseRepository.save(
       this.baseRepository.create({
         categoryId: dto.categoryId,
@@ -348,21 +354,26 @@ export class KnowledgeBasesService implements OnModuleInit {
         colloquialDescription: dto.colloquialDescription?.trim() || null,
         matchPriority: dto.matchPriority ?? 1,
         contentType,
-        contentText:
-          contentType === 'text' ? dto.contentText?.trim() || null : null,
-        fileName: contentType === 'text' ? '' : (dto.fileName?.trim() ?? ''),
-        fileUrl: contentType === 'text' ? '' : (dto.fileUrl?.trim() ?? ''),
+        contentText: contentType === 'text' ? contentText : null,
+        fileName:
+          contentType === 'text'
+            ? textFileUrl
+              ? dto.fileName?.trim() ?? ''
+              : ''
+            : (dto.fileName?.trim() ?? ''),
+        fileUrl:
+          contentType === 'text' ? textFileUrl : (dto.fileUrl?.trim() ?? ''),
         processStage: this.resolveInitialProcessStage(
           contentType,
-          dto.contentText,
-          dto.fileUrl,
+          contentText,
+          textFileUrl || dto.fileUrl,
         ),
         parseStatus: 'pending',
         chunkStatus: 'pending',
         indexStatus: 'pending',
         lastProcessMessage: null,
         containsImages: false,
-        allowFileUpload: contentType !== 'text',
+        allowFileUpload: contentType !== 'text' || Boolean(textFileUrl),
         isEnabled: dto.isEnabled ?? true,
       }),
     );
@@ -370,6 +381,12 @@ export class KnowledgeBasesService implements OnModuleInit {
 
   async updateBase(id: number, dto: UpdateKnowledgeBaseDto) {
     const base = await this.findBase(id);
+    const nextContentType = dto.contentType ?? base.contentType;
+    const textFileUrl =
+      nextContentType === 'text' ? dto.fileUrl?.trim() || '' : '';
+    const textFileContent = textFileUrl
+      ? await this.readTextSource(textFileUrl, dto.fileName)
+      : null;
     const contentChanged =
       dto.contentType !== undefined ||
       dto.contentText !== undefined ||
@@ -403,15 +420,25 @@ export class KnowledgeBasesService implements OnModuleInit {
     }
     if (dto.fileName !== undefined) base.fileName = dto.fileName.trim();
     if (dto.fileUrl !== undefined) base.fileUrl = dto.fileUrl.trim();
-    if (dto.contentType !== undefined) {
-      if (dto.contentType === 'text') {
+    if (nextContentType === 'text') {
+      if (textFileUrl) {
+        base.contentText = textFileContent;
+        base.fileName = dto.fileName?.trim() ?? '';
+        base.fileUrl = textFileUrl;
+        base.allowFileUpload = true;
+      } else if (
+        dto.contentType !== undefined ||
+        dto.contentText !== undefined ||
+        dto.fileName !== undefined ||
+        dto.fileUrl !== undefined
+      ) {
         base.fileName = '';
         base.fileUrl = '';
         base.allowFileUpload = false;
-      } else {
-        base.contentText = null;
-        base.allowFileUpload = true;
       }
+    } else if (dto.contentType !== undefined) {
+      base.contentText = null;
+      base.allowFileUpload = true;
     }
     if (dto.containsImages !== undefined) {
       base.containsImages = dto.containsImages;
@@ -1962,6 +1989,21 @@ export class KnowledgeBasesService implements OnModuleInit {
       return contentText?.trim() ? 'ready' : 'draft';
     }
     return fileUrl?.trim() ? 'uploaded' : 'draft';
+  }
+
+  private async readTextSource(fileUrl: string, fileName?: string | null) {
+    const sourceName = fileName?.trim() || fileUrl;
+    const extension = extname(sourceName.split('?')[0]).toLowerCase();
+    if (!['.txt', '.md'].includes(extension)) {
+      throw new BadRequestException('文本文件仅支持 .txt 或 .md 格式');
+    }
+
+    const file = await this.storedFilesService.read(fileUrl, fileName);
+    const content = file.buffer.toString('utf8').replace(/^\uFEFF/, '').trim();
+    if (!content) {
+      throw new BadRequestException('上传的文本文件内容为空');
+    }
+    return this.normalizeParsedContent(content);
   }
 
   private async updateBaseProcess(

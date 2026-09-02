@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-09-02 优化大 TXT / Markdown 文件上传处理
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/Edit.vue`（文本文件上传不再读取全文并放入 JSON，创建/更新时仅提交统一上传接口返回的文件地址）
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（通过本地/OSS 文件读取服务读取 `.txt` / `.md` 正文并保存到 `contentText`，保留文件来源信息）
+- 删除：无
+- 说明：大 TXT 仍保持“一份源文档”，点击分片后按照分片配置生成多个分片记录；后端读取上限沿用文件读取服务的安全限制，避免前端请求体重复携带大段正文。
+
 ### 2026-09-02 支持知识库文本上传 TXT / Markdown
 - 新增：无
 - 修改：
