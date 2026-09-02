@@ -1,5 +1,12 @@
 # CHANGELOG
 
+### 2026-09-02 修复 AI 回复字面量换行未渲染
+- 新增：无
+- 修改：
+  - `server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`（供应商响应适配层将字面量 `\\n` / `\\r\\n` / `\\r` 规范化为真实换行，覆盖普通回复、流式增量和保存记录）
+- 删除：无
+- 说明：前端原有 `white-space: pre-wrap` 可以正常显示真实换行；修复后 H5 和管理端收到的内容均可按换行展示。
+
 ### 2026-09-02 优化大 TXT / Markdown 文件上传处理
 - 新增：无
 - 修改：
