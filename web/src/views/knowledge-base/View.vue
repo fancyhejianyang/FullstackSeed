@@ -1176,7 +1176,7 @@ onBeforeUnmount(() => {
             {{ rowData?.colloquialDescription || '-' }}
           </el-descriptions-item>
           <el-descriptions-item label="匹配优先级">
-            {{ rowData?.matchPriority ?? 0 }}
+            {{ rowData?.matchPriority ?? 1 }}
           </el-descriptions-item>
           <el-descriptions-item label="内容类型">
             {{ getContentTypeLabel(rowData?.contentType) }}

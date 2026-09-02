@@ -346,7 +346,7 @@ export class KnowledgeBasesService implements OnModuleInit {
         description: dto.description?.trim() || null,
         hitKeywords: dto.hitKeywords?.trim() || null,
         colloquialDescription: dto.colloquialDescription?.trim() || null,
-        matchPriority: dto.matchPriority ?? 0,
+        matchPriority: dto.matchPriority ?? 1,
         contentType,
         contentText:
           contentType === 'text' ? dto.contentText?.trim() || null : null,
@@ -957,7 +957,7 @@ export class KnowledgeBasesService implements OnModuleInit {
         description: dto.description?.trim() || null,
         hitKeywords: dto.hitKeywords?.trim() || null,
         colloquialDescription: dto.colloquialDescription?.trim() || null,
-        matchPriority: dto.matchPriority ?? 0,
+        matchPriority: dto.matchPriority ?? 1,
       }),
     );
   }
@@ -1869,7 +1869,7 @@ export class KnowledgeBasesService implements OnModuleInit {
       document?.sourceName ? `来源：${document.sourceName}` : '',
       hitKeywords ? `检索关键字：${hitKeywords}` : '',
       colloquialDescription ? `常见问法/说法：${colloquialDescription}` : '',
-      `匹配优先级：${document?.matchPriority ?? base.matchPriority ?? 0}`,
+      `匹配优先级：${document?.matchPriority ?? base.matchPriority ?? 1}`,
       '正文：',
       chunk.content,
     ]
@@ -1898,7 +1898,7 @@ export class KnowledgeBasesService implements OnModuleInit {
       hitKeywords: document?.hitKeywords || base.hitKeywords || '',
       colloquialDescription:
         document?.colloquialDescription || base.colloquialDescription || '',
-      matchPriority: document?.matchPriority ?? base.matchPriority ?? 0,
+            matchPriority: document?.matchPriority ?? base.matchPriority ?? 1,
       manualStartOffset: chunk.manualStartOffset ?? -1,
       manualEndOffset: chunk.manualEndOffset ?? -1,
     };
@@ -2606,7 +2606,7 @@ export class KnowledgeBasesService implements OnModuleInit {
       document.colloquialDescription =
         document.colloquialDescription || base?.colloquialDescription || null;
       document.matchPriority =
-        document.matchPriority || base?.matchPriority || 0;
+        document.matchPriority || base?.matchPriority || 1;
     }
     let saved = await this.documentRepository.save(document);
     await this.syncBaseParsedContent(saved, content);

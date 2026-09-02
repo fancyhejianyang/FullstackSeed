@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-09-02 将匹配优先级默认值调整为 1
+- 新增：无
+- 修改：
+  - `server/src/knowledge-bases/entities/knowledge-base.entity.ts`、`server/src/knowledge-bases/entities/knowledge-base-document.entity.ts`（新记录默认匹配优先级改为 1）
+  - `server/src/knowledge-bases/dto/knowledge-base.dto.ts`（知识库和文档匹配优先级最小值改为 1）
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`、`server/src/knowledge-ai-chat/knowledge-ai-chat-retrieval.service.ts`（创建、索引和检索兜底值改为 1）
+  - `web/src/views/knowledge-base/Edit.vue`、`web/src/views/knowledge-base/View.vue`（表单初值、输入下限和详情兜底改为 1）
+- 删除：无
+- 说明：已有数据库中为 0 的历史记录不自动迁移，新建或更新数据统一从 1 开始。
+
 ### 2026-09-02 移除知识库新增编辑表单编码
 - 新增：无
 - 修改：

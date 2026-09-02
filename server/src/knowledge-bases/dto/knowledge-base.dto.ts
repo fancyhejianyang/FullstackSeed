@@ -37,7 +37,7 @@ export class CreateKnowledgeBaseDto {
 
   @Type(() => Number)
   @IsInt()
-  @Min(0)
+  @Min(1)
   @IsOptional()
   matchPriority?: number;
 
@@ -194,7 +194,7 @@ export class CreateKnowledgeBaseDocumentDto {
 
   @Type(() => Number)
   @IsInt()
-  @Min(0)
+  @Min(1)
   @IsOptional()
   matchPriority?: number;
 }

@@ -22,7 +22,7 @@ export class KnowledgeBase extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   colloquialDescription: string | null;
 
-  @Column({ type: 'int', default: 0 })
+  @Column({ type: 'int', default: 1 })
   matchPriority: number;
 
   @Column({ length: 20, default: 'text' })

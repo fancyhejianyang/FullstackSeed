@@ -35,7 +35,7 @@ export class KnowledgeBaseDocument extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   colloquialDescription: string | null;
 
-  @Column({ type: 'int', default: 0 })
+  @Column({ type: 'int', default: 1 })
   matchPriority: number;
 
   @Column({ type: 'int', default: 0 })

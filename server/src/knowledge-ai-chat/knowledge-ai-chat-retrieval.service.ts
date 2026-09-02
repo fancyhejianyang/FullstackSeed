@@ -203,7 +203,7 @@ export class KnowledgeAiChatRetrievalService {
               base?.colloquialDescription ||
               '',
             matchPriority:
-              document?.matchPriority ?? base?.matchPriority ?? chunk.sort ?? 0,
+              document?.matchPriority ?? base?.matchPriority ?? chunk.sort ?? 1,
           });
         })
         .filter((item): item is RetrievalCandidate => Boolean(item));
@@ -275,10 +275,10 @@ export class KnowledgeAiChatRetrievalService {
             colloquialDescription: this.metadataToString(
               metadata.colloquialDescription,
             ),
-            matchPriority: Number(metadata.matchPriority || 0),
+            matchPriority: Number(metadata.matchPriority || 1),
             score:
               item.score * 10 * vectorWeight +
-              Number(metadata.matchPriority || 0) * 0.2,
+              Number(metadata.matchPriority || 1) * 0.2,
           });
         })
         .filter((item): item is RetrievalCandidate => Boolean(item));
