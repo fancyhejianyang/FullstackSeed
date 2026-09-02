@@ -22,7 +22,6 @@ import {
   ParseKnowledgeBaseDocumentDto,
   ParseKnowledgeBaseDocumentRequestDto,
   QueryKnowledgeBaseCategoryDto,
-  QueryNextBaseCodeDto,
   QueryNextCategoryCodeDto,
   QueryKnowledgeBaseChunkDto,
   QueryKnowledgeBaseDocumentDto,
@@ -68,13 +67,6 @@ export class KnowledgeBasesController {
   @ApiOperation({ summary: '生成下一个知识库分类编码' })
   nextCategoryCode(@Query() query: QueryNextCategoryCodeDto) {
     return this.knowledgeBasesService.nextCategoryCode(query.parentId);
-  }
-
-  @Get('next-code')
-  @RequirePermissions('KnowledgeBase.create')
-  @ApiOperation({ summary: '生成下一个知识库编码' })
-  nextBaseCode(@Query() query: QueryNextBaseCodeDto) {
-    return this.knowledgeBasesService.nextBaseCode(query.categoryId);
   }
 
   @Get('documents')

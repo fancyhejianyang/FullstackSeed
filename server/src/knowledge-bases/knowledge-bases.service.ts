@@ -308,7 +308,7 @@ export class KnowledgeBasesService implements OnModuleInit {
       .take(pageSize);
     if (query.keyword?.trim()) {
       qb.where(
-        'base.name LIKE :keyword OR base.code LIKE :keyword OR base.description LIKE :keyword OR base.hitKeywords LIKE :keyword OR base.colloquialDescription LIKE :keyword',
+        'base.name LIKE :keyword OR base.description LIKE :keyword OR base.hitKeywords LIKE :keyword OR base.colloquialDescription LIKE :keyword',
         { keyword: `%${query.keyword.trim()}%` },
       );
     }
@@ -343,7 +343,6 @@ export class KnowledgeBasesService implements OnModuleInit {
       this.baseRepository.create({
         categoryId: dto.categoryId,
         name: dto.name.trim(),
-        code: dto.code?.trim() ?? '',
         description: dto.description?.trim() || null,
         hitKeywords: dto.hitKeywords?.trim() || null,
         colloquialDescription: dto.colloquialDescription?.trim() || null,
@@ -386,7 +385,6 @@ export class KnowledgeBasesService implements OnModuleInit {
       base.categoryId = dto.categoryId;
     }
     if (dto.name !== undefined) base.name = dto.name.trim();
-    if (dto.code !== undefined) base.code = dto.code.trim();
     if (dto.description !== undefined) {
       base.description = dto.description.trim() || null;
     }
@@ -851,23 +849,6 @@ export class KnowledgeBasesService implements OnModuleInit {
       select: ['code'],
     });
     return { code: this.nextSequentialCode(siblings, prefix) };
-  }
-
-  /**
-   * 生成下一个知识库编码（所属分类编码 + 序号）：
-   * 未选分类时兜底前缀 KB；有分类则 = 分类编码_001 / _002 …
-   */
-  async nextBaseCode(categoryId?: number | null) {
-    let prefix = 'KB';
-    if (categoryId) {
-      const category = await this.findCategory(categoryId);
-      prefix = category.code?.trim() || `CAT_${category.id}`;
-    }
-    const bases = await this.baseRepository.find({
-      where: categoryId ? { categoryId } : { categoryId: IsNull() },
-      select: ['code'],
-    });
-    return { code: this.nextSequentialCode(bases, prefix) };
   }
 
   /** 取同前缀下最大序号 + 1，格式化为 3 位零填充，如 CAT_001 */

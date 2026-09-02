@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-09-02 移除知识库新增编辑表单编码
+- 新增：无
+- 修改：
+  - `web/src/views/knowledge-base/Edit.vue`（移除编码字段、自动生成逻辑及提交参数）
+  - `web/src/api/knowledgeBase.ts`（移除知识库表单编码类型和自动编码接口）
+  - `server/src/knowledge-bases/dto/knowledge-base.dto.ts`（移除知识库创建/更新编码字段及对应查询 DTO）
+  - `server/src/knowledge-bases/knowledge-bases.controller.ts`（移除知识库自动编码接口）
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（停止知识库编码查询和读写）
+- 删除：无
+- 说明：保留实体中的历史 `code` 列，避免破坏已有数据库数据；分类编码功能不受影响。
+
 ### 2026-09-02 优化知识库新增编辑表单宽度
 - 新增：无
 - 修改：
