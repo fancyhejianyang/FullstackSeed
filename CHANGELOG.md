@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-09-03 将大文本拆分前移到知识库上传提交阶段
+- 新增：无
+- 修改：
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（创建/更新知识库后按文档解析规则生成源文档记录；知识库级解析逐条处理拆分文本；知识库级分片遍历全部文档）
+  - `web/src/views/knowledge-base/Documents.vue`（补充“待解析”状态显示）
+- 删除：无
+- 说明：TXT/MD 在知识库提交时按当前解析规则生成多条文档数据，标题带分段序号，后续手动解析、AI 解析和分片均以这些记录为边界；PDF、Word、图片暂保留为单条源文档，避免重复提交同一二进制文件。
+
 ### 2026-09-03 修复文档解析规则启动查询异常
 - 新增：无
 - 修改：`server/src/document-parse-rules/document-parse-rules.service.ts`（为 TypeORM 无条件 `findOne` 补充 `where: {}`）
