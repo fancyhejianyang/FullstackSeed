@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { promises as fs } from 'node:fs';
 import { basename, join, normalize, resolve } from 'node:path';
+import { TextDecoder } from 'node:util';
 import { StorageConfigService } from '../storage-config/storage-config.service';
 
 export interface StoredFileContent {
@@ -44,6 +45,37 @@ export class StoredFilesService {
       readableUrl,
       fileName || this.resolveFileName(url),
     );
+  }
+
+  /**
+   * 解码文本文件内容，兼容中文 TXT 常见的 UTF-8、UTF-16 和 GB18030 编码。
+  * 无 BOM 时优先严格尝试 UTF-8，失败后再回退 GB18030，避免中文正文提前变成乱码。
+  */
+  decodeText(buffer: Buffer) {
+    if (
+      buffer.length >= 3 &&
+      buffer.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf]))
+    ) {
+      return new TextDecoder('utf-8').decode(buffer.subarray(3));
+    }
+    if (
+      buffer.length >= 2 &&
+      buffer.subarray(0, 2).equals(Buffer.from([0xff, 0xfe]))
+    ) {
+      return new TextDecoder('utf-16le').decode(buffer.subarray(2));
+    }
+    if (
+      buffer.length >= 2 &&
+      buffer.subarray(0, 2).equals(Buffer.from([0xfe, 0xff]))
+    ) {
+      return new TextDecoder('utf-16be').decode(buffer.subarray(2));
+    }
+
+    try {
+      return new TextDecoder('utf-8', { fatal: true }).decode(buffer);
+    } catch {
+      return new TextDecoder('gb18030').decode(buffer);
+    }
   }
 
   private async resolveLocalUploadPath(fileUrl: string) {

@@ -1999,7 +1999,7 @@ export class KnowledgeBasesService implements OnModuleInit {
     }
 
     const file = await this.storedFilesService.read(fileUrl, fileName);
-    const content = file.buffer.toString('utf8').replace(/^\uFEFF/, '').trim();
+    const content = this.storedFilesService.decodeText(file.buffer).trim();
     if (!content) {
       throw new BadRequestException('上传的文本文件内容为空');
     }

@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-09-03 修复中文 TXT 解析乱码
+- 新增：无
+- 修改：
+  - `server/src/stored-files/stored-files.service.ts`（公共文本读取增加 UTF-8、UTF-8 BOM、UTF-16 和 GB18030 编码兼容）
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（知识库文本上传统一使用公共编码解码）
+- 删除：无
+- 说明：手动解析和 AI 解析现在共用解码后的正文；中文 GBK/GB18030 TXT 不会在保存 `contentText` 前被错误按 UTF-8 解码。
+
 ### 2026-09-02 修复知识库内容正文字面量换行回显
 - 新增：无
 - 修改：
