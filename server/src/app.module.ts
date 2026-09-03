@@ -27,6 +27,7 @@ import { AiFeatureConfigsModule } from './ai-feature-configs/ai-feature-configs.
 import { KnowledgeRetrievalConfigsModule } from './knowledge-retrieval-configs/knowledge-retrieval-configs.module';
 import { KnowledgeChunkConfigsModule } from './knowledge-chunk-configs/knowledge-chunk-configs.module';
 import { VectorConfigsModule } from './vector-configs/vector-configs.module';
+import { DocumentParseRulesModule } from './document-parse-rules/document-parse-rules.module';
 
 @Module({
   imports: [
@@ -120,6 +121,7 @@ import { VectorConfigsModule } from './vector-configs/vector-configs.module';
     KnowledgeRetrievalConfigsModule,
     KnowledgeChunkConfigsModule,
     VectorConfigsModule,
+    DocumentParseRulesModule,
     KnowledgeAiChatModule,
     ExternalAppsModule,
     MineruConfigsModule,

@@ -47,6 +47,7 @@ import { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-config
 import type { AiFeatureConfig } from '../ai-feature-configs/entities/ai-feature-config.entity';
 import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
 import { StoredFilesService } from '../stored-files/stored-files.service';
+import { DocumentParseRulesService } from '../document-parse-rules/document-parse-rules.service';
 
 export interface KnowledgeBaseCategoryTreeNode extends KnowledgeBaseCategory {
   children: KnowledgeBaseCategoryTreeNode[];
@@ -92,6 +93,7 @@ export class KnowledgeBasesService implements OnModuleInit {
     private readonly aiFeatureConfigsService: AiFeatureConfigsService,
     private readonly providersService: KnowledgeAiProvidersService,
     private readonly storedFilesService: StoredFilesService,
+    private readonly documentParseRulesService: DocumentParseRulesService,
   ) {}
 
   async onModuleInit() {
@@ -2224,37 +2226,58 @@ export class KnowledgeBasesService implements OnModuleInit {
       base,
       contentType,
     );
-    const result = await this.providersService.callChat({
-      id: config.providerId!,
-      model: config.model!,
-      systemPrompt:
-        config.systemPrompt ||
-        '你是文档解析助手。请将输入内容整理为适合知识库保存的正文。',
-      question: this.buildDocumentParseQuestion({
-        content: sourceContent,
-        fileName: base.fileName || base.name,
-        contentType,
-        rules: config.rules,
-        responseFormat: config.responseFormat,
-      }),
-    });
-    if (!result.isSuccess) {
-      throw new BadRequestException(result.errorMessage || '文档解析模型调用失败');
+    const parts = await this.documentParseRulesService.splitText(
+      sourceContent,
+      contentType,
+    );
+    const results: string[] = [];
+    let elapsedMilliseconds = 0;
+    let providerResult: Awaited<ReturnType<KnowledgeAiProvidersService['callChat']>> | undefined;
+    for (const part of parts) {
+      const result = await this.providersService.callChat({
+        id: config.providerId!,
+        model: config.model!,
+        systemPrompt:
+          config.systemPrompt ||
+          '你是文档解析助手。请将输入内容整理为适合知识库保存的正文。',
+        question: this.buildDocumentParseQuestion({
+          content: part.content,
+          fileName: base.fileName || base.name,
+          contentType,
+          rules: config.rules,
+          responseFormat: config.responseFormat,
+        }),
+      });
+      if (!result.isSuccess) {
+        throw new BadRequestException(
+          result.errorMessage || `文档解析模型调用失败（第 ${part.index + 1} 段）`,
+        );
+      }
+      const parsedPart = result.answer.trim();
+      if (!parsedPart) {
+        throw new BadRequestException(
+          `文档解析模型结果缺少解析正文（第 ${part.index + 1} 段）`,
+        );
+      }
+      results.push(parsedPart);
+      elapsedMilliseconds += result.elapsedMilliseconds;
+      providerResult = result;
     }
-    const content = result.answer.trim();
-    if (!content) {
+    const content = results.join('\n\n').trim();
+    if (!content || !providerResult) {
       throw new BadRequestException('文档解析模型结果缺少解析正文');
     }
     await this.taskFileLogger.write('base.ai-text-parse.success', {
       knowledgeBaseId: base.id,
       knowledgeBaseName: base.name,
-      providerId: result.providerId,
-      providerName: result.providerName,
-      model: result.model,
+      providerId: providerResult.providerId,
+      providerName: providerResult.providerName,
+      model: providerResult.model,
       contentType,
       sourceContentLength: sourceContent.length,
       contentLength: content.length,
-      elapsedMilliseconds: result.elapsedMilliseconds,
+      partCount: parts.length,
+      elapsedMilliseconds,
     });
     return content;
   }

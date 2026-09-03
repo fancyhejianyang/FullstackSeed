@@ -183,6 +183,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '向量化配置', permission: 'Menu.read' },
       },
       {
+        path: 'system-config/document-parse',
+        name: 'system-config-document-parse',
+        component: () => import('@/views/document-parse-rule/Index.vue'),
+        meta: { title: '文档解析规则', permission: 'Menu.read' },
+      },
+      {
         // 布局内兜底 404（保留侧边栏）
         path: ':pathMatch(.*)*',
         name: 'not-found',

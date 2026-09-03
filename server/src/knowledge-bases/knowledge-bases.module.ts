@@ -17,6 +17,7 @@ import { LogRecordsModule } from '../log-records/log-records.module';
 import { AiFeatureConfigsModule } from '../ai-feature-configs/ai-feature-configs.module';
 import { KnowledgeAiProvidersModule } from '../knowledge-ai-providers/knowledge-ai-providers.module';
 import { StoredFilesModule } from '../stored-files/stored-files.module';
+import { DocumentParseRulesModule } from '../document-parse-rules/document-parse-rules.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { StoredFilesModule } from '../stored-files/stored-files.module';
     AiFeatureConfigsModule,
     KnowledgeAiProvidersModule,
     StoredFilesModule,
+    DocumentParseRulesModule,
     TypeOrmModule.forFeature([
       KnowledgeBase,
       KnowledgeBaseCategory,

@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-09-03 新增文档解析规则配置并接入大文本解析
+- 新增：
+  - `server/src/document-parse-rules/`（文档解析规则单例配置接口与文本预拆分服务）
+  - `web/src/api/documentParseRule.ts`、`web/src/views/document-parse-rule/Index.vue`（系统配置下的文档解析规则页面）
+- 修改：
+  - `server/src/app.module.ts`、`server/src/menus/menus.service.ts`、`web/src/router/index.ts`（注册后端模块、系统配置菜单和路由）
+  - `server/src/knowledge-bases/knowledge-bases.module.ts`、`server/src/knowledge-bases/knowledge-bases.service.ts`（AI 文本解析前读取规则，按 TXT/MD 或 Word 文本片段逐段调用模型）
+- 删除：无
+- 说明：TXT/MD 按目标大小、最大行数和句末/段落边界拆分；Word 提取为文本后按段落数量参与拆分。PDF 每份页数配置已保存，物理 PDF 分页将在接入 PDF 文件重建能力后使用。
+
 ### 2026-09-03 修复 TXT 上传后的文本必填校验
 - 新增：无
 - 修改：

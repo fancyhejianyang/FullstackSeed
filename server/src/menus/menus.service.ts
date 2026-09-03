@@ -235,6 +235,15 @@ const SEED_MENUS: SeedMenu[] = [
     isSystem: true,
     parentPath: '/system-config',
   },
+  {
+    name: '文档解析规则',
+    path: '/system-config/document-parse',
+    icon: '',
+    sort: 110,
+    permissionCode: 'Menu.read',
+    isSystem: true,
+    parentPath: '/system-config',
+  },
 ];
 
 // 锁定菜单路径：前端不限制操作，后端 API 对此类菜单统一做管理员身份校验
