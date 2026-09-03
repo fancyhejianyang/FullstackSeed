@@ -1,5 +1,12 @@
 # CHANGELOG
 
+### 2026-09-03 修复 TXT 预拆分后无法分片
+- 新增：无
+- 修改：
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（TXT/MD 预拆分同步生成文档正文记录；历史 TXT 缺少文档记录时在分片入口自动补建）
+- 删除：无
+- 说明：小说等 TXT 上传后无需重复解析即可直接选择手动或 MinerU 分片，PDF、Word、图片仍按解析完成后进入分片流程。
+
 ### 2026-09-03 恢复知识库分片模式选择
 - 新增：无
 - 修改：

@@ -630,7 +630,7 @@ export class KnowledgeBasesService implements OnModuleInit {
     });
     try {
       const chunkConfig = await this.chunkConfigsService.findDefaultConfig();
-      const document = await this.findBaseDocument(base.id);
+      const document = await this.findBaseDocument(base.id, base);
       if (!document?.content) {
         throw new BadRequestException('当前知识库文档缺少正文内容');
       }
@@ -2185,6 +2185,11 @@ export class KnowledgeBasesService implements OnModuleInit {
       applyPart(base, 0);
       base.name = originalName;
       await this.baseRepository.save(base);
+      await this.saveBaseDocument(
+        base,
+        base.contentText,
+        KNOWLEDGE_PARSE_MODE.manual,
+      );
       return [base];
     }
 
@@ -2210,6 +2215,15 @@ export class KnowledgeBasesService implements OnModuleInit {
       return sibling;
     });
     const savedSiblings = await this.baseRepository.save(siblings);
+    await Promise.all(
+      [base, ...savedSiblings].map((item) =>
+        this.saveBaseDocument(
+          item,
+          item.contentText ?? '',
+          KNOWLEDGE_PARSE_MODE.manual,
+        ),
+      ),
+    );
     await this.taskFileLogger.write('base.source.split.success', {
       knowledgeBaseId: base.id,
       knowledgeBaseName: originalName,
@@ -2681,15 +2695,27 @@ export class KnowledgeBasesService implements OnModuleInit {
     return match?.[1] ?? '';
   }
 
-  private async findBaseDocument(knowledgeBaseId: number) {
+  private async findBaseDocument(
+    knowledgeBaseId: number,
+    base?: KnowledgeBase,
+  ) {
     const document = await this.documentRepository.findOne({
       where: { knowledgeBaseId },
       order: { id: 'DESC' },
     });
-    if (!document) {
-      throw new BadRequestException('请先解析生成知识库文档');
+    if (document) return document;
+
+    // 兼容历史 TXT：上传预拆分时已产生正文，但旧数据没有同步文档子记录。
+    const source =
+      base ?? (await this.baseRepository.findOne({ where: { id: knowledgeBaseId } }));
+    if (source?.contentType === 'text' && source.contentText?.trim()) {
+      return this.saveBaseDocument(
+        source,
+        source.contentText,
+        KNOWLEDGE_PARSE_MODE.manual,
+      );
     }
-    return document;
+    throw new BadRequestException('请先解析生成知识库文档');
   }
 
   private async saveBaseDocument(
