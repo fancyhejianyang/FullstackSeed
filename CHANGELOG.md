@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-09-03 TXT 上传后直接进入待分片状态
+- 新增：无
+- 修改：
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（TXT/MD 上传预拆分后直接标记为已解析，等待分片）
+  - `web/src/views/knowledge-base/Index.vue`（知识库列表隐藏 TXT/MD 的解析操作）
+- 删除：无
+- 说明：TXT/MD 不再重复执行解析流程；上传完成后即可直接点击分片，PDF、Word、图片仍保留解析操作。
+
 ### 2026-09-03 将大文本预拆分修正为知识库主记录
 - 新增：无
 - 修改：

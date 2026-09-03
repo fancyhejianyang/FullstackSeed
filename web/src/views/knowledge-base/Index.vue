@@ -312,6 +312,7 @@ onMounted(fetchCategories);
           删除
         </Button>
         <Button
+          v-if="row.contentType !== 'text'"
           link
           perm="KnowledgeBase.update"
           icon="DocumentChecked"

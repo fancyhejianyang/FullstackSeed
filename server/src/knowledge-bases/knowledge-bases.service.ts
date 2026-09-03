@@ -2155,8 +2155,6 @@ export class KnowledgeBasesService implements OnModuleInit {
       base.contentText,
       rule,
     );
-    if (parts.length <= 1) return [base];
-
     const originalName = this.removeSplitSuffix(base.name);
     const groupId = base.sourceGroupId ?? base.id;
     const partCount = parts.length;
@@ -2165,13 +2163,20 @@ export class KnowledgeBasesService implements OnModuleInit {
       target.sourceGroupId = groupId;
       target.name = `[${originalName} - ${partIndex + 1}]`;
       target.contentText = part.content;
-      target.processStage = 'ready';
-      target.parseStatus = 'pending';
+      target.processStage = 'parsed';
+      target.parseStatus = 'success';
       target.chunkStatus = 'pending';
       target.indexStatus = 'pending';
-      target.lastProcessMessage = `已按上传规则预拆分，共 ${partCount} 份，待解析`;
+      target.lastProcessMessage = `已按上传规则预拆分，共 ${partCount} 份，等待分片`;
       target.sort = partIndex;
     };
+
+    if (parts.length <= 1) {
+      applyPart(base, 0);
+      base.name = originalName;
+      await this.baseRepository.save(base);
+      return [base];
+    }
 
     applyPart(base, 0);
     await this.baseRepository.save(base);
