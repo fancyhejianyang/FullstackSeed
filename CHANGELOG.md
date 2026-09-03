@@ -1,5 +1,11 @@
 # CHANGELOG
 
+### 2026-09-03 修复文档解析规则启动查询异常
+- 新增：无
+- 修改：`server/src/document-parse-rules/document-parse-rules.service.ts`（为 TypeORM 无条件 `findOne` 补充 `where: {}`）
+- 删除：无
+- 说明：修复服务启动时报错 `You must provide selection conditions in order to find a single row`，保持规则初始化和当前配置读取逻辑不变。
+
 ### 2026-09-03 新增文档解析规则配置并接入大文本解析
 - 新增：
   - `server/src/document-parse-rules/`（文档解析规则单例配置接口与文本预拆分服务）

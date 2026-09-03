@@ -19,7 +19,10 @@ export class DocumentParseRulesService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    const existing = await this.ruleRepository.findOne({ order: { id: 'ASC' } });
+    const existing = await this.ruleRepository.findOne({
+      where: {},
+      order: { id: 'ASC' },
+    });
     if (existing) return;
     await this.ruleRepository.save(
       this.ruleRepository.create({
@@ -169,7 +172,10 @@ export class DocumentParseRulesService implements OnModuleInit {
   }
 
   private async findCurrentEntity() {
-    const rule = await this.ruleRepository.findOne({ order: { id: 'ASC' } });
+    const rule = await this.ruleRepository.findOne({
+      where: {},
+      order: { id: 'ASC' },
+    });
     if (!rule) throw new BadRequestException('文档解析规则不存在');
     return rule;
   }
