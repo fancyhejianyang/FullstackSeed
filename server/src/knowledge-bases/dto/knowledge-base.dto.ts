@@ -80,6 +80,12 @@ export class ParseKnowledgeBaseDto {
   parseMode?: 'manual' | 'ai' | 'ocr' | 'mineru';
 }
 
+export class ChunkKnowledgeBaseDto {
+  @IsIn(['manual', 'mineru'])
+  @IsOptional()
+  chunkMode?: 'manual' | 'mineru';
+}
+
 export class QueryKnowledgeBaseDto {
   @Type(() => Number)
   @IsInt()

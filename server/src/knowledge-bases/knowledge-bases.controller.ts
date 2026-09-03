@@ -18,6 +18,7 @@ import {
   CreateKnowledgeBaseChunkDto,
   CreateKnowledgeBaseDocumentDto,
   CreateKnowledgeBaseDto,
+  ChunkKnowledgeBaseDto,
   ParseKnowledgeBaseDto,
   ParseKnowledgeBaseDocumentDto,
   ParseKnowledgeBaseDocumentRequestDto,
@@ -131,8 +132,11 @@ export class KnowledgeBasesController {
   @Post(':id/chunk')
   @RequirePermissions('KnowledgeBase.update')
   @ApiOperation({ summary: '生成知识库分片' })
-  chunkBase(@Param('id', ParseIntPipe) id: number) {
-    return this.knowledgeBasesService.chunkBase(id);
+  chunkBase(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ChunkKnowledgeBaseDto,
+  ) {
+    return this.knowledgeBasesService.chunkBase(id, dto);
   }
 
   @Post(':id/index')

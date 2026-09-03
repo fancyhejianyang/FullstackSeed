@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import PageContainer from '@/components/PageContainer.vue';
 import Button from '@/components/Button.vue';
@@ -16,6 +16,7 @@ import {
   parseKnowledgeBase,
   type KnowledgeBase,
   type KnowledgeBaseCategoryTreeNode,
+  type KnowledgeBaseChunkMode,
   type KnowledgeBaseParseMode,
 } from '@/api/knowledgeBase';
 import Edit from './Edit.vue';
@@ -48,6 +49,7 @@ const editVisible = ref(false);
 const viewVisible = ref(false);
 const editingRow = ref<KnowledgeBase | null>(null);
 const viewingRow = ref<KnowledgeBase | null>(null);
+const viewRef = ref<InstanceType<typeof View>>();
 const processingKey = ref('');
 const categoryNameMap = computed(() => {
   const map = new Map<number, string>();
@@ -81,9 +83,14 @@ function handleEdit(row: KnowledgeBase) {
   editVisible.value = true;
 }
 
-function handleView(row: KnowledgeBase) {
+function handleView(row: KnowledgeBase, openManual = false) {
   viewingRow.value = row;
   viewVisible.value = true;
+  if (openManual) {
+    void nextTick(async () => {
+      await viewRef.value?.openManualChunkEditor();
+    });
+  }
 }
 
 function deleteRequest(row: KnowledgeBase) {
@@ -159,18 +166,32 @@ async function runProcess(
   action: 'parse' | 'chunk' | 'index',
 ) {
   let parseMode: KnowledgeBaseParseMode | undefined;
+  let chunkMode: KnowledgeBaseChunkMode | undefined;
   if (action === 'parse') {
     const chosen = await chooseParseMode();
     // 用户取消或关闭弹窗时终止流程
     if (!chosen) return;
     parseMode = chosen;
   }
+  if (action === 'chunk') {
+    const chosen = await chooseChunkMode();
+    if (!chosen) return;
+    if (chosen === 'manual') {
+      handleView(row, true);
+      return;
+    }
+    chunkMode = chosen;
+  }
   const actionMap = {
     parse: {
       label: parseMode === 'ai' ? 'AI 模型解析' : '手动解析',
       request: (id: number) => parseKnowledgeBase(id, { parseMode }),
     },
-    chunk: { label: '分片', request: chunkKnowledgeBase },
+    chunk: {
+      label: 'MinerU 分片',
+      request: (id: number) =>
+        chunkKnowledgeBase(id, { chunkMode: chunkMode ?? 'mineru' }),
+    },
     index: { label: '索引', request: indexKnowledgeBase },
   };
   processingKey.value = `${action}:${row.id}`;
@@ -180,6 +201,24 @@ async function runProcess(
     await tableRef.value?.refresh();
   } finally {
     processingKey.value = '';
+  }
+}
+
+async function chooseChunkMode(): Promise<KnowledgeBaseChunkMode | null> {
+  try {
+    await ElMessageBox.confirm(
+      '请选择本次分片方式。手动分片会打开详情页进行拖拽选择；MinerU 分片会读取自动分片配置处理已解析正文。',
+      '选择分片模式',
+      {
+        confirmButtonText: 'MinerU 分片',
+        cancelButtonText: '手动分片',
+        distinguishCancelAndClose: true,
+        type: 'info',
+      },
+    );
+    return 'mineru';
+  } catch (action) {
+    return action === 'cancel' ? 'manual' : null;
   }
 }
 
@@ -355,6 +394,7 @@ onMounted(fetchCategories);
     />
 
     <View
+      ref="viewRef"
       v-model:visible="viewVisible"
       :row="viewingRow"
       :category-name="getCategoryName(viewingRow?.categoryId)"

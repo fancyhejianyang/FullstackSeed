@@ -154,12 +154,14 @@ export interface KnowledgeBaseProcessResult {
   documentId?: number;
   chunkCount?: number;
   parseMode?: KnowledgeBaseParseMode;
+  chunkMode?: KnowledgeBaseChunkMode;
   taskId?: string;
   status?: string;
   name?: string;
 }
 
 export type KnowledgeBaseParseMode = 'manual' | 'ai' | 'ocr' | 'mineru';
+export type KnowledgeBaseChunkMode = 'manual' | 'mineru';
 
 export interface ParseKnowledgeBasePayload {
   parseMode?: KnowledgeBaseParseMode;
@@ -312,10 +314,14 @@ export function parseKnowledgeBase(
   );
 }
 
-export function chunkKnowledgeBase(id: number) {
+export function chunkKnowledgeBase(
+  id: number,
+  data: { chunkMode: KnowledgeBaseChunkMode } = { chunkMode: 'mineru' },
+) {
   const nid = assertId(id, 'id');
   return request.post<unknown, KnowledgeBaseProcessResult>(
     `/knowledge-bases/${nid}/chunk`,
+    data,
   );
 }
 

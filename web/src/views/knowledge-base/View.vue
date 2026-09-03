@@ -266,6 +266,13 @@ async function prepareManualChunks() {
   }
 }
 
+async function openManualChunkEditor() {
+  activeTab.value = 'content';
+  await prepareManualChunks();
+}
+
+defineExpose({ openManualChunkEditor });
+
 async function fetchManualChunkConfig() {
   const manual = await getKnowledgeChunkConfigs({
     page: 1,

@@ -10,6 +10,7 @@ import { createHash } from 'crypto';
 import { extname } from 'node:path';
 import {
   BatchDeleteKnowledgeBaseDto,
+  ChunkKnowledgeBaseDto,
   CreateKnowledgeBaseCategoryDto,
   CreateKnowledgeBaseChunkDto,
   CreateKnowledgeBaseDocumentDto,
@@ -592,7 +593,13 @@ export class KnowledgeBasesService implements OnModuleInit {
     }
   }
 
-  async chunkBase(id: number) {
+  async chunkBase(id: number, dto: ChunkKnowledgeBaseDto = {}) {
+    const chunkMode = dto.chunkMode ?? 'mineru';
+    if (chunkMode === 'manual') {
+      throw new BadRequestException(
+        '手动分片请打开知识库详情，在内容页拖拽选择分片',
+      );
+    }
     const base = await this.findBase(id);
     if (base.parseStatus !== 'success') {
       throw new BadRequestException('请先完成解析');
@@ -601,16 +608,16 @@ export class KnowledgeBasesService implements OnModuleInit {
       processStage: 'chunking',
       chunkStatus: 'processing',
       indexStatus: 'pending',
-      lastProcessMessage: '分片任务已提交，等待执行',
+      lastProcessMessage: 'MinerU 分片任务已提交，等待执行',
     });
     return this.taskQueueService.add(
       'knowledge-base.chunk',
-      { knowledgeBaseId: id },
-      () => this.executeChunkBase(id),
+      { knowledgeBaseId: id, chunkMode },
+      () => this.executeChunkBase(id, chunkMode),
     );
   }
 
-  private async executeChunkBase(id: number) {
+  private async executeChunkBase(id: number, chunkMode: 'mineru' = 'mineru') {
     const base = await this.findBase(id);
     if (base.parseStatus !== 'success') {
       throw new BadRequestException('请先完成解析');
@@ -619,7 +626,7 @@ export class KnowledgeBasesService implements OnModuleInit {
       processStage: 'chunking',
       chunkStatus: 'processing',
       indexStatus: 'pending',
-      lastProcessMessage: '正在生成分片',
+      lastProcessMessage: '正在执行 MinerU 分片',
     });
     try {
       const chunkConfig = await this.chunkConfigsService.findDefaultConfig();
@@ -634,15 +641,16 @@ export class KnowledgeBasesService implements OnModuleInit {
         processStage: 'chunked',
         chunkStatus: 'success',
         indexStatus: 'pending',
-        lastProcessMessage: `分片完成，共 ${chunkCount} 个分片`,
+        lastProcessMessage: `MinerU 分片完成，共 ${chunkCount} 个分片`,
       });
       await this.recordKnowledgeProcessLog(base, {
         action: 'chunk',
         isSuccess: true,
-        message: `分片完成，共 ${chunkCount} 个分片`,
+        message: `MinerU 分片完成，共 ${chunkCount} 个分片`,
         data: {
           documentId: document.id,
           chunkCount,
+          chunkMode,
         },
       });
       return {
@@ -650,6 +658,7 @@ export class KnowledgeBasesService implements OnModuleInit {
         documentId: document.id,
         chunkCount,
         processStage: 'chunked',
+        chunkMode,
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '分片失败';
@@ -663,6 +672,7 @@ export class KnowledgeBasesService implements OnModuleInit {
         isSuccess: false,
         message: errorMessage,
         errorMessage,
+        data: { chunkMode },
       });
       throw error;
     }

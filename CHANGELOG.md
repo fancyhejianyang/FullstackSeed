@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-09-03 恢复知识库分片模式选择
+- 新增：无
+- 修改：
+  - `server/src/knowledge-bases/dto/knowledge-base.dto.ts`（分片接口接收手动/MinerU 模式）
+  - `server/src/knowledge-bases/knowledge-bases.controller.ts`（传递分片模式）
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（MinerU 分片异步任务记录模式，手动模式引导至详情编辑器）
+  - `web/src/api/knowledgeBase.ts`（补充分片模式请求类型）
+  - `web/src/views/knowledge-base/Index.vue`（恢复手动/MinerU 分片选择）
+  - `web/src/views/knowledge-base/View.vue`（支持从列表直接打开手动分片编辑器）
+- 删除：无
+- 说明：点击列表“分片”后，选择手动分片会进入内容页拖拽操作，选择 MinerU 分片才提交后台异步分片任务。
+
 ### 2026-09-03 TXT 上传后直接进入待分片状态
 - 新增：无
 - 修改：
