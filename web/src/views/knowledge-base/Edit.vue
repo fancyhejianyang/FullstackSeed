@@ -117,18 +117,10 @@ const rules: FormRules = {
       validator: (_rule, value, callback) => {
         if (
           form.contentType === 'text' &&
-          textSourceMode.value === 'input' &&
-          !String(value || '').trim()
-        ) {
-          callback(new Error('请输入文本内容'));
-          return;
-        }
-        if (
-          form.contentType === 'text' &&
-          textSourceMode.value === 'upload' &&
+          !String(value || '').trim() &&
           !form.fileUrl
         ) {
-          callback(new Error('请上传 TXT / MD 文件'));
+          callback(new Error('请输入文本内容或上传 TXT / MD 文件'));
           return;
         }
         callback();
@@ -265,6 +257,16 @@ watch(textSourceMode, (value) => {
   }
   form.contentText = '';
 });
+
+watch(
+  [textSourceMode, () => form.fileUrl],
+  () => {
+    if (!visible.value || fillingForm.value) return;
+    void nextTick(() => {
+      void contentFormRef.value?.validate();
+    });
+  },
+);
 
 async function handleSubmit() {
   await baseFormRef.value?.validate();
