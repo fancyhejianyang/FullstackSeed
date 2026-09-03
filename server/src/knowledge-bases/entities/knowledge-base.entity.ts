@@ -3,6 +3,11 @@ import { BaseEntity } from '../../common/entities/base.entity';
 
 @Entity('knowledge_bases')
 export class KnowledgeBase extends BaseEntity {
+  // 同一份上传文件拆分出的多条业务文档共用此分组 ID。
+  @Index()
+  @Column({ type: 'int', nullable: true })
+  sourceGroupId: number | null;
+
   @Index()
   @Column({ type: 'int', nullable: true })
   categoryId: number | null;

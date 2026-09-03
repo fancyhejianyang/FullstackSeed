@@ -15,6 +15,7 @@ function assertId(id: number | string | undefined, name: string): number {
 
 export interface KnowledgeBase {
   id: number;
+  sourceGroupId: number | null;
   categoryId: number | null;
   name: string;
   code: string;

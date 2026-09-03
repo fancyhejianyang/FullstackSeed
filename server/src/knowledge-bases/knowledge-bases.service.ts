@@ -379,7 +379,9 @@ export class KnowledgeBasesService implements OnModuleInit {
         isEnabled: dto.isEnabled ?? true,
       }),
     );
-    await this.prepareUploadedSourceDocuments(saved);
+    saved.sourceGroupId = saved.id;
+    await this.baseRepository.save(saved);
+    await this.splitUploadedKnowledgeBases(saved);
     return saved;
   }
 
@@ -463,9 +465,7 @@ export class KnowledgeBasesService implements OnModuleInit {
     }
     if (dto.isEnabled !== undefined) base.isEnabled = dto.isEnabled;
     const saved = await this.baseRepository.save(base);
-    if (contentChanged) {
-      await this.replaceUploadedSourceDocuments(saved);
-    }
+    if (contentChanged) await this.replaceUploadedKnowledgeBases(saved);
     if (!contentChanged && retrievalMetadataChanged) {
       await this.markBaseIndexPendingByBaseId(saved.id);
       saved.indexStatus = 'pending';
@@ -541,51 +541,9 @@ export class KnowledgeBasesService implements OnModuleInit {
       fileUrl: base.fileUrl,
     });
     try {
-      const sourceDocuments = await this.ensureBaseSourceDocuments(base);
-      const processedDocuments: KnowledgeBaseDocument[] = [];
-      if (base.contentType === 'text') {
-        const aiConfig =
-          parseMode === KNOWLEDGE_PARSE_MODE.manual
-            ? null
-            : await this.resolveDocumentParseFeatureConfig();
-        for (const sourceDocument of sourceDocuments) {
-          const content =
-            parseMode === KNOWLEDGE_PARSE_MODE.manual
-              ? sourceDocument.content
-              : await this.parseTextSourceWithAiModel(
-                  base,
-                  sourceDocument.content,
-                  aiConfig!,
-                );
-          if (!content?.trim()) {
-            throw new BadRequestException(
-              `${this.getParseModeLabel(parseMode)}结果缺少解析正文（${sourceDocument.title}）`,
-            );
-          }
-          processedDocuments.push(
-            await this.saveParsedSourceDocument(
-              base,
-              sourceDocument,
-              content,
-              parseMode,
-            ),
-          );
-        }
-      } else {
-        const content = await this.parseBaseContentByMode(base, parseMode);
-        const document = await this.findBaseDocument(base.id);
-        processedDocuments.push(
-          await this.saveParsedSourceDocument(
-            base,
-            document,
-            content,
-            parseMode,
-          ),
-        );
-      }
-      if (!processedDocuments.length) {
-        throw new BadRequestException('当前知识库没有可解析的文档数据');
-      }
+      const content = await this.parseBaseContentByMode(base, parseMode);
+      const document = await this.saveBaseDocument(base, content, parseMode);
+      await this.resetDocumentChunks(document.id);
       await this.updateBaseProcess(base, {
         processStage: 'parsed',
         parseStatus: 'success',
@@ -598,32 +556,18 @@ export class KnowledgeBasesService implements OnModuleInit {
         isSuccess: true,
         message: `${this.getParseModeLabel(parseMode)}完成，等待分片`,
         data: {
-          documentId: processedDocuments[0].id,
-          documentIds: processedDocuments.map((item) => item.id),
-          documentCount: processedDocuments.length,
+          documentId: document.id,
           parseMode,
         },
       });
       await this.taskFileLogger.write('base.parse.success', {
         knowledgeBaseId: id,
         knowledgeBaseName: base.name,
-        documentId: processedDocuments[0].id,
-        documentIds: processedDocuments.map((item) => item.id),
-        documentCount: processedDocuments.length,
+        documentId: document.id,
         parseMode,
-        contentLength: processedDocuments.reduce(
-          (total, item) => total + (item.content?.length ?? 0),
-          0,
-        ),
+        contentLength: content.length,
       });
-      return {
-        id,
-        documentId: processedDocuments[0].id,
-        documentIds: processedDocuments.map((item) => item.id),
-        documentCount: processedDocuments.length,
-        processStage: 'parsed',
-        parseMode,
-      };
+      return { id, documentId: document.id, processStage: 'parsed', parseMode };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '解析失败';
       await this.updateBaseProcess(base, {
@@ -679,20 +623,13 @@ export class KnowledgeBasesService implements OnModuleInit {
     });
     try {
       const chunkConfig = await this.chunkConfigsService.findDefaultConfig();
-      const documents = await this.documentRepository.find({
-        where: { knowledgeBaseId: base.id },
-        order: { sort: 'ASC', id: 'ASC' },
-      });
-      const documentsWithContent = documents.filter((item) => item.content?.trim());
-      if (!documentsWithContent.length) {
+      const document = await this.findBaseDocument(base.id);
+      if (!document?.content) {
         throw new BadRequestException('当前知识库文档缺少正文内容');
       }
-      let chunkCount = 0;
-      for (const document of documentsWithContent) {
-        await this.deleteVectorsByCondition({ documentId: document.id });
-        await this.chunkRepository.softDelete({ documentId: document.id });
-        chunkCount += await this.saveDocumentChunks(document, chunkConfig);
-      }
+      await this.deleteVectorsByCondition({ documentId: document.id });
+      await this.chunkRepository.softDelete({ documentId: document.id });
+      const chunkCount = await this.saveDocumentChunks(document, chunkConfig);
       await this.updateBaseProcess(base, {
         processStage: 'chunked',
         chunkStatus: 'success',
@@ -704,15 +641,13 @@ export class KnowledgeBasesService implements OnModuleInit {
         isSuccess: true,
         message: `分片完成，共 ${chunkCount} 个分片`,
         data: {
-          documentIds: documentsWithContent.map((item) => item.id),
-          documentCount: documentsWithContent.length,
+          documentId: document.id,
           chunkCount,
         },
       });
       return {
         id,
-        documentIds: documentsWithContent.map((item) => item.id),
-        documentCount: documentsWithContent.length,
+        documentId: document.id,
         chunkCount,
         processStage: 'chunked',
       };
@@ -2209,146 +2144,95 @@ export class KnowledgeBasesService implements OnModuleInit {
   }
 
   /**
-   * 上传提交后先把源文件物化为知识库文档记录。
-   * 文本类可以安全按规则切成多条记录；二进制文件暂时保留为一条源文档，
-   * 避免在没有生成物理子文件时重复提交同一个 PDF/Word/图片。
+   * 知识库提交时按上传规则拆分文本类内容，直接形成多条知识库主记录。
+   * 二进制文件不复制 URL，避免后续 MinerU/OCR 对同一原文件重复解析。
    */
-  private async prepareUploadedSourceDocuments(base: KnowledgeBase) {
-    const hasSource =
-      base.contentType === 'text'
-        ? Boolean(base.contentText?.trim())
-        : Boolean(base.fileUrl?.trim());
-    if (!hasSource) return [];
+  private async splitUploadedKnowledgeBases(base: KnowledgeBase) {
+    if (base.contentType !== 'text' || !base.contentText?.trim()) return [base];
 
     const rule = await this.documentParseRulesService.getActiveRule();
-    const parts =
-      base.contentType === 'text'
-        ? this.documentParseRulesService.splitTextByRule(
-            base.contentText ?? '',
-            rule,
-          )
-        : [
-            {
-              index: 0,
-              content: '',
-              startOffset: 0,
-              endOffset: 0,
-            },
-          ];
+    const parts = this.documentParseRulesService.splitTextByRule(
+      base.contentText,
+      rule,
+    );
+    if (parts.length <= 1) return [base];
+
+    const originalName = this.removeSplitSuffix(base.name);
+    const groupId = base.sourceGroupId ?? base.id;
     const partCount = parts.length;
-    const documents = parts.map((part) =>
-      this.documentRepository.create({
-        knowledgeBaseId: base.id,
+    const applyPart = (target: KnowledgeBase, partIndex: number) => {
+      const part = parts[partIndex];
+      target.sourceGroupId = groupId;
+      target.name = `[${originalName} - ${partIndex + 1}]`;
+      target.contentText = part.content;
+      target.processStage = 'ready';
+      target.parseStatus = 'pending';
+      target.chunkStatus = 'pending';
+      target.indexStatus = 'pending';
+      target.lastProcessMessage = `已按上传规则预拆分，共 ${partCount} 份，待解析`;
+      target.sort = partIndex;
+    };
+
+    applyPart(base, 0);
+    await this.baseRepository.save(base);
+    const siblings = parts.slice(1).map((_, index) => {
+      const sibling = this.baseRepository.create({
         categoryId: base.categoryId,
-        title:
-          partCount > 1 ? `[${base.name} - ${part.index + 1}]` : base.name,
-        sourceType: base.contentType,
-        sourceName: base.fileName || base.name,
-        content: part.content || null,
-        status: 'source',
-        description:
-          partCount > 1
-            ? `已上传，等待解析（第 ${part.index + 1}/${partCount} 份）`
-            : '已上传，等待解析',
+        name: originalName,
+        code: base.code,
+        description: base.description,
         hitKeywords: base.hitKeywords,
         colloquialDescription: base.colloquialDescription,
         matchPriority: base.matchPriority,
-        sort: part.index,
-      }),
-    );
-    if (!documents.length) return [];
-    const saved = await this.documentRepository.save(documents);
-    await this.taskFileLogger.write('base.source.prepare.success', {
+        contentType: base.contentType,
+        fileName: base.fileName,
+        fileUrl: base.fileUrl,
+        containsImages: base.containsImages,
+        allowFileUpload: base.allowFileUpload,
+        isEnabled: base.isEnabled,
+      });
+      applyPart(sibling, index + 1);
+      return sibling;
+    });
+    const savedSiblings = await this.baseRepository.save(siblings);
+    await this.taskFileLogger.write('base.source.split.success', {
       knowledgeBaseId: base.id,
-      knowledgeBaseName: base.name,
+      knowledgeBaseName: originalName,
       contentType: base.contentType,
-      documentCount: saved.length,
+      documentCount: savedSiblings.length + 1,
       fileName: base.fileName,
       fileUrl: base.fileUrl,
     });
-    return saved;
+    return [base, ...savedSiblings];
   }
 
-  private async replaceUploadedSourceDocuments(base: KnowledgeBase) {
-    await this.deleteVectorsByCondition({ knowledgeBaseId: base.id });
-    await this.chunkRepository.softDelete({ knowledgeBaseId: base.id });
-    await this.documentRepository.softDelete({ knowledgeBaseId: base.id });
-    await this.prepareUploadedSourceDocuments(base);
-  }
-
-  private async ensureBaseSourceDocuments(base: KnowledgeBase) {
-    const existing = await this.documentRepository.find({
-      where: { knowledgeBaseId: base.id },
-      order: { sort: 'ASC', id: 'ASC' },
+  private async replaceUploadedKnowledgeBases(base: KnowledgeBase) {
+    const groupId = base.sourceGroupId ?? base.id;
+    const siblings = await this.baseRepository.find({
+      where: { sourceGroupId: groupId },
     });
-    if (existing.length) return existing;
-    const prepared = await this.prepareUploadedSourceDocuments(base);
-    if (prepared.length) return prepared;
-    throw new BadRequestException('当前知识库没有可解析的文档数据');
+    const siblingIds = siblings
+      .map((item) => item.id)
+      .filter((id) => id !== base.id);
+    if (siblingIds.length) {
+      await this.deleteVectorsByCondition({ knowledgeBaseId: In(siblingIds) });
+      await this.chunkRepository.softDelete({ knowledgeBaseId: In(siblingIds) });
+      await this.documentRepository.softDelete({ knowledgeBaseId: In(siblingIds) });
+      await this.baseRepository.softDelete(siblingIds);
+    }
+    base.sourceGroupId = groupId;
+    base.name = this.removeSplitSuffix(base.name);
+    await this.baseRepository.save(base);
+    await this.splitUploadedKnowledgeBases(base);
   }
 
-  private async parseTextSourceWithAiModel(
-    base: KnowledgeBase,
-    sourceContent: string | null,
-    config: AiFeatureConfig,
-  ) {
-    if (!sourceContent?.trim()) {
-      throw new BadRequestException('文本源文档内容为空，无法进行文档解析');
-    }
-    const result = await this.providersService.callChat({
-      id: config.providerId!,
-      model: config.model!,
-      systemPrompt:
-        config.systemPrompt ||
-        '你是文档解析助手。请将输入内容整理为适合知识库保存的正文。',
-      question: this.buildDocumentParseQuestion({
-        content: sourceContent,
-        fileName: base.fileName || base.name,
-        contentType: 'text',
-        rules: config.rules,
-        responseFormat: config.responseFormat,
-      }),
-    });
-    if (!result.isSuccess) {
-      throw new BadRequestException(result.errorMessage || '文档解析模型调用失败');
-    }
-    const content = this.normalizeParsedContent(result.answer);
-    if (!content) {
-      throw new BadRequestException('文档解析模型结果缺少解析正文');
-    }
-    return content;
-  }
-
-  private async saveParsedSourceDocument(
-    base: KnowledgeBase,
-    document: KnowledgeBaseDocument,
-    content: string,
-    parseMode: KnowledgeParseMode,
-  ) {
-    const normalizedContent = this.normalizeParsedContent(content);
-    if (!normalizedContent) {
-      throw new BadRequestException(
-        `${this.getParseModeLabel(parseMode)}结果缺少解析正文`,
-      );
-    }
-    document.knowledgeBaseId = base.id;
-    document.categoryId = base.categoryId;
-    document.sourceType = base.contentType === 'text' ? 'text' : parseMode;
-    document.sourceName = base.fileName || base.name;
-    document.content = normalizedContent;
-    document.status = 'parsed';
-    document.description = `${this.getParseModeLabel(parseMode)}完成，等待分片`;
-    document.hitKeywords = base.hitKeywords;
-    document.colloquialDescription = base.colloquialDescription;
-    document.matchPriority = base.matchPriority;
-    const saved = await this.documentRepository.save(document);
-    await this.resetDocumentChunks(saved.id);
-    return saved;
+  private removeSplitSuffix(value: string) {
+    return value.replace(/^\[(.*) - \d+\]$/, '$1').trim();
   }
 
   private async parseBaseWithAiModelConfig(base: KnowledgeBase) {
     const mineruConfig = await this.resolveEnabledMineruParseConfig();
-    if (mineruConfig && base.fileUrl) {
+    if (mineruConfig && base.fileUrl && base.contentType !== 'text') {
       return this.parseBaseWithThirdParty(base, mineruConfig);
     }
     const contentType = this.resolveAiModelParseContentType(
