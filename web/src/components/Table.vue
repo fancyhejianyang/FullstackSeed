@@ -132,6 +132,9 @@ const total = ref(0);
 const page = ref(1);
 const pageSize = ref(10);
 const searchModel = reactive<Record<string, any>>({});
+// 搜索表单允许先编辑，只有点击查询后才成为列表实际使用的条件。
+// 刷新列表时复用这份快照，避免弹窗关闭后丢失最近一次查询条件。
+const appliedSearchModel = ref<Record<string, any>>({});
 const tableRef = ref<TableInstance>();
 const selectedRows = shallowRef<T[]>([]);
 
@@ -204,7 +207,7 @@ async function fetchData() {
     const res = await props.request({
       page: page.value,
       pageSize: pageSize.value,
-      ...searchModel,
+      ...appliedSearchModel.value,
     });
     list.value = res.list;
     total.value = res.total;
@@ -214,12 +217,13 @@ async function fetchData() {
 }
 
 async function handleSearch() {
-  page.value = 1;
+  appliedSearchModel.value = { ...searchModel };
   await fetchData();
 }
 
 async function handleReset() {
   Object.keys(searchModel).forEach((k) => (searchModel[k] = ''));
+  appliedSearchModel.value = {};
   page.value = 1;
   await fetchData();
 }
