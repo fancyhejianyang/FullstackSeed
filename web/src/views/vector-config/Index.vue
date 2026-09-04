@@ -29,6 +29,7 @@ const form = reactive<VectorConfigForm>({
   providerId: '',
   model: '',
   embeddingDimension: 768,
+  providerEmbeddingDimension: '',
   chromaUrl: 'http://localhost:8000',
   collectionName: 'knowledge_chunks',
   tenant: 'default_tenant',
@@ -92,13 +93,24 @@ const fields = computed<FormField[]>(() => [
   },
   {
     prop: 'embeddingDimension',
-    label: '向量维度',
+    label: '向量服务维度',
     component: 'InputNumber',
     placeholder: '默认 768',
     componentProps: {
       mode: 'integer',
       min: 1,
       required: true,
+      suffixText: '维',
+    },
+  },
+  {
+    prop: 'providerEmbeddingDimension',
+    label: '供应商向量维度',
+    component: 'InputNumber',
+    placeholder: '留空时使用向量服务维度；腾讯模型可填写 1024',
+    componentProps: {
+      mode: 'integer',
+      min: 1,
       suffixText: '维',
     },
   },
@@ -156,6 +168,7 @@ function resetForm() {
     providerId: '',
     model: '',
     embeddingDimension: 768,
+    providerEmbeddingDimension: '',
     chromaUrl: 'http://localhost:8000',
     collectionName: 'knowledge_chunks',
     tenant: 'default_tenant',
@@ -175,6 +188,7 @@ function fillForm(data: VectorConfig) {
     providerId: data.providerId ?? '',
     model: data.model ?? '',
     embeddingDimension: data.embeddingDimension || 768,
+    providerEmbeddingDimension: data.providerEmbeddingDimension ?? '',
     chromaUrl: data.chromaUrl,
     collectionName: data.collectionName || 'knowledge_chunks',
     tenant: data.tenant || 'default_tenant',
@@ -224,6 +238,11 @@ function buildPayload() {
   const dimension = Number(form.embeddingDimension);
   payload.embeddingDimension =
     Number.isFinite(dimension) && dimension > 0 ? Math.trunc(dimension) : 768;
+  const providerDimension = Number(form.providerEmbeddingDimension);
+  payload.providerEmbeddingDimension =
+    Number.isFinite(providerDimension) && providerDimension > 0
+      ? Math.trunc(providerDimension)
+      : null;
   if (currentId.value && !payload.token?.trim()) {
     delete payload.token;
   }
@@ -292,7 +311,7 @@ onMounted(loadConfig);
           </p>
           <p class="vector-config__tip">
             当前知识库索引只处理文本分片，请选择文本向量模型；视觉/多模态向量模型不用于这里。
-            同一 Chroma Collection 的向量维度固定，切换模型或维度时请更换 Collection 或清空旧集合。
+            向量服务维度默认 768；供应商模型维度填写后优先用于模型调用和校验，留空则沿用向量服务维度。
           </p>
         </div>
         <el-tag :type="form.isEnabled ? 'success' : 'info'">

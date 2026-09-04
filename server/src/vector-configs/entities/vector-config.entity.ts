@@ -21,6 +21,9 @@ export class VectorConfig extends BaseEntity {
   @Column({ type: 'int', default: 768 })
   embeddingDimension: number;
 
+  @Column({ type: 'int', nullable: true })
+  providerEmbeddingDimension: number | null;
+
   @Column({ length: 500, default: 'http://localhost:8000' })
   chromaUrl: string;
 

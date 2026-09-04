@@ -24,14 +24,16 @@ export class KnowledgeEmbeddingService {
       id: vectorConfig.providerId,
       model: vectorConfig.model,
     });
+    const effectiveDimension =
+      vectorConfig.providerEmbeddingDimension ?? vectorConfig.embeddingDimension;
     const embeddings = await this.providersService.callEmbedding({
       target,
       input: normalized,
-      embeddingDimension: vectorConfig.embeddingDimension,
+      embeddingDimension: effectiveDimension,
     });
     this.assertEmbeddingDimensions({
       embeddings,
-      expectedDimension: vectorConfig.embeddingDimension,
+      expectedDimension: effectiveDimension,
       providerName: target.providerName,
       model: target.model,
     });

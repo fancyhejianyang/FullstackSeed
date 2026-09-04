@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-09-04 增加供应商向量模型维度配置
+- 新增：无
+- 修改：
+  - `server/src/vector-configs/entities/vector-config.entity.ts`、`server/src/vector-configs/dto/vector-config.dto.ts`、`server/src/vector-configs/vector-configs.service.ts`（增加可选供应商向量模型维度并支持单配置保存、回显和读取）
+  - `server/src/knowledge-vectors/knowledge-embedding.service.ts`（模型调用和维度校验优先使用供应商维度，未填写时回退到向量服务维度）
+  - `web/src/api/vectorConfig.ts`、`web/src/views/vector-config/Index.vue`（增加供应商向量维度输入项及回退规则说明）
+- 删除：无
+- 说明：向量服务维度默认 768；腾讯等不支持 `dimensions` 参数的模型可填写其固定输出维度，例如 1024，不再要求修改向量服务默认维度。
+
 ### 2026-09-04 增加向量维度切换校验
 - 新增：无
 - 修改：

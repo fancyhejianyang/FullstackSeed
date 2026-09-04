@@ -25,6 +25,7 @@ export interface UsableVectorConfig {
   providerName: string | null;
   model: string | null;
   embeddingDimension: number;
+  providerEmbeddingDimension: number | null;
   token: string | null;
   source: 'database' | 'env';
 }
@@ -138,6 +139,9 @@ export class VectorConfigsService {
         embeddingDimension: this.resolveEmbeddingDimension(
           configs[0].embeddingDimension,
         ),
+        providerEmbeddingDimension: this.resolveOptionalEmbeddingDimension(
+          configs[0].providerEmbeddingDimension,
+        ),
         token: configs[0].token,
         source: 'database',
       };
@@ -156,6 +160,7 @@ export class VectorConfigsService {
       embeddingDimension: this.resolveEmbeddingDimension(
         Number(process.env.EMBEDDING_DIMENSION || 768),
       ),
+      providerEmbeddingDimension: null,
       token: process.env.CHROMA_TOKEN || null,
       source: 'env',
     };
@@ -200,6 +205,16 @@ export class VectorConfigsService {
       );
     } else if (isCreate) {
       payload.embeddingDimension = 768;
+    }
+    if (dto.providerEmbeddingDimension !== undefined) {
+      payload.providerEmbeddingDimension =
+        dto.providerEmbeddingDimension === null
+          ? null
+          : this.resolveOptionalEmbeddingDimension(
+              dto.providerEmbeddingDimension,
+            );
+    } else if (isCreate) {
+      payload.providerEmbeddingDimension = null;
     }
     if (dto.chromaUrl !== undefined) payload.chromaUrl = dto.chromaUrl.trim();
     if (dto.collectionName !== undefined) {
@@ -266,6 +281,9 @@ export class VectorConfigsService {
       embeddingDimension: this.resolveEmbeddingDimension(
         config.embeddingDimension,
       ),
+      providerEmbeddingDimension: this.resolveOptionalEmbeddingDimension(
+        config.providerEmbeddingDimension,
+      ),
       chromaUrl: config.chromaUrl,
       collectionName: config.collectionName,
       tenant: config.tenant,
@@ -282,5 +300,10 @@ export class VectorConfigsService {
     return Number.isFinite(dimension) && dimension > 0
       ? Math.trunc(dimension)
       : 768;
+  }
+
+  private resolveOptionalEmbeddingDimension(value: unknown) {
+    if (value === null || value === undefined || value === '') return null;
+    return this.resolveEmbeddingDimension(value);
   }
 }

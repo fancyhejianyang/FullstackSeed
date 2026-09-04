@@ -42,6 +42,12 @@ export class CreateVectorConfigDto {
   @IsOptional()
   embeddingDimension?: number;
 
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  providerEmbeddingDimension?: number | null;
+
   @IsUrl({ require_tld: false })
   @MaxLength(500)
   chromaUrl: string;
