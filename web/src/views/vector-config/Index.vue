@@ -48,9 +48,21 @@ const selectedProvider = computed(() =>
   providers.value.find((item) => item.id === Number(form.providerId)),
 );
 const modelOptions = computed(() =>
-  parseProviderModelOptions(selectedProvider.value?.embeddingModels || '').filter(
-    (item) => !isKnownUnsupportedTextEmbeddingModel(item.value),
+  parseProviderModelOptions(selectedProvider.value?.embeddingModels || '').map(
+    (item) => {
+      const unsupported = isKnownUnsupportedTextEmbeddingModel(item.value);
+      return {
+        ...item,
+        disabled: unsupported,
+        label: unsupported
+          ? `${item.label}（不适用于文本索引）`
+          : item.label,
+      };
+    },
   ),
+);
+const selectableModelOptions = computed(() =>
+  modelOptions.value.filter((item) => !item.disabled),
 );
 
 const fields = computed<FormField[]>(() => [
@@ -198,7 +210,7 @@ async function loadConfig() {
 watch(
   () => [form.providerId, providers.value.length],
   () => {
-    const options = modelOptions.value;
+    const options = selectableModelOptions.value;
     if (options.length && !options.some((item) => item.value === form.model)) {
       form.model = '';
     }
