@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
@@ -42,7 +42,9 @@ export class CreateVectorConfigDto {
   @IsOptional()
   embeddingDimension?: number;
 
-  @Type(() => Number)
+  @Transform(({ value }) =>
+    value === null || value === '' ? null : Number(value),
+  )
   @IsInt()
   @Min(1)
   @IsOptional()
@@ -77,6 +79,29 @@ export class CreateVectorConfigDto {
 }
 
 export class UpdateVectorConfigDto extends PartialType(CreateVectorConfigDto) {}
+
+export class DetectVectorDimensionDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  providerId: number;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(120)
+  model: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  embeddingDimension?: number;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(120)
+  collectionName?: string;
+}
 
 export class QueryVectorConfigDto {
   @Type(() => Number)

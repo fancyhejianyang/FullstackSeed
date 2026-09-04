@@ -5,6 +5,7 @@ import PageContainer from '@/components/PageContainer.vue';
 import Button from '@/components/Button.vue';
 import Form, { type FormField } from '@/components/Form.vue';
 import {
+  detectVectorDimension,
   getCurrentVectorConfig,
   saveCurrentVectorConfig,
   type VectorConfig,
@@ -22,6 +23,9 @@ const currentId = ref<number | null>(null);
 const tokenSet = ref(false);
 const loadedConfigName = ref('');
 const providers = ref<KnowledgeAiProvider[]>([]);
+const configReady = ref(false);
+const detectingDimension = ref(false);
+let dimensionRequestId = 0;
 
 const form = reactive<VectorConfigForm>({
   name: '本地 Chroma 向量配置',
@@ -211,9 +215,11 @@ async function loadConfig() {
     providers.value = embeddingResult.list;
     if (!config) {
       resetForm();
+      configReady.value = true;
       return;
     }
     fillForm(config);
+    configReady.value = true;
   } catch {
     ElMessage.error('获取向量化配置失败');
   } finally {
@@ -230,6 +236,48 @@ watch(
     }
   },
 );
+
+watch(
+  () => [form.providerId, form.model],
+  () => {
+    if (!configReady.value || !form.providerId || !form.model) return;
+    const provider = selectedProvider.value;
+    const models = parseProviderModelOptions(provider?.embeddingModels || '');
+    if (!models.some((item) => item.value === form.model)) return;
+    form.providerEmbeddingDimension = '';
+    void detectCurrentDimension();
+  },
+);
+
+async function detectCurrentDimension() {
+  const requestId = ++dimensionRequestId;
+  detectingDimension.value = true;
+  try {
+    const result = await detectVectorDimension({
+      providerId: Number(form.providerId),
+      model: form.model || '',
+      embeddingDimension: Number(form.embeddingDimension) || 768,
+      collectionName: form.collectionName,
+    });
+    if (requestId !== dimensionRequestId) return;
+    form.providerEmbeddingDimension = result.dimension;
+    if (isManagedCollectionName(form.collectionName)) {
+      form.collectionName = result.suggestedCollectionName;
+    }
+    ElMessage.success(`已检测到供应商模型返回 ${result.dimension} 维`);
+  } catch {
+    if (requestId === dimensionRequestId) {
+      ElMessage.error('向量模型维度检测失败，请检查账号、模型和密钥配置');
+    }
+  } finally {
+    if (requestId === dimensionRequestId) detectingDimension.value = false;
+  }
+}
+
+function isManagedCollectionName(value?: string) {
+  const name = value?.trim() || '';
+  return name === 'knowledge_chunks' || /^knowledge_chunks_\d+$/.test(name);
+}
 
 function buildPayload() {
   const payload: VectorConfigForm = { ...form };
@@ -312,6 +360,7 @@ onMounted(loadConfig);
           <p class="vector-config__tip">
             当前知识库索引只处理文本分片，请选择文本向量模型；视觉/多模态向量模型不用于这里。
             向量服务维度默认 768；供应商模型维度填写后优先用于模型调用和校验，留空则沿用向量服务维度。
+            <span v-if="detectingDimension">正在检测当前模型实际维度...</span>
           </p>
         </div>
         <el-tag :type="form.isEnabled ? 'success' : 'info'">

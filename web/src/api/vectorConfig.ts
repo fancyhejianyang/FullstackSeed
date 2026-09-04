@@ -26,6 +26,21 @@ export interface VectorConfigListResult {
   total: number;
 }
 
+export interface DetectVectorDimensionParams {
+  providerId: number;
+  model: string;
+  embeddingDimension?: number;
+  collectionName?: string;
+}
+
+export interface DetectVectorDimensionResult {
+  providerId: number;
+  providerName: string;
+  model: string;
+  dimension: number;
+  suggestedCollectionName: string;
+}
+
 export interface QueryVectorConfigParams {
   page?: number;
   pageSize?: number;
@@ -59,6 +74,13 @@ export function getVectorConfig(id: number) {
 
 export function getCurrentVectorConfig() {
   return request.get<unknown, VectorConfig | null>('/vector-configs/current');
+}
+
+export function detectVectorDimension(data: DetectVectorDimensionParams) {
+  return request.post<unknown, DetectVectorDimensionResult>(
+    '/vector-configs/detect-dimension',
+    data,
+  );
 }
 
 export function createVectorConfig(data: VectorConfigForm) {

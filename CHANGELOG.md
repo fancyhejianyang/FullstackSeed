@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-09-04 新增向量模型维度自动检测
+- 新增：
+  - `server/src/vector-configs/dto/vector-config.dto.ts`（新增检测向量模型维度请求 DTO）
+  - `web/src/api/vectorConfig.ts`（新增维度检测接口类型和调用方法）
+- 修改：
+  - `server/src/vector-configs/vector-configs.controller.ts`、`server/src/vector-configs/vector-configs.service.ts`（增加后端维度探测接口，使用供应商配置发送最小 embedding 请求并返回建议 Collection 名称）
+  - `web/src/views/vector-config/Index.vue`（切换账号/模型后自动检测、回填供应商维度，并更新受管默认 Collection 名称）
+- 删除：无
+- 说明：检测使用模型实际返回向量长度；支持 `dimensions` 的模型按向量服务维度请求，腾讯等固定维度模型按实际返回值处理；用户自定义 Collection 不会被自动覆盖。
+
 ### 2026-09-04 增加供应商向量模型维度配置
 - 新增：无
 - 修改：

@@ -14,6 +14,7 @@ import { RequirePermissions } from '../common/decorators/require-permissions.dec
 import {
   BatchDeleteVectorConfigDto,
   CreateVectorConfigDto,
+  DetectVectorDimensionDto,
   QueryVectorConfigDto,
   UpdateVectorConfigDto,
 } from './dto/vector-config.dto';
@@ -37,6 +38,13 @@ export class VectorConfigsController {
   @ApiOperation({ summary: '当前向量化配置' })
   findCurrent() {
     return this.vectorConfigsService.findCurrent();
+  }
+
+  @Post('detect-dimension')
+  @RequirePermissions('Menu.read')
+  @ApiOperation({ summary: '检测向量模型实际维度' })
+  detectDimension(@Body() dto: DetectVectorDimensionDto) {
+    return this.vectorConfigsService.detectDimension(dto);
   }
 
   @Post('current')

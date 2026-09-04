@@ -8,6 +8,7 @@ import { In, Not, Repository } from 'typeorm';
 import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
 import {
   CreateVectorConfigDto,
+  DetectVectorDimensionDto,
   QueryVectorConfigDto,
   UpdateVectorConfigDto,
 } from './dto/vector-config.dto';
@@ -64,6 +65,35 @@ export class VectorConfigsService {
   async findCurrent() {
     const config = await this.findCurrentEntity();
     return config ? this.toView(config) : null;
+  }
+
+  async detectDimension(dto: DetectVectorDimensionDto) {
+    const target = await this.providersService.resolveEmbeddingTarget({
+      id: dto.providerId,
+      model: dto.model,
+    });
+    const [embedding] = await this.providersService.callEmbedding({
+      target,
+      input: ['FullstackSeed 向量维度检测'],
+      embeddingDimension: this.resolveEmbeddingDimension(
+        dto.embeddingDimension,
+      ),
+    });
+    if (!embedding?.length) {
+      throw new BadRequestException('向量模型未返回有效的维度信息');
+    }
+
+    const dimension = embedding.length;
+    const baseCollectionName = this.resolveCollectionBaseName(
+      dto.collectionName,
+    );
+    return {
+      providerId: target.providerId,
+      providerName: target.providerName,
+      model: target.model,
+      dimension,
+      suggestedCollectionName: `${baseCollectionName}_${dimension}`,
+    };
   }
 
   async saveCurrent(dto: CreateVectorConfigDto | UpdateVectorConfigDto) {
@@ -305,5 +335,10 @@ export class VectorConfigsService {
   private resolveOptionalEmbeddingDimension(value: unknown) {
     if (value === null || value === undefined || value === '') return null;
     return this.resolveEmbeddingDimension(value);
+  }
+
+  private resolveCollectionBaseName(value?: string) {
+    const collectionName = value?.trim() || 'knowledge_chunks';
+    return collectionName.replace(/_\d+$/, '') || 'knowledge_chunks';
   }
 }
