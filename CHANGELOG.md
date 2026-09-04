@@ -1,13 +1,5 @@
 # CHANGELOG
 
-### 2026-09-04 按向量模型自动隔离 Chroma 集合
-- 新增：无
-- 修改：
-  - `server/src/knowledge-vectors/knowledge-vector.service.ts`（根据供应商、模型和配置维度生成物理集合名，并将这些参数加入集合缓存键）
-  - `server/src/knowledge-vectors/knowledge-embedding.service.ts`（仅校验同一批向量维度一致，不再要求模型实际维度必须等于配置默认值）
-- 删除：无
-- 说明：切换向量模型时不再要求手工修改 `collectionName` 或把配置维度改成模型实际维度；不同模型自动使用独立的 Chroma 集合，旧集合保留，首次索引新集合时按模型实际返回维度建立。
-
 ### 2026-09-04 增加向量维度切换校验
 - 新增：无
 - 修改：

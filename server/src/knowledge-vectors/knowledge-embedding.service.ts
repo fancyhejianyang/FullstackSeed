@@ -31,6 +31,7 @@ export class KnowledgeEmbeddingService {
     });
     this.assertEmbeddingDimensions({
       embeddings,
+      expectedDimension: vectorConfig.embeddingDimension,
       providerName: target.providerName,
       model: target.model,
     });
@@ -47,6 +48,7 @@ export class KnowledgeEmbeddingService {
 
   private assertEmbeddingDimensions(options: {
     embeddings: number[][];
+    expectedDimension: number;
     providerName: string;
     model: string;
   }) {
@@ -59,5 +61,11 @@ export class KnowledgeEmbeddingService {
       );
     }
 
+    const actualDimension = actualDimensions[0];
+    if (actualDimension === options.expectedDimension) return;
+
+    throw new BadRequestException(
+      `向量维度不匹配：向量化配置为 ${options.expectedDimension} 维，但账号 ${options.providerName} 的模型 ${options.model} 实际返回 ${actualDimension} 维。请将配置维度改为 ${actualDimension}；如果 Chroma 集合已按旧维度创建，请更换集合名称或清理旧集合后重新索引`,
+    );
   }
 }
