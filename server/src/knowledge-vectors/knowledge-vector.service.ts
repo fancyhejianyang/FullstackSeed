@@ -41,7 +41,7 @@ export class KnowledgeVectorService {
       });
     } catch (error) {
       throw new BadRequestException(
-        `Chroma 向量写入失败：${this.getErrorMessage(error)}`,
+        `Chroma 向量写入失败：${this.formatChromaError(error)}`,
       );
     }
   }
@@ -156,5 +156,17 @@ export class KnowledgeVectorService {
 
   private getErrorMessage(error: unknown) {
     return error instanceof Error ? error.message : String(error);
+  }
+
+  private formatChromaError(error: unknown) {
+    const message = this.getErrorMessage(error);
+    const dimensionMismatch = message.match(
+      /Collection expecting embedding with dimension of (\d+), got (\d+)/i,
+    );
+    if (dimensionMismatch) {
+      const [, expected, actual] = dimensionMismatch;
+      return `集合已固定为 ${expected} 维，但本次向量为 ${actual} 维。请将向量化配置改为 ${actual}，并更换 Chroma 集合名称或清理旧集合后重新索引；Chroma 集合维度不能原地修改`;
+    }
+    return message;
   }
 }

@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-09-04 增加向量维度切换校验
+- 新增：无
+- 修改：
+  - `server/src/knowledge-vectors/knowledge-embedding.service.ts`（校验模型实际返回的向量维度与向量化配置，并提示模型、账号及修复方式）
+  - `server/src/knowledge-vectors/knowledge-vector.service.ts`（将 Chroma 集合维度冲突转换为明确的配置和重建提示）
+- 删除：无
+- 说明：切换向量模型后不再只返回 Chroma 底层 400；模型实际维度与配置或既有集合不一致时，会提示调整维度并更换集合或清理旧集合后重新索引，不自动删除已有向量数据。
+
 ### 2026-09-04 修正 Table 搜索与刷新分页状态
 - 新增：无
 - 修改：
