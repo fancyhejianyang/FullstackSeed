@@ -5,6 +5,7 @@ import {
   type Metadata,
   type Where,
 } from 'chromadb';
+import { createHash } from 'node:crypto';
 import { VectorConfigsService } from '../vector-configs/vector-configs.service';
 
 export interface KnowledgeVectorUpsertItem {
@@ -89,9 +90,10 @@ export class KnowledgeVectorService {
 
   private async getCollection() {
     const config = await this.vectorConfigsService.findUsableConfig();
+    const collectionName = this.resolvePhysicalCollectionName(config);
     const cacheKey = [
       config.chromaUrl,
-      config.collectionName,
+      collectionName,
       config.tenant,
       config.database,
       config.token || '',
@@ -103,11 +105,15 @@ export class KnowledgeVectorService {
     }
     if (!this.collectionPromise) {
       this.collectionPromise = this.getClient(config).getOrCreateCollection({
-        name: config.collectionName,
+        name: collectionName,
         embeddingFunction: null,
         metadata: {
           source: 'FullstackSeed',
           purpose: 'knowledge-base',
+          logicalCollectionName: config.collectionName,
+          providerId: config.providerId ?? 0,
+          model: config.model || '',
+          configuredDimension: config.embeddingDimension,
         },
       });
     }
@@ -156,6 +162,23 @@ export class KnowledgeVectorService {
 
   private getErrorMessage(error: unknown) {
     return error instanceof Error ? error.message : String(error);
+  }
+
+  private resolvePhysicalCollectionName(
+    config: Awaited<ReturnType<VectorConfigsService['findUsableConfig']>>,
+  ) {
+    const baseName =
+      config.collectionName
+        .trim()
+        .replace(/[^a-zA-Z0-9_-]+/g, '-')
+        .replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, '') || 'knowledge_chunks';
+    const modelKey = createHash('sha1')
+      .update(`${config.providerId ?? 0}:${(config.model || '').trim()}`)
+      .digest('hex')
+      .slice(0, 12);
+    const suffix = `__v${modelKey}__d${config.embeddingDimension}`;
+    const availableBaseLength = Math.max(3, 63 - suffix.length - 1);
+    return `${baseName.slice(0, availableBaseLength)}${suffix}`;
   }
 
   private formatChromaError(error: unknown) {
