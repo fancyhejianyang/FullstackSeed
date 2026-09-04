@@ -843,9 +843,7 @@ export class KnowledgeAiProvidersService {
 
   private readMessageContent(content?: unknown): string {
     if (!content) return '';
-    if (typeof content === 'string') {
-      return this.normalizeLineBreaks(content).trim();
-    }
+    if (typeof content === 'string') return content.trim();
     if (typeof content === 'number' || typeof content === 'boolean') {
       return String(content);
     }
@@ -857,14 +855,6 @@ export class KnowledgeAiProvidersService {
             .join('')
         : this.readObjectContent(content)
       : '';
-  }
-
-  /** 将模型返回的字面量转义换行统一为真实换行。 */
-  private normalizeLineBreaks(value: string) {
-    return value
-      .replace(/\\r\\n/g, '\n')
-      .replace(/\\n/g, '\n')
-      .replace(/\\r/g, '\n');
   }
 
   private readObjectContent(content: unknown) {
@@ -1002,9 +992,8 @@ export class KnowledgeAiProvidersService {
         parsed.choices?.[0]?.message?.content ||
         '';
       if (delta) {
-        const normalizedDelta = this.normalizeLineBreaks(delta);
-        content += normalizedDelta;
-        onDelta(normalizedDelta);
+        content += delta;
+        onDelta(delta);
       }
     }
     return { content, isDone: false };
