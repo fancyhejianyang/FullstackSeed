@@ -182,6 +182,25 @@ async function runProcess(
     }
     chunkMode = chosen;
   }
+  const forceIndex =
+    action === 'index' &&
+    (row.indexStatus === 'success' || row.processStage === 'indexed');
+  if (forceIndex) {
+    try {
+      await ElMessageBox.confirm(
+        '该知识库已经完成索引，重新索引会重新生成并覆盖当前分片的向量数据，是否继续？',
+        '重新索引确认',
+        {
+          confirmButtonText: '重新索引',
+          cancelButtonText: '取消',
+          distinguishCancelAndClose: true,
+          type: 'warning',
+        },
+      );
+    } catch {
+      return;
+    }
+  }
   const actionMap = {
     parse: {
       label: parseMode === 'ai' ? 'AI 模型解析' : '手动解析',
@@ -192,7 +211,10 @@ async function runProcess(
       request: (id: number) =>
         chunkKnowledgeBase(id, { chunkMode: chunkMode ?? 'mineru' }),
     },
-    index: { label: '索引', request: indexKnowledgeBase },
+    index: {
+      label: forceIndex ? '重新索引' : '索引',
+      request: (id: number) => indexKnowledgeBase(id, { force: forceIndex }),
+    },
   };
   processingKey.value = `${action}:${row.id}`;
   try {

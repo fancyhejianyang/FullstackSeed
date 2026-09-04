@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-09-04 支持已索引知识库二次确认后强制重建
+- 新增：
+  - `server/src/knowledge-bases/dto/knowledge-base.dto.ts`（增加索引请求 DTO，支持 `force` 参数）
+  - `web/src/api/knowledgeBase.ts`（索引接口增加可选强制重建参数）
+- 修改：
+  - `server/src/knowledge-bases/knowledge-bases.controller.ts`、`server/src/knowledge-bases/knowledge-bases.service.ts`（透传强制索引参数，确认后重新处理全部分片）
+  - `web/src/views/knowledge-base/Index.vue`（已索引数据再次点击索引时增加二次确认）
+- 删除：无
+- 说明：普通索引仍按内容哈希、向量状态和向量 ID执行增量跳过；只有确认后的 `force: true` 才会重建全部分片。
+
 ### 2026-09-04 新增向量模型维度自动检测
 - 新增：
   - `server/src/vector-configs/dto/vector-config.dto.ts`（新增检测向量模型维度请求 DTO）

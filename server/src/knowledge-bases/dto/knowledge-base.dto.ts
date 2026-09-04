@@ -86,6 +86,12 @@ export class ChunkKnowledgeBaseDto {
   chunkMode?: 'manual' | 'mineru';
 }
 
+export class IndexKnowledgeBaseDto {
+  @IsBoolean()
+  @IsOptional()
+  force?: boolean;
+}
+
 export class QueryKnowledgeBaseDto {
   @Type(() => Number)
   @IsInt()

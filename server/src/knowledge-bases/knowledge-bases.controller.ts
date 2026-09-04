@@ -19,6 +19,7 @@ import {
   CreateKnowledgeBaseDocumentDto,
   CreateKnowledgeBaseDto,
   ChunkKnowledgeBaseDto,
+  IndexKnowledgeBaseDto,
   ParseKnowledgeBaseDto,
   ParseKnowledgeBaseDocumentDto,
   ParseKnowledgeBaseDocumentRequestDto,
@@ -142,8 +143,11 @@ export class KnowledgeBasesController {
   @Post(':id/index')
   @RequirePermissions('KnowledgeBase.update')
   @ApiOperation({ summary: '生成知识库索引' })
-  indexBase(@Param('id', ParseIntPipe) id: number) {
-    return this.knowledgeBasesService.indexBase(id);
+  indexBase(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: IndexKnowledgeBaseDto,
+  ) {
+    return this.knowledgeBasesService.indexBase(id, dto.force === true);
   }
 
   @Post('categories')

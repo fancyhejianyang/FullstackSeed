@@ -167,6 +167,10 @@ export interface ParseKnowledgeBasePayload {
   parseMode?: KnowledgeBaseParseMode;
 }
 
+export interface IndexKnowledgeBasePayload {
+  force?: boolean;
+}
+
 export interface ListResult<T> {
   list: T[];
   total: number;
@@ -325,10 +329,14 @@ export function chunkKnowledgeBase(
   );
 }
 
-export function indexKnowledgeBase(id: number) {
+export function indexKnowledgeBase(
+  id: number,
+  data: IndexKnowledgeBasePayload = {},
+) {
   const nid = assertId(id, 'id');
   return request.post<unknown, KnowledgeBaseProcessResult>(
     `/knowledge-bases/${nid}/index`,
+    data,
   );
 }
 

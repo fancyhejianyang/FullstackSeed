@@ -678,7 +678,7 @@ export class KnowledgeBasesService implements OnModuleInit {
     }
   }
 
-  async indexBase(id: number) {
+  async indexBase(id: number, force = false) {
     const base = await this.findBase(id);
     if (base.chunkStatus !== 'success') {
       throw new BadRequestException('请先完成分片');
@@ -690,12 +690,12 @@ export class KnowledgeBasesService implements OnModuleInit {
     });
     return this.taskQueueService.add(
       'knowledge-base.index',
-      { knowledgeBaseId: id },
-      () => this.executeIndexBase(id),
+      { knowledgeBaseId: id, force },
+      () => this.executeIndexBase(id, force),
     );
   }
 
-  private async executeIndexBase(id: number) {
+  private async executeIndexBase(id: number, force = false) {
     const base = await this.findBase(id);
     if (base.chunkStatus !== 'success') {
       throw new BadRequestException('请先完成分片');
@@ -741,6 +741,7 @@ export class KnowledgeBasesService implements OnModuleInit {
         })
         .filter(
           (item) =>
+            force ||
             item.chunk.vectorStatus !== KNOWLEDGE_CHUNK_VECTOR_STATUS.success ||
             item.chunk.contentHash !== item.contentHash ||
             item.chunk.vectorId !== item.vectorId,
