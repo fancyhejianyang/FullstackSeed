@@ -44,6 +44,16 @@ const searchFields: FormField[] = [
     type: 'select',
     options: [{ label: '全部', value: '' }, ...retrievalModeOptions],
   },
+  {
+    prop: 'isEnabled',
+    label: '启用状态',
+    type: 'select',
+    options: [
+      { label: '全部', value: '' },
+      { label: '启用', value: true },
+      { label: '停用', value: false },
+    ],
+  },
   { prop: 'keyword', label: '关键词', type: 'input', placeholder: '配置/知识库/描述' },
 ];
 

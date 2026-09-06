@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsInt,
   IsArray,
+  IsBoolean,
   Min,
   Matches,
   ValidateIf,
@@ -62,4 +63,9 @@ export class QueryRoleDto {
   @IsString()
   @IsOptional()
   keyword?: string;
+
+  @Transform(({ value }) => toBoolLike(value))
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
 }

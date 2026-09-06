@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
@@ -18,6 +18,7 @@ import {
   type AiFeatureType,
   type AiResponseFormat,
 } from '../ai-feature-config.constants';
+import { toBoolLike } from '../../common/utils/bool-like';
 
 export class CreateAiFeatureConfigDto {
   @IsString()
@@ -117,6 +118,11 @@ export class QueryAiFeatureConfigDto {
   @Min(1)
   @IsOptional()
   providerId?: number;
+
+  @Transform(({ value }) => toBoolLike(value))
+  @IsBoolean()
+  @IsOptional()
+  isEnabled?: boolean;
 }
 
 export class BatchDeleteAiFeatureConfigDto {

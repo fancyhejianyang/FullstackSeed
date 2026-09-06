@@ -52,6 +52,16 @@ const columns: TableColumn[] = [
 
 // 搜索栏配置
 const searchFields: FormField[] = [
+  {
+    prop: 'status',
+    label: '状态',
+    type: 'select',
+    options: [
+      { label: '全部', value: '' },
+      { label: '草稿', value: 'draft' },
+      { label: '已发布', value: 'published' },
+    ],
+  },
   { prop: 'keyword', label: '标题', type: 'input', placeholder: '按标题搜索' },
 ];
 

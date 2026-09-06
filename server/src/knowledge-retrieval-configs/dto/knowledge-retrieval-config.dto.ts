@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
@@ -14,6 +14,7 @@ import {
 } from 'class-validator';
 import { PartialType } from '@nestjs/swagger';
 import type { KnowledgeRetrievalMode } from '../entities/knowledge-retrieval-config.entity';
+import { toBoolLike } from '../../common/utils/bool-like';
 
 export class CreateKnowledgeRetrievalConfigDto {
   @IsString()
@@ -117,6 +118,11 @@ export class QueryKnowledgeRetrievalConfigDto {
   @IsIn(['fullText', 'vector', 'hybrid'])
   @IsOptional()
   retrievalMode?: KnowledgeRetrievalMode;
+
+  @Transform(({ value }) => toBoolLike(value))
+  @IsBoolean()
+  @IsOptional()
+  isEnabled?: boolean;
 }
 
 export class BatchDeleteKnowledgeRetrievalConfigDto {

@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
@@ -11,6 +11,7 @@ import {
   ValidateIf,
 } from 'class-validator';
 import { PartialType } from '@nestjs/swagger';
+import { toBoolLike } from '../../common/utils/bool-like';
 
 export class CreateExternalAppDto {
   @IsString()
@@ -66,6 +67,11 @@ export class QueryExternalAppDto {
   @IsString()
   @IsOptional()
   keyword?: string;
+
+  @Transform(({ value }) => toBoolLike(value))
+  @IsBoolean()
+  @IsOptional()
+  isEnabled?: boolean;
 }
 
 export class BatchDeleteExternalAppDto {

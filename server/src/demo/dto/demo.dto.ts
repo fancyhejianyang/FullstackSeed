@@ -121,6 +121,10 @@ export class QueryDemoDto {
   @IsString()
   @IsOptional()
   keyword?: string;
+
+  @IsIn(DEMO_STATUSES)
+  @IsOptional()
+  status?: DemoStatus;
 }
 
 export class BatchDeleteDemoDto {

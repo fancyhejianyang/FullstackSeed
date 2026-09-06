@@ -21,6 +21,16 @@ const columns: TableColumn[] = [
 ];
 
 const searchFields: FormField[] = [
+  {
+    prop: 'isActive',
+    label: '启用状态',
+    type: 'select',
+    options: [
+      { label: '全部', value: '' },
+      { label: '启用', value: true },
+      { label: '禁用', value: false },
+    ],
+  },
   { prop: 'keyword', label: '关键字', type: 'input', placeholder: '角色名称' },
 ];
 

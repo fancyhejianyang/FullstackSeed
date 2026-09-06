@@ -15,8 +15,11 @@ export class DemoService {
   async findAll(query: QueryDemoDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
+    const baseWhere = query.status ? { status: query.status } : {};
     const [list, total] = await this.demoRepository.findAndCount({
-      where: query.keyword ? { title: Like(`%${query.keyword}%`) } : {},
+      where: query.keyword
+        ? { ...baseWhere, title: Like(`%${query.keyword}%`) }
+        : baseWhere,
       order: { id: 'DESC' },
       skip: (page - 1) * pageSize,
       take: pageSize,

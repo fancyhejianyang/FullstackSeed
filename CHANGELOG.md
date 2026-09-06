@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-09-06 补齐其它列表页业务下拉筛选
+- 新增：
+  - `server/src/common/list-query-filters.spec.ts`（验证布尔查询转换、启停状态、示例状态、模板格式和问答结果筛选）
+- 修改：
+  - `web/src/views/ai-feature-config/Index.vue`、`web/src/views/data-import/Index.vue`、`web/src/views/demo/Index.vue`、`web/src/views/external-app/Index.vue`、`web/src/views/knowledge-ai-provider/Index.vue`、`web/src/views/knowledge-ai-record/Index.vue`、`web/src/views/knowledge-chunk-config/Index.vue`、`web/src/views/knowledge-retrieval-config/Index.vue`、`web/src/views/log-record/Index.vue`、`web/src/views/mineru-config/Index.vue`、`web/src/views/permission/Index.vue`、`web/src/views/role/Index.vue`、`web/src/views/user/Index.vue`（为全部标准分页列表补充至少一个业务下拉筛选）
+  - `web/src/api/aiFeatureConfig.ts`、`web/src/api/dataImport.ts`、`web/src/api/demo.ts`、`web/src/api/externalApp.ts`、`web/src/api/knowledgeAiProvider.ts`、`web/src/api/knowledgeAiChat.ts`、`web/src/api/knowledgeChunkConfig.ts`、`web/src/api/knowledgeRetrievalConfig.ts`、`web/src/api/mineruConfig.ts`、`web/src/api/permission.ts`、`web/src/api/role.ts`、`web/src/api/user.ts`（补齐列表查询参数类型）
+  - `web/src/components/Table.vue`（请求前统一剔除空字符串、空值和未定义筛选项，同时保留 `false` 等有效条件）
+  - `web/src/components/InputEmail.vue`（放宽内部标准化函数的可空类型，清除完整前端构建的存量类型阻塞）
+  - `server/src/ai-feature-configs/ai-feature-configs.service.ts`、`server/src/ai-feature-configs/dto/ai-feature-config.dto.ts`、`server/src/data-import/data-import.service.ts`、`server/src/data-import/dto/data-import.dto.ts`、`server/src/demo/demo.service.ts`、`server/src/demo/dto/demo.dto.ts`、`server/src/external-apps/external-apps.service.ts`、`server/src/external-apps/dto/external-app.dto.ts`、`server/src/knowledge-ai-chat/knowledge-ai-chat.service.ts`、`server/src/knowledge-ai-chat/dto/knowledge-ai-chat.dto.ts`、`server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`、`server/src/knowledge-ai-providers/dto/knowledge-ai-provider.dto.ts`、`server/src/knowledge-retrieval-configs/knowledge-retrieval-configs.service.ts`、`server/src/knowledge-retrieval-configs/dto/knowledge-retrieval-config.dto.ts`、`server/src/mineru-configs/mineru-configs.service.ts`、`server/src/mineru-configs/dto/mineru-config.dto.ts`、`server/src/permissions/permissions.service.ts`、`server/src/permissions/dto/permission.dto.ts`、`server/src/roles/roles.service.ts`、`server/src/roles/dto/role.dto.ts`、`server/src/users/users.service.ts`、`server/src/users/dto/user.dto.ts`（校验并执行新增的服务端分页筛选条件）
+- 删除：无
+- 说明：日志操作类型和既有模块筛选均复用后端扫描结果；本次不涉及数据库结构变更，非分页仪表盘、树形菜单和单例配置页不增加无意义筛选。
+
 ### 2026-09-06 增加知识库列表组合下拉筛选
 - 新增：
   - `server/src/knowledge-bases/knowledge-bases.service.spec.ts`（验证查询布尔值转换及分类、类型、阶段、启停组合筛选）

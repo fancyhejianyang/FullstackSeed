@@ -24,6 +24,7 @@ export interface QueryExternalAppParams {
   page?: number;
   pageSize?: number;
   keyword?: string;
+  isEnabled?: boolean | '';
 }
 
 export interface ExternalAppForm {

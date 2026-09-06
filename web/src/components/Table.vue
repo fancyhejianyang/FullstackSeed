@@ -204,10 +204,15 @@ function handleRowClick(row: T) {
 async function fetchData() {
   loading.value = true;
   try {
+    const activeFilters = Object.fromEntries(
+      Object.entries(appliedSearchModel.value).filter(
+        ([, value]) => value !== '' && value !== null && value !== undefined,
+      ),
+    );
     const res = await props.request({
       page: page.value,
       pageSize: pageSize.value,
-      ...appliedSearchModel.value,
+      ...activeFilters,
     });
     list.value = res.list;
     total.value = res.total;

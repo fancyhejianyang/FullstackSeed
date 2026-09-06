@@ -28,8 +28,12 @@ export class RolesService {
   async findAll(query: QueryRoleDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
+    const baseWhere =
+      query.isActive !== undefined ? { isActive: query.isActive } : {};
     const [list, total] = await this.roleRepository.findAndCount({
-      where: query.keyword ? { name: Like(`%${query.keyword}%`) } : {},
+      where: query.keyword
+        ? { ...baseWhere, name: Like(`%${query.keyword}%`) }
+        : baseWhere,
       relations: { permissions: true },
       order: { id: 'DESC' },
       skip: (page - 1) * pageSize,

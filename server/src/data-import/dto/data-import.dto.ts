@@ -1,5 +1,9 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
+
+export const DATA_IMPORT_TEMPLATE_TYPES = ['xlsx', 'xls', 'csv'] as const;
+export type DataImportTemplateType =
+  (typeof DATA_IMPORT_TEMPLATE_TYPES)[number];
 
 export class QueryDataImportConfigDto {
   @Type(() => Number)
@@ -21,6 +25,10 @@ export class QueryDataImportConfigDto {
   @IsString()
   @IsOptional()
   moduleId?: string;
+
+  @IsIn(DATA_IMPORT_TEMPLATE_TYPES)
+  @IsOptional()
+  templateType?: DataImportTemplateType;
 }
 
 export class CreateDataImportConfigDto {

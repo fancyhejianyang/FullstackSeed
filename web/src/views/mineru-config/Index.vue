@@ -33,6 +33,16 @@ const columns: TableColumn[] = [
 ];
 
 const searchFields: FormField[] = [
+  {
+    prop: 'isEnabled',
+    label: '启用状态',
+    type: 'select',
+    options: [
+      { label: '全部', value: '' },
+      { label: '启用', value: true },
+      { label: '停用', value: false },
+    ],
+  },
   { prop: 'keyword', label: '关键词', type: 'input', placeholder: '名称/服务地址/模型版本' },
 ];
 

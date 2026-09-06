@@ -73,7 +73,7 @@ watch(
   { immediate: true },
 );
 
-function normalize(value: string | number | null) {
+function normalize(value: string | number | null | undefined) {
   return String(value ?? '').trim();
 }
 

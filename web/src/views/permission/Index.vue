@@ -25,6 +25,17 @@ const columns: TableColumn[] = [
 ];
 
 const searchFields: FormField[] = [
+  {
+    prop: 'type',
+    label: '权限类型',
+    type: 'select',
+    options: [
+      { label: '全部', value: '' },
+      { label: '菜单', value: 'menu' },
+      { label: '按钮', value: 'button' },
+      { label: '接口', value: 'api' },
+    ],
+  },
   { prop: 'keyword', label: '关键字', type: 'input', placeholder: '编码/名称' },
 ];
 

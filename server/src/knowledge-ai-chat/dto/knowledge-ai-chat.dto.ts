@@ -1,12 +1,14 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
+  IsBoolean,
   IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
   Min,
 } from 'class-validator';
+import { toBoolLike } from '../../common/utils/bool-like';
 
 export class AskKnowledgeAiDto {
   @Type(() => Number)
@@ -84,6 +86,11 @@ export class QueryKnowledgeAiChatSessionDto {
   @Min(1)
   @IsOptional()
   providerId?: number;
+
+  @Transform(({ value }) => toBoolLike(value))
+  @IsBoolean()
+  @IsOptional()
+  isSuccess?: boolean;
 }
 
 export class BatchDeleteKnowledgeAiChatSessionDto {

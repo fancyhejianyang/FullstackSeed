@@ -127,14 +127,16 @@ export class KnowledgeAiProvidersService {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
     const keyword = query.keyword?.trim();
+    const baseWhere =
+      query.isEnabled !== undefined ? { isEnabled: query.isEnabled } : {};
     const where = keyword
       ? [
-          { name: Like(`%${keyword}%`) },
-          { apiUrl: Like(`%${keyword}%`) },
-          { workspaceId: Like(`%${keyword}%`) },
-          { description: Like(`%${keyword}%`) },
+          { ...baseWhere, name: Like(`%${keyword}%`) },
+          { ...baseWhere, apiUrl: Like(`%${keyword}%`) },
+          { ...baseWhere, workspaceId: Like(`%${keyword}%`) },
+          { ...baseWhere, description: Like(`%${keyword}%`) },
         ]
-      : {};
+      : baseWhere;
     const [list, total] = await this.providerRepository.findAndCount({
       where,
       order: { id: 'DESC' },

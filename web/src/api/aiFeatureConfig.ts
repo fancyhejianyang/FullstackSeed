@@ -33,6 +33,7 @@ export interface QueryAiFeatureConfigParams {
   keyword?: string;
   featureType?: AiFeatureType | '';
   providerId?: number | '';
+  isEnabled?: boolean | '';
 }
 
 export interface AiFeatureConfigForm {

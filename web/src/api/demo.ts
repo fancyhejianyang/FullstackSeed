@@ -41,6 +41,7 @@ export interface QueryDemoParams {
   page?: number;
   pageSize?: number;
   keyword?: string;
+  status?: DemoStatus | '';
 }
 
 export interface DemoForm {

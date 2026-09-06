@@ -93,6 +93,17 @@ const searchFields: FormField[] = [
     slot: true,
   },
   {
+    prop: 'templateType',
+    label: '模板格式',
+    type: 'select',
+    options: [
+      { label: '全部', value: '' },
+      { label: 'Excel（.xlsx）', value: 'xlsx' },
+      { label: 'Excel 97-2003（.xls）', value: 'xls' },
+      { label: 'CSV（.csv）', value: 'csv' },
+    ],
+  },
+  {
     prop: 'keyword',
     label: '关键词',
     type: 'input',

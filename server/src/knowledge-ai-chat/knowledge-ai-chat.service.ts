@@ -56,7 +56,10 @@ export class KnowledgeAiChatService {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
     const keyword = query.keyword?.trim();
-    const baseWhere = query.providerId ? { providerId: query.providerId } : {};
+    const baseWhere = {
+      ...(query.providerId ? { providerId: query.providerId } : {}),
+      ...(query.isSuccess !== undefined ? { isSuccess: query.isSuccess } : {}),
+    };
     const where = keyword
       ? [
           { ...baseWhere, title: Like(`%${keyword}%`) },

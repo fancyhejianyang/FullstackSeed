@@ -68,6 +68,7 @@ export interface QueryKnowledgeAiChatSessionParams {
   pageSize?: number;
   keyword?: string;
   providerId?: number;
+  isSuccess?: boolean | '';
 }
 
 export interface AskKnowledgeAiPayload {

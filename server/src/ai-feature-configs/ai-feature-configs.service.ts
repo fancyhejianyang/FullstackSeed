@@ -31,6 +31,7 @@ export class AiFeatureConfigsService {
     const baseWhere = {
       ...(query.featureType ? { featureType: query.featureType } : {}),
       ...(query.providerId ? { providerId: query.providerId } : {}),
+      ...(query.isEnabled !== undefined ? { isEnabled: query.isEnabled } : {}),
     };
     const where = keyword
       ? [

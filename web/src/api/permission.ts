@@ -22,6 +22,7 @@ export interface QueryPermissionParams {
   page?: number;
   pageSize?: number;
   keyword?: string;
+  type?: PermissionType | '';
 }
 
 export interface PermissionForm {

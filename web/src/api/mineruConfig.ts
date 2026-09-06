@@ -30,6 +30,7 @@ export interface QueryMineruConfigParams {
   page?: number;
   pageSize?: number;
   keyword?: string;
+  isEnabled?: boolean | '';
 }
 
 export interface MineruConfigForm {

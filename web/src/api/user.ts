@@ -28,6 +28,7 @@ export interface QueryUserParams {
   page?: number;
   pageSize?: number;
   keyword?: string;
+  isActive?: boolean | '';
 }
 
 export interface UserForm {

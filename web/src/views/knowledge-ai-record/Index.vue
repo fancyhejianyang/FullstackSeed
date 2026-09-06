@@ -38,6 +38,16 @@ const columns: TableColumn[] = [
 
 const searchFields: FormField[] = [
   {
+    prop: 'isSuccess',
+    label: '问答状态',
+    type: 'select',
+    options: [
+      { label: '全部', value: '' },
+      { label: '成功', value: true },
+      { label: '失败', value: false },
+    ],
+  },
+  {
     prop: 'keyword',
     label: '关键词',
     type: 'input',

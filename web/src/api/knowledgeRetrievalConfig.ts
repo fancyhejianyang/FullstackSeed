@@ -34,6 +34,7 @@ export interface QueryKnowledgeRetrievalConfigParams {
   pageSize?: number;
   keyword?: string;
   retrievalMode?: KnowledgeRetrievalMode | '';
+  isEnabled?: boolean | '';
 }
 
 export interface KnowledgeRetrievalConfigForm {

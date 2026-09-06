@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
-import { In, Like, Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User } from './entities/user.entity';
 import { Role } from '../roles/entities/role.entity';
@@ -216,8 +216,11 @@ export class UsersService implements OnModuleInit {
       .orderBy('user.id', 'DESC')
       .skip((page - 1) * pageSize)
       .take(pageSize);
+    if (query.isActive !== undefined) {
+      qb.andWhere('user.isActive = :isActive', { isActive: query.isActive });
+    }
     if (query.keyword) {
-      qb.where('user.username LIKE :kw OR user.nickname LIKE :kw', {
+      qb.andWhere('(user.username LIKE :kw OR user.nickname LIKE :kw)', {
         kw: `%${query.keyword}%`,
       });
     }

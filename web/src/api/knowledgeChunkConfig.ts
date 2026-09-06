@@ -24,7 +24,7 @@ export interface QueryKnowledgeChunkConfigParams {
   page?: number;
   pageSize?: number;
   keyword?: string;
-  chunkMode?: KnowledgeChunkMode;
+  chunkMode?: KnowledgeChunkMode | '';
 }
 
 export interface KnowledgeChunkConfigListResult {

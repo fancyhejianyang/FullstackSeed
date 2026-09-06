@@ -32,6 +32,7 @@ export interface QueryDataImportConfigParams {
   pageSize?: number;
   keyword?: string;
   moduleId?: string;
+  templateType?: 'xlsx' | 'xls' | 'csv' | '';
 }
 
 export interface CreateDataImportConfigPayload {

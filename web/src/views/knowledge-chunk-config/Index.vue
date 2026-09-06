@@ -37,6 +37,16 @@ const columns: TableColumn[] = [
 ];
 
 const searchFields: FormField[] = [
+  {
+    prop: 'chunkMode',
+    label: '分片模式',
+    type: 'select',
+    options: [
+      { label: '全部', value: '' },
+      { label: 'MinerU/自动', value: 'auto' },
+      { label: '手动', value: 'manual' },
+    ],
+  },
   { prop: 'keyword', label: '关键词', type: 'input', placeholder: '配置名称' },
 ];
 

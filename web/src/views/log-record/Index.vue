@@ -31,6 +31,21 @@ const moduleOptions = computed(() =>
   })),
 );
 
+const actionOptions = computed(() => {
+  const labels = new Map<string, string>();
+  moduleConfigs.value.forEach((module) => {
+    module.actions.forEach((action) => {
+      if (!labels.has(action.action)) {
+        labels.set(action.action, action.label || action.action);
+      }
+    });
+  });
+  return [
+    { label: '全部', value: '' },
+    ...Array.from(labels, ([value, label]) => ({ label, value })),
+  ];
+});
+
 const columns: TableColumn[] = [
   { prop: 'moduleName', label: '模块', width: 140 },
   { prop: 'action', label: '操作', width: 120 },
@@ -48,6 +63,12 @@ const searchFields: FormField[] = [
     type: 'select',
     options: moduleOptions,
     slot: true,
+  },
+  {
+    prop: 'action',
+    label: '操作类型',
+    type: 'select',
+    options: actionOptions,
   },
   {
     prop: 'keyword',

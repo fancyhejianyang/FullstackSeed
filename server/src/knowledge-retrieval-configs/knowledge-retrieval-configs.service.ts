@@ -33,6 +33,7 @@ export class KnowledgeRetrievalConfigsService {
     const keyword = query.keyword?.trim();
     const baseWhere = {
       ...(query.retrievalMode ? { retrievalMode: query.retrievalMode } : {}),
+      ...(query.isEnabled !== undefined ? { isEnabled: query.isEnabled } : {}),
     };
     const where = keyword
       ? [

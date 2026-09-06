@@ -22,6 +22,7 @@ export interface QueryRoleParams {
   page?: number;
   pageSize?: number;
   keyword?: string;
+  isActive?: boolean | '';
 }
 
 export interface RoleForm {

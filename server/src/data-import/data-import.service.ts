@@ -35,11 +35,23 @@ export class DataImportService {
     const keyword = query.keyword?.trim();
     const moduleId = query.moduleId?.trim().toLowerCase();
 
-    const baseWhere = moduleId ? { moduleId } : {};
+    const baseWhere = {
+      ...(moduleId ? { moduleId } : {}),
+      ...(query.templateType
+        ? { templateName: Like(`%.${query.templateType}`) }
+        : {}),
+    };
     const where = keyword
       ? [
           { ...baseWhere, moduleName: Like(`%${keyword}%`) },
-          { ...baseWhere, templateName: Like(`%${keyword}%`) },
+          {
+            ...baseWhere,
+            templateName: Like(
+              query.templateType
+                ? `%${keyword}%.${query.templateType}`
+                : `%${keyword}%`,
+            ),
+          },
         ]
       : baseWhere;
 

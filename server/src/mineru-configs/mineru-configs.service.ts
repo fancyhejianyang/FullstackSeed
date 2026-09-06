@@ -68,13 +68,15 @@ export class MineruConfigsService {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
     const keyword = query.keyword?.trim();
+    const baseWhere =
+      query.isEnabled !== undefined ? { isEnabled: query.isEnabled } : {};
     const where = keyword
       ? [
-          { name: Like(`%${keyword}%`) },
-          { baseUrl: Like(`%${keyword}%`) },
-          { modelVersion: Like(`%${keyword}%`) },
+          { ...baseWhere, name: Like(`%${keyword}%`) },
+          { ...baseWhere, baseUrl: Like(`%${keyword}%`) },
+          { ...baseWhere, modelVersion: Like(`%${keyword}%`) },
         ]
-      : {};
+      : baseWhere;
     const [list, total] = await this.configRepository.findAndCount({
       where,
       order: { id: 'DESC' },

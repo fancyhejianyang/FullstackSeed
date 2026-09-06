@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
@@ -13,6 +13,7 @@ import {
   Min,
 } from 'class-validator';
 import { PartialType } from '@nestjs/swagger';
+import { toBoolLike } from '../../common/utils/bool-like';
 
 export type MineruAuthMode = 'Bearer' | 'TokenHeader';
 
@@ -98,6 +99,11 @@ export class QueryMineruConfigDto {
   @IsString()
   @IsOptional()
   keyword?: string;
+
+  @Transform(({ value }) => toBoolLike(value))
+  @IsBoolean()
+  @IsOptional()
+  isEnabled?: boolean;
 }
 
 export class BatchDeleteMineruConfigDto {

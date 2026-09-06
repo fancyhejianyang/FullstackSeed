@@ -47,4 +47,8 @@ export class QueryPermissionDto {
   @IsString()
   @IsOptional()
   keyword?: string;
+
+  @IsIn(['menu', 'button', 'api'])
+  @IsOptional()
+  type?: PermissionType;
 }

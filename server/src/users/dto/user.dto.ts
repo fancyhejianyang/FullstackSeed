@@ -6,6 +6,7 @@ import {
   Min,
   MinLength,
   IsArray,
+  IsBoolean,
   ValidateIf,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
@@ -62,4 +63,9 @@ export class QueryUserDto {
   @IsString()
   @IsOptional()
   keyword?: string;
+
+  @Transform(({ value }) => toBoolLike(value))
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
 }

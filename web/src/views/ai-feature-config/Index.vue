@@ -27,7 +27,7 @@ const featureTypeOptions = [
   { label: '向量化', value: 'embedding' },
 ];
 
-const responseFormatMap = {
+const responseFormatMap: Record<string, string> = {
   text: '文本',
   json: 'JSON',
   markdown: 'Markdown',
@@ -52,6 +52,16 @@ const searchFields: FormField[] = [
     type: 'select',
     placeholder: '请选择功能类型',
     options: [{ label: '全部', value: '' }, ...featureTypeOptions],
+  },
+  {
+    prop: 'isEnabled',
+    label: '启用状态',
+    type: 'select',
+    options: [
+      { label: '全部', value: '' },
+      { label: '启用', value: true },
+      { label: '停用', value: false },
+    ],
   },
   { prop: 'keyword', label: '关键词', type: 'input', placeholder: '配置/账号/模型' },
 ];

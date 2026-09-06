@@ -23,13 +23,14 @@ export class PermissionsService {
   async findAll(query: QueryPermissionDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
+    const baseWhere = query.type ? { type: query.type } : {};
     const [list, total] = await this.permissionRepository.findAndCount({
       where: query.keyword
         ? [
-            { code: Like(`%${query.keyword}%`) },
-            { name: Like(`%${query.keyword}%`) },
+            { ...baseWhere, code: Like(`%${query.keyword}%`) },
+            { ...baseWhere, name: Like(`%${query.keyword}%`) },
           ]
-        : {},
+        : baseWhere,
       order: { id: 'DESC' },
       skip: (page - 1) * pageSize,
       take: pageSize,
@@ -37,7 +38,14 @@ export class PermissionsService {
     // 锁定list 内字段
 
     return {
-      list: list.map(({ createdAt, updatedAt, deletedAt, ...rest }) => rest),
+      list: list.map(({ id, code, name, type, description, menuId }) => ({
+        id,
+        code,
+        name,
+        type,
+        description,
+        menuId,
+      })),
       total,
     };
   }
