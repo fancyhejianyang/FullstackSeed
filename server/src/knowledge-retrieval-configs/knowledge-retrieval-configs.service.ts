@@ -141,9 +141,9 @@ export class KnowledgeRetrievalConfigsService {
       payload.knowledgeBaseIds = [];
       payload.knowledgeBaseNames = null;
     }
-    if (dto.topK !== undefined || isCreate) payload.topK = dto.topK ?? 10;
+    if (dto.topK !== undefined || isCreate) payload.topK = dto.topK ?? 6;
     if (dto.minScore !== undefined || isCreate)
-      payload.minScore = dto.minScore ?? 0;
+      payload.minScore = dto.minScore ?? 0.35;
     if (dto.rrfK !== undefined || isCreate) payload.rrfK = dto.rrfK ?? 60;
     if (dto.textWeight !== undefined || isCreate)
       payload.textWeight = dto.textWeight ?? 0.8;
@@ -159,9 +159,10 @@ export class KnowledgeRetrievalConfigsService {
     }
     if (dto.rerankAiFeatureConfigId !== undefined) {
       if (dto.rerankAiFeatureConfigId) {
-        const rerankConfig = await this.aiFeatureConfigsService.findOne(
-          dto.rerankAiFeatureConfigId,
-        );
+        const rerankConfig =
+          await this.aiFeatureConfigsService.findUsableChatConfig(
+            dto.rerankAiFeatureConfigId,
+          );
         payload.rerankAiFeatureConfigId = rerankConfig.id;
         payload.rerankAiFeatureConfigName = rerankConfig.name;
       } else {

@@ -68,6 +68,7 @@ export interface KnowledgeAiChatCallPayload {
   model?: string;
   question: string;
   systemPrompt?: string;
+  messages?: KnowledgeAiChatMessagePayload[];
 }
 
 export interface KnowledgeAiChatTargetPayload {
@@ -289,7 +290,9 @@ export class KnowledgeAiProvidersService {
         },
         body: JSON.stringify({
           model,
-          messages: this.buildQuestionMessages(payload),
+          messages: payload.messages?.length
+            ? payload.messages
+            : this.buildQuestionMessages(payload),
           temperature: 0.2,
         }),
       });
@@ -784,7 +787,8 @@ export class KnowledgeAiProvidersService {
       markdown: 'Markdown',
       json: 'JSON',
     };
-    const responseFormat = formatMap[payload.responseFormat || 'markdown'] || 'Markdown';
+    const responseFormat =
+      formatMap[payload.responseFormat || 'markdown'] || 'Markdown';
     return [
       {
         role: 'user',

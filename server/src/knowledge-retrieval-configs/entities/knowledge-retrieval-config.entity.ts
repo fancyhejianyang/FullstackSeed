@@ -23,10 +23,10 @@ export class KnowledgeRetrievalConfig extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   knowledgeBaseNames: string | null;
 
-  @Column({ type: 'int', default: 10 })
+  @Column({ type: 'int', default: 6 })
   topK: number;
 
-  @Column({ type: 'decimal', precision: 8, scale: 4, default: 0 })
+  @Column({ type: 'decimal', precision: 8, scale: 4, default: 0.35 })
   minScore: number;
 
   @Column({ type: 'int', default: 60 })

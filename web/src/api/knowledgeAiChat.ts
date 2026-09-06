@@ -10,11 +10,26 @@ export interface KnowledgeAiChatSession {
   lastQuestion: string | null;
   lastAnswer: string | null;
   hitKnowledgeBaseNames: string | null;
+  activeKnowledgeBaseId: number | null;
+  lastRetrievalQuery: string | null;
   isSuccess: boolean;
   errorMessage: string | null;
   elapsedMilliseconds: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface KnowledgeRetrievalHit {
+  key: string;
+  chunkId: number | null;
+  title: string;
+  knowledgeBaseId: number;
+  knowledgeBaseName: string;
+  sourceName: string;
+  score: number;
+  textScore: number;
+  vectorScore: number;
+  rerankScore: number | null;
 }
 
 export interface KnowledgeAiChatMessage {
@@ -27,6 +42,11 @@ export interface KnowledgeAiChatMessage {
   question: string;
   answer: string | null;
   hitKnowledgeBaseNames: string | null;
+  retrievalQuery: string | null;
+  hitKnowledgeBaseIds: number[] | null;
+  hitChunkIds: number[] | null;
+  retrievalHits: KnowledgeRetrievalHit[] | null;
+  rerankApplied: boolean;
   isSuccess: boolean;
   errorMessage: string | null;
   elapsedMilliseconds: number;
@@ -112,6 +132,11 @@ export type KnowledgeAiChatStreamEvent =
         retrievalConfigId: number | null;
         hasReference: boolean;
         referenceLength: number;
+        query: string;
+        queryRewritten: boolean;
+        routedKnowledgeBaseIds: number[];
+        rerankApplied: boolean;
+        hits: KnowledgeRetrievalHit[];
       };
     }
   | {

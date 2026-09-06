@@ -56,8 +56,8 @@ const form = reactive<RetrievalForm>({
   name: '',
   retrievalMode: 'hybrid',
   knowledgeScopeKeys: [],
-  topK: 10,
-  minScore: 0,
+  topK: 6,
+  minScore: 0.35,
   rrfK: 60,
   textWeight: 0.8,
   vectorWeight: 1,
@@ -115,7 +115,7 @@ const fields = computed<FormField[]>(() => {
     },
     {
       prop: 'minScore',
-      label: '默认最低分',
+      label: '最低相关度',
       component: 'InputNumber',
       componentProps: { min: 0, max: 1, precision: 4 },
     },
@@ -206,7 +206,7 @@ async function fetchOptions() {
   const [knowledgeBaseResult, categoryResult, configResult] = await Promise.all([
     getKnowledgeBases({ page: 1, pageSize: 500 }),
     getKnowledgeBaseCategoryTree({}),
-    getAiFeatureConfigs({ page: 1, pageSize: 500 }),
+    getAiFeatureConfigs({ page: 1, pageSize: 500, featureType: 'chat' }),
   ]);
   knowledgeBases.value = knowledgeBaseResult.list;
   categoryTree.value = categoryResult;
@@ -218,8 +218,8 @@ function resetForm() {
   form.retrievalMode = 'hybrid';
   form.knowledgeScopeKeys = [];
   setScopeTreeCheckedKeys([]);
-  form.topK = 10;
-  form.minScore = 0;
+  form.topK = 6;
+  form.minScore = 0.35;
   form.rrfK = 60;
   form.textWeight = 0.8;
   form.vectorWeight = 1;
@@ -241,8 +241,8 @@ function fillForm(data: KnowledgeRetrievalConfig) {
       : []),
   ];
   setScopeTreeCheckedKeys(form.knowledgeScopeKeys);
-  form.topK = Number(data.topK ?? 10);
-  form.minScore = Number(data.minScore ?? 0);
+  form.topK = Number(data.topK ?? 6);
+  form.minScore = Number(data.minScore ?? 0.35);
   form.rrfK = Number(data.rrfK ?? 60);
   form.textWeight = Number(data.textWeight ?? 0.8);
   form.vectorWeight = Number(data.vectorWeight ?? 1);

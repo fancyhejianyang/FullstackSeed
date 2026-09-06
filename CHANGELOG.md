@@ -1,5 +1,18 @@
 # CHANGELOG
 
+### 2026-09-06 优化 AI 连续问答的知识库路由与检索排序
+- 新增：
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat-retrieval.service.spec.ts`（覆盖会话知识库粘性、显式主题切换、融合评分、重排结果解析和弱知识库抑制）
+  - `server/src/migrations/1788627600000-ImproveKnowledgeRetrievalContext.ts`（增加会话检索状态、消息命中明细字段并调整新检索配置默认值）
+- 修改：
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat-retrieval.service.ts`（增加多轮检索问题改写、会话知识库优先路由、归一化加权 RRF、弱知识库抑制、真实 AI 重排和原始分片回填）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat.service.ts`、`server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`（统一流式/非流式历史上下文，持久化检索轨迹并向前端输出命中明细）
+  - `server/src/knowledge-ai-chat/entities/knowledge-ai-chat-session.entity.ts`、`server/src/knowledge-ai-chat/entities/knowledge-ai-chat-message.entity.ts`（保存当前知识库、独立检索问题、命中分片及分项得分）
+  - `server/src/knowledge-retrieval-configs/entities/knowledge-retrieval-config.entity.ts`、`server/src/knowledge-retrieval-configs/knowledge-retrieval-configs.service.ts`（新配置默认 `topK=6`、`minScore=0.35`，重排配置限制为可用对话配置）
+  - `web/src/api/knowledgeAiChat.ts`、`web/src/views/knowledge-ai-record/Index.vue`、`web/src/views/knowledge-retrieval-config/Edit.vue`（对齐检索轨迹字段、展示命中得分并优化配置默认值及重排配置选项）
+- 删除：无
+- 说明：连续追问会自动复用当前会话命中的知识库；明确提到新知识库时才切换。已有检索配置不会被迁移自动改值，需按业务数据手动校准范围、最低相关度及是否启用重排。
+
 ### 2026-09-04 支持已索引知识库二次确认后强制重建
 - 新增：
   - `server/src/knowledge-bases/dto/knowledge-base.dto.ts`（增加索引请求 DTO，支持 `force` 参数）

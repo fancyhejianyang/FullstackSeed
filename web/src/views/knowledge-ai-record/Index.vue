@@ -60,6 +60,10 @@ function getHitKnowledgeBaseNames(row: KnowledgeAiChatSession) {
     .filter(Boolean);
 }
 
+function formatScore(score: number) {
+  return Number(score || 0).toFixed(3);
+}
+
 async function batchDeleteRequest(payload: { ids: Array<string | number> }) {
   await batchDeleteKnowledgeAiChatSessions(payload.ids);
 }
@@ -141,6 +145,27 @@ async function handleView(row: KnowledgeAiChatSession) {
           <div class="ai-record__answer">
             {{ message.answer || message.errorMessage || '-' }}
           </div>
+          <div v-if="message.retrievalQuery" class="ai-record__retrieval">
+            <span>检索问题：{{ message.retrievalQuery }}</span>
+            <el-tag v-if="message.rerankApplied" type="info" effect="light" size="small">
+              已重排
+            </el-tag>
+          </div>
+          <div
+            v-if="message.retrievalHits?.length"
+            class="ai-record__retrieval-hits"
+          >
+            <el-tag
+              v-for="hit in message.retrievalHits"
+              :key="hit.key"
+              type="info"
+              effect="light"
+              size="small"
+            >
+              {{ hit.knowledgeBaseName }} / {{ hit.sourceName }} /
+              {{ formatScore(hit.score) }}
+            </el-tag>
+          </div>
           <div class="ai-record__meta">
             {{ message.providerName }} / {{ message.model }} /
             {{ message.elapsedMilliseconds }} ms /
@@ -175,6 +200,22 @@ async function handleView(row: KnowledgeAiChatSession) {
   color: #606266;
   line-height: 1.6;
   white-space: pre-wrap;
+}
+
+.ai-record__retrieval {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  color: #606266;
+  font-size: 13px;
+}
+
+.ai-record__retrieval-hits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 .ai-record__message.is-error .ai-record__answer {

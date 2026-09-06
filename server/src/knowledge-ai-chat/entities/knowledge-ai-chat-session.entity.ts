@@ -27,6 +27,12 @@ export class KnowledgeAiChatSession extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   hitKnowledgeBaseNames: string | null;
 
+  @Column({ type: 'int', nullable: true })
+  activeKnowledgeBaseId: number | null;
+
+  @Column({ type: 'text', nullable: true })
+  lastRetrievalQuery: string | null;
+
   @Column({ type: 'tinyint', default: true })
   isSuccess: boolean;
 

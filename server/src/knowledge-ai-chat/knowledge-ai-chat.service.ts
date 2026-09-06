@@ -16,7 +16,10 @@ import {
 } from './dto/knowledge-ai-chat.dto';
 import { KnowledgeAiChatMessage } from './entities/knowledge-ai-chat-message.entity';
 import { KnowledgeAiChatSession } from './entities/knowledge-ai-chat-session.entity';
-import { KnowledgeAiChatRetrievalService } from './knowledge-ai-chat-retrieval.service';
+import {
+  KnowledgeAiChatRetrievalService,
+  type KnowledgeRetrievalHit,
+} from './knowledge-ai-chat-retrieval.service';
 
 export interface KnowledgeAiChatStreamWriter {
   writeEvent: (event: string, data: unknown) => void;
@@ -24,8 +27,15 @@ export interface KnowledgeAiChatStreamWriter {
 
 interface KnowledgeRetrievalState {
   configId: number | null;
+  query: string;
+  queryRewritten: boolean;
   context: string;
   knowledgeBaseNames: string[];
+  knowledgeBaseIds: number[];
+  chunkIds: number[];
+  routedKnowledgeBaseIds: number[];
+  rerankApplied: boolean;
+  hits: KnowledgeRetrievalHit[];
 }
 
 @Injectable()
@@ -74,60 +84,35 @@ export class KnowledgeAiChatService {
   }
 
   async ask(dto: AskKnowledgeAiDto) {
-    const { config } = await this.resolveChatFeature(dto, {
+    const { target, config } = await this.resolveChatFeature(dto, {
       allowDtoConfig: true,
     });
+    const session = dto.sessionId
+      ? await this.findSessionEntity(dto.sessionId)
+      : await this.createSession(dto, target);
+    const history = await this.getSessionHistory(session.id);
     const retrievalConfigId = dto.retrievalConfigId ?? null;
     const retrieval = await this.buildRetrievalState(
       dto.question,
       retrievalConfigId,
+      session,
+      history.length > 0,
     );
+    const messages = this.buildChatMessages(dto, config, retrieval, history);
     const result = await this.providersService.callChat({
-      id: dto.providerId ?? config?.providerId ?? undefined,
-      model: dto.model ?? config?.model ?? undefined,
-      question: this.buildQuestionContent(dto.question, {
-        configId: retrievalConfigId,
-        context: retrieval.context,
-        knowledgeBaseNames: retrieval.knowledgeBaseNames,
-      }),
-      systemPrompt: this.buildSystemMessageContent(dto.systemPrompt, config),
+      id: target.providerId,
+      model: target.model,
+      question: dto.question,
+      messages,
     });
-
-    const session = dto.sessionId
-      ? await this.findSessionEntity(dto.sessionId)
-      : await this.createSession(dto, result);
-
-    const message = await this.messageRepository.save(
-      this.messageRepository.create({
-        sessionId: session.id,
-        providerId: result.providerId,
-        providerName: result.providerName || session.providerName,
-        model: result.model,
-        systemPrompt: this.buildSystemMessageContent(dto.systemPrompt, config),
-        question: dto.question.trim(),
-        answer: result.answer || null,
-        hitKnowledgeBaseNames: this.serializeKnowledgeBaseNames(
-          retrieval.knowledgeBaseNames,
-        ),
-        isSuccess: result.isSuccess,
-        errorMessage: result.errorMessage,
-        elapsedMilliseconds: result.elapsedMilliseconds,
-      }),
+    const message = await this.saveMessage(
+      dto,
+      session,
+      target,
+      result,
+      config,
+      retrieval,
     );
-
-    session.providerId = result.providerId;
-    session.providerName = result.providerName || session.providerName;
-    session.model = result.model;
-    session.messageCount += 1;
-    session.lastQuestion = dto.question.trim();
-    session.lastAnswer = result.answer || null;
-    session.hitKnowledgeBaseNames = this.serializeKnowledgeBaseNames(
-      retrieval.knowledgeBaseNames,
-    );
-    session.isSuccess = result.isSuccess;
-    session.errorMessage = result.errorMessage;
-    session.elapsedMilliseconds = result.elapsedMilliseconds;
-    await this.sessionRepository.save(session);
 
     return {
       session,
@@ -146,6 +131,7 @@ export class KnowledgeAiChatService {
     const session = dto.sessionId
       ? await this.findSessionEntity(dto.sessionId)
       : await this.createSession(dto, target);
+    const history = await this.getSessionHistory(session.id);
 
     writer.writeEvent('meta', {
       sessionId: session.id,
@@ -161,14 +147,21 @@ export class KnowledgeAiChatService {
     const retrieval = await this.buildRetrievalState(
       dto.question,
       externalApp?.retrievalConfigId ?? dto.retrievalConfigId ?? null,
+      session,
+      history.length > 0,
     );
     writer.writeEvent('retrieval', {
       retrievalConfigId: retrieval.configId,
       hasReference: Boolean(retrieval.context),
       referenceLength: retrieval.context.length,
+      query: retrieval.query,
+      queryRewritten: retrieval.queryRewritten,
+      routedKnowledgeBaseIds: retrieval.routedKnowledgeBaseIds,
+      rerankApplied: retrieval.rerankApplied,
+      hits: retrieval.hits,
     });
 
-    const messages = await this.buildStreamMessages(dto, config, retrieval);
+    const messages = this.buildChatMessages(dto, config, retrieval, history);
     const result = await this.providersService.callChatStream({
       target,
       messages,
@@ -278,6 +271,8 @@ export class KnowledgeAiChatService {
         lastQuestion: null,
         lastAnswer: null,
         hitKnowledgeBaseNames: null,
+        activeKnowledgeBaseId: null,
+        lastRetrievalQuery: null,
         isSuccess: true,
         errorMessage: null,
         elapsedMilliseconds: 0,
@@ -290,28 +285,22 @@ export class KnowledgeAiChatService {
     return title.length > 80 ? `${title.slice(0, 80)}...` : title;
   }
 
-  private async buildStreamMessages(
+  private buildChatMessages(
     dto: AskKnowledgeAiDto,
     config?: AiFeatureConfig | null,
     retrieval?: KnowledgeRetrievalState,
-  ): Promise<KnowledgeAiChatMessagePayload[]> {
+    history: KnowledgeAiChatMessage[] = [],
+  ): KnowledgeAiChatMessagePayload[] {
     const messages: KnowledgeAiChatMessagePayload[] = [
       {
         role: 'system',
         content: this.buildSystemMessageContent(dto.systemPrompt, config),
       },
     ];
-    if (dto.sessionId) {
-      const history = await this.messageRepository.find({
-        where: { sessionId: dto.sessionId },
-        order: { id: 'DESC' },
-        take: 20,
-      });
-      for (const item of history.reverse()) {
-        messages.push({ role: 'user', content: item.question });
-        if (item.answer) {
-          messages.push({ role: 'assistant', content: item.answer });
-        }
+    for (const item of history) {
+      messages.push({ role: 'user', content: item.question });
+      if (item.answer) {
+        messages.push({ role: 'assistant', content: item.answer });
       }
     }
     messages.push({
@@ -324,17 +313,41 @@ export class KnowledgeAiChatService {
   private async buildRetrievalState(
     question: string,
     configId?: number | null,
+    session?: KnowledgeAiChatSession,
+    hasHistory = false,
   ): Promise<KnowledgeRetrievalState> {
     const normalizedConfigId = configId ?? null;
     const result = await this.retrievalService.buildReferenceResult(
       question,
       normalizedConfigId,
+      {
+        hasHistory,
+        previousQuery:
+          session?.lastRetrievalQuery ?? session?.lastQuestion ?? undefined,
+        preferredKnowledgeBaseId: session?.activeKnowledgeBaseId ?? undefined,
+      },
     );
     return {
       configId: normalizedConfigId,
+      query: result.query,
+      queryRewritten: result.queryRewritten,
       context: result.context,
       knowledgeBaseNames: result.knowledgeBaseNames,
+      knowledgeBaseIds: result.knowledgeBaseIds,
+      chunkIds: result.chunkIds,
+      routedKnowledgeBaseIds: result.routedKnowledgeBaseIds,
+      rerankApplied: result.rerankApplied,
+      hits: result.hits,
     };
+  }
+
+  private async getSessionHistory(sessionId: number) {
+    const history = await this.messageRepository.find({
+      where: { sessionId },
+      order: { id: 'DESC' },
+      take: 20,
+    });
+    return history.reverse();
   }
 
   private async saveMessage(
@@ -364,6 +377,11 @@ export class KnowledgeAiChatService {
         question: dto.question.trim(),
         answer: result.answer || null,
         hitKnowledgeBaseNames,
+        retrievalQuery: retrieval?.query ?? null,
+        hitKnowledgeBaseIds: retrieval?.knowledgeBaseIds ?? null,
+        hitChunkIds: retrieval?.chunkIds ?? null,
+        retrievalHits: retrieval?.hits ?? null,
+        rerankApplied: retrieval?.rerankApplied ?? false,
         isSuccess: result.isSuccess,
         errorMessage: result.errorMessage,
         elapsedMilliseconds: result.elapsedMilliseconds,
@@ -377,6 +395,11 @@ export class KnowledgeAiChatService {
     session.lastQuestion = dto.question.trim();
     session.lastAnswer = result.answer || null;
     session.hitKnowledgeBaseNames = hitKnowledgeBaseNames;
+    session.activeKnowledgeBaseId =
+      retrieval?.knowledgeBaseIds[0] ?? session.activeKnowledgeBaseId ?? null;
+    session.lastRetrievalQuery = retrieval?.knowledgeBaseIds.length
+      ? retrieval.query
+      : (session.lastRetrievalQuery ?? dto.question.trim());
     session.isSuccess = result.isSuccess;
     session.errorMessage = result.errorMessage;
     session.elapsedMilliseconds = result.elapsedMilliseconds;
