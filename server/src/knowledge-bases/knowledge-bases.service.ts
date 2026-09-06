@@ -5,7 +5,14 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, Like, Repository, type FindOptionsWhere } from 'typeorm';
+import {
+  Brackets,
+  In,
+  IsNull,
+  Like,
+  Repository,
+  type FindOptionsWhere,
+} from 'typeorm';
 import { createHash } from 'crypto';
 import { extname } from 'node:path';
 import {
@@ -311,14 +318,35 @@ export class KnowledgeBasesService implements OnModuleInit {
       .skip((page - 1) * pageSize)
       .take(pageSize);
     if (query.keyword?.trim()) {
+      const keyword = `%${query.keyword.trim()}%`;
       qb.where(
-        'base.name LIKE :keyword OR base.description LIKE :keyword OR base.hitKeywords LIKE :keyword OR base.colloquialDescription LIKE :keyword',
-        { keyword: `%${query.keyword.trim()}%` },
+        new Brackets((scope) => {
+          scope
+            .where('base.name LIKE :keyword', { keyword })
+            .orWhere('base.description LIKE :keyword')
+            .orWhere('base.hitKeywords LIKE :keyword')
+            .orWhere('base.colloquialDescription LIKE :keyword');
+        }),
       );
     }
     if (query.categoryId) {
       qb.andWhere('base.categoryId = :categoryId', {
         categoryId: query.categoryId,
+      });
+    }
+    if (query.contentType) {
+      qb.andWhere('base.contentType = :contentType', {
+        contentType: query.contentType,
+      });
+    }
+    if (query.processStage) {
+      qb.andWhere('base.processStage = :processStage', {
+        processStage: query.processStage,
+      });
+    }
+    if (query.isEnabled !== undefined) {
+      qb.andWhere('base.isEnabled = :isEnabled', {
+        isEnabled: query.isEnabled,
       });
     }
     const [list, total] = await qb.getManyAndCount();

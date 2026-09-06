@@ -10,7 +10,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { PartialType } from '@nestjs/swagger';
 
 export class CreateKnowledgeBaseDto {
@@ -114,6 +114,34 @@ export class QueryKnowledgeBaseDto {
   @Min(1)
   @IsOptional()
   categoryId?: number;
+
+  @IsIn(['text', 'pdf', 'word', 'image'])
+  @IsOptional()
+  contentType?: 'text' | 'pdf' | 'word' | 'image';
+
+  @IsIn([
+    'draft',
+    'ready',
+    'uploaded',
+    'parsing',
+    'parsed',
+    'chunking',
+    'chunked',
+    'indexing',
+    'indexed',
+    'failed',
+  ])
+  @IsOptional()
+  processStage?: string;
+
+  @Transform(({ value }: { value: unknown }) => {
+    if (value === true || value === 'true') return true;
+    if (value === false || value === 'false') return false;
+    return value;
+  })
+  @IsBoolean()
+  @IsOptional()
+  isEnabled?: boolean;
 }
 
 export class CreateKnowledgeBaseCategoryDto {

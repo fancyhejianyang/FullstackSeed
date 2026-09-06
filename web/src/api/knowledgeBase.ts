@@ -181,6 +181,9 @@ export interface QueryKnowledgeBaseParams {
   pageSize?: number;
   keyword?: string;
   categoryId?: number;
+  contentType?: KnowledgeBase['contentType'];
+  processStage?: string;
+  isEnabled?: boolean;
 }
 
 export interface QueryKnowledgeBaseCategoryParams {

@@ -18,6 +18,7 @@ import {
   type KnowledgeBaseCategoryTreeNode,
   type KnowledgeBaseChunkMode,
   type KnowledgeBaseParseMode,
+  type QueryKnowledgeBaseParams,
 } from '@/api/knowledgeBase';
 import Edit from './Edit.vue';
 import View from './View.vue';
@@ -27,6 +28,10 @@ const tableRef = ref<{
   runBatchDelete: () => Promise<void>;
 }>();
 const categoryTree = ref<KnowledgeBaseCategoryTreeNode[]>([]);
+
+const categoryFilterOptions = computed(() =>
+  buildCategoryFilterOptions(categoryTree.value),
+);
 
 const columns: TableColumn[] = [
   { prop: 'name', label: '名称', minWidth: 180 },
@@ -41,9 +46,75 @@ const columns: TableColumn[] = [
   { prop: 'updatedAt', label: '更新时间', width: 180, slot: true },
 ];
 
-const searchFields: FormField[] = [
-  { prop: 'keyword', label: '关键词', type: 'input', placeholder: '名称/关键字' },
-];
+const searchFields = computed<FormField[]>(() => [
+  {
+    prop: 'keyword',
+    label: '关键词',
+    type: 'input',
+    placeholder: '名称/关键字',
+    componentProps: { style: { width: '220px' } },
+  },
+  {
+    prop: 'categoryId',
+    label: '所属分类',
+    type: 'select',
+    placeholder: '全部分类',
+    options: categoryFilterOptions.value,
+    componentProps: { style: { width: '200px' } },
+  },
+  {
+    prop: 'contentType',
+    label: '内容类型',
+    type: 'select',
+    placeholder: '全部类型',
+    options: [
+      { label: '文本', value: 'text' },
+      { label: 'PDF', value: 'pdf' },
+      { label: 'Word', value: 'word' },
+      { label: '图片', value: 'image' },
+    ],
+    componentProps: {
+      filterable: false,
+      style: { width: '150px' },
+    },
+  },
+  {
+    prop: 'processStage',
+    label: '处理阶段',
+    type: 'select',
+    placeholder: '全部阶段',
+    options: [
+      { label: '待补充', value: 'draft' },
+      { label: '待处理', value: 'ready' },
+      { label: '待解析', value: 'uploaded' },
+      { label: '解析中', value: 'parsing' },
+      { label: '已解析', value: 'parsed' },
+      { label: '分片中', value: 'chunking' },
+      { label: '已分片', value: 'chunked' },
+      { label: '索引中', value: 'indexing' },
+      { label: '已索引', value: 'indexed' },
+      { label: '处理失败', value: 'failed' },
+    ],
+    componentProps: {
+      filterable: false,
+      style: { width: '160px' },
+    },
+  },
+  {
+    prop: 'isEnabled',
+    label: '启用状态',
+    type: 'select',
+    placeholder: '全部状态',
+    options: [
+      { label: '启用', value: true },
+      { label: '停用', value: false },
+    ],
+    componentProps: {
+      filterable: false,
+      style: { width: '140px' },
+    },
+  },
+]);
 
 const editVisible = ref(false);
 const viewVisible = ref(false);
@@ -60,13 +131,31 @@ const categoryNameMap = computed(() => {
 });
 
 function fetchKnowledgeBases(params: Record<string, unknown>) {
-  return getKnowledgeBases(params);
+  const query = Object.fromEntries(
+    Object.entries(params).filter(
+      ([, value]) => value !== '' && value !== null && value !== undefined,
+    ),
+  ) as QueryKnowledgeBaseParams;
+  return getKnowledgeBases(query);
 }
 
 function flattenCategories(
   nodes: KnowledgeBaseCategoryTreeNode[],
 ): KnowledgeBaseCategoryTreeNode[] {
   return nodes.flatMap((node) => [node, ...flattenCategories(node.children ?? [])]);
+}
+
+function buildCategoryFilterOptions(
+  nodes: KnowledgeBaseCategoryTreeNode[],
+  parentPath = '',
+): Array<{ label: string; value: number }> {
+  return nodes.flatMap((node) => {
+    const path = parentPath ? `${parentPath} / ${node.name}` : node.name;
+    return [
+      { label: path, value: node.id },
+      ...buildCategoryFilterOptions(node.children ?? [], path),
+    ];
+  });
 }
 
 async function fetchCategories() {

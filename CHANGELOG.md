@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-09-06 增加知识库列表组合下拉筛选
+- 新增：
+  - `server/src/knowledge-bases/knowledge-bases.service.spec.ts`（验证查询布尔值转换及分类、类型、阶段、启停组合筛选）
+- 修改：
+  - `web/src/views/knowledge-base/Index.vue`、`web/src/api/knowledgeBase.ts`（知识库列表增加所属分类、内容类型、处理阶段和启用状态下拉筛选，并补齐查询参数类型）
+  - `server/src/knowledge-bases/dto/knowledge-base.dto.ts`、`server/src/knowledge-bases/knowledge-bases.service.ts`（校验并执行新增筛选条件，修正关键词与下拉条件组合查询的逻辑分组）
+- 删除：无
+- 说明：筛选项复用项目 Form/Select 组件，可清空、重置并与关键词组合参与服务端分页查询；不涉及数据库结构变更。
+
 ### 2026-09-06 修复知识库回答分片内容被二次截断
 - 新增：无
 - 修改：
