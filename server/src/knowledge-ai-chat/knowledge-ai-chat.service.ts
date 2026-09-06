@@ -34,6 +34,8 @@ interface KnowledgeRetrievalState {
   knowledgeBaseIds: number[];
   chunkIds: number[];
   routedKnowledgeBaseIds: number[];
+  activeKnowledgeBaseId: number | null;
+  inventoryQuery: boolean;
   rerankApplied: boolean;
   hits: KnowledgeRetrievalHit[];
 }
@@ -157,6 +159,8 @@ export class KnowledgeAiChatService {
       query: retrieval.query,
       queryRewritten: retrieval.queryRewritten,
       routedKnowledgeBaseIds: retrieval.routedKnowledgeBaseIds,
+      activeKnowledgeBaseId: retrieval.activeKnowledgeBaseId,
+      inventoryQuery: retrieval.inventoryQuery,
       rerankApplied: retrieval.rerankApplied,
       hits: retrieval.hits,
     });
@@ -336,6 +340,8 @@ export class KnowledgeAiChatService {
       knowledgeBaseIds: result.knowledgeBaseIds,
       chunkIds: result.chunkIds,
       routedKnowledgeBaseIds: result.routedKnowledgeBaseIds,
+      activeKnowledgeBaseId: result.activeKnowledgeBaseId,
+      inventoryQuery: result.inventoryQuery,
       rerankApplied: result.rerankApplied,
       hits: result.hits,
     };
@@ -395,11 +401,18 @@ export class KnowledgeAiChatService {
     session.lastQuestion = dto.question.trim();
     session.lastAnswer = result.answer || null;
     session.hitKnowledgeBaseNames = hitKnowledgeBaseNames;
-    session.activeKnowledgeBaseId =
-      retrieval?.knowledgeBaseIds[0] ?? session.activeKnowledgeBaseId ?? null;
-    session.lastRetrievalQuery = retrieval?.knowledgeBaseIds.length
-      ? retrieval.query
-      : (session.lastRetrievalQuery ?? dto.question.trim());
+    if (retrieval?.inventoryQuery) {
+      session.activeKnowledgeBaseId = null;
+      session.lastRetrievalQuery = dto.question.trim();
+    } else {
+      session.activeKnowledgeBaseId =
+        retrieval?.activeKnowledgeBaseId ??
+        session.activeKnowledgeBaseId ??
+        null;
+      session.lastRetrievalQuery = retrieval?.knowledgeBaseIds.length
+        ? retrieval.query
+        : (session.lastRetrievalQuery ?? dto.question.trim());
+    }
     session.isSuccess = result.isSuccess;
     session.errorMessage = result.errorMessage;
     session.elapsedMilliseconds = result.elapsedMilliseconds;

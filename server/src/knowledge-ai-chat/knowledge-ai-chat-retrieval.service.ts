@@ -45,6 +45,8 @@ interface RetrievalPlan {
   query: string;
   queryRewritten: boolean;
   routedKnowledgeBaseIds: number[];
+  activeKnowledgeBaseId: number | null;
+  inventoryQuery: boolean;
 }
 
 export interface KnowledgeRetrievalOptions {
@@ -74,6 +76,8 @@ export interface KnowledgeRetrievalResult {
   knowledgeBaseIds: number[];
   chunkIds: number[];
   routedKnowledgeBaseIds: number[];
+  activeKnowledgeBaseId: number | null;
+  inventoryQuery: boolean;
   rerankApplied: boolean;
   hits: KnowledgeRetrievalHit[];
 }
@@ -102,6 +106,24 @@ const TOPIC_RESET_PATTERN =
   /(?:换个|另一个|新的)(?:问题|话题)|不谈这个|重新开始/;
 const QUERY_FILLER_PATTERN =
   /请问|麻烦|帮我|告诉我|介绍一下|介绍下|说一下|说说|怎么样|是什么|有哪些|如何|怎么|是否|相关|内容|描述|情况|这个|那个|其中|关于|该校|本校/g;
+const KNOWLEDGE_BASE_NAME_SUFFIX_PATTERN =
+  /(?:20\d{2}(?:级|届)?)?(?:新生|学生)?(?:入学|报到)(?:手册|指南|须知|材料|通知|说明)?$/;
+const GENERIC_ROUTE_TERMS = new Set([
+  '大学',
+  '学院',
+  '学校',
+  '学生',
+  '新生',
+  '入学',
+  '手册',
+  '材料',
+  '通知',
+  '指南',
+  '须知',
+  '说明',
+]);
+const INVENTORY_QUERY_PATTERN =
+  /(?:知识库).*(?:有哪些|哪些|有几|多少|列表|清单|配置|有吗|没有)|(?:有哪些|哪些|有几|多少|列表|清单|配置|有吗|没有).*(?:知识库)|(?:配置了|配置的|只有|其他|别的).*(?:大学|学校|学院|手册)|(?:有哪些|哪些|有几|多少).*(?:大学|学校|学院).*(?:手册)/;
 
 @Injectable()
 export class KnowledgeAiChatRetrievalService {
@@ -140,6 +162,9 @@ export class KnowledgeAiChatRetrievalService {
     if (!scopeBases.length) return this.emptyResult(originalQuestion);
 
     const plan = this.buildRetrievalPlan(originalQuestion, scopeBases, options);
+    if (plan.inventoryQuery) {
+      return this.buildInventoryResult(originalQuestion, scopeBases);
+    }
     const routedBases = scopeBases.filter((base) =>
       plan.routedKnowledgeBaseIds.includes(base.id),
     );
@@ -181,6 +206,7 @@ export class KnowledgeAiChatRetrievalService {
       return this.emptyResult(plan.query, {
         queryRewritten: plan.queryRewritten,
         routedKnowledgeBaseIds: routedBaseIds,
+        activeKnowledgeBaseId: null,
         rerankApplied: reranked.applied,
       });
     }
@@ -218,6 +244,15 @@ export class KnowledgeAiChatRetrievalService {
         ),
       ),
       routedKnowledgeBaseIds: routedBaseIds,
+      activeKnowledgeBaseId:
+        plan.activeKnowledgeBaseId &&
+        selected.some(
+          (candidate) =>
+            candidate.knowledgeBaseId === plan.activeKnowledgeBaseId,
+        )
+          ? plan.activeKnowledgeBaseId
+          : null,
+      inventoryQuery: false,
       rerankApplied: reranked.applied,
       hits,
     };
@@ -235,10 +270,48 @@ export class KnowledgeAiChatRetrievalService {
       knowledgeBaseIds: [],
       chunkIds: [],
       routedKnowledgeBaseIds: [],
+      activeKnowledgeBaseId: null,
+      inventoryQuery: false,
       rerankApplied: false,
       hits: [],
       ...overrides,
     };
+  }
+
+  private buildInventoryResult(question: string, bases: KnowledgeBase[]) {
+    const normalizedQuestion = this.normalizeText(question);
+    const wantsEducationBases = /大学|学校|学院|入学|手册/.test(
+      normalizedQuestion,
+    );
+    const educationBases = wantsEducationBases
+      ? bases.filter((base) =>
+          /大学|学校|学院|入学|手册/.test(this.normalizeText(base.name)),
+        )
+      : [];
+    const inventoryBases = (educationBases.length ? educationBases : bases)
+      .slice()
+      .sort((a, b) => a.id - b.id);
+    const names = inventoryBases.map((base) => base.name);
+    return {
+      query: question,
+      queryRewritten: false,
+      context: [
+        '以下是当前检索配置实际绑定且已启用的知识库清单，不是语义检索猜测结果：',
+        ...inventoryBases.map(
+          (base, index) =>
+            `${index + 1}. ${base.name}${base.code ? `（编码：${base.code}）` : ''}`,
+        ),
+        `合计：${inventoryBases.length} 个知识库。`,
+      ].join('\n'),
+      knowledgeBaseNames: names,
+      knowledgeBaseIds: inventoryBases.map((base) => base.id),
+      chunkIds: [],
+      routedKnowledgeBaseIds: inventoryBases.map((base) => base.id),
+      activeKnowledgeBaseId: null,
+      inventoryQuery: true,
+      rerankApplied: false,
+      hits: [],
+    } satisfies KnowledgeRetrievalResult;
   }
 
   private buildRetrievalPlan(
@@ -246,9 +319,18 @@ export class KnowledgeAiChatRetrievalService {
     bases: KnowledgeBase[],
     options: KnowledgeRetrievalOptions,
   ): RetrievalPlan {
-    const explicitRoutes = this.rankKnowledgeBases(question, bases).filter(
-      (route) => route.explicit && route.score >= 0.6,
-    );
+    const rankedRoutes = this.rankKnowledgeBases(question, bases);
+    const explicitRoutes = rankedRoutes.filter((route) => route.explicit);
+    if (this.isInventoryQuery(question)) {
+      return {
+        query: question,
+        queryRewritten: false,
+        routedKnowledgeBaseIds: bases.map((base) => base.id),
+        activeKnowledgeBaseId: null,
+        inventoryQuery: true,
+      };
+    }
+
     const preferredId = options.preferredKnowledgeBaseId;
     const preferredAvailable = Boolean(
       preferredId && bases.some((base) => base.id === preferredId),
@@ -265,14 +347,15 @@ export class KnowledgeAiChatRetrievalService {
         : question;
 
     if (explicitRoutes.length) {
-      const bestScore = explicitRoutes[0].score;
       return {
         query,
         queryRewritten: false,
         routedKnowledgeBaseIds: explicitRoutes
-          .filter((route) => bestScore - route.score <= 0.15)
           .slice(0, 2)
           .map((route) => route.id),
+        activeKnowledgeBaseId:
+          explicitRoutes.length === 1 ? explicitRoutes[0].id : null,
+        inventoryQuery: false,
       };
     }
 
@@ -281,24 +364,49 @@ export class KnowledgeAiChatRetrievalService {
         query,
         queryRewritten: query !== question,
         routedKnowledgeBaseIds: [preferredId],
+        activeKnowledgeBaseId: preferredId,
+        inventoryQuery: false,
       };
     }
 
     const routes = this.rankKnowledgeBases(query, bases).filter(
-      (route) => route.score >= 0.6,
+      (route) => route.score >= 0.35,
+    );
+    const bestRoute = routes[0];
+    const secondRoute = routes[1];
+    const hasConfidentRoute = Boolean(
+      bestRoute &&
+      bestRoute.score >= 0.75 &&
+      (!secondRoute || bestRoute.score - secondRoute.score >= 0.35),
     );
     return {
       query,
       queryRewritten: query !== question,
-      routedKnowledgeBaseIds: routes.length
-        ? routes.slice(0, 2).map((route) => route.id)
-        : bases.map((base) => base.id),
+      routedKnowledgeBaseIds:
+        hasConfidentRoute && bestRoute
+          ? [bestRoute.id]
+          : bases.map((base) => base.id),
+      activeKnowledgeBaseId:
+        hasConfidentRoute && bestRoute ? bestRoute.id : null,
+      inventoryQuery: false,
     };
   }
 
   private rankKnowledgeBases(question: string, bases: KnowledgeBase[]) {
     const terms = this.buildSearchTerms(question);
     const normalizedQuestion = this.normalizeText(question);
+    const routeTexts = new Map(
+      bases.map((base) => [base.id, this.buildKnowledgeBaseRouteText(base)]),
+    );
+    const termFrequency = new Map(
+      terms.map((term) => {
+        const normalizedTerm = this.normalizeText(term);
+        const frequency = Array.from(routeTexts.values()).filter((text) =>
+          text.includes(normalizedTerm),
+        ).length;
+        return [normalizedTerm, frequency];
+      }),
+    );
     return bases
       .map<KnowledgeBaseRoute>((base) => {
         const name = this.normalizeText(base.name);
@@ -306,25 +414,70 @@ export class KnowledgeAiChatRetrievalService {
         const keywords = this.normalizeText(base.hitKeywords || '');
         const colloquial = this.normalizeText(base.colloquialDescription || '');
         const description = this.normalizeText(base.description || '');
-        const explicit = Boolean(
-          (name && normalizedQuestion.includes(name)) ||
-          (code && normalizedQuestion.includes(code)),
+        const aliases = this.buildKnowledgeBaseAliases(base);
+        const matchedAliasLength = Math.max(
+          0,
+          ...aliases
+            .filter((alias) => normalizedQuestion.includes(alias))
+            .map((alias) => alias.length),
         );
+        const explicit = matchedAliasLength > 0;
         let score = 0;
-        if (explicit) score = 1;
+        if (explicit) score = 100 + matchedAliasLength;
         for (const term of terms) {
           const normalizedTerm = this.normalizeText(term);
           if (!normalizedTerm) continue;
-          if (name.includes(normalizedTerm)) score += 0.35;
-          if (code.includes(normalizedTerm)) score += 0.35;
-          if (keywords.includes(normalizedTerm)) score += 0.3;
-          if (colloquial.includes(normalizedTerm)) score += 0.2;
-          if (description.includes(normalizedTerm)) score += 0.1;
+          const frequency = termFrequency.get(normalizedTerm) ?? bases.length;
+          const distinctiveness = GENERIC_ROUTE_TERMS.has(normalizedTerm)
+            ? 0.05
+            : 1 / Math.max(1, frequency);
+          const lengthWeight = Math.min(1.5, normalizedTerm.length / 2);
+          const fieldScore = Math.max(
+            name.includes(normalizedTerm) ? 0.7 : 0,
+            code.includes(normalizedTerm) ? 0.9 : 0,
+            keywords.includes(normalizedTerm) ? 0.75 : 0,
+            colloquial.includes(normalizedTerm) ? 0.45 : 0,
+            description.includes(normalizedTerm) ? 0.2 : 0,
+          );
+          score += fieldScore * distinctiveness * lengthWeight;
         }
-        return { id: base.id, score: this.clamp(score), explicit };
+        return { id: base.id, score, explicit };
       })
       .filter((route) => route.score > 0)
-      .sort((a, b) => b.score - a.score);
+      .sort(
+        (a, b) =>
+          Number(b.explicit) - Number(a.explicit) ||
+          b.score - a.score ||
+          a.id - b.id,
+      );
+  }
+
+  private buildKnowledgeBaseAliases(base: KnowledgeBase) {
+    const name = this.normalizeText(base.name);
+    const strippedName = name
+      .replace(/20\d{2}(?:级|届)?/g, '')
+      .replace(KNOWLEDGE_BASE_NAME_SUFFIX_PATTERN, '');
+    const code = this.normalizeText(base.code || '');
+    return Array.from(new Set([name, strippedName, code])).filter(
+      (alias) => alias.length >= 2 && !GENERIC_ROUTE_TERMS.has(alias),
+    );
+  }
+
+  private buildKnowledgeBaseRouteText(base: KnowledgeBase) {
+    return [
+      base.name,
+      base.code,
+      base.hitKeywords,
+      base.colloquialDescription,
+      base.description,
+    ]
+      .filter(Boolean)
+      .map((value) => this.normalizeText(String(value)))
+      .join(' ');
+  }
+
+  private isInventoryQuery(question: string) {
+    return INVENTORY_QUERY_PATTERN.test(this.normalizeText(question));
   }
 
   private async resolveKnowledgeBases(
@@ -590,19 +743,15 @@ export class KnowledgeAiChatRetrievalService {
     candidates: FusedRetrievalCandidate[],
     config: KnowledgeRetrievalConfig,
   ) {
-    if (
-      !config.enableRerank ||
-      !config.rerankAiFeatureConfigId ||
-      !candidates.length
-    ) {
+    if (!config.enableRerank || !candidates.length) {
       return { candidates, applied: false };
     }
 
     try {
-      const rerankConfig =
-        await this.aiFeatureConfigsService.findUsableChatConfig(
-          config.rerankAiFeatureConfigId,
-        );
+      const rerankConfig = await this.resolveRerankConfig(
+        config.rerankAiFeatureConfigId,
+      );
+      if (!rerankConfig) return { candidates, applied: false };
       const rerankPool = candidates.slice(0, 24);
       const result = await this.providersService.callChat({
         id: rerankConfig.providerId ?? undefined,
@@ -645,6 +794,19 @@ export class KnowledgeAiChatRetrievalService {
     } catch {
       return { candidates, applied: false };
     }
+  }
+
+  private async resolveRerankConfig(configId?: number | null) {
+    if (configId) {
+      try {
+        return await this.aiFeatureConfigsService.findUsableChatConfig(
+          configId,
+        );
+      } catch {
+        // 已选择的重排配置停用或删除后，回退到当前启用的聊天配置。
+      }
+    }
+    return this.aiFeatureConfigsService.findEnabledByFeature('chat');
   }
 
   private parseRerankScores(value: string) {

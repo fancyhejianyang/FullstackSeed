@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-09-06 修复大学手册路由并默认启用检索重排
+- 新增：
+  - `server/src/knowledge-retrieval-configs/knowledge-retrieval-configs.service.spec.ts`（验证新建检索配置默认启用重排并自动绑定当前聊天配置）
+  - `server/src/migrations/1788634800000-EnableKnowledgeRetrievalRerank.ts`（将重排数据库默认值改为开启，并为历史配置补充当前启用的聊天配置）
+- 修改：
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat-retrieval.service.ts`（增加知识库简称识别、公共词降权、低置信全范围召回、配置清单查询和重排配置回退）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat.service.ts`、`web/src/api/knowledgeAiChat.ts`（仅在高置信命中时锁定会话知识库，清单查询主动解除知识库粘性并输出路由状态）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat-retrieval.service.spec.ts`（覆盖“深圳大学”简称路由、公共词不锁库、知识库清单查询和默认重排回退）
+  - `server/src/knowledge-retrieval-configs/dto/knowledge-retrieval-config.dto.ts`、`server/src/knowledge-retrieval-configs/entities/knowledge-retrieval-config.entity.ts`、`server/src/knowledge-retrieval-configs/knowledge-retrieval-configs.service.ts`、`web/src/views/knowledge-retrieval-config/Edit.vue`（重排默认开启，未传重排配置时自动选择可用聊天配置）
+- 删除：无
+- 说明：知识库范围内的大学手册不再因“大学/入学/手册”等公共词并列而按数据库顺序误选；询问知识库列表时直接使用配置清单，不将分片召回结果误报为全部知识库。
+
 ### 2026-09-06 优化 AI 连续问答的知识库路由与检索排序
 - 新增：
   - `server/src/knowledge-ai-chat/knowledge-ai-chat-retrieval.service.spec.ts`（覆盖会话知识库粘性、显式主题切换、融合评分、重排结果解析和弱知识库抑制）

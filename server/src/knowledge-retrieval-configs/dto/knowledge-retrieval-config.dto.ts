@@ -11,7 +11,6 @@ import {
   Max,
   MaxLength,
   Min,
-  ValidateIf,
 } from 'class-validator';
 import { PartialType } from '@nestjs/swagger';
 import type { KnowledgeRetrievalMode } from '../entities/knowledge-retrieval-config.entity';
@@ -79,10 +78,10 @@ export class CreateKnowledgeRetrievalConfigDto {
   @IsOptional()
   enableRerank?: boolean;
 
-  @ValidateIf((dto: CreateKnowledgeRetrievalConfigDto) => !!dto.enableRerank)
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @IsOptional()
   rerankAiFeatureConfigId?: number | null;
 
   @IsBoolean()

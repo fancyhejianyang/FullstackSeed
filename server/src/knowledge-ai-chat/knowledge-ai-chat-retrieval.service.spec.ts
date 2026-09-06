@@ -36,6 +36,8 @@ interface RetrievalInternals {
     query: string;
     queryRewritten: boolean;
     routedKnowledgeBaseIds: number[];
+    activeKnowledgeBaseId: number | null;
+    inventoryQuery: boolean;
   };
   fuseCandidates: (
     textCandidates: Candidate[],
@@ -91,6 +93,12 @@ describe('KnowledgeAiChatRetrievalService', () => {
         findUsableChatConfig: jest
           .fn()
           .mockResolvedValue({ providerId: 3, model: 'rerank-model' }),
+        findEnabledByFeature: jest.fn().mockResolvedValue({
+          id: 3,
+          name: '默认聊天配置',
+          providerId: 3,
+          model: 'rerank-model',
+        }),
       } as unknown as AiFeatureConfigsService,
       { callChat: providerCall } as unknown as KnowledgeAiProvidersService,
     );
@@ -134,6 +142,55 @@ describe('KnowledgeAiChatRetrievalService', () => {
 
     expect(plan.queryRewritten).toBe(false);
     expect(plan.routedKnowledgeBaseIds).toEqual([2]);
+    expect(plan.activeKnowledgeBaseId).toBe(2);
+  });
+
+  it('recognizes a shortened university name regardless of database order', () => {
+    const plan = internals.buildRetrievalPlan(
+      '深圳大学入学材料有哪些？',
+      [
+        buildBase(10, '吉林长春理工大学入学手册', {
+          hitKeywords: '长春理工大学入学',
+        }),
+        buildBase(11, '南京审计大学入学手册'),
+        buildBase(12, '深圳大学学生入学手册'),
+      ],
+      {},
+    );
+
+    expect(plan.routedKnowledgeBaseIds).toEqual([12]);
+    expect(plan.activeKnowledgeBaseId).toBe(12);
+  });
+
+  it('does not lock a session for generic terms shared by many bases', () => {
+    const plan = internals.buildRetrievalPlan(
+      '大学入学手册',
+      [
+        buildBase(10, '吉林长春理工大学入学手册'),
+        buildBase(11, '南京审计大学入学手册'),
+        buildBase(12, '深圳大学学生入学手册'),
+      ],
+      {},
+    );
+
+    expect(plan.routedKnowledgeBaseIds).toEqual([10, 11, 12]);
+    expect(plan.activeKnowledgeBaseId).toBeNull();
+  });
+
+  it('routes knowledge-base inventory questions to the configured scope', () => {
+    const plan = internals.buildRetrievalPlan(
+      '其他的大学入学手册有哪些？',
+      [
+        buildBase(10, '吉林长春理工大学入学手册'),
+        buildBase(11, '南京审计大学入学手册'),
+        buildBase(12, '深圳大学学生入学手册'),
+      ],
+      { hasHistory: true, preferredKnowledgeBaseId: 11 },
+    );
+
+    expect(plan.inventoryQuery).toBe(true);
+    expect(plan.routedKnowledgeBaseIds).toEqual([10, 11, 12]);
+    expect(plan.activeKnowledgeBaseId).toBeNull();
   });
 
   it('keeps fused scores normalized and preserves component scores', () => {
@@ -213,6 +270,27 @@ describe('KnowledgeAiChatRetrievalService', () => {
     expect(result.applied).toBe(true);
     expect(result.candidates[0].rerankScore).toBe(0.93);
     expect(result.candidates[0].score).toBeGreaterThan(0.7);
+  });
+
+  it('falls back to the enabled chat config for default reranking', async () => {
+    providerCall.mockResolvedValue({
+      isSuccess: true,
+      answer: '[{"id":"chunk:1","score":0.88}]',
+    });
+
+    const result = await internals.rerankCandidates(
+      '兵役政策',
+      [buildFusedCandidate('chunk:1', 1, 0.7)],
+      {
+        enableRerank: true,
+        rerankAiFeatureConfigId: null,
+      } as KnowledgeRetrievalConfig,
+    );
+
+    expect(providerCall).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 3, model: 'rerank-model' }),
+    );
+    expect(result.applied).toBe(true);
   });
 });
 

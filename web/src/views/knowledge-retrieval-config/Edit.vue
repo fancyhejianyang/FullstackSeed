@@ -61,7 +61,7 @@ const form = reactive<RetrievalForm>({
   rrfK: 60,
   textWeight: 0.8,
   vectorWeight: 1,
-  enableRerank: false,
+  enableRerank: true,
   rerankAiFeatureConfigId: '',
   isEnabled: true,
   description: '',
@@ -198,7 +198,13 @@ watch(visible, async (value) => {
 watch(
   () => form.enableRerank,
   (value) => {
-    if (!value) form.rerankAiFeatureConfigId = '';
+    if (!value) {
+      form.rerankAiFeatureConfigId = '';
+      return;
+    }
+    if (!form.rerankAiFeatureConfigId) {
+      form.rerankAiFeatureConfigId = rerankConfigOptions.value[0]?.value ?? '';
+    }
   },
 );
 
@@ -223,8 +229,8 @@ function resetForm() {
   form.rrfK = 60;
   form.textWeight = 0.8;
   form.vectorWeight = 1;
-  form.enableRerank = false;
-  form.rerankAiFeatureConfigId = '';
+  form.enableRerank = true;
+  form.rerankAiFeatureConfigId = rerankConfigOptions.value[0]?.value ?? '';
   form.isEnabled = true;
   form.description = '';
 }

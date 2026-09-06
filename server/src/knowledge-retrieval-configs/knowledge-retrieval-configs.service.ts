@@ -72,14 +72,14 @@ export class KnowledgeRetrievalConfigsService {
     const entity = this.configRepository.create(
       await this.toEntityPayload(dto, true),
     );
-    this.assertRerankOptions(entity);
+    await this.ensureRerankOptions(entity);
     return this.configRepository.save(entity);
   }
 
   async update(id: number, dto: UpdateKnowledgeRetrievalConfigDto) {
     const config = await this.findOne(id);
     Object.assign(config, await this.toEntityPayload(dto, false));
-    this.assertRerankOptions(config);
+    await this.ensureRerankOptions(config);
     return this.configRepository.save(config);
   }
 
@@ -151,7 +151,7 @@ export class KnowledgeRetrievalConfigsService {
       payload.vectorWeight = dto.vectorWeight ?? 1;
     }
     if (dto.enableRerank !== undefined || isCreate) {
-      payload.enableRerank = dto.enableRerank ?? false;
+      payload.enableRerank = dto.enableRerank ?? true;
       if (!payload.enableRerank) {
         payload.rerankAiFeatureConfigId = null;
         payload.rerankAiFeatureConfigName = null;
@@ -178,10 +178,18 @@ export class KnowledgeRetrievalConfigsService {
     return payload;
   }
 
-  private assertRerankOptions(config: Partial<KnowledgeRetrievalConfig>) {
-    if (config.enableRerank && !config.rerankAiFeatureConfigId) {
-      throw new BadRequestException('启用重排时请选择重排 AI 配置');
+  private async ensureRerankOptions(config: Partial<KnowledgeRetrievalConfig>) {
+    if (!config.enableRerank) return;
+    const rerankConfig = config.rerankAiFeatureConfigId
+      ? await this.aiFeatureConfigsService.findUsableChatConfig(
+          config.rerankAiFeatureConfigId,
+        )
+      : await this.aiFeatureConfigsService.findEnabledByFeature('chat');
+    if (!rerankConfig) {
+      throw new BadRequestException('启用重排需要至少一个已启用的聊天 AI 配置');
     }
+    config.rerankAiFeatureConfigId = rerankConfig.id;
+    config.rerankAiFeatureConfigName = rerankConfig.name;
   }
 
   private toNullableText(value?: string) {

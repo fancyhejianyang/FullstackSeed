@@ -135,6 +135,8 @@ export type KnowledgeAiChatStreamEvent =
         query: string;
         queryRewritten: boolean;
         routedKnowledgeBaseIds: number[];
+        activeKnowledgeBaseId: number | null;
+        inventoryQuery: boolean;
         rerankApplied: boolean;
         hits: KnowledgeRetrievalHit[];
       };
