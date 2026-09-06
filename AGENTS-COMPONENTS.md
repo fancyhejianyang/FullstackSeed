@@ -61,7 +61,7 @@
 
 | Prop | 类型 | 默认 | 说明 |
 | --- | --- | --- | --- |
-| `columns` | `TableColumn[]` | 必填 | 列配置（`prop/label/width/minWidth/fixed/slot`），特殊列用 `slot:true` 后写 `#column-<prop>` 插槽 |
+| `columns` | `TableColumn[]` | 必填 | 列配置（`prop/label/width/minWidth/fixed/slot/showOverflowTooltip`），特殊列用 `slot:true` 后写 `#column-<prop>` 插槽；单列可用 `showOverflowTooltip:false` 关闭省略提示 |
 | `request` | `(params) => Promise<{list,total}>` | 必填 | 数据请求函数，接收分页与搜索参数 |
 | `searchFields` | `FormField[]` | `[]` | 搜索栏字段配置（不传则不显示搜索栏） |
 | `pageSizes` | `number[]` | `[10,20,50]` | 分页大小选项 |
@@ -76,6 +76,7 @@
 | `batchDeleteRequest` | `({ids,rows}) => Promise<unknown>` | — | 批量删除 API；同上 |
 | `autoRefreshOnDelete` / `autoRefreshOnBatchDelete` | `boolean` | `true` | 删除成功后是否自动刷新 |
 | `fit` | `boolean` | `true` | 是否自动撑满容器；设为 `false` 时按列宽产生横向滚动 |
+| `showOverflowTooltip` | `boolean` | `true` | 数据列默认单行省略，仅在内容实际溢出时悬浮显示完整 Tooltip；操作列与勾选列不参与 |
 
 ### Emits
 
@@ -105,6 +106,12 @@
 ### 颜色
 
 - 内置按钮 `查看=info` / `编辑=primary` / `删除=danger`，符合 `.design-spec.md` 第 6 节配色标准，**页面无需手配**
+
+### 单元格溢出
+
+- 所有数据列默认保持单行，超出列宽时显示省略号，并仅在实际溢出时提供完整内容 Tooltip
+- 具名插槽列同样继承该行为；图片、可换行富文本等确需例外的列可设置 `showOverflowTooltip: false`
+- 操作列和勾选列属于交互区域，不应用文本溢出 Tooltip
 
 ---
 

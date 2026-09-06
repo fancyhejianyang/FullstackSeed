@@ -7,6 +7,7 @@
  * - `request` 统一接收分页 + 搜索参数，返回 `{ list, total }`
  * - `permModule` 只传模块名，内部按 `Module.action` 拼权限码并控制查看/编辑/删除/批量删除
  * - 传入 deleteRequest/batchDeleteRequest 时，组件内置确认、执行、提示和刷新
+ * - 数据列默认单行省略，内容溢出时悬浮显示完整 Tooltip
  * - 通过 `#toolbar` / `#column-字段名` / `#actions` 保留业务扩展入口
  * - 暴露 refresh/search/clearSelection/getSelectedRows/runBatchDelete 等方法给页面 ref 调用
  */
@@ -23,6 +24,8 @@ export interface TableColumn {
   width?: string | number;
   minWidth?: string | number;
   fixed?: boolean | 'left' | 'right';
+  // 是否单行省略并在溢出时显示 Tooltip；默认继承 Table 的全局配置
+  showOverflowTooltip?: boolean;
   // 是否使用具名插槽 #column-[prop] 自定义单元格
   slot?: boolean;
 }
@@ -67,6 +70,8 @@ const props = withDefaults(
     autoRefreshOnBatchDelete?: boolean;
     // 是否自动撑满容器；设为 false 时按列宽产生横向滚动
     fit?: boolean;
+    // 数据列是否默认单行省略，并在内容溢出时显示完整 Tooltip
+    showOverflowTooltip?: boolean;
   }>(),
   {
     searchFields: () => [],
@@ -83,6 +88,7 @@ const props = withDefaults(
     autoRefreshOnDelete: true,
     autoRefreshOnBatchDelete: true,
     fit: true,
+    showOverflowTooltip: true,
   },
 );
 
@@ -349,6 +355,7 @@ onMounted(fetchData);
       border
       stripe
       :fit="props.fit"
+      :show-overflow-tooltip="props.showOverflowTooltip"
       @selection-change="handleSelectionChange"
       @row-click="handleRowClick"
     >
@@ -365,6 +372,7 @@ onMounted(fetchData);
         label="操作"
         :width="props.actionWidth"
         fixed="left"
+        :show-overflow-tooltip="false"
       >
         <template #default="scope">
           <el-button
@@ -404,6 +412,7 @@ onMounted(fetchData);
         :width="col.width"
         :min-width="col.minWidth"
         :fixed="col.fixed"
+        :show-overflow-tooltip="col.showOverflowTooltip"
       >
         <template v-if="col.slot && col.prop" #default="scope">
           <slot :name="`column-${col.prop}`" v-bind="scope" />

@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-09-06 增加 Table 单元格默认溢出提示
+- 新增：无
+- 修改：
+  - `web/src/components/Table.vue`（所有数据列默认单行省略，并在内容实际溢出时显示完整 Tooltip；支持表格级和列级关闭）
+  - `AGENTS-COMPONENTS.md`、`.design-spec.md`（同步 Table 溢出提示契约与表格数据展示规范）
+- 删除：无
+- 说明：操作列和勾选列保持原有交互，不套用文本 Tooltip；普通列及具名插槽列默认继承统一行为。
+
 ### 2026-09-06 补齐其它列表页业务下拉筛选
 - 新增：
   - `server/src/common/list-query-filters.spec.ts`（验证布尔查询转换、启停状态、示例状态、模板格式和问答结果筛选）
