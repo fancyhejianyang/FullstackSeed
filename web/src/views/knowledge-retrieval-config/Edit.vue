@@ -37,6 +37,7 @@ type RetrievalForm = {
   rrfK: number | null;
   textWeight: number | null;
   vectorWeight: number | null;
+  sessionContextTimeoutMinutes: number | null;
   enableRerank: boolean;
   rerankAiFeatureConfigId: number | '';
   isEnabled: boolean;
@@ -61,6 +62,7 @@ const form = reactive<RetrievalForm>({
   rrfK: 60,
   textWeight: 0.8,
   vectorWeight: 1,
+  sessionContextTimeoutMinutes: 15,
   enableRerank: true,
   rerankAiFeatureConfigId: '',
   isEnabled: true,
@@ -138,6 +140,17 @@ const fields = computed<FormField[]>(() => {
       componentProps: { min: 0, max: 1, precision: 4 },
     },
     {
+      prop: 'sessionContextTimeoutMinutes',
+      label: '上下文有效期（分钟）',
+      component: 'InputNumber',
+      componentProps: {
+        mode: 'integer',
+        min: 0,
+        max: 1440,
+        placeholder: '默认 15，填 0 则每次独立检索',
+      },
+    },
+    {
       prop: 'enableRerank',
       label: '启用重排',
       component: 'Switch',
@@ -171,6 +184,9 @@ const rules = computed<FormRules>(() => ({
   name: [{ required: true, message: '请输入配置名称', trigger: 'blur' }],
   retrievalMode: [{ required: true, message: '请选择检索模式', trigger: 'change' }],
   topK: [{ required: true, message: '请输入召回上限', trigger: 'blur' }],
+  sessionContextTimeoutMinutes: [
+    { required: true, message: '请输入上下文有效期', trigger: 'blur' },
+  ],
   ...(form.enableRerank
     ? {
         rerankAiFeatureConfigId: [
@@ -229,6 +245,7 @@ function resetForm() {
   form.rrfK = 60;
   form.textWeight = 0.8;
   form.vectorWeight = 1;
+  form.sessionContextTimeoutMinutes = 15;
   form.enableRerank = true;
   form.rerankAiFeatureConfigId = rerankConfigOptions.value[0]?.value ?? '';
   form.isEnabled = true;
@@ -252,6 +269,9 @@ function fillForm(data: KnowledgeRetrievalConfig) {
   form.rrfK = Number(data.rrfK ?? 60);
   form.textWeight = Number(data.textWeight ?? 0.8);
   form.vectorWeight = Number(data.vectorWeight ?? 1);
+  form.sessionContextTimeoutMinutes = Number(
+    data.sessionContextTimeoutMinutes ?? 15,
+  );
   form.enableRerank = !!data.enableRerank;
   form.rerankAiFeatureConfigId = data.rerankAiFeatureConfigId ?? '';
   form.isEnabled = !!data.isEnabled;
@@ -270,6 +290,7 @@ function buildPayload(): KnowledgeRetrievalConfigForm {
     rrfK: form.rrfK,
     textWeight: form.textWeight,
     vectorWeight: form.vectorWeight,
+    sessionContextTimeoutMinutes: form.sessionContextTimeoutMinutes,
     enableRerank: form.enableRerank,
     rerankAiFeatureConfigId: form.enableRerank
       ? Number(form.rerankAiFeatureConfigId)
@@ -395,6 +416,9 @@ async function handleSubmit() {
           </div>
         </template>
       </Form>
+      <div class="knowledge-retrieval-edit__session-tip">
+        有效期内，未明确切换知识库的追问会优先使用上一轮命中知识库；超过有效期按新问题重新检索。填 0 则关闭知识库上下文复用。
+      </div>
     </div>
   </Dialog>
 </template>
@@ -411,6 +435,13 @@ async function handleSubmit() {
 }
 
 .knowledge-retrieval-edit__scope-tip {
+  margin-top: 8px;
+  color: #909399;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.knowledge-retrieval-edit__session-tip {
   margin-top: 8px;
   color: #909399;
   font-size: 12px;

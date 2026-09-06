@@ -28,6 +28,7 @@ describe('KnowledgeRetrievalConfigsService', () => {
     const result = await service.create({ name: '默认检索配置' });
 
     expect(result.enableRerank).toBe(true);
+    expect(result.sessionContextTimeoutMinutes).toBe(15);
     expect(result.rerankAiFeatureConfigId).toBe(3);
     expect(result.rerankAiFeatureConfigName).toBe('默认聊天配置');
     expect(save).toHaveBeenCalledTimes(1);

@@ -38,6 +38,9 @@ export class KnowledgeRetrievalConfig extends BaseEntity {
   @Column({ type: 'decimal', precision: 8, scale: 4, default: 1 })
   vectorWeight: number;
 
+  @Column({ type: 'int', default: 15 })
+  sessionContextTimeoutMinutes: number;
+
   @Column({ type: 'tinyint', default: true })
   enableRerank: boolean;
 

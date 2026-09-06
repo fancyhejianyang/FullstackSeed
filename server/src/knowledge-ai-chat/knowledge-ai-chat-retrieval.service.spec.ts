@@ -85,15 +85,21 @@ interface RetrievalInternals {
     candidates: Array<Candidate & { rerankScore: number | null }>;
     applied: boolean;
   }>;
+  canReuseSessionContext: (
+    options: KnowledgeRetrievalOptions,
+    timeoutMinutes: number,
+    now?: Date,
+  ) => boolean;
 }
 
 describe('KnowledgeAiChatRetrievalService', () => {
   let internals: RetrievalInternals;
   let providerCall: jest.Mock;
+  let service: KnowledgeAiChatRetrievalService;
 
   beforeEach(() => {
     providerCall = jest.fn();
-    const service = new KnowledgeAiChatRetrievalService(
+    service = new KnowledgeAiChatRetrievalService(
       {} as Repository<KnowledgeBase>,
       {} as Repository<KnowledgeBaseDocument>,
       {} as Repository<KnowledgeBaseChunk>,
@@ -138,6 +144,118 @@ describe('KnowledgeAiChatRetrievalService', () => {
     expect(plan.query).toContain('中国科学院大学');
     expect(plan.query).toContain('该校的师资团队怎么样');
     expect(plan.routedKnowledgeBaseIds).toEqual([1]);
+  });
+
+  it('expires knowledge-base context after the configured session timeout', () => {
+    const lastRetrievalAt = new Date('2026-09-06T10:00:00.000Z');
+
+    expect(
+      internals.canReuseSessionContext(
+        { hasHistory: true, lastRetrievalAt },
+        15,
+        new Date('2026-09-06T10:15:00.000Z'),
+      ),
+    ).toBe(true);
+    expect(
+      internals.canReuseSessionContext(
+        { hasHistory: true, lastRetrievalAt },
+        15,
+        new Date('2026-09-06T10:15:00.001Z'),
+      ),
+    ).toBe(false);
+    expect(
+      internals.canReuseSessionContext(
+        { hasHistory: true, lastRetrievalAt },
+        0,
+        new Date('2026-09-06T10:01:00.000Z'),
+      ),
+    ).toBe(false);
+  });
+
+  it('retries the full knowledge-base scope when a reused context has no hit', async () => {
+    const activeBase = {
+      id: 1,
+      name: '历史学校手册',
+      code: '',
+      description: '',
+      hitKeywords: '',
+      colloquialDescription: '',
+      contentText: '',
+      matchPriority: 1,
+    } as KnowledgeBase;
+    const targetBase = {
+      id: 2,
+      name: '目标学校手册',
+      code: '',
+      description: '',
+      hitKeywords: '',
+      colloquialDescription: '',
+      contentText: '',
+      matchPriority: 1,
+    } as KnowledgeBase;
+    const baseFind = jest
+      .fn()
+      .mockResolvedValueOnce([activeBase])
+      .mockResolvedValueOnce([activeBase, targetBase]);
+    const documentsFind = jest
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: 21,
+          knowledgeBaseId: 2,
+          title: '目标问题',
+          content: '目标问题的正确答案',
+          sourceName: '目标学校手册',
+          hitKeywords: '目标问题',
+          colloquialDescription: '',
+          matchPriority: 1,
+        } as KnowledgeBaseDocument,
+      ]);
+    const scopeQueryBuilder = {
+      select: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getMany: jest.fn().mockResolvedValue([activeBase, targetBase]),
+    };
+    const serviceWithFallback = new KnowledgeAiChatRetrievalService(
+      {
+        createQueryBuilder: jest.fn().mockReturnValue(scopeQueryBuilder),
+        find: baseFind,
+      } as unknown as Repository<KnowledgeBase>,
+      { find: documentsFind } as unknown as Repository<KnowledgeBaseDocument>,
+      { find: jest.fn().mockResolvedValue([]) } as unknown as Repository<KnowledgeBaseChunk>,
+      {
+        findUsableConfig: jest.fn().mockResolvedValue({
+          retrievalMode: 'fullText',
+          topK: 1,
+          minScore: 0.35,
+          textWeight: 0.8,
+          vectorWeight: 1,
+          rrfK: 60,
+          enableRerank: false,
+          sessionContextTimeoutMinutes: 15,
+          knowledgeBaseIds: [],
+          categoryIds: [],
+        }),
+      } as unknown as KnowledgeRetrievalConfigsService,
+      {} as KnowledgeEmbeddingService,
+      {} as KnowledgeVectorService,
+      {} as AiFeatureConfigsService,
+      {} as KnowledgeAiProvidersService,
+    );
+
+    const result = await serviceWithFallback.buildReferenceResult('目标问题', 1, {
+      hasHistory: true,
+      previousQuery: '历史问题',
+      preferredKnowledgeBaseId: 1,
+      lastRetrievalAt: new Date(),
+    });
+
+    expect(result.query).toBe('目标问题');
+    expect(result.knowledgeBaseIds).toEqual([2]);
+    expect(result.sessionContextReused).toBe(false);
+    expect(baseFind).toHaveBeenCalledTimes(2);
   });
 
   it('switches away from the active knowledge base for an explicit new topic', () => {

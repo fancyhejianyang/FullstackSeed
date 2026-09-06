@@ -75,6 +75,13 @@ export class CreateKnowledgeRetrievalConfigDto {
   @IsOptional()
   vectorWeight?: number;
 
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(1440)
+  @IsOptional()
+  sessionContextTimeoutMinutes?: number;
+
   @IsBoolean()
   @IsOptional()
   enableRerank?: boolean;

@@ -32,6 +32,7 @@ const columns: TableColumn[] = [
   { prop: 'knowledgeBaseNames', label: '知识库范围', minWidth: 220, slot: true },
   { prop: 'topK', label: '召回上限', width: 100 },
   { prop: 'minScore', label: '最低分', width: 100 },
+  { prop: 'sessionContextTimeoutMinutes', label: '上下文有效期', width: 130, slot: true },
   { prop: 'enableRerank', label: '重排', width: 90, slot: true },
   { prop: 'isEnabled', label: '状态', width: 90, slot: true },
   { prop: 'updatedAt', label: '更新时间', width: 180, slot: true },
@@ -133,6 +134,10 @@ function getScopeText(row: KnowledgeRetrievalConfig) {
         <el-tag :type="row.enableRerank ? 'success' : 'info'">
           {{ row.enableRerank ? '启用' : '关闭' }}
         </el-tag>
+      </template>
+
+      <template #column-sessionContextTimeoutMinutes="{ row }">
+        {{ row.sessionContextTimeoutMinutes === 0 ? '不复用' : `${row.sessionContextTimeoutMinutes} 分钟` }}
       </template>
 
       <template #column-isEnabled="{ row }">

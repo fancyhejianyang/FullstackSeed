@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-09-06 增加检索会话上下文有效期
+- 新增：
+  - `server/src/migrations/1788642000000-AddKnowledgeRetrievalSessionTimeout.ts`（增加检索配置会话上下文有效期及会话最后检索时间字段）
+- 修改：
+  - `server/src/knowledge-retrieval-configs/entities/knowledge-retrieval-config.entity.ts`、`server/src/knowledge-retrieval-configs/dto/knowledge-retrieval-config.dto.ts`、`server/src/knowledge-retrieval-configs/knowledge-retrieval-configs.service.ts`（新增 `sessionContextTimeoutMinutes`，新配置默认 15 分钟，允许 0–1440 分钟）
+  - `server/src/knowledge-ai-chat/entities/knowledge-ai-chat-session.entity.ts`、`server/src/knowledge-ai-chat/knowledge-ai-chat.service.ts`、`server/src/knowledge-ai-chat/knowledge-ai-chat-retrieval.service.ts`（仅在有效期内复用知识库上下文；粘性检索无命中时以当前问题原文自动回退至全范围检索；新问题无命中时清除旧知识库缓存）
+  - `web/src/api/knowledgeRetrievalConfig.ts`、`web/src/views/knowledge-retrieval-config/Edit.vue`、`web/src/views/knowledge-retrieval-config/Index.vue`（增加“上下文有效期（分钟）”配置、说明及列表展示）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat-retrieval.service.spec.ts`、`server/src/knowledge-retrieval-configs/knowledge-retrieval-configs.service.spec.ts`（覆盖有效期、全范围回退与默认值）
+- 删除：无
+- 说明：该策略由后端检索路由执行，并非模型供应商参数；填 `0` 表示每次均作为独立问题检索。历史会话首次使用新逻辑时会按新问题处理并写入新的检索时间。
+
 ### 2026-09-06 增加 Table 单元格默认溢出提示
 - 新增：无
 - 修改：

@@ -49,12 +49,15 @@ interface RetrievalPlan {
   routedKnowledgeBaseIds: number[];
   activeKnowledgeBaseId: number | null;
   inventoryQuery: boolean;
+  sessionContextReused: boolean;
 }
 
 export interface KnowledgeRetrievalOptions {
   hasHistory?: boolean;
   previousQuery?: string | null;
   preferredKnowledgeBaseId?: number | null;
+  lastRetrievalAt?: Date | string | null;
+  allowSessionFallback?: boolean;
 }
 
 export interface KnowledgeRetrievalHit {
@@ -80,6 +83,7 @@ export interface KnowledgeRetrievalResult {
   routedKnowledgeBaseIds: number[];
   activeKnowledgeBaseId: number | null;
   inventoryQuery: boolean;
+  sessionContextReused: boolean;
   rerankApplied: boolean;
   hits: KnowledgeRetrievalHit[];
 }
@@ -163,7 +167,14 @@ export class KnowledgeAiChatRetrievalService {
     );
     if (!scopeBases.length) return this.emptyResult(originalQuestion);
 
-    const plan = this.buildRetrievalPlan(originalQuestion, scopeBases, options);
+    const sessionContextReusable = this.canReuseSessionContext(
+      options,
+      Number(config.sessionContextTimeoutMinutes ?? 15),
+    );
+    const plan = this.buildRetrievalPlan(originalQuestion, scopeBases, {
+      ...options,
+      hasHistory: sessionContextReusable,
+    });
     if (plan.inventoryQuery) {
       return this.buildInventoryResult(originalQuestion, scopeBases);
     }
@@ -205,10 +216,17 @@ export class KnowledgeAiChatRetrievalService {
     const selected = this.selectContextCandidates(scored, topK);
 
     if (!selected.length) {
+      if (plan.sessionContextReused && options.allowSessionFallback !== false) {
+        return this.buildReferenceResult(originalQuestion, configId, {
+          hasHistory: false,
+          allowSessionFallback: false,
+        });
+      }
       return this.emptyResult(plan.query, {
         queryRewritten: plan.queryRewritten,
         routedKnowledgeBaseIds: routedBaseIds,
         activeKnowledgeBaseId: null,
+        sessionContextReused: plan.sessionContextReused,
         rerankApplied: reranked.applied,
       });
     }
@@ -241,6 +259,7 @@ export class KnowledgeAiChatRetrievalService {
           ? plan.activeKnowledgeBaseId
           : null,
       inventoryQuery: false,
+      sessionContextReused: plan.sessionContextReused,
       rerankApplied: reranked.applied,
       hits,
     };
@@ -260,6 +279,7 @@ export class KnowledgeAiChatRetrievalService {
       routedKnowledgeBaseIds: [],
       activeKnowledgeBaseId: null,
       inventoryQuery: false,
+      sessionContextReused: false,
       rerankApplied: false,
       hits: [],
       ...overrides,
@@ -297,6 +317,7 @@ export class KnowledgeAiChatRetrievalService {
       routedKnowledgeBaseIds: inventoryBases.map((base) => base.id),
       activeKnowledgeBaseId: null,
       inventoryQuery: true,
+      sessionContextReused: false,
       rerankApplied: false,
       hits: [],
     } satisfies KnowledgeRetrievalResult;
@@ -316,6 +337,7 @@ export class KnowledgeAiChatRetrievalService {
         routedKnowledgeBaseIds: bases.map((base) => base.id),
         activeKnowledgeBaseId: null,
         inventoryQuery: true,
+        sessionContextReused: false,
       };
     }
 
@@ -325,6 +347,7 @@ export class KnowledgeAiChatRetrievalService {
     );
     const continuesTopic = Boolean(
       options.hasHistory &&
+      preferredAvailable &&
       !explicitRoutes.length &&
       !TOPIC_RESET_PATTERN.test(question),
     );
@@ -344,6 +367,7 @@ export class KnowledgeAiChatRetrievalService {
         activeKnowledgeBaseId:
           explicitRoutes.length === 1 ? explicitRoutes[0].id : null,
         inventoryQuery: false,
+        sessionContextReused: false,
       };
     }
 
@@ -354,6 +378,7 @@ export class KnowledgeAiChatRetrievalService {
         routedKnowledgeBaseIds: [preferredId],
         activeKnowledgeBaseId: preferredId,
         inventoryQuery: false,
+        sessionContextReused: true,
       };
     }
 
@@ -377,7 +402,25 @@ export class KnowledgeAiChatRetrievalService {
       activeKnowledgeBaseId:
         hasConfidentRoute && bestRoute ? bestRoute.id : null,
       inventoryQuery: false,
+      sessionContextReused: false,
     };
+  }
+
+  private canReuseSessionContext(
+    options: KnowledgeRetrievalOptions,
+    timeoutMinutes: number,
+    now = new Date(),
+  ) {
+    if (
+      !options.hasHistory ||
+      timeoutMinutes <= 0 ||
+      !options.lastRetrievalAt
+    ) {
+      return false;
+    }
+    const lastRetrievalAt = new Date(options.lastRetrievalAt);
+    if (Number.isNaN(lastRetrievalAt.getTime())) return false;
+    return now.getTime() - lastRetrievalAt.getTime() <= timeoutMinutes * 60_000;
   }
 
   private rankKnowledgeBases(question: string, bases: KnowledgeBase[]) {

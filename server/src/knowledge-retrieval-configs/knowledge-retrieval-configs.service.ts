@@ -151,6 +151,10 @@ export class KnowledgeRetrievalConfigsService {
     if (dto.vectorWeight !== undefined || isCreate) {
       payload.vectorWeight = dto.vectorWeight ?? 1;
     }
+    if (dto.sessionContextTimeoutMinutes !== undefined || isCreate) {
+      payload.sessionContextTimeoutMinutes =
+        dto.sessionContextTimeoutMinutes ?? 15;
+    }
     if (dto.enableRerank !== undefined || isCreate) {
       payload.enableRerank = dto.enableRerank ?? true;
       if (!payload.enableRerank) {

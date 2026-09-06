@@ -15,6 +15,7 @@ export interface KnowledgeRetrievalConfig {
   rrfK: number;
   textWeight: number;
   vectorWeight: number;
+  sessionContextTimeoutMinutes: number;
   enableRerank: boolean;
   rerankAiFeatureConfigId: number | null;
   rerankAiFeatureConfigName: string | null;
@@ -47,6 +48,7 @@ export interface KnowledgeRetrievalConfigForm {
   rrfK?: number | null;
   textWeight?: number | null;
   vectorWeight?: number | null;
+  sessionContextTimeoutMinutes?: number | null;
   enableRerank?: boolean;
   rerankAiFeatureConfigId?: number | null;
   isEnabled?: boolean;

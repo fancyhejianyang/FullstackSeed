@@ -36,6 +36,7 @@ interface KnowledgeRetrievalState {
   routedKnowledgeBaseIds: number[];
   activeKnowledgeBaseId: number | null;
   inventoryQuery: boolean;
+  sessionContextReused: boolean;
   rerankApplied: boolean;
   hits: KnowledgeRetrievalHit[];
 }
@@ -332,6 +333,7 @@ export class KnowledgeAiChatService {
         previousQuery:
           session?.lastRetrievalQuery ?? session?.lastQuestion ?? undefined,
         preferredKnowledgeBaseId: session?.activeKnowledgeBaseId ?? undefined,
+        lastRetrievalAt: session?.lastRetrievalAt ?? undefined,
       },
     );
     return {
@@ -345,6 +347,7 @@ export class KnowledgeAiChatService {
       routedKnowledgeBaseIds: result.routedKnowledgeBaseIds,
       activeKnowledgeBaseId: result.activeKnowledgeBaseId,
       inventoryQuery: result.inventoryQuery,
+      sessionContextReused: result.sessionContextReused,
       rerankApplied: result.rerankApplied,
       hits: result.hits,
     };
@@ -404,17 +407,24 @@ export class KnowledgeAiChatService {
     session.lastQuestion = dto.question.trim();
     session.lastAnswer = result.answer || null;
     session.hitKnowledgeBaseNames = hitKnowledgeBaseNames;
+    if (retrieval?.configId) {
+      session.lastRetrievalAt = new Date();
+    }
     if (retrieval?.inventoryQuery) {
       session.activeKnowledgeBaseId = null;
       session.lastRetrievalQuery = dto.question.trim();
-    } else {
+    } else if (retrieval) {
       session.activeKnowledgeBaseId =
         retrieval?.activeKnowledgeBaseId ??
-        session.activeKnowledgeBaseId ??
+        (retrieval.sessionContextReused
+          ? session.activeKnowledgeBaseId
+          : null) ??
         null;
       session.lastRetrievalQuery = retrieval?.knowledgeBaseIds.length
         ? retrieval.query
-        : (session.lastRetrievalQuery ?? dto.question.trim());
+        : retrieval.sessionContextReused
+          ? (session.lastRetrievalQuery ?? dto.question.trim())
+          : dto.question.trim();
     }
     session.isSuccess = result.isSuccess;
     session.errorMessage = result.errorMessage;

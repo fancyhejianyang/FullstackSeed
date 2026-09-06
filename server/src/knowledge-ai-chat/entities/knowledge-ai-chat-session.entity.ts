@@ -33,6 +33,9 @@ export class KnowledgeAiChatSession extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   lastRetrievalQuery: string | null;
 
+  @Column({ type: 'datetime', nullable: true })
+  lastRetrievalAt: Date | null;
+
   @Column({ type: 'tinyint', default: true })
   isSuccess: boolean;
 
