@@ -16,6 +16,8 @@ import {
 interface Candidate {
   key: string;
   chunkId: number | null;
+  documentId: number | null;
+  chunkIndex: number | null;
   title: string;
   content: string;
   knowledgeBaseId: number;
@@ -60,6 +62,15 @@ interface RetrievalInternals {
     >,
     topK: number,
   ) => Candidate[];
+  formatReferenceContext: (
+    candidates: Array<
+      Candidate & {
+        textScore: number;
+        vectorScore: number;
+        rerankScore: number | null;
+      }
+    >,
+  ) => string;
   rerankCandidates: (
     question: string,
     candidates: Array<
@@ -229,6 +240,28 @@ describe('KnowledgeAiChatRetrievalService', () => {
     expect(selected.map((item) => item.knowledgeBaseId)).toEqual([1, 1]);
   });
 
+  it('keeps complete chunk content and restores source order in context', () => {
+    const first = {
+      ...buildFusedCandidate('chunk:1', 1, 0.7),
+      documentId: 8,
+      chunkIndex: 0,
+      content: `开头${'入学材料'.repeat(260)}调转档案完整说明`,
+    };
+    const second = {
+      ...buildFusedCandidate('chunk:2', 1, 0.9),
+      documentId: 8,
+      chunkIndex: 1,
+      content: '后续内容',
+    };
+
+    const context = internals.formatReferenceContext([second, first]);
+
+    expect(context).toContain('调转档案完整说明');
+    expect(context.indexOf(first.content)).toBeLessThan(
+      context.indexOf(second.content),
+    );
+  });
+
   it('removes conversational filler and scores keyword matches above noise', () => {
     const terms = internals.buildSearchTerms('该校的兵役相关描述是什么？');
     const relevant = buildCandidate(0);
@@ -317,6 +350,8 @@ function buildCandidate(score: number): Candidate {
   return {
     key: 'chunk:1',
     chunkId: 1,
+    documentId: 1,
+    chunkIndex: 0,
     title: '兵役政策',
     content: '兵役政策正文',
     knowledgeBaseId: 1,

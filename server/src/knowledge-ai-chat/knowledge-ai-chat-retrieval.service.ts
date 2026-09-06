@@ -14,6 +14,8 @@ import { KnowledgeVectorService } from '../knowledge-vectors/knowledge-vector.se
 interface RetrievalCandidate {
   key: string;
   chunkId: number | null;
+  documentId: number | null;
+  chunkIndex: number | null;
   title: string;
   content: string;
   knowledgeBaseId: number;
@@ -215,21 +217,7 @@ export class KnowledgeAiChatRetrievalService {
     return {
       query: plan.query,
       queryRewritten: plan.queryRewritten,
-      context: selected
-        .map((candidate, index) => {
-          const source = candidate.sourceName
-            ? `来源：${candidate.sourceName}\n`
-            : '';
-          return [
-            `[${index + 1}] ${candidate.title}`,
-            `知识库：${candidate.knowledgeBaseName}`,
-            source,
-            this.truncate(candidate.content, 900),
-          ]
-            .filter(Boolean)
-            .join('\n');
-        })
-        .join('\n\n'),
+      context: this.formatReferenceContext(selected),
       knowledgeBaseNames: Array.from(
         new Set(selected.map((candidate) => candidate.knowledgeBaseName)),
       ).filter(Boolean),
@@ -562,6 +550,8 @@ export class KnowledgeAiChatRetrievalService {
           return this.toCandidate({
             key: `chunk:${chunk.id}`,
             chunkId: chunk.id,
+            documentId: chunk.documentId,
+            chunkIndex: chunk.chunkIndex,
             title: chunk.title || document?.title || base?.name || '知识片段',
             content: chunk.content,
             knowledgeBaseId: chunk.knowledgeBaseId,
@@ -585,6 +575,8 @@ export class KnowledgeAiChatRetrievalService {
         return this.toCandidate({
           key: `document:${document.id}`,
           chunkId: null,
+          documentId: document.id,
+          chunkIndex: null,
           title: document.title,
           content: document.content || '',
           knowledgeBaseId: document.knowledgeBaseId,
@@ -602,6 +594,8 @@ export class KnowledgeAiChatRetrievalService {
         this.toCandidate({
           key: `base:${base.id}`,
           chunkId: null,
+          documentId: null,
+          chunkIndex: null,
           title: base.name,
           content: base.contentText || '',
           knowledgeBaseId: base.id,
@@ -653,6 +647,8 @@ export class KnowledgeAiChatRetrievalService {
           const candidate = this.toCandidate({
             key: `chunk:${chunkId}`,
             chunkId,
+            documentId: chunk.documentId,
+            chunkIndex: chunk.chunkIndex,
             title:
               chunk.title || this.metadataToString(metadata.title, '知识片段'),
             content: chunk.content,
@@ -876,6 +872,42 @@ export class KnowledgeAiChatRetrievalService {
       if (selected.length >= topK) break;
     }
     return selected;
+  }
+
+  private formatReferenceContext(candidates: FusedRetrievalCandidate[]) {
+    return this.orderContextCandidates(candidates)
+      .map((candidate, index) => {
+        const source = candidate.sourceName
+          ? `来源：${candidate.sourceName}`
+          : '';
+        return [
+          `[${index + 1}] ${candidate.title}`,
+          `知识库：${candidate.knowledgeBaseName}`,
+          source,
+          candidate.content,
+        ]
+          .filter(Boolean)
+          .join('\n');
+      })
+      .join('\n\n');
+  }
+
+  private orderContextCandidates(candidates: FusedRetrievalCandidate[]) {
+    const groups = new Map<string, FusedRetrievalCandidate[]>();
+    for (const candidate of candidates) {
+      const groupKey = candidate.documentId
+        ? `document:${candidate.documentId}`
+        : candidate.key;
+      const group = groups.get(groupKey) ?? [];
+      group.push(candidate);
+      groups.set(groupKey, group);
+    }
+    return Array.from(groups.values()).flatMap((group) =>
+      group.slice().sort((a, b) => {
+        if (a.chunkIndex === null || b.chunkIndex === null) return 0;
+        return a.chunkIndex - b.chunkIndex;
+      }),
+    );
   }
 
   private toCandidate(input: RetrievalCandidate) {

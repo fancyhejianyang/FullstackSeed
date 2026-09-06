@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-09-06 修复知识库回答分片内容被二次截断
+- 新增：无
+- 修改：
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat-retrieval.service.ts`（取消入选分片 900 字硬截断，并按文档分片顺序组织回答上下文）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat-retrieval.service.spec.ts`（覆盖长分片完整保留及上下文原文顺序）
+- 删除：无
+- 说明：默认 1200 字分片不再于第 900 字被截断；本次深圳大学“调转档案”详细办理方式可完整进入模型上下文，无需重新分片或重建索引。
+
 ### 2026-09-06 修复大学手册路由并默认启用检索重排
 - 新增：
   - `server/src/knowledge-retrieval-configs/knowledge-retrieval-configs.service.spec.ts`（验证新建检索配置默认启用重排并自动绑定当前聊天配置）
