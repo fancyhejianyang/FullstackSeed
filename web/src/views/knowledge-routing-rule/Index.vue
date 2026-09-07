@@ -37,8 +37,8 @@ const columns: TableColumn[] = [
   { prop: 'matchMode', label: '匹配方式', width: 110, slot: true },
   { prop: 'weight', label: '权重', width: 100 },
   { prop: 'retrievalConfigName', label: '所属检索配置', minWidth: 160 },
+  { prop: 'categoryNames', label: '目标分类', minWidth: 160, slot: true },
   { prop: 'knowledgeBaseNames', label: '目标知识库', minWidth: 180, slot: true },
-  { prop: 'documentNames', label: '目标文档', minWidth: 180, slot: true },
   { prop: 'isEnabled', label: '状态', width: 90, slot: true },
   { prop: 'updatedAt', label: '更新时间', width: 180, slot: true },
 ];
@@ -152,8 +152,8 @@ function getRuleTypeLabel(value: KnowledgeRoutingRuleType) {
         {{ row.knowledgeBaseNames || '—' }}
       </template>
 
-      <template #column-documentNames="{ row }">
-        {{ row.documentNames || '—' }}
+      <template #column-categoryNames="{ row }">
+        {{ row.categoryNames || '—' }}
       </template>
 
       <template #column-isEnabled="{ row }">

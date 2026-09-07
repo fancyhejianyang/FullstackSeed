@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Like, Repository } from 'typeorm';
-import { KnowledgeBaseDocument } from '../knowledge-bases/entities/knowledge-base-document.entity';
+import { KnowledgeBaseCategory } from '../knowledge-bases/entities/knowledge-base-category.entity';
 import { KnowledgeBase } from '../knowledge-bases/entities/knowledge-base.entity';
 import { KnowledgeRetrievalConfig } from '../knowledge-retrieval-configs/entities/knowledge-retrieval-config.entity';
 import {
@@ -13,6 +13,7 @@ import {
   QueryKnowledgeRoutingRuleDto,
   UpdateKnowledgeRoutingRuleDto,
 } from './dto/knowledge-routing-rule.dto';
+import { KnowledgeRoutingRuleCategory } from './entities/knowledge-routing-rule-category.entity';
 import { KnowledgeRoutingRuleDocument } from './entities/knowledge-routing-rule-document.entity';
 import { KnowledgeRoutingRuleKnowledgeBase } from './entities/knowledge-routing-rule-knowledge-base.entity';
 import {
@@ -21,8 +22,8 @@ import {
 } from './entities/knowledge-routing-rule.entity';
 
 type RuleMappingIds = {
+  categoryIds: number[];
   knowledgeBaseIds: number[];
-  documentIds: number[];
 };
 
 export interface KnowledgeRoutingRuleMatch {
@@ -31,8 +32,8 @@ export interface KnowledgeRoutingRuleMatch {
   ruleType: KnowledgeRoutingRuleType;
   matchMode: 'contains' | 'exact';
   weight: number;
+  categoryIds: number[];
   knowledgeBaseIds: number[];
-  documentIds: number[];
 }
 
 @Injectable()
@@ -42,14 +43,16 @@ export class KnowledgeRoutingRulesService {
     private readonly ruleRepository: Repository<KnowledgeRoutingRule>,
     @InjectRepository(KnowledgeRoutingRuleKnowledgeBase)
     private readonly ruleKnowledgeBaseRepository: Repository<KnowledgeRoutingRuleKnowledgeBase>,
+    @InjectRepository(KnowledgeRoutingRuleCategory)
+    private readonly ruleCategoryRepository: Repository<KnowledgeRoutingRuleCategory>,
     @InjectRepository(KnowledgeRoutingRuleDocument)
-    private readonly ruleDocumentRepository: Repository<KnowledgeRoutingRuleDocument>,
+    private readonly legacyRuleDocumentRepository: Repository<KnowledgeRoutingRuleDocument>,
     @InjectRepository(KnowledgeRetrievalConfig)
     private readonly retrievalConfigRepository: Repository<KnowledgeRetrievalConfig>,
     @InjectRepository(KnowledgeBase)
     private readonly knowledgeBaseRepository: Repository<KnowledgeBase>,
-    @InjectRepository(KnowledgeBaseDocument)
-    private readonly documentRepository: Repository<KnowledgeBaseDocument>,
+    @InjectRepository(KnowledgeBaseCategory)
+    private readonly categoryRepository: Repository<KnowledgeBaseCategory>,
   ) {}
 
   async findAll(query: QueryKnowledgeRoutingRuleDto) {
@@ -100,14 +103,14 @@ export class KnowledgeRoutingRulesService {
     const rule = await this.findEntity(id);
     const currentMappingIds = await this.findMappingIds([id]);
     const mappingIds: RuleMappingIds = {
+      categoryIds:
+        dto.categoryIds === undefined
+          ? (currentMappingIds.get(id)?.categoryIds ?? [])
+          : this.normalizeIds(dto.categoryIds),
       knowledgeBaseIds:
         dto.knowledgeBaseIds === undefined
           ? (currentMappingIds.get(id)?.knowledgeBaseIds ?? [])
           : this.normalizeIds(dto.knowledgeBaseIds),
-      documentIds:
-        dto.documentIds === undefined
-          ? (currentMappingIds.get(id)?.documentIds ?? [])
-          : this.normalizeIds(dto.documentIds),
     };
     const payload = await this.toEntityPayload(dto, false);
     const nextRuleType = payload.ruleType ?? rule.ruleType;
@@ -118,7 +121,7 @@ export class KnowledgeRoutingRulesService {
     );
     Object.assign(rule, payload);
     await this.ruleRepository.save(rule);
-    if (dto.knowledgeBaseIds !== undefined || dto.documentIds !== undefined) {
+    if (dto.categoryIds !== undefined || dto.knowledgeBaseIds !== undefined) {
       await this.replaceMappings(id, mappingIds);
     }
     return this.findOne(id);
@@ -169,8 +172,8 @@ export class KnowledgeRoutingRulesService {
       .filter((rule) => this.isRuleMatched(rule, normalizedQuestion))
       .map((rule) => {
         const mappingIds = mappingIdsByRule.get(rule.id) ?? {
+          categoryIds: [],
           knowledgeBaseIds: [],
-          documentIds: [],
         };
         return {
           id: rule.id,
@@ -178,8 +181,8 @@ export class KnowledgeRoutingRulesService {
           ruleType: rule.ruleType,
           matchMode: rule.matchMode,
           weight: Number(rule.weight),
+          categoryIds: mappingIds.categoryIds,
           knowledgeBaseIds: mappingIds.knowledgeBaseIds,
-          documentIds: mappingIds.documentIds,
         };
       });
   }
@@ -231,6 +234,14 @@ export class KnowledgeRoutingRulesService {
     if (!retrievalConfig) {
       throw new BadRequestException('所属知识库检索配置不存在');
     }
+    const categories = mappingIds.categoryIds.length
+      ? await this.categoryRepository.find({
+          where: { id: In(mappingIds.categoryIds) },
+        })
+      : [];
+    if (categories.length !== mappingIds.categoryIds.length) {
+      throw new BadRequestException('部分目标分类不存在');
+    }
     const bases = mappingIds.knowledgeBaseIds.length
       ? await this.knowledgeBaseRepository.find({
           where: { id: In(mappingIds.knowledgeBaseIds) },
@@ -239,15 +250,27 @@ export class KnowledgeRoutingRulesService {
     if (bases.length !== mappingIds.knowledgeBaseIds.length) {
       throw new BadRequestException('部分目标知识库不存在');
     }
-    if (['alias', 'exclusive'].includes(ruleType) && !bases.length) {
+    if (
+      ['alias', 'exclusive'].includes(ruleType) &&
+      !categories.length &&
+      !bases.length
+    ) {
       throw new BadRequestException(
-        '别名升权和专属路由规则至少需要关联一个目标知识库',
+        '别名升权和专属路由规则至少需要关联一个目标分类或知识库',
       );
     }
     const selectedBaseIds = new Set(retrievalConfig.knowledgeBaseIds ?? []);
     const selectedCategoryIds = new Set(retrievalConfig.categoryIds ?? []);
     const isAllKnowledgeBases =
       selectedBaseIds.size === 0 && selectedCategoryIds.size === 0;
+    if (
+      !isAllKnowledgeBases &&
+      categories.some((category) => !selectedCategoryIds.has(category.id))
+    ) {
+      throw new BadRequestException(
+        '目标分类必须处于所属知识库检索配置的检索范围内',
+      );
+    }
     if (
       !isAllKnowledgeBases &&
       bases.some(
@@ -260,36 +283,29 @@ export class KnowledgeRoutingRulesService {
         '目标知识库必须处于所属知识库检索配置的检索范围内',
       );
     }
-
-    const documents = mappingIds.documentIds.length
-      ? await this.documentRepository.find({
-          where: { id: In(mappingIds.documentIds) },
-        })
-      : [];
-    if (documents.length !== mappingIds.documentIds.length) {
-      throw new BadRequestException('部分目标知识库文档不存在');
-    }
-    const baseIdSet = new Set(mappingIds.knowledgeBaseIds);
     if (
-      documents.some((document) => !baseIdSet.has(document.knowledgeBaseId))
+      categories.length &&
+      bases.some(
+        (base) => !mappingIds.categoryIds.includes(base.categoryId ?? 0),
+      )
     ) {
-      throw new BadRequestException('目标文档必须隶属于已选择的目标知识库');
+      throw new BadRequestException('目标知识库必须隶属于已选择的目标分类');
     }
   }
 
   private async replaceMappings(ruleId: number, mappingIds: RuleMappingIds) {
     await this.removeMappings([ruleId]);
+    if (mappingIds.categoryIds.length) {
+      await this.ruleCategoryRepository.save(
+        mappingIds.categoryIds.map((categoryId) =>
+          this.ruleCategoryRepository.create({ ruleId, categoryId }),
+        ),
+      );
+    }
     if (mappingIds.knowledgeBaseIds.length) {
       await this.ruleKnowledgeBaseRepository.save(
         mappingIds.knowledgeBaseIds.map((knowledgeBaseId) =>
           this.ruleKnowledgeBaseRepository.create({ ruleId, knowledgeBaseId }),
-        ),
-      );
-    }
-    if (mappingIds.documentIds.length) {
-      await this.ruleDocumentRepository.save(
-        mappingIds.documentIds.map((documentId) =>
-          this.ruleDocumentRepository.create({ ruleId, documentId }),
         ),
       );
     }
@@ -298,7 +314,8 @@ export class KnowledgeRoutingRulesService {
   private async removeMappings(ruleIds: number[]) {
     await Promise.all([
       this.ruleKnowledgeBaseRepository.delete({ ruleId: In(ruleIds) }),
-      this.ruleDocumentRepository.delete({ ruleId: In(ruleIds) }),
+      this.ruleCategoryRepository.delete({ ruleId: In(ruleIds) }),
+      this.legacyRuleDocumentRepository.delete({ ruleId: In(ruleIds) }),
     ]);
   }
 
@@ -311,6 +328,13 @@ export class KnowledgeRoutingRulesService {
         where: { id: In(rules.map((rule) => rule.retrievalConfigId)) },
       }),
     ]);
+    const allCategoryIds = Array.from(
+      new Set(
+        Array.from(mappingIdsByRule.values()).flatMap(
+          (item) => item.categoryIds,
+        ),
+      ),
+    );
     const allKnowledgeBaseIds = Array.from(
       new Set(
         Array.from(mappingIdsByRule.values()).flatMap(
@@ -318,76 +342,67 @@ export class KnowledgeRoutingRulesService {
         ),
       ),
     );
-    const allDocumentIds = Array.from(
-      new Set(
-        Array.from(mappingIdsByRule.values()).flatMap(
-          (item) => item.documentIds,
-        ),
-      ),
-    );
-    const [bases, documents] = await Promise.all([
+    const [categories, bases] = await Promise.all([
+      allCategoryIds.length
+        ? this.categoryRepository.find({ where: { id: In(allCategoryIds) } })
+        : [],
       allKnowledgeBaseIds.length
         ? this.knowledgeBaseRepository.find({
             where: { id: In(allKnowledgeBaseIds) },
           })
         : [],
-      allDocumentIds.length
-        ? this.documentRepository.find({ where: { id: In(allDocumentIds) } })
-        : [],
     ]);
     const configMap = new Map(configs.map((item) => [item.id, item]));
+    const categoryMap = new Map(categories.map((item) => [item.id, item]));
     const baseMap = new Map(bases.map((item) => [item.id, item]));
-    const documentMap = new Map(documents.map((item) => [item.id, item]));
     return rules.map((rule) => {
       const mappingIds = mappingIdsByRule.get(rule.id) ?? {
+        categoryIds: [],
         knowledgeBaseIds: [],
-        documentIds: [],
       };
+      const selectedCategories = mappingIds.categoryIds
+        .map((id) => categoryMap.get(id))
+        .filter((item): item is KnowledgeBaseCategory => Boolean(item));
       const selectedBases = mappingIds.knowledgeBaseIds
         .map((id) => baseMap.get(id))
         .filter((item): item is KnowledgeBase => Boolean(item));
-      const selectedDocuments = mappingIds.documentIds
-        .map((id) => documentMap.get(id))
-        .filter((item): item is KnowledgeBaseDocument => Boolean(item));
       return {
         ...rule,
         retrievalConfigName:
           configMap.get(rule.retrievalConfigId)?.name ??
           `检索配置 #${rule.retrievalConfigId}`,
+        categoryIds: selectedCategories.map((item) => item.id),
+        categoryNames: selectedCategories.map((item) => item.name).join('、'),
         knowledgeBaseIds: selectedBases.map((item) => item.id),
         knowledgeBaseNames: selectedBases.map((item) => item.name).join('、'),
-        documentIds: selectedDocuments.map((item) => item.id),
-        documentNames: selectedDocuments
-          .map((item) => item.title || item.sourceName || `文档 #${item.id}`)
-          .join('、'),
       };
     });
   }
 
   private async findMappingIds(ruleIds: number[]) {
-    const [baseMappings, documentMappings] = await Promise.all([
+    const [categoryMappings, baseMappings] = await Promise.all([
+      this.ruleCategoryRepository.find({ where: { ruleId: In(ruleIds) } }),
       this.ruleKnowledgeBaseRepository.find({ where: { ruleId: In(ruleIds) } }),
-      this.ruleDocumentRepository.find({ where: { ruleId: In(ruleIds) } }),
     ]);
     const result = new Map<number, RuleMappingIds>();
     ruleIds.forEach((ruleId) => {
-      result.set(ruleId, { knowledgeBaseIds: [], documentIds: [] });
+      result.set(ruleId, { categoryIds: [], knowledgeBaseIds: [] });
+    });
+    categoryMappings.forEach((mapping) => {
+      result.get(mapping.ruleId)?.categoryIds.push(mapping.categoryId);
     });
     baseMappings.forEach((mapping) => {
       result
         .get(mapping.ruleId)
         ?.knowledgeBaseIds.push(mapping.knowledgeBaseId);
     });
-    documentMappings.forEach((mapping) => {
-      result.get(mapping.ruleId)?.documentIds.push(mapping.documentId);
-    });
     return result;
   }
 
   private mappingIdsFromDto(dto: CreateKnowledgeRoutingRuleDto) {
     return {
+      categoryIds: this.normalizeIds(dto.categoryIds),
       knowledgeBaseIds: this.normalizeIds(dto.knowledgeBaseIds),
-      documentIds: this.normalizeIds(dto.documentIds),
     };
   }
 

@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-09-07 调整知识库路由目标为分类加知识库
+- 新增：
+  - `server/src/knowledge-routing-rules/entities/knowledge-routing-rule-category.entity.ts`（路由规则与目标分类的映射实体）
+  - `server/src/migrations/1788667200000-ReplaceKnowledgeRoutingDocumentsWithCategories.ts`（创建分类映射，并将历史文档映射转换为所属分类）
+- 修改：
+  - `server/src/knowledge-routing-rules/`（路由规则 DTO、模块和服务改为维护 `categoryIds + knowledgeBaseIds`，校验知识库从属于所选分类）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat-retrieval.service.ts`、`entities/knowledge-ai-chat-message.entity.ts`（按分类展开路由范围，并记录分类命中快照）
+  - `web/src/api/knowledgeRoutingRule.ts`、`web/src/views/knowledge-routing-rule/`（将目标文档替换为目标分类，目标知识库随分类收窄，列表/详情同步展示分类）
+  - `CHANGELOG.md`（记录本次调整）
+- 删除：无
+- 说明：分类是路由粗粒度范围，知识库是可选精确范围；旧文档映射表保留但不再参与新规则或运行时路由，迁移会保留其所属分类信息。
+
 ### 2026-09-07 接入知识库路由规则到 AI 检索
 - 新增：
   - `server/src/migrations/1788663600000-RecordKnowledgeRoutingRuleMatches.ts`（记录聊天消息命中的路由规则快照）

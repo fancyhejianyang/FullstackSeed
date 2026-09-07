@@ -52,14 +52,14 @@ export class CreateKnowledgeRoutingRuleDto {
   @IsInt({ each: true })
   @Min(1, { each: true })
   @IsOptional()
-  knowledgeBaseIds?: number[];
+  categoryIds?: number[];
 
   @IsArray()
   @Type(() => Number)
   @IsInt({ each: true })
   @Min(1, { each: true })
   @IsOptional()
-  documentIds?: number[];
+  knowledgeBaseIds?: number[];
 
   @IsBoolean()
   @IsOptional()

@@ -11,10 +11,10 @@ export interface KnowledgeRoutingRule {
   weight: number;
   retrievalConfigId: number;
   retrievalConfigName: string;
+  categoryIds: number[];
+  categoryNames: string;
   knowledgeBaseIds: number[];
   knowledgeBaseNames: string;
-  documentIds: number[];
-  documentNames: string;
   isEnabled: boolean;
   description: string | null;
   createdAt: string;
@@ -41,8 +41,8 @@ export interface KnowledgeRoutingRuleForm {
   matchMode: KnowledgeRoutingMatchMode;
   weight: number;
   retrievalConfigId: number;
+  categoryIds: number[];
   knowledgeBaseIds: number[];
-  documentIds: number[];
   isEnabled: boolean;
   description?: string;
 }

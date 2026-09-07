@@ -51,9 +51,6 @@ interface RetrievalPlan {
   query: string;
   queryRewritten: boolean;
   routedKnowledgeBaseIds: number[];
-  restrictedDocumentIds: number[];
-  documentRestrictedKnowledgeBaseIds: number[];
-  unrestrictedKnowledgeBaseIds: number[];
   activeKnowledgeBaseId: number | null;
   inventoryQuery: boolean;
   sessionContextReused: boolean;
@@ -64,9 +61,6 @@ interface RetrievalPlan {
 interface RoutingRuleScope {
   matches: KnowledgeRoutingRuleMatch[];
   exclusiveKnowledgeBaseIds: number[];
-  restrictedDocumentIds: number[];
-  documentRestrictedKnowledgeBaseIds: number[];
-  unrestrictedKnowledgeBaseIds: number[];
   hasAliasRoute: boolean;
 }
 
@@ -240,16 +234,8 @@ export class KnowledgeAiChatRetrievalService {
         : this.findVectorCandidates(plan.query, routedBases, candidateLimit),
     ]);
 
-    const filteredTextCandidates = this.filterByRoutingRuleDocuments(
-      textScored,
-      plan,
-    );
-    const filteredVectorCandidates = this.filterByRoutingRuleDocuments(
-      vectorScored,
-      plan,
-    );
     const fused = this.applyRoutingRuleWeights(
-      this.fuseCandidates(filteredTextCandidates, filteredVectorCandidates, {
+      this.fuseCandidates(textScored, vectorScored, {
         textWeight,
         vectorWeight,
         rrfK: Math.max(1, Number(config.rrfK || 60)),
@@ -404,11 +390,6 @@ export class KnowledgeAiChatRetrievalService {
           .length
           ? routingRuleScope.exclusiveKnowledgeBaseIds
           : bases.map((base) => base.id),
-        restrictedDocumentIds: routingRuleScope.restrictedDocumentIds,
-        documentRestrictedKnowledgeBaseIds:
-          routingRuleScope.documentRestrictedKnowledgeBaseIds,
-        unrestrictedKnowledgeBaseIds:
-          routingRuleScope.unrestrictedKnowledgeBaseIds,
         activeKnowledgeBaseId: null,
         inventoryQuery: true,
         sessionContextReused: false,
@@ -423,11 +404,6 @@ export class KnowledgeAiChatRetrievalService {
         query: question,
         queryRewritten: false,
         routedKnowledgeBaseIds: routingRuleScope.exclusiveKnowledgeBaseIds,
-        restrictedDocumentIds: routingRuleScope.restrictedDocumentIds,
-        documentRestrictedKnowledgeBaseIds:
-          routingRuleScope.documentRestrictedKnowledgeBaseIds,
-        unrestrictedKnowledgeBaseIds:
-          routingRuleScope.unrestrictedKnowledgeBaseIds,
         activeKnowledgeBaseId:
           routingRuleScope.exclusiveKnowledgeBaseIds.length === 1
             ? routingRuleScope.exclusiveKnowledgeBaseIds[0]
@@ -463,9 +439,6 @@ export class KnowledgeAiChatRetrievalService {
         routedKnowledgeBaseIds: explicitRoutes
           .slice(0, 2)
           .map((route) => route.id),
-        restrictedDocumentIds: [],
-        documentRestrictedKnowledgeBaseIds: [],
-        unrestrictedKnowledgeBaseIds: [],
         activeKnowledgeBaseId:
           explicitRoutes.length === 1 ? explicitRoutes[0].id : null,
         inventoryQuery: false,
@@ -480,9 +453,6 @@ export class KnowledgeAiChatRetrievalService {
         query,
         queryRewritten: query !== question,
         routedKnowledgeBaseIds: [preferredId],
-        restrictedDocumentIds: [],
-        documentRestrictedKnowledgeBaseIds: [],
-        unrestrictedKnowledgeBaseIds: [],
         activeKnowledgeBaseId: preferredId,
         inventoryQuery: false,
         sessionContextReused: true,
@@ -510,9 +480,6 @@ export class KnowledgeAiChatRetrievalService {
         hasConfidentRoute && bestRoute
           ? [bestRoute.id]
           : bases.map((base) => base.id),
-      restrictedDocumentIds: [],
-      documentRestrictedKnowledgeBaseIds: [],
-      unrestrictedKnowledgeBaseIds: [],
       activeKnowledgeBaseId:
         hasConfidentRoute && bestRoute ? bestRoute.id : null,
       inventoryQuery: false,
@@ -623,76 +590,51 @@ export class KnowledgeAiChatRetrievalService {
     rules: KnowledgeRoutingRuleMatch[],
     bases: KnowledgeBase[],
   ): RoutingRuleScope {
-    const scopeBaseIds = new Set(bases.map((base) => base.id));
-    const scopedRules = rules.map((rule) => ({
-      rule,
-      knowledgeBaseIds: rule.knowledgeBaseIds.filter((id) =>
-        scopeBaseIds.has(id),
-      ),
+    const matches = rules.map((rule) => ({
+      ...rule,
+      knowledgeBaseIds: this.resolveRuleKnowledgeBaseIds(rule, bases),
     }));
-    const exclusiveRules = scopedRules.filter(
-      ({ rule, knowledgeBaseIds }) =>
-        rule.ruleType === 'exclusive' && knowledgeBaseIds.length,
-    );
-    const documentRestrictedRules = exclusiveRules.filter(
-      ({ rule }) => rule.documentIds.length,
-    );
-    const unrestrictedRules = exclusiveRules.filter(
-      ({ rule }) => !rule.documentIds.length,
+    const exclusiveRules = matches.filter(
+      (rule) => rule.ruleType === 'exclusive' && rule.knowledgeBaseIds.length,
     );
     return {
-      matches: rules,
+      matches,
       exclusiveKnowledgeBaseIds: this.uniqueIds(
-        exclusiveRules.flatMap(({ knowledgeBaseIds }) => knowledgeBaseIds),
+        exclusiveRules.flatMap((rule) => rule.knowledgeBaseIds),
       ),
-      restrictedDocumentIds: this.uniqueIds(
-        documentRestrictedRules.flatMap(({ rule }) => rule.documentIds),
-      ),
-      documentRestrictedKnowledgeBaseIds: this.uniqueIds(
-        documentRestrictedRules.flatMap(
-          ({ knowledgeBaseIds }) => knowledgeBaseIds,
-        ),
-      ),
-      unrestrictedKnowledgeBaseIds: this.uniqueIds(
-        unrestrictedRules.flatMap(({ knowledgeBaseIds }) => knowledgeBaseIds),
-      ),
-      hasAliasRoute: scopedRules.some(
-        ({ rule, knowledgeBaseIds }) =>
-          rule.ruleType === 'alias' && knowledgeBaseIds.length > 0,
+      hasAliasRoute: matches.some(
+        (rule) => rule.ruleType === 'alias' && rule.knowledgeBaseIds.length > 0,
       ),
     };
+  }
+
+  private resolveRuleKnowledgeBaseIds(
+    rule: KnowledgeRoutingRuleMatch,
+    bases: KnowledgeBase[],
+  ) {
+    const scopeBaseIds = new Set(bases.map((base) => base.id));
+    const categoryBaseIds = rule.categoryIds.length
+      ? bases
+          .filter((base) => rule.categoryIds.includes(base.categoryId ?? 0))
+          .map((base) => base.id)
+      : [];
+    const selectedBaseIds = rule.knowledgeBaseIds.filter((id) =>
+      scopeBaseIds.has(id),
+    );
+    if (rule.categoryIds.length && selectedBaseIds.length) {
+      const categoryBaseIdSet = new Set(categoryBaseIds);
+      return selectedBaseIds.filter((id) => categoryBaseIdSet.has(id));
+    }
+    if (selectedBaseIds.length) return selectedBaseIds;
+    return categoryBaseIds;
   }
 
   private emptyRoutingRuleScope(): RoutingRuleScope {
     return {
       matches: [],
       exclusiveKnowledgeBaseIds: [],
-      restrictedDocumentIds: [],
-      documentRestrictedKnowledgeBaseIds: [],
-      unrestrictedKnowledgeBaseIds: [],
       hasAliasRoute: false,
     };
-  }
-
-  private filterByRoutingRuleDocuments<T extends RetrievalCandidate>(
-    candidates: T[],
-    plan: RetrievalPlan,
-  ) {
-    if (!plan.documentRestrictedKnowledgeBaseIds.length) return candidates;
-    const documentRestrictedBaseIds = new Set(
-      plan.documentRestrictedKnowledgeBaseIds,
-    );
-    const unrestrictedBaseIds = new Set(plan.unrestrictedKnowledgeBaseIds);
-    const allowedDocumentIds = new Set(plan.restrictedDocumentIds);
-    return candidates.filter((candidate) => {
-      if (!documentRestrictedBaseIds.has(candidate.knowledgeBaseId)) {
-        return true;
-      }
-      if (unrestrictedBaseIds.has(candidate.knowledgeBaseId)) return true;
-      return Boolean(
-        candidate.documentId && allowedDocumentIds.has(candidate.documentId),
-      );
-    });
   }
 
   private applyRoutingRuleWeights(
@@ -790,6 +732,7 @@ export class KnowledgeAiChatRetrievalService {
       .createQueryBuilder('base')
       .select([
         'base.id',
+        'base.categoryId',
         'base.name',
         'base.code',
         'base.description',

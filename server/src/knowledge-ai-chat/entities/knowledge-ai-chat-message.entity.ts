@@ -57,8 +57,8 @@ export class KnowledgeAiChatMessage extends BaseEntity {
     ruleType: 'generic' | 'alias' | 'exclusive';
     matchMode: 'contains' | 'exact';
     weight: number;
+    categoryIds: number[];
     knowledgeBaseIds: number[];
-    documentIds: number[];
   }> | null;
 
   @Column({ type: 'tinyint', default: false })

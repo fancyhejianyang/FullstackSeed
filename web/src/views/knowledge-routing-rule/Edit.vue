@@ -16,9 +16,9 @@ import {
 } from '@/api/knowledgeRoutingRule';
 import {
   getKnowledgeBases,
-  getKnowledgeBaseDocuments,
+  getKnowledgeBaseCategoryTree,
   type KnowledgeBase,
-  type KnowledgeBaseDocument,
+  type KnowledgeBaseCategoryTreeNode,
 } from '@/api/knowledgeBase';
 import {
   getKnowledgeRetrievalConfigs,
@@ -37,8 +37,8 @@ type RoutingRuleEditForm = {
   matchMode: KnowledgeRoutingMatchMode;
   weight: number | null;
   retrievalConfigId: number | '';
+  categoryIds: string[];
   knowledgeBaseIds: string[];
-  documentIds: string[];
   isEnabled: boolean;
   description: string;
 };
@@ -49,7 +49,7 @@ const submitting = ref(false);
 const formRef = ref<InstanceType<typeof Form>>();
 const retrievalConfigs = ref<KnowledgeRetrievalConfig[]>([]);
 const knowledgeBases = ref<KnowledgeBase[]>([]);
-const documents = ref<KnowledgeBaseDocument[]>([]);
+const categoryTree = ref<KnowledgeBaseCategoryTreeNode[]>([]);
 
 const form = reactive<RoutingRuleEditForm>({
   term: '',
@@ -57,8 +57,8 @@ const form = reactive<RoutingRuleEditForm>({
   matchMode: 'contains',
   weight: -0.8,
   retrievalConfigId: '',
+  categoryIds: [],
   knowledgeBaseIds: [],
-  documentIds: [],
   isEnabled: true,
   description: '',
 });
@@ -84,25 +84,34 @@ const scopedKnowledgeBases = computed(() => {
   );
 });
 
-const knowledgeBaseOptions = computed(() =>
-  scopedKnowledgeBases.value.map((item) => ({
-    label: `${item.name}${item.code ? `（${item.code}）` : ''}`,
-    value: String(item.id),
-  })),
+const scopedCategoryIds = computed(() => {
+  const config = selectedRetrievalConfig.value;
+  if (!config) return new Set(flattenCategories(categoryTree.value).map((item) => item.id));
+  const selectedCategoryIds = new Set(config.categoryIds ?? []);
+  const selectedBaseIds = new Set(config.knowledgeBaseIds ?? []);
+  if (!selectedCategoryIds.size && !selectedBaseIds.size) {
+    return new Set(flattenCategories(categoryTree.value).map((item) => item.id));
+  }
+  return selectedCategoryIds;
+});
+
+const categoryOptions = computed(() =>
+  flattenCategories(categoryTree.value)
+    .filter((item) => scopedCategoryIds.value.has(item.id))
+    .map((item) => ({ label: item.label, value: String(item.id) })),
 );
 
-const availableDocuments = computed(() => {
-  const selectedBaseIds = new Set(form.knowledgeBaseIds.map(Number));
-  return documents.value.filter((item) => selectedBaseIds.has(item.knowledgeBaseId));
-});
-
-const documentOptions = computed(() => {
-  const baseMap = new Map(knowledgeBases.value.map((item) => [item.id, item.name]));
-  return availableDocuments.value.map((item) => ({
-    label: `${baseMap.get(item.knowledgeBaseId) || `知识库 #${item.knowledgeBaseId}`} / ${item.title}`,
+const knowledgeBaseOptions = computed(() =>
+  scopedKnowledgeBases.value
+    .filter(
+      (item) =>
+        !form.categoryIds.length || form.categoryIds.map(Number).includes(item.categoryId ?? 0),
+    )
+    .map((item) => ({
+      label: `${item.name}${item.code ? `（${item.code}）` : ''}`,
     value: String(item.id),
-  }));
-});
+    })),
+);
 
 const fields = computed<FormField[]>(() => [
   { prop: 'term', label: '路由词', type: 'input', placeholder: '如 深大、报销、产品型号' },
@@ -132,19 +141,18 @@ const fields = computed<FormField[]>(() => [
     placeholder: '请选择检索配置',
   },
   {
+    prop: 'categoryIds',
+    label: '目标分类',
+    type: 'selectMultiple',
+    options: categoryOptions,
+    placeholder: needsTargets.value ? '请选择目标分类或知识库' : '公共词可不关联目标范围',
+  },
+  {
     prop: 'knowledgeBaseIds',
     label: '目标知识库',
     type: 'selectMultiple',
     options: knowledgeBaseOptions,
-    placeholder: needsTargets.value ? '请选择至少一个目标知识库' : '公共词可不关联目标知识库',
-  },
-  {
-    prop: 'documentIds',
-    label: '目标文档',
-    type: 'selectMultiple',
-    options: documentOptions,
-    componentProps: { disabled: !form.knowledgeBaseIds.length },
-    placeholder: '可选；仅能选择已关联知识库下的文档',
+    placeholder: form.categoryIds.length ? '可选；仅能选择目标分类下的知识库' : '可选；用于精确限定路由范围',
   },
   {
     prop: 'isEnabled',
@@ -178,10 +186,10 @@ watch(visible, async (value) => {
 });
 
 watch(
-  () => form.knowledgeBaseIds,
+  () => form.categoryIds,
   () => {
-    const selectableIds = new Set(availableDocuments.value.map((item) => String(item.id)));
-    form.documentIds = form.documentIds.filter((id) => selectableIds.has(id));
+    const selectableIds = new Set(knowledgeBaseOptions.value.map((item) => item.value));
+    form.knowledgeBaseIds = form.knowledgeBaseIds.filter((id) => selectableIds.has(id));
   },
   { deep: true },
 );
@@ -189,7 +197,9 @@ watch(
 watch(
   () => form.retrievalConfigId,
   () => {
-    const selectableIds = new Set(scopedKnowledgeBases.value.map((item) => String(item.id)));
+    const selectableCategoryIds = new Set(categoryOptions.value.map((item) => item.value));
+    form.categoryIds = form.categoryIds.filter((id) => selectableCategoryIds.has(id));
+    const selectableIds = new Set(knowledgeBaseOptions.value.map((item) => item.value));
     form.knowledgeBaseIds = form.knowledgeBaseIds.filter((id) => selectableIds.has(id));
   },
 );
@@ -203,14 +213,14 @@ watch(
 );
 
 async function fetchOptions() {
-  const [retrievalResult, knowledgeBaseResult, documentResult] = await Promise.all([
+  const [retrievalResult, knowledgeBaseResult, categoryResult] = await Promise.all([
     getKnowledgeRetrievalConfigs({ page: 1, pageSize: 500 }),
     getKnowledgeBases({ page: 1, pageSize: 500 }),
-    getKnowledgeBaseDocuments({ page: 1, pageSize: 500 }),
+    getKnowledgeBaseCategoryTree({}),
   ]);
   retrievalConfigs.value = retrievalResult.list;
   knowledgeBases.value = knowledgeBaseResult.list;
-  documents.value = documentResult.list;
+  categoryTree.value = categoryResult;
 }
 
 function resetForm() {
@@ -219,8 +229,8 @@ function resetForm() {
   form.matchMode = 'contains';
   form.weight = -0.8;
   form.retrievalConfigId = retrievalConfigOptions.value[0]?.value ?? '';
+  form.categoryIds = [];
   form.knowledgeBaseIds = [];
-  form.documentIds = [];
   form.isEnabled = true;
   form.description = '';
 }
@@ -231,8 +241,8 @@ function fillForm(data: KnowledgeRoutingRule) {
   form.matchMode = data.matchMode ?? 'contains';
   form.weight = Number(data.weight);
   form.retrievalConfigId = data.retrievalConfigId;
+  form.categoryIds = (data.categoryIds ?? []).map(String);
   form.knowledgeBaseIds = (data.knowledgeBaseIds ?? []).map(String);
-  form.documentIds = (data.documentIds ?? []).map(String);
   form.isEnabled = !!data.isEnabled;
   form.description = data.description ?? '';
 }
@@ -250,8 +260,8 @@ function buildPayload(): KnowledgeRoutingRuleForm {
     matchMode: form.matchMode,
     weight: Number(form.weight),
     retrievalConfigId: Number(form.retrievalConfigId),
+    categoryIds: form.categoryIds.map(Number),
     knowledgeBaseIds: form.knowledgeBaseIds.map(Number),
-    documentIds: form.documentIds.map(Number),
     isEnabled: form.isEnabled,
     description: form.description.trim(),
   };
@@ -259,8 +269,8 @@ function buildPayload(): KnowledgeRoutingRuleForm {
 
 async function handleSubmit() {
   await formRef.value?.validate();
-  if (needsTargets.value && !form.knowledgeBaseIds.length) {
-    ElMessage.warning('当前规则类型至少需要关联一个目标知识库');
+  if (needsTargets.value && !form.categoryIds.length && !form.knowledgeBaseIds.length) {
+    ElMessage.warning('当前规则类型至少需要关联一个目标分类或知识库');
     return;
   }
   submitting.value = true;
@@ -278,6 +288,16 @@ async function handleSubmit() {
     submitting.value = false;
   }
 }
+
+function flattenCategories(
+  nodes: KnowledgeBaseCategoryTreeNode[],
+  level = 0,
+): Array<{ id: number; label: string }> {
+  return nodes.flatMap((node) => [
+    { id: node.id, label: `${'　'.repeat(level)}${node.name}` },
+    ...flattenCategories(node.children ?? [], level + 1),
+  ]);
+}
 </script>
 
 <template>
@@ -291,7 +311,7 @@ async function handleSubmit() {
     <div v-loading="loading">
       <Form ref="formRef" v-model="form" :fields="fields" :rules="rules" label-width="120px" />
       <div class="knowledge-routing-rule-edit__tip">
-        当前仅保存路由规则与映射关系，尚未接入 AI 聊天检索。公共词使用负权重；别名和专属路由使用正权重。
+        路由按“目标分类 → 可选目标知识库”收窄范围，并已接入 AI 聊天检索。公共词使用负权重；别名和专属路由使用正权重。
       </div>
     </div>
   </Dialog>

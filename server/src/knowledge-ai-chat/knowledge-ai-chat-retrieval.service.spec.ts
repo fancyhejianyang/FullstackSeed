@@ -94,14 +94,15 @@ interface RetrievalInternals {
     timeoutMinutes: number,
     now?: Date,
   ) => boolean;
+  resolveRoutingRuleScope: (
+    rules: KnowledgeRoutingRuleMatch[],
+    bases: KnowledgeBase[],
+  ) => RoutingRuleScopeInput;
 }
 
 interface RoutingRuleScopeInput {
   matches: KnowledgeRoutingRuleMatch[];
   exclusiveKnowledgeBaseIds: number[];
-  restrictedDocumentIds: number[];
-  documentRestrictedKnowledgeBaseIds: number[];
-  unrestrictedKnowledgeBaseIds: number[];
   hasAliasRoute: boolean;
 }
 
@@ -309,8 +310,8 @@ describe('KnowledgeAiChatRetrievalService', () => {
           ruleType: 'exclusive',
           matchMode: 'contains',
           weight: 1,
+          categoryIds: [],
           knowledgeBaseIds: [2],
-          documentIds: [],
         },
       ]),
     );
@@ -337,8 +338,8 @@ describe('KnowledgeAiChatRetrievalService', () => {
           ruleType: 'alias',
           matchMode: 'contains',
           weight: 0.8,
+          categoryIds: [],
           knowledgeBaseIds: [2],
-          documentIds: [],
         },
       ]),
     );
@@ -346,6 +347,29 @@ describe('KnowledgeAiChatRetrievalService', () => {
     expect(plan.routedKnowledgeBaseIds).toEqual([2]);
     expect(plan.activeKnowledgeBaseId).toBe(2);
     expect(plan.sessionContextReused).toBe(false);
+  });
+
+  it('expands an exclusive category rule to its scoped knowledge bases', () => {
+    const bases = [
+      buildBase(1, '中国科学院大学', { categoryId: 10 }),
+      buildBase(2, '深圳大学', { categoryId: 20 }),
+    ];
+    const scope = internals.resolveRoutingRuleScope(
+      [
+        {
+          id: 8,
+          term: '深圳高校',
+          ruleType: 'exclusive',
+          matchMode: 'contains',
+          weight: 1,
+          categoryIds: [20],
+          knowledgeBaseIds: [],
+        },
+      ],
+      bases,
+    );
+
+    expect(scope.exclusiveKnowledgeBaseIds).toEqual([2]);
   });
 
   it('recognizes a shortened university name regardless of database order', () => {
@@ -523,6 +547,7 @@ function buildBase(
   id: number,
   name: string,
   metadata: {
+    categoryId?: number;
     hitKeywords?: string;
     colloquialDescription?: string;
     description?: string;
@@ -530,6 +555,7 @@ function buildBase(
 ) {
   return {
     id,
+    categoryId: metadata.categoryId ?? null,
     name,
     code: '',
     description: metadata.description ?? '',
@@ -578,23 +604,11 @@ function buildRoutingRuleScope(
   const exclusiveRules = matches.filter(
     (rule) => rule.ruleType === 'exclusive',
   );
-  const documentRestrictedRules = exclusiveRules.filter(
-    (rule) => rule.documentIds.length,
-  );
   return {
     matches,
     exclusiveKnowledgeBaseIds: exclusiveRules.flatMap(
       (rule) => rule.knowledgeBaseIds,
     ),
-    restrictedDocumentIds: documentRestrictedRules.flatMap(
-      (rule) => rule.documentIds,
-    ),
-    documentRestrictedKnowledgeBaseIds: documentRestrictedRules.flatMap(
-      (rule) => rule.knowledgeBaseIds,
-    ),
-    unrestrictedKnowledgeBaseIds: exclusiveRules
-      .filter((rule) => !rule.documentIds.length)
-      .flatMap((rule) => rule.knowledgeBaseIds),
     hasAliasRoute: matches.some(
       (rule) => rule.ruleType === 'alias' && rule.knowledgeBaseIds.length > 0,
     ),
