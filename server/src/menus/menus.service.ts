@@ -173,6 +173,15 @@ const SEED_MENUS: SeedMenu[] = [
     parentPath: '/chat-management',
   },
   {
+    name: '知识库路由规则',
+    path: '/chat-management/routing-rules',
+    icon: '',
+    sort: 36,
+    permissionCode: 'KnowledgeRoutingRule.read',
+    isSystem: true,
+    parentPath: '/chat-management',
+  },
+  {
     name: '问题记录',
     path: '/chat-management/records',
     icon: '',

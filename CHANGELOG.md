@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-09-07 新增知识库路由规则配置模块
+- 新增：
+  - `server/src/knowledge-routing-rules/`（路由规则主表、知识库/文档映射表、CRUD 接口与映射范围校验）
+  - `server/src/migrations/1788656400000-CreateKnowledgeRoutingRules.ts`（创建路由规则及两张映射表）
+  - `web/src/api/knowledgeRoutingRule.ts`、`web/src/views/knowledge-routing-rule/`（规则管理接口、列表、筛选、详情与编辑页面）
+- 修改：
+  - `server/src/app.module.ts`、`server/src/users/users.service.ts`、`server/src/menus/menus.service.ts`（挂载模块、补齐管理员权限和聊天管理菜单）
+  - `web/src/router/index.ts`（增加知识库路由规则页面路由）
+  - `CHANGELOG.md`（记录本次功能）
+- 删除：无
+- 说明：规则支持公共词降权、别名升权和专属路由，按“检索配置 → 目标知识库 → 可选目标文档”建立映射；本次只提供管理能力，尚未接入 AI 检索运行时。
+
 ### 2026-09-07 补充 AI 会话管理字段说明
 - 新增：
   - `MD/AI会话管理字段说明.md`（以会话主记录、检索上下文、消息明细和读写流程说明 AI 会话管理）

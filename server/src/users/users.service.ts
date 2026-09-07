@@ -25,6 +25,7 @@ const STANDARD_ACTIONS = [
 const ADMIN_PERMISSION_MODULES = [
   'Demo',
   'KnowledgeBase',
+  'KnowledgeRoutingRule',
   'User',
   'Role',
   'Permission',
