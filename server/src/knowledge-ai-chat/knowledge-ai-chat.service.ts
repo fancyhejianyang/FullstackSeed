@@ -20,6 +20,7 @@ import {
   KnowledgeAiChatRetrievalService,
   type KnowledgeRetrievalHit,
 } from './knowledge-ai-chat-retrieval.service';
+import type { KnowledgeRoutingRuleMatch } from '../knowledge-routing-rules/knowledge-routing-rules.service';
 
 export interface KnowledgeAiChatStreamWriter {
   writeEvent: (event: string, data: unknown) => void;
@@ -38,6 +39,7 @@ interface KnowledgeRetrievalState {
   inventoryQuery: boolean;
   sessionContextReused: boolean;
   rerankApplied: boolean;
+  routingRuleMatches: KnowledgeRoutingRuleMatch[];
   hits: KnowledgeRetrievalHit[];
 }
 
@@ -166,6 +168,7 @@ export class KnowledgeAiChatService {
       activeKnowledgeBaseId: retrieval.activeKnowledgeBaseId,
       inventoryQuery: retrieval.inventoryQuery,
       rerankApplied: retrieval.rerankApplied,
+      routingRuleMatches: retrieval.routingRuleMatches,
       hits: retrieval.hits,
     });
 
@@ -349,6 +352,7 @@ export class KnowledgeAiChatService {
       inventoryQuery: result.inventoryQuery,
       sessionContextReused: result.sessionContextReused,
       rerankApplied: result.rerankApplied,
+      routingRuleMatches: result.routingRuleMatches,
       hits: result.hits,
     };
   }
@@ -393,6 +397,7 @@ export class KnowledgeAiChatService {
         hitKnowledgeBaseIds: retrieval?.knowledgeBaseIds ?? null,
         hitChunkIds: retrieval?.chunkIds ?? null,
         retrievalHits: retrieval?.hits ?? null,
+        routingRuleMatches: retrieval?.routingRuleMatches ?? null,
         rerankApplied: retrieval?.rerankApplied ?? false,
         isSuccess: result.isSuccess,
         errorMessage: result.errorMessage,

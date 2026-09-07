@@ -8,6 +8,10 @@ import { KnowledgeBase } from '../knowledge-bases/entities/knowledge-base.entity
 import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
 import { KnowledgeRetrievalConfig } from '../knowledge-retrieval-configs/entities/knowledge-retrieval-config.entity';
 import { KnowledgeRetrievalConfigsService } from '../knowledge-retrieval-configs/knowledge-retrieval-configs.service';
+import {
+  KnowledgeRoutingRulesService,
+  type KnowledgeRoutingRuleMatch,
+} from '../knowledge-routing-rules/knowledge-routing-rules.service';
 import { KnowledgeEmbeddingService } from '../knowledge-vectors/knowledge-embedding.service';
 import { KnowledgeVectorService } from '../knowledge-vectors/knowledge-vector.service';
 
@@ -47,9 +51,23 @@ interface RetrievalPlan {
   query: string;
   queryRewritten: boolean;
   routedKnowledgeBaseIds: number[];
+  restrictedDocumentIds: number[];
+  documentRestrictedKnowledgeBaseIds: number[];
+  unrestrictedKnowledgeBaseIds: number[];
   activeKnowledgeBaseId: number | null;
   inventoryQuery: boolean;
   sessionContextReused: boolean;
+  hasExclusiveRoutingRule: boolean;
+  routingRuleMatches: KnowledgeRoutingRuleMatch[];
+}
+
+interface RoutingRuleScope {
+  matches: KnowledgeRoutingRuleMatch[];
+  exclusiveKnowledgeBaseIds: number[];
+  restrictedDocumentIds: number[];
+  documentRestrictedKnowledgeBaseIds: number[];
+  unrestrictedKnowledgeBaseIds: number[];
+  hasAliasRoute: boolean;
 }
 
 export interface KnowledgeRetrievalOptions {
@@ -85,6 +103,7 @@ export interface KnowledgeRetrievalResult {
   inventoryQuery: boolean;
   sessionContextReused: boolean;
   rerankApplied: boolean;
+  routingRuleMatches: KnowledgeRoutingRuleMatch[];
   hits: KnowledgeRetrievalHit[];
 }
 
@@ -145,6 +164,7 @@ export class KnowledgeAiChatRetrievalService {
     private readonly vectorService: KnowledgeVectorService,
     private readonly aiFeatureConfigsService: AiFeatureConfigsService,
     private readonly providersService: KnowledgeAiProvidersService,
+    private readonly routingRulesService?: KnowledgeRoutingRulesService,
   ) {}
 
   async buildReferenceContext(question: string, configId?: number | null) {
@@ -167,24 +187,41 @@ export class KnowledgeAiChatRetrievalService {
     );
     if (!scopeBases.length) return this.emptyResult(originalQuestion);
 
+    const matchedRoutingRules = await this.findMatchedRoutingRules(
+      config.id,
+      originalQuestion,
+    );
+    const routingRuleScope = this.resolveRoutingRuleScope(
+      matchedRoutingRules,
+      scopeBases,
+    );
+
     const sessionContextReusable = this.canReuseSessionContext(
       options,
       Number(config.sessionContextTimeoutMinutes ?? 15),
     );
-    const plan = this.buildRetrievalPlan(originalQuestion, scopeBases, {
-      ...options,
-      hasHistory: sessionContextReusable,
-    });
-    if (plan.inventoryQuery) {
-      return this.buildInventoryResult(originalQuestion, scopeBases);
-    }
+    const plan = this.buildRetrievalPlan(
+      originalQuestion,
+      scopeBases,
+      {
+        ...options,
+        hasHistory: sessionContextReusable,
+      },
+      routingRuleScope,
+    );
     const routedBases = scopeBases.filter((base) =>
       plan.routedKnowledgeBaseIds.includes(base.id),
     );
+    if (plan.inventoryQuery) {
+      return this.buildInventoryResult(originalQuestion, routedBases, {
+        routingRuleMatches: plan.routingRuleMatches,
+      });
+    }
     const routedBaseIds = routedBases.map((base) => base.id);
     if (!routedBaseIds.length) {
       return this.emptyResult(plan.query, {
         queryRewritten: plan.queryRewritten,
+        routingRuleMatches: plan.routingRuleMatches,
       });
     }
 
@@ -203,11 +240,22 @@ export class KnowledgeAiChatRetrievalService {
         : this.findVectorCandidates(plan.query, routedBases, candidateLimit),
     ]);
 
-    const fused = this.fuseCandidates(textScored, vectorScored, {
-      textWeight,
-      vectorWeight,
-      rrfK: Math.max(1, Number(config.rrfK || 60)),
-    });
+    const filteredTextCandidates = this.filterByRoutingRuleDocuments(
+      textScored,
+      plan,
+    );
+    const filteredVectorCandidates = this.filterByRoutingRuleDocuments(
+      vectorScored,
+      plan,
+    );
+    const fused = this.applyRoutingRuleWeights(
+      this.fuseCandidates(filteredTextCandidates, filteredVectorCandidates, {
+        textWeight,
+        vectorWeight,
+        rrfK: Math.max(1, Number(config.rrfK || 60)),
+      }),
+      plan.routingRuleMatches,
+    );
     const reranked = await this.rerankCandidates(plan.query, fused, config);
     const minScore = this.clamp(Number(config.minScore ?? 0.35));
     const scored = reranked.candidates
@@ -216,7 +264,11 @@ export class KnowledgeAiChatRetrievalService {
     const selected = this.selectContextCandidates(scored, topK);
 
     if (!selected.length) {
-      if (plan.sessionContextReused && options.allowSessionFallback !== false) {
+      if (
+        plan.sessionContextReused &&
+        !plan.hasExclusiveRoutingRule &&
+        options.allowSessionFallback !== false
+      ) {
         return this.buildReferenceResult(originalQuestion, configId, {
           hasHistory: false,
           allowSessionFallback: false,
@@ -228,6 +280,7 @@ export class KnowledgeAiChatRetrievalService {
         activeKnowledgeBaseId: null,
         sessionContextReused: plan.sessionContextReused,
         rerankApplied: reranked.applied,
+        routingRuleMatches: plan.routingRuleMatches,
       });
     }
 
@@ -261,6 +314,7 @@ export class KnowledgeAiChatRetrievalService {
       inventoryQuery: false,
       sessionContextReused: plan.sessionContextReused,
       rerankApplied: reranked.applied,
+      routingRuleMatches: plan.routingRuleMatches,
       hits,
     };
   }
@@ -281,12 +335,17 @@ export class KnowledgeAiChatRetrievalService {
       inventoryQuery: false,
       sessionContextReused: false,
       rerankApplied: false,
+      routingRuleMatches: [],
       hits: [],
       ...overrides,
     };
   }
 
-  private buildInventoryResult(question: string, bases: KnowledgeBase[]) {
+  private buildInventoryResult(
+    question: string,
+    bases: KnowledgeBase[],
+    overrides: Partial<KnowledgeRetrievalResult> = {},
+  ) {
     const normalizedQuestion = this.normalizeText(question);
     const wantsEducationBases = /大学|学校|学院|入学|手册/.test(
       normalizedQuestion,
@@ -319,7 +378,9 @@ export class KnowledgeAiChatRetrievalService {
       inventoryQuery: true,
       sessionContextReused: false,
       rerankApplied: false,
+      routingRuleMatches: [],
       hits: [],
+      ...overrides,
     } satisfies KnowledgeRetrievalResult;
   }
 
@@ -327,17 +388,54 @@ export class KnowledgeAiChatRetrievalService {
     question: string,
     bases: KnowledgeBase[],
     options: KnowledgeRetrievalOptions,
+    routingRuleScope: RoutingRuleScope = this.emptyRoutingRuleScope(),
   ): RetrievalPlan {
-    const rankedRoutes = this.rankKnowledgeBases(question, bases);
+    const rankedRoutes = this.rankKnowledgeBases(
+      question,
+      bases,
+      routingRuleScope.matches,
+    );
     const explicitRoutes = rankedRoutes.filter((route) => route.explicit);
     if (this.isInventoryQuery(question)) {
       return {
         query: question,
         queryRewritten: false,
-        routedKnowledgeBaseIds: bases.map((base) => base.id),
+        routedKnowledgeBaseIds: routingRuleScope.exclusiveKnowledgeBaseIds
+          .length
+          ? routingRuleScope.exclusiveKnowledgeBaseIds
+          : bases.map((base) => base.id),
+        restrictedDocumentIds: routingRuleScope.restrictedDocumentIds,
+        documentRestrictedKnowledgeBaseIds:
+          routingRuleScope.documentRestrictedKnowledgeBaseIds,
+        unrestrictedKnowledgeBaseIds:
+          routingRuleScope.unrestrictedKnowledgeBaseIds,
         activeKnowledgeBaseId: null,
         inventoryQuery: true,
         sessionContextReused: false,
+        hasExclusiveRoutingRule:
+          routingRuleScope.exclusiveKnowledgeBaseIds.length > 0,
+        routingRuleMatches: routingRuleScope.matches,
+      };
+    }
+
+    if (routingRuleScope.exclusiveKnowledgeBaseIds.length) {
+      return {
+        query: question,
+        queryRewritten: false,
+        routedKnowledgeBaseIds: routingRuleScope.exclusiveKnowledgeBaseIds,
+        restrictedDocumentIds: routingRuleScope.restrictedDocumentIds,
+        documentRestrictedKnowledgeBaseIds:
+          routingRuleScope.documentRestrictedKnowledgeBaseIds,
+        unrestrictedKnowledgeBaseIds:
+          routingRuleScope.unrestrictedKnowledgeBaseIds,
+        activeKnowledgeBaseId:
+          routingRuleScope.exclusiveKnowledgeBaseIds.length === 1
+            ? routingRuleScope.exclusiveKnowledgeBaseIds[0]
+            : null,
+        inventoryQuery: false,
+        sessionContextReused: false,
+        hasExclusiveRoutingRule: true,
+        routingRuleMatches: routingRuleScope.matches,
       };
     }
 
@@ -349,6 +447,7 @@ export class KnowledgeAiChatRetrievalService {
       options.hasHistory &&
       preferredAvailable &&
       !explicitRoutes.length &&
+      !routingRuleScope.hasAliasRoute &&
       !TOPIC_RESET_PATTERN.test(question),
     );
     const previousQuery = options.previousQuery?.trim();
@@ -364,10 +463,15 @@ export class KnowledgeAiChatRetrievalService {
         routedKnowledgeBaseIds: explicitRoutes
           .slice(0, 2)
           .map((route) => route.id),
+        restrictedDocumentIds: [],
+        documentRestrictedKnowledgeBaseIds: [],
+        unrestrictedKnowledgeBaseIds: [],
         activeKnowledgeBaseId:
           explicitRoutes.length === 1 ? explicitRoutes[0].id : null,
         inventoryQuery: false,
         sessionContextReused: false,
+        hasExclusiveRoutingRule: false,
+        routingRuleMatches: routingRuleScope.matches,
       };
     }
 
@@ -376,15 +480,22 @@ export class KnowledgeAiChatRetrievalService {
         query,
         queryRewritten: query !== question,
         routedKnowledgeBaseIds: [preferredId],
+        restrictedDocumentIds: [],
+        documentRestrictedKnowledgeBaseIds: [],
+        unrestrictedKnowledgeBaseIds: [],
         activeKnowledgeBaseId: preferredId,
         inventoryQuery: false,
         sessionContextReused: true,
+        hasExclusiveRoutingRule: false,
+        routingRuleMatches: routingRuleScope.matches,
       };
     }
 
-    const routes = this.rankKnowledgeBases(query, bases).filter(
-      (route) => route.score >= 0.35,
-    );
+    const routes = this.rankKnowledgeBases(
+      query,
+      bases,
+      routingRuleScope.matches,
+    ).filter((route) => route.score >= 0.35);
     const bestRoute = routes[0];
     const secondRoute = routes[1];
     const hasConfidentRoute = Boolean(
@@ -399,10 +510,15 @@ export class KnowledgeAiChatRetrievalService {
         hasConfidentRoute && bestRoute
           ? [bestRoute.id]
           : bases.map((base) => base.id),
+      restrictedDocumentIds: [],
+      documentRestrictedKnowledgeBaseIds: [],
+      unrestrictedKnowledgeBaseIds: [],
       activeKnowledgeBaseId:
         hasConfidentRoute && bestRoute ? bestRoute.id : null,
       inventoryQuery: false,
       sessionContextReused: false,
+      hasExclusiveRoutingRule: false,
+      routingRuleMatches: routingRuleScope.matches,
     };
   }
 
@@ -423,7 +539,11 @@ export class KnowledgeAiChatRetrievalService {
     return now.getTime() - lastRetrievalAt.getTime() <= timeoutMinutes * 60_000;
   }
 
-  private rankKnowledgeBases(question: string, bases: KnowledgeBase[]) {
+  private rankKnowledgeBases(
+    question: string,
+    bases: KnowledgeBase[],
+    routingRules: KnowledgeRoutingRuleMatch[] = [],
+  ) {
     const terms = this.buildSearchTerms(question);
     const normalizedQuestion = this.normalizeText(question);
     const routeTexts = new Map(
@@ -462,6 +582,10 @@ export class KnowledgeAiChatRetrievalService {
           const distinctiveness = GENERIC_ROUTE_TERMS.has(normalizedTerm)
             ? 0.05
             : 1 / Math.max(1, frequency);
+          const ruleTermWeight = this.getGenericRuleTermWeight(
+            normalizedTerm,
+            routingRules,
+          );
           const lengthWeight = Math.min(1.5, normalizedTerm.length / 2);
           const fieldScore = Math.max(
             name.includes(normalizedTerm) ? 0.7 : 0,
@@ -470,8 +594,9 @@ export class KnowledgeAiChatRetrievalService {
             colloquial.includes(normalizedTerm) ? 0.45 : 0,
             description.includes(normalizedTerm) ? 0.2 : 0,
           );
-          score += fieldScore * distinctiveness * lengthWeight;
+          score += fieldScore * distinctiveness * lengthWeight * ruleTermWeight;
         }
+        score += this.getKnowledgeBaseRuleWeight(base.id, routingRules);
         return { id: base.id, score, explicit };
       })
       .filter((route) => route.score > 0)
@@ -481,6 +606,152 @@ export class KnowledgeAiChatRetrievalService {
           b.score - a.score ||
           a.id - b.id,
       );
+  }
+
+  private async findMatchedRoutingRules(
+    retrievalConfigId: number,
+    question: string,
+  ) {
+    if (!this.routingRulesService) return [];
+    return this.routingRulesService.findMatchedRulesForRetrieval(
+      retrievalConfigId,
+      question,
+    );
+  }
+
+  private resolveRoutingRuleScope(
+    rules: KnowledgeRoutingRuleMatch[],
+    bases: KnowledgeBase[],
+  ): RoutingRuleScope {
+    const scopeBaseIds = new Set(bases.map((base) => base.id));
+    const scopedRules = rules.map((rule) => ({
+      rule,
+      knowledgeBaseIds: rule.knowledgeBaseIds.filter((id) =>
+        scopeBaseIds.has(id),
+      ),
+    }));
+    const exclusiveRules = scopedRules.filter(
+      ({ rule, knowledgeBaseIds }) =>
+        rule.ruleType === 'exclusive' && knowledgeBaseIds.length,
+    );
+    const documentRestrictedRules = exclusiveRules.filter(
+      ({ rule }) => rule.documentIds.length,
+    );
+    const unrestrictedRules = exclusiveRules.filter(
+      ({ rule }) => !rule.documentIds.length,
+    );
+    return {
+      matches: rules,
+      exclusiveKnowledgeBaseIds: this.uniqueIds(
+        exclusiveRules.flatMap(({ knowledgeBaseIds }) => knowledgeBaseIds),
+      ),
+      restrictedDocumentIds: this.uniqueIds(
+        documentRestrictedRules.flatMap(({ rule }) => rule.documentIds),
+      ),
+      documentRestrictedKnowledgeBaseIds: this.uniqueIds(
+        documentRestrictedRules.flatMap(
+          ({ knowledgeBaseIds }) => knowledgeBaseIds,
+        ),
+      ),
+      unrestrictedKnowledgeBaseIds: this.uniqueIds(
+        unrestrictedRules.flatMap(({ knowledgeBaseIds }) => knowledgeBaseIds),
+      ),
+      hasAliasRoute: scopedRules.some(
+        ({ rule, knowledgeBaseIds }) =>
+          rule.ruleType === 'alias' && knowledgeBaseIds.length > 0,
+      ),
+    };
+  }
+
+  private emptyRoutingRuleScope(): RoutingRuleScope {
+    return {
+      matches: [],
+      exclusiveKnowledgeBaseIds: [],
+      restrictedDocumentIds: [],
+      documentRestrictedKnowledgeBaseIds: [],
+      unrestrictedKnowledgeBaseIds: [],
+      hasAliasRoute: false,
+    };
+  }
+
+  private filterByRoutingRuleDocuments<T extends RetrievalCandidate>(
+    candidates: T[],
+    plan: RetrievalPlan,
+  ) {
+    if (!plan.documentRestrictedKnowledgeBaseIds.length) return candidates;
+    const documentRestrictedBaseIds = new Set(
+      plan.documentRestrictedKnowledgeBaseIds,
+    );
+    const unrestrictedBaseIds = new Set(plan.unrestrictedKnowledgeBaseIds);
+    const allowedDocumentIds = new Set(plan.restrictedDocumentIds);
+    return candidates.filter((candidate) => {
+      if (!documentRestrictedBaseIds.has(candidate.knowledgeBaseId)) {
+        return true;
+      }
+      if (unrestrictedBaseIds.has(candidate.knowledgeBaseId)) return true;
+      return Boolean(
+        candidate.documentId && allowedDocumentIds.has(candidate.documentId),
+      );
+    });
+  }
+
+  private applyRoutingRuleWeights(
+    candidates: FusedRetrievalCandidate[],
+    rules: KnowledgeRoutingRuleMatch[],
+  ) {
+    if (!rules.length) return candidates;
+    return candidates
+      .map((candidate) => ({
+        ...candidate,
+        score: this.clamp(
+          candidate.score +
+            this.getKnowledgeBaseRuleWeight(candidate.knowledgeBaseId, rules) *
+              0.1,
+        ),
+      }))
+      .sort((a, b) => b.score - a.score || b.matchPriority - a.matchPriority);
+  }
+
+  private getGenericRuleTermWeight(
+    normalizedTerm: string,
+    rules: KnowledgeRoutingRuleMatch[],
+  ) {
+    const adjustment = rules
+      .filter(
+        (rule) =>
+          rule.ruleType === 'generic' &&
+          !rule.knowledgeBaseIds.length &&
+          this.isRoutingRuleTermRelated(normalizedTerm, rule.term),
+      )
+      .reduce((sum, rule) => sum + rule.weight, 0);
+    return Math.min(1.5, Math.max(0.05, 1 + adjustment));
+  }
+
+  private getKnowledgeBaseRuleWeight(
+    knowledgeBaseId: number,
+    rules: KnowledgeRoutingRuleMatch[],
+  ) {
+    return rules.reduce((sum, rule) => {
+      if (!rule.knowledgeBaseIds.includes(knowledgeBaseId)) return sum;
+      if (rule.ruleType === 'alias') return sum + rule.weight * 2;
+      if (rule.ruleType === 'generic') return sum + rule.weight * 0.2;
+      return sum;
+    }, 0);
+  }
+
+  private isRoutingRuleTermRelated(normalizedTerm: string, ruleTerm: string) {
+    const normalizedRuleTerm = this.normalizeText(ruleTerm);
+    return Boolean(
+      normalizedRuleTerm &&
+      (normalizedTerm.includes(normalizedRuleTerm) ||
+        normalizedRuleTerm.includes(normalizedTerm)),
+    );
+  }
+
+  private uniqueIds(ids: number[]) {
+    return Array.from(
+      new Set(ids.filter((id) => Number.isInteger(id) && id > 0)),
+    );
   }
 
   private buildKnowledgeBaseAliases(base: KnowledgeBase) {

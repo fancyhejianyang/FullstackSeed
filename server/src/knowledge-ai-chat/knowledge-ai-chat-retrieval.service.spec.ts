@@ -6,6 +6,7 @@ import { KnowledgeBase } from '../knowledge-bases/entities/knowledge-base.entity
 import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
 import { KnowledgeRetrievalConfig } from '../knowledge-retrieval-configs/entities/knowledge-retrieval-config.entity';
 import { KnowledgeRetrievalConfigsService } from '../knowledge-retrieval-configs/knowledge-retrieval-configs.service';
+import type { KnowledgeRoutingRuleMatch } from '../knowledge-routing-rules/knowledge-routing-rules.service';
 import { KnowledgeEmbeddingService } from '../knowledge-vectors/knowledge-embedding.service';
 import { KnowledgeVectorService } from '../knowledge-vectors/knowledge-vector.service';
 import {
@@ -34,12 +35,15 @@ interface RetrievalInternals {
     question: string,
     bases: KnowledgeBase[],
     options: KnowledgeRetrievalOptions,
+    routingRuleScope?: RoutingRuleScopeInput,
   ) => {
     query: string;
     queryRewritten: boolean;
     routedKnowledgeBaseIds: number[];
     activeKnowledgeBaseId: number | null;
     inventoryQuery: boolean;
+    sessionContextReused: boolean;
+    hasExclusiveRoutingRule: boolean;
   };
   fuseCandidates: (
     textCandidates: Candidate[],
@@ -90,6 +94,15 @@ interface RetrievalInternals {
     timeoutMinutes: number,
     now?: Date,
   ) => boolean;
+}
+
+interface RoutingRuleScopeInput {
+  matches: KnowledgeRoutingRuleMatch[];
+  exclusiveKnowledgeBaseIds: number[];
+  restrictedDocumentIds: number[];
+  documentRestrictedKnowledgeBaseIds: number[];
+  unrestrictedKnowledgeBaseIds: number[];
+  hasAliasRoute: boolean;
 }
 
 describe('KnowledgeAiChatRetrievalService', () => {
@@ -224,7 +237,9 @@ describe('KnowledgeAiChatRetrievalService', () => {
         find: baseFind,
       } as unknown as Repository<KnowledgeBase>,
       { find: documentsFind } as unknown as Repository<KnowledgeBaseDocument>,
-      { find: jest.fn().mockResolvedValue([]) } as unknown as Repository<KnowledgeBaseChunk>,
+      {
+        find: jest.fn().mockResolvedValue([]),
+      } as unknown as Repository<KnowledgeBaseChunk>,
       {
         findUsableConfig: jest.fn().mockResolvedValue({
           retrievalMode: 'fullText',
@@ -245,12 +260,16 @@ describe('KnowledgeAiChatRetrievalService', () => {
       {} as KnowledgeAiProvidersService,
     );
 
-    const result = await serviceWithFallback.buildReferenceResult('目标问题', 1, {
-      hasHistory: true,
-      previousQuery: '历史问题',
-      preferredKnowledgeBaseId: 1,
-      lastRetrievalAt: new Date(),
-    });
+    const result = await serviceWithFallback.buildReferenceResult(
+      '目标问题',
+      1,
+      {
+        hasHistory: true,
+        previousQuery: '历史问题',
+        preferredKnowledgeBaseId: 1,
+        lastRetrievalAt: new Date(),
+      },
+    );
 
     expect(result.query).toBe('目标问题');
     expect(result.knowledgeBaseIds).toEqual([2]);
@@ -272,6 +291,61 @@ describe('KnowledgeAiChatRetrievalService', () => {
     expect(plan.queryRewritten).toBe(false);
     expect(plan.routedKnowledgeBaseIds).toEqual([2]);
     expect(plan.activeKnowledgeBaseId).toBe(2);
+  });
+
+  it('applies an exclusive routing rule before reusing session context', () => {
+    const plan = internals.buildRetrievalPlan(
+      '深大的入学材料有哪些？',
+      [buildBase(1, '中国科学院大学'), buildBase(2, '深圳大学')],
+      {
+        hasHistory: true,
+        previousQuery: '中国科学院大学的学校简介',
+        preferredKnowledgeBaseId: 1,
+      },
+      buildRoutingRuleScope([
+        {
+          id: 6,
+          term: '深大',
+          ruleType: 'exclusive',
+          matchMode: 'contains',
+          weight: 1,
+          knowledgeBaseIds: [2],
+          documentIds: [],
+        },
+      ]),
+    );
+
+    expect(plan.routedKnowledgeBaseIds).toEqual([2]);
+    expect(plan.activeKnowledgeBaseId).toBe(2);
+    expect(plan.sessionContextReused).toBe(false);
+    expect(plan.hasExclusiveRoutingRule).toBe(true);
+  });
+
+  it('uses an alias rule to break a stale knowledge-base route', () => {
+    const plan = internals.buildRetrievalPlan(
+      '深大的入学材料有哪些？',
+      [buildBase(1, '中国科学院大学'), buildBase(2, '深圳大学')],
+      {
+        hasHistory: true,
+        previousQuery: '中国科学院大学的学校简介',
+        preferredKnowledgeBaseId: 1,
+      },
+      buildRoutingRuleScope([
+        {
+          id: 7,
+          term: '深大',
+          ruleType: 'alias',
+          matchMode: 'contains',
+          weight: 0.8,
+          knowledgeBaseIds: [2],
+          documentIds: [],
+        },
+      ]),
+    );
+
+    expect(plan.routedKnowledgeBaseIds).toEqual([2]);
+    expect(plan.activeKnowledgeBaseId).toBe(2);
+    expect(plan.sessionContextReused).toBe(false);
   });
 
   it('recognizes a shortened university name regardless of database order', () => {
@@ -495,5 +569,34 @@ function buildFusedCandidate(
     textScore: score,
     vectorScore: score,
     rerankScore: null,
+  };
+}
+
+function buildRoutingRuleScope(
+  matches: KnowledgeRoutingRuleMatch[],
+): RoutingRuleScopeInput {
+  const exclusiveRules = matches.filter(
+    (rule) => rule.ruleType === 'exclusive',
+  );
+  const documentRestrictedRules = exclusiveRules.filter(
+    (rule) => rule.documentIds.length,
+  );
+  return {
+    matches,
+    exclusiveKnowledgeBaseIds: exclusiveRules.flatMap(
+      (rule) => rule.knowledgeBaseIds,
+    ),
+    restrictedDocumentIds: documentRestrictedRules.flatMap(
+      (rule) => rule.documentIds,
+    ),
+    documentRestrictedKnowledgeBaseIds: documentRestrictedRules.flatMap(
+      (rule) => rule.knowledgeBaseIds,
+    ),
+    unrestrictedKnowledgeBaseIds: exclusiveRules
+      .filter((rule) => !rule.documentIds.length)
+      .flatMap((rule) => rule.knowledgeBaseIds),
+    hasAliasRoute: matches.some(
+      (rule) => rule.ruleType === 'alias' && rule.knowledgeBaseIds.length > 0,
+    ),
   };
 }

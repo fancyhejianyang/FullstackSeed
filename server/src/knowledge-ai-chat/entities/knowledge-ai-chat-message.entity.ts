@@ -50,6 +50,17 @@ export class KnowledgeAiChatMessage extends BaseEntity {
     rerankScore: number | null;
   }> | null;
 
+  @Column({ type: 'simple-json', nullable: true })
+  routingRuleMatches: Array<{
+    id: number;
+    term: string;
+    ruleType: 'generic' | 'alias' | 'exclusive';
+    matchMode: 'contains' | 'exact';
+    weight: number;
+    knowledgeBaseIds: number[];
+    documentIds: number[];
+  }> | null;
+
   @Column({ type: 'tinyint', default: false })
   rerankApplied: boolean;
 

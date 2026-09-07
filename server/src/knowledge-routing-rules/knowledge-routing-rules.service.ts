@@ -25,6 +25,16 @@ type RuleMappingIds = {
   documentIds: number[];
 };
 
+export interface KnowledgeRoutingRuleMatch {
+  id: number;
+  term: string;
+  ruleType: KnowledgeRoutingRuleType;
+  matchMode: 'contains' | 'exact';
+  weight: number;
+  knowledgeBaseIds: number[];
+  documentIds: number[];
+}
+
 @Injectable()
 export class KnowledgeRoutingRulesService {
   constructor(
@@ -133,6 +143,45 @@ export class KnowledgeRoutingRulesService {
     await this.removeMappings(uniqueIds);
     await this.ruleRepository.softDelete(uniqueIds);
     return { ids: uniqueIds };
+  }
+
+  /**
+   * 每次知识库检索前调用：仅返回当前检索配置下已启用且命中的规则。
+   * 配置管理与运行时检索共用同一份映射，避免名称、权重或启用状态不一致。
+   */
+  async findMatchedRulesForRetrieval(
+    retrievalConfigId: number,
+    question: string,
+  ): Promise<KnowledgeRoutingRuleMatch[]> {
+    const normalizedQuestion = this.normalizeForMatch(question);
+    if (!normalizedQuestion) return [];
+
+    const rules = await this.ruleRepository.find({
+      where: { retrievalConfigId, isEnabled: true },
+      order: { id: 'ASC' },
+    });
+    if (!rules.length) return [];
+
+    const mappingIdsByRule = await this.findMappingIds(
+      rules.map((rule) => rule.id),
+    );
+    return rules
+      .filter((rule) => this.isRuleMatched(rule, normalizedQuestion))
+      .map((rule) => {
+        const mappingIds = mappingIdsByRule.get(rule.id) ?? {
+          knowledgeBaseIds: [],
+          documentIds: [],
+        };
+        return {
+          id: rule.id,
+          term: rule.term,
+          ruleType: rule.ruleType,
+          matchMode: rule.matchMode,
+          weight: Number(rule.weight),
+          knowledgeBaseIds: mappingIds.knowledgeBaseIds,
+          documentIds: mappingIds.documentIds,
+        };
+      });
   }
 
   private async toEntityPayload(
@@ -346,6 +395,21 @@ export class KnowledgeRoutingRulesService {
     if (ruleType === 'alias') return 0.8;
     if (ruleType === 'exclusive') return 1;
     return -0.8;
+  }
+
+  private isRuleMatched(
+    rule: KnowledgeRoutingRule,
+    normalizedQuestion: string,
+  ) {
+    const normalizedTerm = this.normalizeForMatch(rule.term);
+    if (!normalizedTerm) return false;
+    return rule.matchMode === 'exact'
+      ? normalizedQuestion === normalizedTerm
+      : normalizedQuestion.includes(normalizedTerm);
+  }
+
+  private normalizeForMatch(value: string) {
+    return value.toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '');
   }
 
   private toNullableText(value?: string) {

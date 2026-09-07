@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-09-07 接入知识库路由规则到 AI 检索
+- 新增：
+  - `server/src/migrations/1788663600000-RecordKnowledgeRoutingRuleMatches.ts`（记录聊天消息命中的路由规则快照）
+- 修改：
+  - `server/src/knowledge-routing-rules/knowledge-routing-rules.service.ts`（提供检索运行时的启用规则匹配能力）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat-retrieval.service.ts`（每次检索执行专属路由、别名升权、公共词降权及文档范围过滤）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat.module.ts`、`server/src/knowledge-ai-chat/knowledge-ai-chat.service.ts`、`server/src/knowledge-ai-chat/entities/knowledge-ai-chat-message.entity.ts`（注入规则模块、向流式事件返回并持久化命中规则）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat-retrieval.service.spec.ts`（覆盖专属路由优先与别名切换知识库）
+  - `CHANGELOG.md`（记录本次功能）
+- 删除：无
+- 说明：每轮 AI 知识库检索都先按当前检索配置匹配已启用路由规则；`exclusive` 限定知识库/文档范围，`alias` 终止旧会话粘滞并提高目标知识库排序，`generic` 降低公共词干扰。规则变更即时生效，不依赖会话缓存。
+
 ### 2026-09-07 新增知识库路由规则配置模块
 - 新增：
   - `server/src/knowledge-routing-rules/`（路由规则主表、知识库/文档映射表、CRUD 接口与映射范围校验）
