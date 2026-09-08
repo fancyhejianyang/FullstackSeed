@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-09-08 提升小说等相似语料的在线检索稳定性
+- 新增：无
+- 修改：
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat-retrieval.service.ts`（人物/实体属性问句保留实体锚点并升权；候选排序增加稳定键；候选池扩大至 `40～120`、重排池扩大至 48；重排改为围绕命中词读取最多 1,200 字；人物命中时优先同知识库上下文，并补充前后相邻分片）
+  - `server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`（内部聊天调用可覆盖温度；检索重排固定使用 `temperature: 0`，普通聊天仍为 `0.2`）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat-retrieval.service.spec.ts`（覆盖实体锚点、同分稳定排序及确定性重排调用）
+  - `CHANGELOG.md`（记录本次调整）
+- 删除：无
+- 说明：本次不调整已有正文、分片或向量索引；人物事实问题通过运行时关键词与排序策略提升召回和结果一致性。相邻分片仅补充模型上下文，不作为新的直接检索命中写入 `retrievalHits`。
+
 ### 2026-09-07 调整知识库路由目标为分类加知识库
 - 新增：
   - `server/src/knowledge-routing-rules/entities/knowledge-routing-rule-category.entity.ts`（路由规则与目标分类的映射实体）

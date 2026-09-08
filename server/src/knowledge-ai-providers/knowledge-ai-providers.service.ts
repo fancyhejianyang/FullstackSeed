@@ -69,6 +69,11 @@ export interface KnowledgeAiChatCallPayload {
   question: string;
   systemPrompt?: string;
   messages?: KnowledgeAiChatMessagePayload[];
+  /**
+   * 仅供服务端内部调用覆盖默认采样温度。检索重排需要可复现结果，
+   * 因此会显式传入 0；普通聊天仍保持原来的 0.2。
+   */
+  temperature?: number;
 }
 
 export interface KnowledgeAiChatTargetPayload {
@@ -295,7 +300,7 @@ export class KnowledgeAiProvidersService {
           messages: payload.messages?.length
             ? payload.messages
             : this.buildQuestionMessages(payload),
-          temperature: 0.2,
+          temperature: this.resolveTemperature(payload.temperature),
         }),
       });
 
@@ -778,6 +783,11 @@ export class KnowledgeAiProvidersService {
         content: payload.question,
       },
     ];
+  }
+
+  private resolveTemperature(value?: number) {
+    if (!Number.isFinite(value)) return 0.2;
+    return Math.min(2, Math.max(0, Number(value)));
   }
 
   private buildVisionOcrMessages(payload: KnowledgeAiVisionOcrPayload) {

@@ -52,6 +52,25 @@ interface RetrievalInternals {
   ) => Array<Candidate & { textScore: number; vectorScore: number }>;
   parseRerankScores: (value: string) => Map<string, number>;
   buildSearchTerms: (question: string) => string[];
+  extractEntityAnchors: (question: string) => string[];
+  compareCandidates: (a: Candidate, b: Candidate) => number;
+  expandContextWithNeighbors: (
+    candidates: Array<
+      Candidate & {
+        textScore: number;
+        vectorScore: number;
+        rerankScore: number | null;
+      }
+    >,
+  ) => Promise<
+    Array<
+      Candidate & {
+        textScore: number;
+        vectorScore: number;
+        rerankScore: number | null;
+      }
+    >
+  >;
   scoreTextCandidate: (
     candidate: Omit<Candidate, 'score'>,
     question: string,
@@ -498,6 +517,69 @@ describe('KnowledgeAiChatRetrievalService', () => {
     );
   });
 
+  it('keeps a named entity as an anchor for attribute questions', () => {
+    const question = '请问欧阳娜娜的职位是什么？';
+    const relevant = {
+      ...buildCandidate(0),
+      content: '欧阳娜娜目前担任学院办公室主任。',
+    };
+    const noise = {
+      ...buildCandidate(0),
+      content: '学院办公室主任负责统筹日常行政工作。',
+    };
+
+    expect(internals.extractEntityAnchors(question)).toEqual(['欧阳娜娜']);
+    expect(internals.buildSearchTerms(question)).toContain('欧阳娜娜');
+    expect(internals.scoreTextCandidate(relevant, question)).toBeGreaterThan(
+      internals.scoreTextCandidate(noise, question),
+    );
+  });
+
+  it('uses stable keys to break equal candidate scores', () => {
+    const later = { ...buildCandidate(0.7), key: 'chunk:9', chunkId: 9 };
+    const earlier = { ...buildCandidate(0.7), key: 'chunk:2', chunkId: 2 };
+
+    expect(internals.compareCandidates(later, earlier)).toBeGreaterThan(0);
+    expect(internals.compareCandidates(earlier, later)).toBeLessThan(0);
+  });
+
+  it('adds adjacent chunks as context without replacing direct hits', async () => {
+    const neighboringService = new KnowledgeAiChatRetrievalService(
+      {} as Repository<KnowledgeBase>,
+      {} as Repository<KnowledgeBaseDocument>,
+      {
+        find: jest.fn().mockResolvedValue([
+          {
+            id: 4,
+            documentId: 8,
+            chunkIndex: 2,
+            title: '第 3 章',
+            content: '相邻片段内容',
+          } as KnowledgeBaseChunk,
+        ]),
+      } as unknown as Repository<KnowledgeBaseChunk>,
+      {} as KnowledgeRetrievalConfigsService,
+      {} as KnowledgeEmbeddingService,
+      {} as KnowledgeVectorService,
+      {} as AiFeatureConfigsService,
+      {} as KnowledgeAiProvidersService,
+    );
+    const direct = {
+      ...buildFusedCandidate('chunk:5', 1, 0.8),
+      chunkId: 5,
+      documentId: 8,
+      chunkIndex: 3,
+    };
+
+    const expanded = await (
+      neighboringService as unknown as RetrievalInternals
+    ).expandContextWithNeighbors([direct]);
+
+    expect(expanded.map((item) => item.key)).toEqual(['chunk:5', 'chunk:4']);
+    expect(expanded[1].textScore).toBe(0);
+    expect(expanded[1].content).toBe('相邻片段内容');
+  });
+
   it('invokes the selected chat config when reranking is enabled', async () => {
     providerCall.mockResolvedValue({
       isSuccess: true,
@@ -514,7 +596,7 @@ describe('KnowledgeAiChatRetrievalService', () => {
     );
 
     expect(providerCall).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 3, model: 'rerank-model' }),
+      expect.objectContaining({ id: 3, model: 'rerank-model', temperature: 0 }),
     );
     expect(result.applied).toBe(true);
     expect(result.candidates[0].rerankScore).toBe(0.93);
