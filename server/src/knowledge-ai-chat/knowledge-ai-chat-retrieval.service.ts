@@ -5,7 +5,10 @@ import { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-config
 import { KnowledgeBaseChunk } from '../knowledge-bases/entities/knowledge-base-chunk.entity';
 import { KnowledgeBaseDocument } from '../knowledge-bases/entities/knowledge-base-document.entity';
 import { KnowledgeBase } from '../knowledge-bases/entities/knowledge-base.entity';
-import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
+import {
+  KnowledgeAiProvidersService,
+  type KnowledgeAiTokenUsage,
+} from '../knowledge-ai-providers/knowledge-ai-providers.service';
 import { KnowledgeRetrievalConfig } from '../knowledge-retrieval-configs/entities/knowledge-retrieval-config.entity';
 import { KnowledgeRetrievalConfigsService } from '../knowledge-retrieval-configs/knowledge-retrieval-configs.service';
 import {
@@ -75,6 +78,7 @@ export interface KnowledgeRetrievalOptions {
 export interface KnowledgeRetrievalHit {
   key: string;
   chunkId: number | null;
+  chunkIndex: number | null;
   title: string;
   knowledgeBaseId: number;
   knowledgeBaseName: string;
@@ -97,6 +101,7 @@ export interface KnowledgeRetrievalResult {
   inventoryQuery: boolean;
   sessionContextReused: boolean;
   rerankApplied: boolean;
+  rerankTokenUsage: KnowledgeAiTokenUsage | null;
   routingRuleMatches: KnowledgeRoutingRuleMatch[];
   hits: KnowledgeRetrievalHit[];
 }
@@ -276,10 +281,21 @@ export class KnowledgeAiChatRetrievalService {
         !plan.hasExclusiveRoutingRule &&
         options.allowSessionFallback !== false
       ) {
-        return this.buildReferenceResult(originalQuestion, configId, {
-          hasHistory: false,
-          allowSessionFallback: false,
-        });
+        const fallback = await this.buildReferenceResult(
+          originalQuestion,
+          configId,
+          {
+            hasHistory: false,
+            allowSessionFallback: false,
+          },
+        );
+        return {
+          ...fallback,
+          rerankTokenUsage: this.mergeTokenUsage(
+            reranked.tokenUsage,
+            fallback.rerankTokenUsage,
+          ),
+        };
       }
       return this.emptyResult(plan.query, {
         queryRewritten: plan.queryRewritten,
@@ -287,6 +303,7 @@ export class KnowledgeAiChatRetrievalService {
         activeKnowledgeBaseId: null,
         sessionContextReused: plan.sessionContextReused,
         rerankApplied: reranked.applied,
+        rerankTokenUsage: reranked.tokenUsage,
         routingRuleMatches: plan.routingRuleMatches,
       });
     }
@@ -323,6 +340,7 @@ export class KnowledgeAiChatRetrievalService {
       inventoryQuery: false,
       sessionContextReused: plan.sessionContextReused,
       rerankApplied: reranked.applied,
+      rerankTokenUsage: reranked.tokenUsage,
       routingRuleMatches: plan.routingRuleMatches,
       hits,
     };
@@ -344,6 +362,7 @@ export class KnowledgeAiChatRetrievalService {
       inventoryQuery: false,
       sessionContextReused: false,
       rerankApplied: false,
+      rerankTokenUsage: null,
       routingRuleMatches: [],
       hits: [],
       ...overrides,
@@ -387,6 +406,7 @@ export class KnowledgeAiChatRetrievalService {
       inventoryQuery: true,
       sessionContextReused: false,
       rerankApplied: false,
+      rerankTokenUsage: null,
       routingRuleMatches: [],
       hits: [],
       ...overrides,
@@ -1049,14 +1069,16 @@ export class KnowledgeAiChatRetrievalService {
     config: KnowledgeRetrievalConfig,
   ) {
     if (!config.enableRerank || !candidates.length) {
-      return { candidates, applied: false };
+      return { candidates, applied: false, tokenUsage: null };
     }
 
     try {
       const rerankConfig = await this.resolveRerankConfig(
         config.rerankAiFeatureConfigId,
       );
-      if (!rerankConfig) return { candidates, applied: false };
+      if (!rerankConfig) {
+        return { candidates, applied: false, tokenUsage: null };
+      }
       const rerankPool = candidates.slice(0, 48);
       const result = await this.providersService.callChat({
         id: rerankConfig.providerId ?? undefined,
@@ -1078,10 +1100,12 @@ export class KnowledgeAiChatRetrievalService {
         }),
       });
       if (!result.isSuccess || !result.answer) {
-        return { candidates, applied: false };
+        return { candidates, applied: false, tokenUsage: result.usage };
       }
       const scores = this.parseRerankScores(result.answer);
-      if (!scores.size) return { candidates, applied: false };
+      if (!scores.size) {
+        return { candidates, applied: false, tokenUsage: result.usage };
+      }
 
       return {
         candidates: candidates
@@ -1096,9 +1120,10 @@ export class KnowledgeAiChatRetrievalService {
           })
           .sort((a, b) => this.compareCandidates(a, b)),
         applied: true,
+        tokenUsage: result.usage,
       };
     } catch {
-      return { candidates, applied: false };
+      return { candidates, applied: false, tokenUsage: null };
     }
   }
 
@@ -1511,6 +1536,7 @@ export class KnowledgeAiChatRetrievalService {
     return {
       key: candidate.key,
       chunkId: candidate.chunkId,
+      chunkIndex: candidate.chunkIndex,
       title: candidate.title,
       knowledgeBaseId: candidate.knowledgeBaseId,
       knowledgeBaseName: candidate.knowledgeBaseName,
@@ -1527,6 +1553,31 @@ export class KnowledgeAiChatRetrievalService {
 
   private roundScore(value: number) {
     return Number(this.clamp(value).toFixed(4));
+  }
+
+  private mergeTokenUsage(
+    first: KnowledgeAiTokenUsage | null,
+    second: KnowledgeAiTokenUsage | null,
+  ) {
+    if (!first && !second) return null;
+    return {
+      promptTokens: this.sumTokenCounts(
+        first?.promptTokens,
+        second?.promptTokens,
+      ),
+      completionTokens: this.sumTokenCounts(
+        first?.completionTokens,
+        second?.completionTokens,
+      ),
+      totalTokens: this.sumTokenCounts(first?.totalTokens, second?.totalTokens),
+    };
+  }
+
+  private sumTokenCounts(...values: Array<number | null | undefined>) {
+    const counts = values.filter(
+      (value): value is number => value !== null && value !== undefined,
+    );
+    return counts.length ? counts.reduce((sum, value) => sum + value, 0) : null;
   }
 
   private clamp(value: number) {

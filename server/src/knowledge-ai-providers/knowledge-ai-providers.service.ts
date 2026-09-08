@@ -30,6 +30,7 @@ interface ChatCompletionResponse {
   output?: unknown;
   text?: unknown;
   answer?: unknown;
+  usage?: unknown;
 }
 
 interface ChatCompletionStreamResponse {
@@ -41,6 +42,7 @@ interface ChatCompletionStreamResponse {
       content?: string;
     };
   }>;
+  usage?: unknown;
 }
 
 interface EmbeddingResponse {
@@ -118,6 +120,13 @@ export interface KnowledgeAiChatCallResult {
   answer: string;
   errorMessage: string | null;
   elapsedMilliseconds: number;
+  usage: KnowledgeAiTokenUsage | null;
+}
+
+export interface KnowledgeAiTokenUsage {
+  promptTokens: number | null;
+  completionTokens: number | null;
+  totalTokens: number | null;
 }
 
 @Injectable()
@@ -327,6 +336,7 @@ export class KnowledgeAiProvidersService {
         answer,
         errorMessage: null,
         elapsedMilliseconds: Date.now() - startedAt,
+        usage: this.extractTokenUsage(data),
       };
     } catch (error) {
       return {
@@ -338,6 +348,7 @@ export class KnowledgeAiProvidersService {
         errorMessage:
           error instanceof Error ? error.message : '模型接口调用失败',
         elapsedMilliseconds: Date.now() - startedAt,
+        usage: null,
       };
     }
   }
@@ -359,6 +370,7 @@ export class KnowledgeAiProvidersService {
           messages: payload.messages,
           temperature: 0.2,
           stream: true,
+          stream_options: { include_usage: true },
         }),
       });
 
@@ -372,7 +384,11 @@ export class KnowledgeAiProvidersService {
         throw new BadRequestException('模型接口未返回流式响应内容');
       }
 
-      answer = await this.readChatStream(response.body, payload.onDelta);
+      const streamResult = await this.readChatStream(
+        response.body,
+        payload.onDelta,
+      );
+      answer = streamResult.answer;
 
       return {
         isSuccess: true,
@@ -382,6 +398,7 @@ export class KnowledgeAiProvidersService {
         answer,
         errorMessage: null,
         elapsedMilliseconds: Date.now() - startedAt,
+        usage: streamResult.usage,
       };
     } catch (error) {
       return {
@@ -393,6 +410,7 @@ export class KnowledgeAiProvidersService {
         errorMessage:
           error instanceof Error ? error.message : '模型接口流式调用失败',
         elapsedMilliseconds: Date.now() - startedAt,
+        usage: null,
       };
     }
   }
@@ -444,6 +462,7 @@ export class KnowledgeAiProvidersService {
         answer,
         errorMessage: null,
         elapsedMilliseconds: Date.now() - startedAt,
+        usage: this.extractTokenUsage(data),
       };
     } catch (error) {
       await this.recordAiModelCall('visionOcr', {
@@ -463,6 +482,7 @@ export class KnowledgeAiProvidersService {
         errorMessage:
           error instanceof Error ? error.message : '视觉模型 OCR 调用失败',
         elapsedMilliseconds: Date.now() - startedAt,
+        usage: null,
       };
     }
   }
@@ -969,6 +989,7 @@ export class KnowledgeAiProvidersService {
     const decoder = new TextDecoder();
     let buffer = '';
     let answer = '';
+    let usage: KnowledgeAiTokenUsage | null = null;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -979,15 +1000,18 @@ export class KnowledgeAiProvidersService {
       for (const block of blocks) {
         const result = this.consumeStreamBlock(block, onDelta);
         answer += result.content;
-        if (result.isDone) return answer;
+        usage = result.usage ?? usage;
+        if (result.isDone) return { answer, usage };
       }
     }
 
     buffer += decoder.decode();
     if (buffer.trim()) {
-      answer += this.consumeStreamBlock(buffer, onDelta).content;
+      const result = this.consumeStreamBlock(buffer, onDelta);
+      answer += result.content;
+      usage = result.usage ?? usage;
     }
-    return answer;
+    return { answer, usage };
   }
 
   private consumeStreamBlock(
@@ -995,14 +1019,16 @@ export class KnowledgeAiProvidersService {
     onDelta: (content: string) => void,
   ) {
     let content = '';
+    let usage: KnowledgeAiTokenUsage | null = null;
     for (const line of block.split(/\r?\n/)) {
       const trimmed = line.trim();
       if (!trimmed.startsWith('data:')) continue;
       const data = trimmed.slice(5).trim();
       if (!data) continue;
-      if (data === '[DONE]') return { content, isDone: true };
+      if (data === '[DONE]') return { content, isDone: true, usage };
 
       const parsed = JSON.parse(data) as ChatCompletionStreamResponse;
+      usage = this.extractTokenUsage(parsed) ?? usage;
       const delta =
         parsed.choices?.[0]?.delta?.content ||
         parsed.choices?.[0]?.message?.content ||
@@ -1012,6 +1038,39 @@ export class KnowledgeAiProvidersService {
         onDelta(delta);
       }
     }
-    return { content, isDone: false };
+    return { content, isDone: false, usage };
+  }
+
+  private extractTokenUsage(data: { usage?: unknown; output?: unknown }) {
+    const output = this.asRecord(data.output);
+    const usage = this.asRecord(data.usage) ?? this.asRecord(output?.usage);
+    if (!usage) return null;
+    const promptTokens = this.toTokenCount(
+      usage.prompt_tokens ??
+        usage.promptTokens ??
+        usage.input_tokens ??
+        usage.inputTokens,
+    );
+    const completionTokens = this.toTokenCount(
+      usage.completion_tokens ??
+        usage.completionTokens ??
+        usage.output_tokens ??
+        usage.outputTokens,
+    );
+    const totalTokens =
+      this.toTokenCount(usage.total_tokens ?? usage.totalTokens) ??
+      (promptTokens !== null && completionTokens !== null
+        ? promptTokens + completionTokens
+        : null);
+    return promptTokens !== null ||
+      completionTokens !== null ||
+      totalTokens !== null
+      ? { promptTokens, completionTokens, totalTokens }
+      : null;
+  }
+
+  private toTokenCount(value: unknown) {
+    const count = Number(value);
+    return Number.isFinite(count) && count >= 0 ? Math.trunc(count) : null;
   }
 }

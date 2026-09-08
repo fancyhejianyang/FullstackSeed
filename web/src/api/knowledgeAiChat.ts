@@ -22,6 +22,7 @@ export interface KnowledgeAiChatSession {
 export interface KnowledgeRetrievalHit {
   key: string;
   chunkId: number | null;
+  chunkIndex: number | null;
   title: string;
   knowledgeBaseId: number;
   knowledgeBaseName: string;
@@ -50,6 +51,9 @@ export interface KnowledgeAiChatMessage {
   isSuccess: boolean;
   errorMessage: string | null;
   elapsedMilliseconds: number;
+  promptTokens: number | null;
+  completionTokens: number | null;
+  totalTokens: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -160,6 +164,9 @@ export type KnowledgeAiChatStreamEvent =
         answer: string;
         errorMessage: string | null;
         elapsedMilliseconds: number;
+        promptTokens?: number | null;
+        completionTokens?: number | null;
+        totalTokens?: number | null;
       };
     };
 

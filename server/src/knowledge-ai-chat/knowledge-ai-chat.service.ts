@@ -8,6 +8,7 @@ import {
   KnowledgeAiProvidersService,
   type KnowledgeAiChatMessagePayload,
   type KnowledgeAiChatTarget,
+  type KnowledgeAiTokenUsage,
 } from '../knowledge-ai-providers/knowledge-ai-providers.service';
 import {
   AskKnowledgeAiDto,
@@ -39,6 +40,7 @@ interface KnowledgeRetrievalState {
   inventoryQuery: boolean;
   sessionContextReused: boolean;
   rerankApplied: boolean;
+  rerankTokenUsage: KnowledgeAiTokenUsage | null;
   routingRuleMatches: KnowledgeRoutingRuleMatch[];
   hits: KnowledgeRetrievalHit[];
 }
@@ -195,6 +197,9 @@ export class KnowledgeAiChatService {
       answer: result.answer,
       errorMessage: result.errorMessage,
       elapsedMilliseconds: result.elapsedMilliseconds,
+      promptTokens: message.promptTokens,
+      completionTokens: message.completionTokens,
+      totalTokens: message.totalTokens,
     });
     return { session, message };
   }
@@ -352,6 +357,7 @@ export class KnowledgeAiChatService {
       inventoryQuery: result.inventoryQuery,
       sessionContextReused: result.sessionContextReused,
       rerankApplied: result.rerankApplied,
+      rerankTokenUsage: result.rerankTokenUsage,
       routingRuleMatches: result.routingRuleMatches,
       hits: result.hits,
     };
@@ -376,12 +382,17 @@ export class KnowledgeAiChatService {
       answer: string;
       errorMessage: string | null;
       elapsedMilliseconds: number;
+      usage: KnowledgeAiTokenUsage | null;
     },
     config?: AiFeatureConfig | null,
     retrieval?: KnowledgeRetrievalState,
   ) {
     const hitKnowledgeBaseNames = this.serializeKnowledgeBaseNames(
       retrieval?.knowledgeBaseNames ?? [],
+    );
+    const tokenUsage = this.mergeTokenUsage(
+      result.usage,
+      retrieval?.rerankTokenUsage ?? null,
     );
     const message = await this.messageRepository.save(
       this.messageRepository.create({
@@ -402,6 +413,9 @@ export class KnowledgeAiChatService {
         isSuccess: result.isSuccess,
         errorMessage: result.errorMessage,
         elapsedMilliseconds: result.elapsedMilliseconds,
+        promptTokens: tokenUsage?.promptTokens ?? null,
+        completionTokens: tokenUsage?.completionTokens ?? null,
+        totalTokens: tokenUsage?.totalTokens ?? null,
       }),
     );
 
@@ -443,6 +457,31 @@ export class KnowledgeAiChatService {
       new Set(names.map((item) => item.trim()).filter(Boolean)),
     );
     return uniqueNames.length ? uniqueNames.join('、') : null;
+  }
+
+  private mergeTokenUsage(
+    first: KnowledgeAiTokenUsage | null,
+    second: KnowledgeAiTokenUsage | null,
+  ) {
+    if (!first && !second) return null;
+    return {
+      promptTokens: this.sumTokenCounts(
+        first?.promptTokens,
+        second?.promptTokens,
+      ),
+      completionTokens: this.sumTokenCounts(
+        first?.completionTokens,
+        second?.completionTokens,
+      ),
+      totalTokens: this.sumTokenCounts(first?.totalTokens, second?.totalTokens),
+    };
+  }
+
+  private sumTokenCounts(...values: Array<number | null | undefined>) {
+    const counts = values.filter(
+      (value): value is number => value !== null && value !== undefined,
+    );
+    return counts.length ? counts.reduce((sum, value) => sum + value, 0) : null;
   }
 
   private async resolveChatFeature(

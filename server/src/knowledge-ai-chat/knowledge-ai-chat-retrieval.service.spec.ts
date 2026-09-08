@@ -54,6 +54,16 @@ interface RetrievalInternals {
   buildSearchTerms: (question: string) => string[];
   extractEntityAnchors: (question: string) => string[];
   compareCandidates: (a: Candidate, b: Candidate) => number;
+  toHit: (
+    candidate: Candidate & {
+      textScore: number;
+      vectorScore: number;
+      rerankScore: number | null;
+    },
+  ) => {
+    chunkId: number | null;
+    chunkIndex: number | null;
+  };
   expandContextWithNeighbors: (
     candidates: Array<
       Candidate & {
@@ -541,6 +551,18 @@ describe('KnowledgeAiChatRetrievalService', () => {
 
     expect(internals.compareCandidates(later, earlier)).toBeGreaterThan(0);
     expect(internals.compareCandidates(earlier, later)).toBeLessThan(0);
+  });
+
+  it('records the source chunk index in retrieval hits', () => {
+    const candidate = {
+      ...buildFusedCandidate('chunk:18', 1, 0.8),
+      chunkId: 18,
+      chunkIndex: 17,
+    };
+
+    expect(internals.toHit(candidate)).toEqual(
+      expect.objectContaining({ chunkId: 18, chunkIndex: 17 }),
+    );
   });
 
   it('adds adjacent chunks as context without replacing direct hits', async () => {

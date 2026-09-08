@@ -74,6 +74,17 @@ function formatScore(score: number) {
   return Number(score || 0).toFixed(3);
 }
 
+function formatChunkSequence(chunkIndex: number | null) {
+  return chunkIndex == null ? '分片序号未知' : `分片 #${chunkIndex + 1}`;
+}
+
+function formatTokenUsage(message: KnowledgeAiChatSessionDetail['messages'][number]) {
+  if (message.totalTokens == null) return 'Token：上游未返回';
+  const promptTokens = message.promptTokens ?? '-';
+  const completionTokens = message.completionTokens ?? '-';
+  return `Token：${message.totalTokens}（输入 ${promptTokens} / 输出 ${completionTokens}）`;
+}
+
 async function batchDeleteRequest(payload: { ids: Array<string | number> }) {
   await batchDeleteKnowledgeAiChatSessions(payload.ids);
 }
@@ -173,12 +184,14 @@ async function handleView(row: KnowledgeAiChatSession) {
               size="small"
             >
               {{ hit.knowledgeBaseName }} / {{ hit.sourceName }} /
-              {{ formatScore(hit.score) }}
+              {{ formatChunkSequence(hit.chunkIndex) }} /
+              ID {{ hit.chunkId ?? '-' }} / {{ formatScore(hit.score) }}
             </el-tag>
           </div>
           <div class="ai-record__meta">
             {{ message.providerName }} / {{ message.model }} /
             {{ message.elapsedMilliseconds }} ms /
+            {{ formatTokenUsage(message) }} /
             {{ formatDateTime(message.createdAt) }}
           </div>
         </div>

@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-09-08 补充问答记录的召回分片与 Token 用量
+- 新增：
+  - `server/src/migrations/1788753600000-AddKnowledgeAiChatTokenUsage.ts`（为聊天消息增加输入、输出和总 Token 字段）
+- 修改：
+  - `server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`（解析普通及流式聊天响应的 usage；流式请求要求上游回传最终 usage）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat-retrieval.service.ts`、`knowledge-ai-chat.service.ts`、`entities/knowledge-ai-chat-message.entity.ts`（持久化召回分片序号，并合并重排和最终回答的实际 Token 用量）
+  - `web/src/api/knowledgeAiChat.ts`、`web/src/views/knowledge-ai-record/Index.vue`（问答详情展示分片序号、分片 ID、召回分数和 Token 明细）
+  - `CHANGELOG.md`（记录本次调整）
+- 删除：无
+- 说明：仅展示模型供应商实际返回的 usage；历史记录或不返回 usage 的供应商显示“上游未返回”，不会以字符数估算伪造 Token 数据。
+
 ### 2026-09-08 提升小说等相似语料的在线检索稳定性
 - 新增：无
 - 修改：

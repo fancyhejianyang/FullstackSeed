@@ -40,6 +40,7 @@ export class KnowledgeAiChatMessage extends BaseEntity {
   retrievalHits: Array<{
     key: string;
     chunkId: number | null;
+    chunkIndex: number | null;
     title: string;
     knowledgeBaseId: number;
     knowledgeBaseName: string;
@@ -72,4 +73,13 @@ export class KnowledgeAiChatMessage extends BaseEntity {
 
   @Column({ type: 'int', default: 0 })
   elapsedMilliseconds: number;
+
+  @Column({ type: 'int', nullable: true })
+  promptTokens: number | null;
+
+  @Column({ type: 'int', nullable: true })
+  completionTokens: number | null;
+
+  @Column({ type: 'int', nullable: true })
+  totalTokens: number | null;
 }
