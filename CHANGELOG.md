@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-09-08 支持流式展示 AI 思考过程
+- 新增：无
+- 修改：
+  - `server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`（识别 OpenAI 兼容流中的 `reasoning_content` / `reasoning`，通过独立回调转发）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat.service.ts`（向应用端输出 `thinking` SSE 事件，数据结构为 `{ content }`）
+  - `web/src/api/knowledgeAiChat.ts`（补充 `thinking` 流式事件类型）
+  - `server/src/knowledge-ai-providers/knowledge-ai-providers.service.spec.ts`（覆盖思考片段与最终回答分别回调）
+  - `CHANGELOG.md`（记录本次调整）
+- 删除：无
+- 说明：只有上游模型实际返回思考字段时才推送该事件；思考过程不会持久化到问答记录，也不会混入最终回答正文。
+
 ### 2026-09-08 增加聊天 Think 模式配置与请求透传
 - 新增：
   - `server/src/migrations/1788757200000-AddAiFeatureConfigThinking.ts`（为 AI 功能配置增加 Think 总开关和 JSON 参数对象）

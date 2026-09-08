@@ -181,6 +181,7 @@ export class KnowledgeAiChatService {
       messages,
       thinkingParameters: this.resolveThinkingParameters(config),
       onDelta: (content) => writer.writeEvent('delta', { content }),
+      onThinkingDelta: (content) => writer.writeEvent('thinking', { content }),
     });
 
     const message = await this.saveMessage(

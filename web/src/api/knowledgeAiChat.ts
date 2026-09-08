@@ -132,6 +132,10 @@ export type KnowledgeAiChatStreamEvent =
       data: { content: string };
     }
   | {
+      event: 'thinking';
+      data: { content: string };
+    }
+  | {
       event: 'retrieval';
       data: {
         retrievalConfigId: number | null;

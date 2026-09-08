@@ -36,10 +36,14 @@ interface ChatCompletionResponse {
 interface ChatCompletionStreamResponse {
   choices?: Array<{
     delta?: {
-      content?: string;
+      content?: unknown;
+      reasoning_content?: unknown;
+      reasoning?: unknown;
     };
     message?: {
-      content?: string;
+      content?: unknown;
+      reasoning_content?: unknown;
+      reasoning?: unknown;
     };
   }>;
   usage?: unknown;
@@ -102,6 +106,7 @@ export interface KnowledgeAiChatStreamPayload {
   messages: KnowledgeAiChatMessagePayload[];
   thinkingParameters?: Record<string, unknown> | null;
   onDelta: (content: string) => void;
+  onThinkingDelta?: (content: string) => void;
 }
 
 export interface KnowledgeAiVisionOcrPayload {
@@ -398,6 +403,7 @@ export class KnowledgeAiProvidersService {
       const streamResult = await this.readChatStream(
         response.body,
         payload.onDelta,
+        payload.onThinkingDelta,
       );
       answer = streamResult.answer;
 
@@ -1029,6 +1035,7 @@ export class KnowledgeAiProvidersService {
   private async readChatStream(
     body: ReadableStream<Uint8Array>,
     onDelta: (content: string) => void,
+    onThinkingDelta?: (content: string) => void,
   ) {
     const reader = body.getReader();
     const decoder = new TextDecoder();
@@ -1043,7 +1050,7 @@ export class KnowledgeAiProvidersService {
       const blocks = buffer.split(/\r?\n\r?\n/);
       buffer = blocks.pop() ?? '';
       for (const block of blocks) {
-        const result = this.consumeStreamBlock(block, onDelta);
+        const result = this.consumeStreamBlock(block, onDelta, onThinkingDelta);
         answer += result.content;
         usage = result.usage ?? usage;
         if (result.isDone) return { answer, usage };
@@ -1052,7 +1059,7 @@ export class KnowledgeAiProvidersService {
 
     buffer += decoder.decode();
     if (buffer.trim()) {
-      const result = this.consumeStreamBlock(buffer, onDelta);
+      const result = this.consumeStreamBlock(buffer, onDelta, onThinkingDelta);
       answer += result.content;
       usage = result.usage ?? usage;
     }
@@ -1062,28 +1069,42 @@ export class KnowledgeAiProvidersService {
   private consumeStreamBlock(
     block: string,
     onDelta: (content: string) => void,
+    onThinkingDelta?: (content: string) => void,
   ) {
     let content = '';
+    let thinkingContent = '';
     let usage: KnowledgeAiTokenUsage | null = null;
     for (const line of block.split(/\r?\n/)) {
       const trimmed = line.trim();
       if (!trimmed.startsWith('data:')) continue;
       const data = trimmed.slice(5).trim();
       if (!data) continue;
-      if (data === '[DONE]') return { content, isDone: true, usage };
+      if (data === '[DONE]') {
+        return { content, thinkingContent, isDone: true, usage };
+      }
 
       const parsed = JSON.parse(data) as ChatCompletionStreamResponse;
       usage = this.extractTokenUsage(parsed) ?? usage;
-      const delta =
-        parsed.choices?.[0]?.delta?.content ||
-        parsed.choices?.[0]?.message?.content ||
-        '';
+      const choice = parsed.choices?.[0];
+      const delta = this.readMessageContent(
+        choice?.delta?.content ?? choice?.message?.content,
+      );
+      const reasoning = this.readMessageContent(
+        choice?.delta?.reasoning_content ??
+          choice?.delta?.reasoning ??
+          choice?.message?.reasoning_content ??
+          choice?.message?.reasoning,
+      );
+      if (reasoning) {
+        thinkingContent += reasoning;
+        onThinkingDelta?.(reasoning);
+      }
       if (delta) {
         content += delta;
         onDelta(delta);
       }
     }
-    return { content, isDone: false, usage };
+    return { content, thinkingContent, isDone: false, usage };
   }
 
   private extractTokenUsage(data: { usage?: unknown; output?: unknown }) {

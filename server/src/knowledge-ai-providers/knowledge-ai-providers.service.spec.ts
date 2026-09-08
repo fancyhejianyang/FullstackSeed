@@ -16,6 +16,15 @@ interface ProviderInternals {
     stream?: boolean;
     thinkingParameters?: Record<string, unknown> | null;
   }) => Record<string, unknown>;
+  consumeStreamBlock: (
+    block: string,
+    onDelta: (content: string) => void,
+    onThinkingDelta?: (content: string) => void,
+  ) => {
+    content: string;
+    thinkingContent: string;
+    isDone: boolean;
+  };
 }
 
 describe('KnowledgeAiProvidersService', () => {
@@ -65,6 +74,24 @@ describe('KnowledgeAiProvidersService', () => {
       model: 'qwen-test',
       stream: true,
       stream_options: { include_usage: true },
+    });
+  });
+
+  it('forwards streaming reasoning content through the dedicated callback', () => {
+    const thinkingChunks: string[] = [];
+    const answerChunks: string[] = [];
+
+    const result = internals.consumeStreamBlock(
+      'data: {"choices":[{"delta":{"reasoning_content":"先核对资料。","content":"最终答案"}}]}',
+      (content) => answerChunks.push(content),
+      (content) => thinkingChunks.push(content),
+    );
+
+    expect(thinkingChunks).toEqual(['先核对资料。']);
+    expect(answerChunks).toEqual(['最终答案']);
+    expect(result).toMatchObject({
+      thinkingContent: '先核对资料。',
+      content: '最终答案',
     });
   });
 });
