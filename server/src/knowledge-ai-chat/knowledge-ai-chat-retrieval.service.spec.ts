@@ -527,7 +527,7 @@ describe('KnowledgeAiChatRetrievalService', () => {
         ...buildFusedCandidate('chunk:1', 1, 0.8),
         sourceName: '新生报到指南',
         content:
-          '请查看流程图：\n![报到流程](https://cdn.example.com/checkin.png)\n![重复图片](https://cdn.example.com/checkin.png)',
+          '请查看流程图：\n![报到流程](https://cdn.example.com/checkin.png)\n![重复图片](https://cdn.example.com/checkin.png)\n![本地图片](/uploads/2026/09/08/checkin.png)',
       },
       {
         ...buildFusedCandidate('chunk:2', 1, 0.7),
@@ -539,6 +539,12 @@ describe('KnowledgeAiChatRetrievalService', () => {
       {
         url: 'https://cdn.example.com/checkin.png',
         alt: '报到流程',
+        sourceName: '新生报到指南',
+        chunkId: 1,
+      },
+      {
+        url: '/uploads/2026/09/08/checkin.png',
+        alt: '本地图片',
         sourceName: '新生报到指南',
         chunkId: 1,
       },

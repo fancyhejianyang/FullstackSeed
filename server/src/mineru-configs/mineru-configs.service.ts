@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Like, Not, Repository } from 'typeorm';
 import JSZip from 'jszip';
+import { basename, posix } from 'node:path';
 import {
   CreateMineruConfigDto,
   QueryMineruConfigDto,
@@ -13,6 +14,16 @@ import {
 } from './dto/mineru-config.dto';
 import { MineruConfig } from './entities/mineru-config.entity';
 import { StorageConfigService } from '../storage-config/storage-config.service';
+import { UploadsService } from '../uploads/uploads.service';
+
+const MINERU_IMAGE_MIME_TYPES: Record<string, string> = {
+  '.bmp': 'image/bmp',
+  '.gif': 'image/gif',
+  '.jpeg': 'image/jpeg',
+  '.jpg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+};
 
 interface MineruCreateTaskResponse {
   task_id?: string;
@@ -62,6 +73,7 @@ export class MineruConfigsService {
     @InjectRepository(MineruConfig)
     private readonly configRepository: Repository<MineruConfig>,
     private readonly storageConfigService: StorageConfigService,
+    private readonly uploadsService: UploadsService,
   ) {}
 
   async findAll(query: QueryMineruConfigDto) {
@@ -339,8 +351,9 @@ export class MineruConfigsService {
       'download_url',
       'downloadUrl',
     ]);
-    if (!markdown && resultZipUrl) {
-      markdown = await this.extractTextFromResultZip(resultZipUrl);
+    if (resultZipUrl && (!markdown || this.hasRelativeMarkdownImage(markdown))) {
+      const zipMarkdown = await this.extractTextFromResultZip(resultZipUrl);
+      if (zipMarkdown) markdown = zipMarkdown;
     }
     const status =
       this.findFirstString(candidates, [
@@ -459,6 +472,11 @@ export class MineruConfigsService {
     }
     const buffer = Buffer.from(await response.arrayBuffer());
     const zip = await JSZip.loadAsync(buffer);
+    const imageUrls = await this.uploadMineruImageFiles(
+      Object.values(zip.files).filter(
+        (file) => !file.dir && this.isMineruImageFile(file.name),
+      ),
+    );
     const files = Object.values(zip.files)
       .filter((file) => !file.dir && this.isReadableMineruResultFile(file.name))
       .sort((a, b) => {
@@ -471,10 +489,96 @@ export class MineruConfigsService {
       const rawText = await file.async('string');
       const text = this.isHtmlMineruResultFile(file.name)
         ? this.convertHtmlToLinkedText(rawText).trim()
-        : rawText.trim();
+        : this.replaceMineruMarkdownImageUrls(
+            rawText,
+            file.name,
+            imageUrls,
+          ).trim();
       if (text) texts.push(text);
     }
     return texts.join('\n\n').trim();
+  }
+
+  /**
+   * MinerU 的 Markdown 图片通常写成 images/xxx.png，实际文件在结果 ZIP 内。
+   * 解析时转存到当前项目配置的本地上传目录或 OSS，避免聊天端拿到无来源的相对路径。
+   */
+  private async uploadMineruImageFiles(files: JSZip.JSZipObject[]) {
+    const imageUrls = new Map<string, string>();
+    for (const file of files) {
+      const content = await file.async('nodebuffer');
+      const result = await this.uploadsService.saveFile({
+        originalname: basename(file.name),
+        mimetype: this.getMineruImageMimeType(file.name),
+        size: content.length,
+        buffer: content,
+      });
+      imageUrls.set(this.normalizeMineruZipPath(file.name), result.url);
+    }
+    return imageUrls;
+  }
+
+  private hasRelativeMarkdownImage(content: string) {
+    return /!\[[^\]]*\]\(\s*(?!<?(?:https?:)?\/\/)[^)]+\)/i.test(content);
+  }
+
+  private replaceMineruMarkdownImageUrls(
+    content: string,
+    markdownFileName: string,
+    imageUrls: Map<string, string>,
+  ) {
+    return content.replace(
+      /!\[([^\]]*)\]\(\s*(<?)([^\s)>]+)\2(?:\s+["'][^)]*["'])?\s*\)/g,
+      (match, alt: string, _bracket: string, rawUrl: string) => {
+        const imageUrl = this.resolveMineruImageUrl(
+          rawUrl,
+          markdownFileName,
+          imageUrls,
+        );
+        return imageUrl ? `![${alt}](${imageUrl})` : match;
+      },
+    );
+  }
+
+  private resolveMineruImageUrl(
+    rawUrl: string,
+    markdownFileName: string,
+    imageUrls: Map<string, string>,
+  ) {
+    const value = rawUrl.trim();
+    if (!value || /^(?:https?:|data:|\/uploads\/)/i.test(value)) return '';
+    const decoded = this.tryDecodeUriComponent(value).replace(/\\/g, '/');
+    const normalizedUrl = this.normalizeMineruZipPath(decoded.replace(/^\/+/, ''));
+    const markdownDirectory = posix.dirname(
+      this.normalizeMineruZipPath(markdownFileName),
+    );
+    const relativePath = this.normalizeMineruZipPath(
+      posix.join(markdownDirectory, normalizedUrl),
+    );
+    return imageUrls.get(relativePath) || imageUrls.get(normalizedUrl) || '';
+  }
+
+  private isMineruImageFile(fileName: string) {
+    return !!this.getMineruImageMimeType(fileName);
+  }
+
+  private getMineruImageMimeType(fileName: string) {
+    const extension = posix.extname(fileName.replace(/\\/g, '/')).toLowerCase();
+    return MINERU_IMAGE_MIME_TYPES[extension] || '';
+  }
+
+  private normalizeMineruZipPath(value: string) {
+    return posix
+      .normalize(value.replace(/\\/g, '/').replace(/^\/+/, ''))
+      .replace(/^\.\//, '');
+  }
+
+  private tryDecodeUriComponent(value: string) {
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
   }
 
   private isReadableMineruResultFile(fileName: string) {

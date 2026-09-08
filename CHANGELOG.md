@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-09-08 修复 MinerU 图片在 AI 客服端的展示
+- 新增：
+  - `server/src/mineru-configs/mineru-configs.service.spec.ts`（覆盖 MinerU 结果包相对图片路径替换为上传地址）
+- 修改：
+  - `server/src/mineru-configs/`（读取结果 ZIP 时将 PNG/JPG/JPEG/GIF/WEBP/BMP 图片转存到当前本地上传目录或 OSS，并在 Markdown 中替换 `images/...` 相对路径）
+  - `server/src/uploads/uploads.module.ts`（导出上传服务，供 MinerU 结果资源转存复用）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat-retrieval.service.ts`、测试（允许 `referenceImages` 返回受控的 `/uploads/...` 图片路径）
+  - `D:/AllProjects/H5/ai-customer-service/js/api.js`、`js/app.js`（按 API 服务域名安全解析 `/uploads/...`，并渲染为图片）
+  - `CHANGELOG.md`（记录本次调整）
+- 删除：无
+- 说明：历史文档若只保留了 `images/...` 文本且未保存 MinerU 结果 ZIP 中的原图，需重新执行 MinerU 解析及后续分片、索引；新解析任务会自动保存图片并替换为可展示地址。
+
 ### 2026-09-08 默认返回命中知识库图片
 - 新增：无
 - 修改：

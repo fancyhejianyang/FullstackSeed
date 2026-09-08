@@ -1256,7 +1256,7 @@ export class KnowledgeAiChatRetrievalService {
   private extractReferenceImages(candidates: FusedRetrievalCandidate[]) {
     const images = new Map<string, KnowledgeReferenceImage>();
     const imagePattern =
-      /!\[([^\]]*)\]\(\s*(<?https?:\/\/[^\s)>]+>?)\s*(?:["'][^)]*["'])?\s*\)/gi;
+      /!\[([^\]]*)\]\(\s*(<?(?:https?:\/\/|\/uploads\/)[^\s)>]+>?)\s*(?:["'][^)]*["'])?\s*\)/gi;
 
     for (const candidate of candidates) {
       for (const match of candidate.content.matchAll(imagePattern)) {
@@ -1276,6 +1276,9 @@ export class KnowledgeAiChatRetrievalService {
   private normalizeReferenceImageUrl(value?: string) {
     const url = value?.replace(/^<|>$/g, '').trim() ?? '';
     if (!url) return '';
+    if (/^\/uploads\/[\w./%-]+(?:\?[\w./%&=+-]*)?$/i.test(url)) {
+      return url;
+    }
     try {
       const parsed = new URL(url);
       return ['http:', 'https:'].includes(parsed.protocol) ? parsed.toString() : '';
