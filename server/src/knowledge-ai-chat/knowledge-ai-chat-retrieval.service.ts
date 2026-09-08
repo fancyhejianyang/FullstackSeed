@@ -89,6 +89,13 @@ export interface KnowledgeRetrievalHit {
   rerankScore: number | null;
 }
 
+export interface KnowledgeReferenceImage {
+  url: string;
+  alt: string;
+  sourceName: string;
+  chunkId: number | null;
+}
+
 export interface KnowledgeRetrievalResult {
   query: string;
   queryRewritten: boolean;
@@ -104,6 +111,7 @@ export interface KnowledgeRetrievalResult {
   rerankTokenUsage: KnowledgeAiTokenUsage | null;
   routingRuleMatches: KnowledgeRoutingRuleMatch[];
   hits: KnowledgeRetrievalHit[];
+  referenceImages: KnowledgeReferenceImage[];
 }
 
 const TEXT_STOP_TERMS = new Set([
@@ -309,12 +317,11 @@ export class KnowledgeAiChatRetrievalService {
     }
 
     const hits = selected.map((candidate) => this.toHit(candidate));
+    const contextCandidates = await this.expandContextWithNeighbors(selected);
     return {
       query: plan.query,
       queryRewritten: plan.queryRewritten,
-      context: this.formatReferenceContext(
-        await this.expandContextWithNeighbors(selected),
-      ),
+      context: this.formatReferenceContext(contextCandidates),
       knowledgeBaseNames: Array.from(
         new Set(selected.map((candidate) => candidate.knowledgeBaseName)),
       ).filter(Boolean),
@@ -343,6 +350,7 @@ export class KnowledgeAiChatRetrievalService {
       rerankTokenUsage: reranked.tokenUsage,
       routingRuleMatches: plan.routingRuleMatches,
       hits,
+      referenceImages: this.extractReferenceImages(contextCandidates),
     };
   }
 
@@ -365,6 +373,7 @@ export class KnowledgeAiChatRetrievalService {
       rerankTokenUsage: null,
       routingRuleMatches: [],
       hits: [],
+      referenceImages: [],
       ...overrides,
     };
   }
@@ -409,6 +418,7 @@ export class KnowledgeAiChatRetrievalService {
       rerankTokenUsage: null,
       routingRuleMatches: [],
       hits: [],
+      referenceImages: [],
       ...overrides,
     } satisfies KnowledgeRetrievalResult;
   }
@@ -1241,6 +1251,37 @@ export class KnowledgeAiChatRetrievalService {
           .join('\n');
       })
       .join('\n\n');
+  }
+
+  private extractReferenceImages(candidates: FusedRetrievalCandidate[]) {
+    const images = new Map<string, KnowledgeReferenceImage>();
+    const imagePattern =
+      /!\[([^\]]*)\]\(\s*(<?https?:\/\/[^\s)>]+>?)\s*(?:["'][^)]*["'])?\s*\)/gi;
+
+    for (const candidate of candidates) {
+      for (const match of candidate.content.matchAll(imagePattern)) {
+        const url = this.normalizeReferenceImageUrl(match[2]);
+        if (!url || images.has(url)) continue;
+        images.set(url, {
+          url,
+          alt: match[1].trim() || '知识库图片',
+          sourceName: candidate.sourceName || candidate.title,
+          chunkId: candidate.chunkId,
+        });
+      }
+    }
+    return Array.from(images.values());
+  }
+
+  private normalizeReferenceImageUrl(value?: string) {
+    const url = value?.replace(/^<|>$/g, '').trim() ?? '';
+    if (!url) return '';
+    try {
+      const parsed = new URL(url);
+      return ['http:', 'https:'].includes(parsed.protocol) ? parsed.toString() : '';
+    } catch {
+      return '';
+    }
   }
 
   private orderContextCandidates(candidates: FusedRetrievalCandidate[]) {

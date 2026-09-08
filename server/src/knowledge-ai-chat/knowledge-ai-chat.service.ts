@@ -19,6 +19,7 @@ import { KnowledgeAiChatMessage } from './entities/knowledge-ai-chat-message.ent
 import { KnowledgeAiChatSession } from './entities/knowledge-ai-chat-session.entity';
 import {
   KnowledgeAiChatRetrievalService,
+  type KnowledgeReferenceImage,
   type KnowledgeRetrievalHit,
 } from './knowledge-ai-chat-retrieval.service';
 import type { KnowledgeRoutingRuleMatch } from '../knowledge-routing-rules/knowledge-routing-rules.service';
@@ -43,6 +44,7 @@ interface KnowledgeRetrievalState {
   rerankTokenUsage: KnowledgeAiTokenUsage | null;
   routingRuleMatches: KnowledgeRoutingRuleMatch[];
   hits: KnowledgeRetrievalHit[];
+  referenceImages: KnowledgeReferenceImage[];
 }
 
 @Injectable()
@@ -173,6 +175,7 @@ export class KnowledgeAiChatService {
       rerankApplied: retrieval.rerankApplied,
       routingRuleMatches: retrieval.routingRuleMatches,
       hits: retrieval.hits,
+      referenceImages: retrieval.referenceImages,
     });
 
     const messages = this.buildChatMessages(dto, config, retrieval, history);
@@ -363,6 +366,7 @@ export class KnowledgeAiChatService {
       rerankTokenUsage: result.rerankTokenUsage,
       routingRuleMatches: result.routingRuleMatches,
       hits: result.hits,
+      referenceImages: result.referenceImages,
     };
   }
 
@@ -552,6 +556,11 @@ export class KnowledgeAiChatService {
       '你必须只依据以下知识库参考资料回答用户问题。',
       '严禁使用互联网常识、模型训练知识或自行推测补充答案。',
       '如果参考资料不足以回答，请明确说明“知识库中未找到相关内容，无法确认”。',
+      ...(retrieval.referenceImages.length
+        ? [
+            '资料中的 Markdown 图片属于原文资源；图片直接支持回答时，必须原样保留其 `![说明](URL)`，放在对应说明文字的下一行。不得虚构图片 URL。',
+          ]
+        : []),
       '',
       `知识库参考资料：\n${retrieval.context}`,
       '',

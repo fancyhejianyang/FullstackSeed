@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-09-08 默认返回命中知识库图片
+- 新增：无
+- 修改：
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat-retrieval.service.ts`（从命中及相邻补充分片的 MinerU Markdown 中提取、去重并校验 `http/https` 图片 URL）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat.service.ts`、`web/src/api/knowledgeAiChat.ts`（在 `retrieval` SSE 事件增加 `referenceImages`，包含 URL、替代文本、来源和分片 ID）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat-retrieval.service.spec.ts`（覆盖安全 URL、去重和不安全协议过滤）
+  - `CHANGELOG.md`（记录本次调整）
+- 删除：无
+- 说明：图片不依赖模型是否主动输出；模型遗漏时，应用端可根据 `referenceImages` 在最终答案后补充展示。仅返回 Markdown 中已存在且浏览器可访问的绝对 `http/https` 图片地址。
+
 ### 2026-09-08 支持流式展示 AI 思考过程
 - 新增：无
 - 修改：

@@ -33,6 +33,13 @@ export interface KnowledgeRetrievalHit {
   rerankScore: number | null;
 }
 
+export interface KnowledgeReferenceImage {
+  url: string;
+  alt: string;
+  sourceName: string;
+  chunkId: number | null;
+}
+
 export interface KnowledgeAiChatMessage {
   id: number;
   sessionId: number;
@@ -148,6 +155,7 @@ export type KnowledgeAiChatStreamEvent =
         inventoryQuery: boolean;
         rerankApplied: boolean;
         hits: KnowledgeRetrievalHit[];
+        referenceImages: KnowledgeReferenceImage[];
       };
     }
   | {

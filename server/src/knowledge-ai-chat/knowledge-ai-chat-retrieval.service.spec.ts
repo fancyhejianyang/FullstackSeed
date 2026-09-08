@@ -104,6 +104,20 @@ interface RetrievalInternals {
       }
     >,
   ) => string;
+  extractReferenceImages: (
+    candidates: Array<
+      Candidate & {
+        textScore: number;
+        vectorScore: number;
+        rerankScore: number | null;
+      }
+    >,
+  ) => Array<{
+    url: string;
+    alt: string;
+    sourceName: string;
+    chunkId: number | null;
+  }>;
   rerankCandidates: (
     question: string,
     candidates: Array<
@@ -505,6 +519,30 @@ describe('KnowledgeAiChatRetrievalService', () => {
     expect(context.indexOf(first.content)).toBeLessThan(
       context.indexOf(second.content),
     );
+  });
+
+  it('returns only safe deduplicated Markdown image URLs from context chunks', () => {
+    const images = internals.extractReferenceImages([
+      {
+        ...buildFusedCandidate('chunk:1', 1, 0.8),
+        sourceName: '新生报到指南',
+        content:
+          '请查看流程图：\n![报到流程](https://cdn.example.com/checkin.png)\n![重复图片](https://cdn.example.com/checkin.png)',
+      },
+      {
+        ...buildFusedCandidate('chunk:2', 1, 0.7),
+        content: '忽略不安全资源：![本地文件](javascript:alert(1))',
+      },
+    ]);
+
+    expect(images).toEqual([
+      {
+        url: 'https://cdn.example.com/checkin.png',
+        alt: '报到流程',
+        sourceName: '新生报到指南',
+        chunkId: 1,
+      },
+    ]);
   });
 
   it('removes conversational filler and scores keyword matches above noise', () => {
