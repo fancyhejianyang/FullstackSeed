@@ -1,13 +1,14 @@
 # CHANGELOG
 
-### 2026-09-08 隐藏 AI 原始思考内容
+### 2026-09-08 增加用户可见的 AI 推理摘要
 - 新增：无
 - 修改：
-  - `server/src/knowledge-ai-chat/knowledge-ai-chat.service.ts`（Think 模式仅向应用发送固定的安全状态，不再透传供应商的 `reasoning_content` / `reasoning`）
-  - `D:/AllProjects/H5/ai-customer-service/js/app.js`（忽略 `thinking` 事件原文，仅显示固定状态，作为客户端兜底）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat.service.ts`（主回答完成后，以最终回答和知识库名称单独生成用户可见摘要；不传入原提示词、规则、检索配置或分片正文）
+  - `web/src/api/knowledgeAiChat.ts`（`thinking` SSE 事件补充 `kind: status | summary`）
+  - `D:/AllProjects/H5/ai-customer-service/js/api.js`、`js/app.js`（区分处理状态和用户可见摘要，并在思考面板展示摘要）
   - `CHANGELOG.md`（记录本次调整）
 - 删除：无
-- 说明：模型仍可在服务端使用 Think 参数生成回答，但系统提示词、检索策略、路由规则和原始推理文本不会返回给终端用户。
+- 说明：模型仍可在服务端使用 Think 参数生成回答；原始 `reasoning_content` / `reasoning` 不会返回给终端用户。
 
 ### 2026-09-08 修复 MinerU 图片在 AI 客服端的展示
 - 新增：

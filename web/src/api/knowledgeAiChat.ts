@@ -140,7 +140,7 @@ export type KnowledgeAiChatStreamEvent =
     }
   | {
       event: 'thinking';
-      data: { content: string };
+      data: { content: string; kind: 'status' | 'summary' };
     }
   | {
       event: 'retrieval';
