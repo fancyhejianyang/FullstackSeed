@@ -179,12 +179,17 @@ export class KnowledgeAiChatService {
     });
 
     const messages = this.buildChatMessages(dto, config, retrieval, history);
+    const thinkingParameters = this.resolveThinkingParameters(config);
+    if (thinkingParameters) {
+      writer.writeEvent('thinking', {
+        content: '正在分析问题并生成回答…',
+      });
+    }
     const result = await this.providersService.callChatStream({
       target,
       messages,
-      thinkingParameters: this.resolveThinkingParameters(config),
+      thinkingParameters,
       onDelta: (content) => writer.writeEvent('delta', { content }),
-      onThinkingDelta: (content) => writer.writeEvent('thinking', { content }),
     });
 
     const message = await this.saveMessage(

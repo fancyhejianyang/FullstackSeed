@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-09-08 隐藏 AI 原始思考内容
+- 新增：无
+- 修改：
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat.service.ts`（Think 模式仅向应用发送固定的安全状态，不再透传供应商的 `reasoning_content` / `reasoning`）
+  - `D:/AllProjects/H5/ai-customer-service/js/app.js`（忽略 `thinking` 事件原文，仅显示固定状态，作为客户端兜底）
+  - `CHANGELOG.md`（记录本次调整）
+- 删除：无
+- 说明：模型仍可在服务端使用 Think 参数生成回答，但系统提示词、检索策略、路由规则和原始推理文本不会返回给终端用户。
+
 ### 2026-09-08 修复 MinerU 图片在 AI 客服端的展示
 - 新增：
   - `server/src/mineru-configs/mineru-configs.service.spec.ts`（覆盖 MinerU 结果包相对图片路径替换为上传地址）
