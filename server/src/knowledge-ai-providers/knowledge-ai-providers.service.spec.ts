@@ -9,6 +9,13 @@ interface ProviderInternals {
     completionTokens: number | null;
     totalTokens: number | null;
   } | null;
+  buildChatRequestBody: (payload: {
+    model: string;
+    messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+    temperature: number;
+    stream?: boolean;
+    thinkingParameters?: Record<string, unknown> | null;
+  }) => Record<string, unknown>;
 }
 
 describe('KnowledgeAiProvidersService', () => {
@@ -38,5 +45,26 @@ describe('KnowledgeAiProvidersService', () => {
 
   it('returns null when the upstream response has no usable token usage', () => {
     expect(internals.extractTokenUsage({ usage: {} })).toBeNull();
+  });
+
+  it('merges Think parameters without allowing them to replace core request fields', () => {
+    const body = internals.buildChatRequestBody({
+      model: 'qwen-test',
+      messages: [{ role: 'user', content: '你好' }],
+      temperature: 0.2,
+      stream: true,
+      thinkingParameters: {
+        enable_thinking: true,
+        model: 'should-not-apply',
+        stream: false,
+      },
+    });
+
+    expect(body).toMatchObject({
+      enable_thinking: true,
+      model: 'qwen-test',
+      stream: true,
+      stream_options: { include_usage: true },
+    });
   });
 });

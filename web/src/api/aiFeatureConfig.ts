@@ -10,6 +10,8 @@ export interface AiFeatureConfig {
   providerId: number | null;
   providerName: string | null;
   model: string | null;
+  enableThinking: boolean;
+  thinkingParameters: Record<string, unknown> | null;
   useMineru: boolean;
   mineruConfigId: number | null;
   mineruConfigName: string | null;
@@ -41,6 +43,8 @@ export interface AiFeatureConfigForm {
   featureType: AiFeatureType;
   providerId?: number | '' | null;
   model?: string;
+  enableThinking?: boolean;
+  thinkingParameters?: Record<string, unknown> | null;
   useMineru?: boolean;
   mineruConfigId?: number | '' | null;
   systemPrompt?: string;

@@ -33,11 +33,18 @@ const formRef = ref<InstanceType<typeof Form>>();
 const providers = ref<KnowledgeAiProvider[]>([]);
 const mineruConfigs = ref<MineruConfig[]>([]);
 
-const form = reactive<AiFeatureConfigForm>({
+type AiFeatureConfigEditForm = AiFeatureConfigForm & {
+  thinkingParametersText: string;
+};
+
+const form = reactive<AiFeatureConfigEditForm>({
   name: '',
   featureType: 'chat',
   providerId: '',
   model: '',
+  enableThinking: false,
+  thinkingParameters: null,
+  thinkingParametersText: '',
   useMineru: false,
   mineruConfigId: '',
   systemPrompt: '',
@@ -74,6 +81,7 @@ const selectedProvider = computed(() =>
 
 const isParseFeature = computed(() => ['ocr', 'documentParse'].includes(form.featureType));
 const isMineruParseFeature = computed(() => isParseFeature.value && !!form.useMineru);
+const isChatFeature = computed(() => form.featureType === 'chat');
 
 const modelOptions = computed(() => getModelOptions(selectedProvider.value, form.featureType));
 
@@ -132,6 +140,25 @@ const fields = computed<FormField[]>(() => {
         placeholder: modelPlaceholder.value,
       },
     );
+  }
+
+  if (isChatFeature.value) {
+    baseFields.push({
+      prop: 'enableThinking',
+      label: 'Think 模式',
+      component: 'Switch',
+      componentProps: { activeText: '开启', inactiveText: '关闭' },
+    });
+    if (form.enableThinking) {
+      baseFields.push({
+        prop: 'thinkingParametersText',
+        label: 'Think 参数',
+        type: 'textarea',
+        rows: 5,
+        placeholder:
+          'JSON 对象。例如 Qwen：{\n  "enable_thinking": true\n}\n或推理模型：{\n  "reasoning_effort": "medium"\n}',
+      });
+    }
   }
 
   return [
@@ -206,6 +233,10 @@ watch(
     if (!isParseFeature.value) {
       form.useMineru = false;
     }
+    if (!isChatFeature.value) {
+      form.enableThinking = false;
+      form.thinkingParametersText = '';
+    }
     if (isMineruParseFeature.value) {
       form.providerId = '';
       form.model = '';
@@ -233,6 +264,8 @@ function resetForm() {
   form.featureType = 'chat';
   form.providerId = '';
   form.model = '';
+  form.enableThinking = false;
+  form.thinkingParametersText = '';
   form.useMineru = false;
   form.mineruConfigId = '';
   form.systemPrompt = '';
@@ -247,6 +280,10 @@ function fillForm(data: AiFeatureConfig) {
   form.featureType = data.featureType;
   form.providerId = data.providerId ?? '';
   form.model = data.model ?? '';
+  form.enableThinking = !!data.enableThinking;
+  form.thinkingParametersText = data.thinkingParameters
+    ? JSON.stringify(data.thinkingParameters, null, 2)
+    : '';
   form.useMineru = !!data.useMineru;
   form.mineruConfigId = data.mineruConfigId ?? '';
   form.systemPrompt = data.systemPrompt ?? '';
@@ -262,6 +299,8 @@ function buildPayload(): AiFeatureConfigForm {
     featureType: form.featureType,
     providerId: isMineruParseFeature.value ? null : Number(form.providerId),
     model: isMineruParseFeature.value ? '' : form.model?.trim(),
+    enableThinking: isChatFeature.value && !!form.enableThinking,
+    thinkingParameters: resolveThinkingParameters(),
     useMineru: !!form.useMineru,
     mineruConfigId: isMineruParseFeature.value ? Number(form.mineruConfigId) : null,
     systemPrompt: form.systemPrompt?.trim(),
@@ -272,15 +311,42 @@ function buildPayload(): AiFeatureConfigForm {
   };
 }
 
+function resolveThinkingParameters() {
+  if (!isChatFeature.value || !form.enableThinking) return null;
+  const text = form.thinkingParametersText.trim();
+  if (!text) {
+    throw new Error('启用 Think 模式时，请填写 Think 参数 JSON 对象');
+  }
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('Think 参数必须是 JSON 对象，例如 {"enable_thinking":true}');
+    }
+    return parsed as Record<string, unknown>;
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new Error('Think 参数不是合法的 JSON 对象');
+    }
+    throw error;
+  }
+}
+
 async function handleSubmit() {
   await formRef.value?.validate();
+  let payload: AiFeatureConfigForm;
+  try {
+    payload = buildPayload();
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : 'Think 参数配置不正确');
+    return;
+  }
   submitting.value = true;
   try {
     if (props.row?.id) {
-      await updateAiFeatureConfig(props.row.id, buildPayload());
+      await updateAiFeatureConfig(props.row.id, payload);
       ElMessage.success('更新成功');
     } else {
-      await createAiFeatureConfig(buildPayload());
+      await createAiFeatureConfig(payload);
       ElMessage.success('创建成功');
     }
     visible.value = false;

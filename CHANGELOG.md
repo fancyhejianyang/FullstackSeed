@@ -1,5 +1,18 @@
 # CHANGELOG
 
+### 2026-09-08 增加聊天 Think 模式配置与请求透传
+- 新增：
+  - `server/src/migrations/1788757200000-AddAiFeatureConfigThinking.ts`（为 AI 功能配置增加 Think 总开关和 JSON 参数对象）
+  - `server/src/ai-feature-configs/ai-feature-configs.service.spec.ts`（覆盖聊天限定、参数保留与请求核心字段保护）
+- 修改：
+  - `server/src/ai-feature-configs/`（新增 `enableThinking`、`thinkingParameters` 字段；仅聊天类型允许启用，关闭或切换其他类型时自动清空）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat.service.ts`、`server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`（普通问答和流式问答统一将已启用配置的 JSON 参数合并进上游模型请求）
+  - `server/src/knowledge-ai-providers/knowledge-ai-providers.service.spec.ts`（验证 Think 参数不会覆盖模型、消息、流式和温度等核心请求字段）
+  - `web/src/api/aiFeatureConfig.ts`、`web/src/views/ai-feature-config/`（聊天配置新增 Think 开关、JSON 编辑与列表状态展示）
+  - `CHANGELOG.md`（记录本次调整）
+- 删除：无
+- 说明：Think 的实际参数由所选模型供应商决定，例如 `{"enable_thinking":true}` 或 `{"reasoning_effort":"medium"}`；项目开关关闭时不会向模型透传任何 Think 参数。
+
 ### 2026-09-08 补充问答记录的召回分片与 Token 用量
 - 新增：
   - `server/src/migrations/1788753600000-AddKnowledgeAiChatTokenUsage.ts`（为聊天消息增加输入、输出和总 Token 字段）

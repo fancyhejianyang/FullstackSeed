@@ -5,6 +5,7 @@ import {
   IsIn,
   IsInt,
   IsNotEmpty,
+  IsObject,
   IsOptional,
   IsString,
   MaxLength,
@@ -52,6 +53,14 @@ export class CreateAiFeatureConfigDto {
   @IsNotEmpty()
   @MaxLength(120)
   model?: string | null;
+
+  @IsBoolean()
+  @IsOptional()
+  enableThinking?: boolean;
+
+  @IsObject()
+  @IsOptional()
+  thinkingParameters?: Record<string, unknown> | null;
 
   @IsString()
   @IsOptional()

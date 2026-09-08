@@ -76,6 +76,11 @@ export interface KnowledgeAiChatCallPayload {
    * 因此会显式传入 0；普通聊天仍保持原来的 0.2。
    */
   temperature?: number;
+  /**
+   * 仅由聊天 AI 功能配置提供的供应商特有 Think 参数。
+   * 核心请求字段仍由服务端固定生成，不能被该对象覆盖。
+   */
+  thinkingParameters?: Record<string, unknown> | null;
 }
 
 export interface KnowledgeAiChatTargetPayload {
@@ -95,6 +100,7 @@ export interface KnowledgeAiChatTarget {
 export interface KnowledgeAiChatStreamPayload {
   target: KnowledgeAiChatTarget;
   messages: KnowledgeAiChatMessagePayload[];
+  thinkingParameters?: Record<string, unknown> | null;
   onDelta: (content: string) => void;
 }
 
@@ -304,13 +310,16 @@ export class KnowledgeAiProvidersService {
           Authorization: `Bearer ${target.secretKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          model,
-          messages: payload.messages?.length
-            ? payload.messages
-            : this.buildQuestionMessages(payload),
-          temperature: this.resolveTemperature(payload.temperature),
-        }),
+        body: JSON.stringify(
+          this.buildChatRequestBody({
+            model,
+            messages: payload.messages?.length
+              ? payload.messages
+              : this.buildQuestionMessages(payload),
+            temperature: this.resolveTemperature(payload.temperature),
+            thinkingParameters: payload.thinkingParameters,
+          }),
+        ),
       });
 
       if (!response.ok) {
@@ -365,13 +374,15 @@ export class KnowledgeAiProvidersService {
           Authorization: `Bearer ${payload.target.secretKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          model: payload.target.model,
-          messages: payload.messages,
-          temperature: 0.2,
-          stream: true,
-          stream_options: { include_usage: true },
-        }),
+        body: JSON.stringify(
+          this.buildChatRequestBody({
+            model: payload.target.model,
+            messages: payload.messages,
+            temperature: 0.2,
+            stream: true,
+            thinkingParameters: payload.thinkingParameters,
+          }),
+        ),
       });
 
       if (!response.ok) {
@@ -803,6 +814,40 @@ export class KnowledgeAiProvidersService {
         content: payload.question,
       },
     ];
+  }
+
+  private buildChatRequestBody(payload: {
+    model: string;
+    messages: KnowledgeAiChatMessagePayload[];
+    temperature: number;
+    stream?: boolean;
+    thinkingParameters?: Record<string, unknown> | null;
+  }) {
+    return {
+      ...this.toSafeThinkingParameters(payload.thinkingParameters),
+      model: payload.model,
+      messages: payload.messages,
+      temperature: payload.temperature,
+      ...(payload.stream
+        ? { stream: true, stream_options: { include_usage: true } }
+        : {}),
+    };
+  }
+
+  private toSafeThinkingParameters(
+    value?: Record<string, unknown> | null,
+  ) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return {};
+    }
+    return Object.fromEntries(
+      Object.entries(value).filter(
+        ([key]) =>
+          !['model', 'messages', 'stream', 'stream_options', 'temperature'].includes(
+            key.toLowerCase(),
+          ),
+      ),
+    );
   }
 
   private resolveTemperature(value?: number) {

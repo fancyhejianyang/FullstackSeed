@@ -39,6 +39,7 @@ const columns: TableColumn[] = [
   { prop: 'executeMode', label: '执行方式', width: 120, slot: true },
   { prop: 'providerName', label: '配置/账号', minWidth: 160, slot: true },
   { prop: 'model', label: '模型', minWidth: 160, slot: true },
+  { prop: 'enableThinking', label: 'Think 模式', width: 105, slot: true },
   { prop: 'responseFormat', label: '返回格式', width: 120, slot: true },
   { prop: 'isEnabled', label: '状态', width: 90, slot: true },
   { prop: 'description', label: '描述', minWidth: 180 },
@@ -140,6 +141,12 @@ function getFeatureLabel(value: AiFeatureType) {
 
       <template #column-model="{ row }">
         {{ row.model || '-' }}
+      </template>
+
+      <template #column-enableThinking="{ row }">
+        <el-tag :type="row.enableThinking ? 'success' : 'info'">
+          {{ row.enableThinking ? '开启' : '关闭' }}
+        </el-tag>
       </template>
 
       <template #column-responseFormat="{ row }">

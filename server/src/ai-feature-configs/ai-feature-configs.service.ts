@@ -15,6 +15,14 @@ import {
 } from './dto/ai-feature-config.dto';
 import { AiFeatureConfig } from './entities/ai-feature-config.entity';
 
+const RESERVED_THINKING_PARAMETER_KEYS = new Set([
+  'model',
+  'messages',
+  'stream',
+  'stream_options',
+  'temperature',
+]);
+
 @Injectable()
 export class AiFeatureConfigsService {
   constructor(
@@ -88,6 +96,7 @@ export class AiFeatureConfigsService {
   async create(dto: CreateAiFeatureConfigDto) {
     const payload = await this.toEntityPayload(dto, true);
     const entity = this.configRepository.create(payload);
+    this.normalizeFeatureSpecificSettings(entity);
     this.assertExecutableConfig(entity);
     if (entity.isEnabled) {
       await this.disableOtherFeatureConfigs(entity.featureType);
@@ -99,6 +108,7 @@ export class AiFeatureConfigsService {
   async update(id: number, dto: UpdateAiFeatureConfigDto) {
     const config = await this.findOne(id);
     Object.assign(config, await this.toEntityPayload(dto, false));
+    this.normalizeFeatureSpecificSettings(config);
     this.assertExecutableConfig(config);
     if (config.isEnabled) {
       await this.disableOtherFeatureConfigs(config.featureType, config.id);
@@ -143,6 +153,12 @@ export class AiFeatureConfigsService {
       }
     }
     if (dto.model !== undefined) payload.model = dto.model?.trim() || null;
+    if (dto.enableThinking !== undefined || isCreate) {
+      payload.enableThinking = dto.enableThinking ?? false;
+    }
+    if (dto.thinkingParameters !== undefined) {
+      payload.thinkingParameters = dto.thinkingParameters ?? null;
+    }
     if (dto.mineruConfigId !== undefined) {
       if (dto.mineruConfigId) {
         const mineruConfig = await this.mineruConfigsService.findOne(
@@ -182,6 +198,32 @@ export class AiFeatureConfigsService {
     return payload;
   }
 
+  private normalizeFeatureSpecificSettings(config: Partial<AiFeatureConfig>) {
+    if (config.featureType !== 'chat') {
+      config.enableThinking = false;
+      config.thinkingParameters = null;
+      return;
+    }
+    if (!config.enableThinking) {
+      config.thinkingParameters = null;
+      return;
+    }
+    const parameters = config.thinkingParameters;
+    if (!this.isNonEmptyObject(parameters)) {
+      throw new BadRequestException(
+        '启用 Think 模式时，请填写至少一个 Think 请求参数',
+      );
+    }
+    const reservedKey = Object.keys(parameters).find((key) =>
+      RESERVED_THINKING_PARAMETER_KEYS.has(key.toLowerCase()),
+    );
+    if (reservedKey) {
+      throw new BadRequestException(
+        `Think 参数不允许覆盖请求字段：${reservedKey}`,
+      );
+    }
+  }
+
   private async disableOtherFeatureConfigs(
     featureType: AiFeatureType,
     excludeId?: number,
@@ -210,5 +252,16 @@ export class AiFeatureConfigsService {
   private toNullableText(value?: string) {
     const text = value?.trim() ?? '';
     return text || null;
+  }
+
+  private isNonEmptyObject(
+    value: unknown,
+  ): value is Record<string, unknown> {
+    return (
+      !!value &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      Object.keys(value).length > 0
+    );
   }
 }

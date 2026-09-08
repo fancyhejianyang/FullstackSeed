@@ -23,6 +23,18 @@ export class AiFeatureConfig extends BaseEntity {
   @Column({ type: 'varchar', length: 120, nullable: true })
   model: string | null;
 
+  /**
+   * 项目侧 Think 总开关。仅聊天配置生效，避免把供应商特有参数误用于 OCR、向量化等调用。
+   */
+  @Column({ type: 'tinyint', default: false })
+  enableThinking: boolean;
+
+  /**
+   * 供应商/模型特有的 Think 请求参数，例如 { "enable_thinking": true }。
+   */
+  @Column({ type: 'json', nullable: true })
+  thinkingParameters: Record<string, unknown> | null;
+
   @Column({ type: 'tinyint', default: false })
   useMineru: boolean;
 

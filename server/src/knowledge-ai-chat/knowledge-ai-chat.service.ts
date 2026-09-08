@@ -114,6 +114,7 @@ export class KnowledgeAiChatService {
       model: target.model,
       question: dto.question,
       messages,
+      thinkingParameters: this.resolveThinkingParameters(config),
     });
     const message = await this.saveMessage(
       dto,
@@ -178,6 +179,7 @@ export class KnowledgeAiChatService {
     const result = await this.providersService.callChatStream({
       target,
       messages,
+      thinkingParameters: this.resolveThinkingParameters(config),
       onDelta: (content) => writer.writeEvent('delta', { content }),
     });
 
@@ -518,6 +520,16 @@ export class KnowledgeAiChatService {
       this.buildResponseFormatInstruction(config?.responseFormat),
     ].filter(Boolean);
     return parts.join('\n\n');
+  }
+
+  private resolveThinkingParameters(config?: AiFeatureConfig | null) {
+    if (config?.featureType !== 'chat' || !config.enableThinking) {
+      return null;
+    }
+    const parameters = config.thinkingParameters;
+    return parameters && typeof parameters === 'object' && !Array.isArray(parameters)
+      ? parameters
+      : null;
   }
 
   private buildQuestionContent(
