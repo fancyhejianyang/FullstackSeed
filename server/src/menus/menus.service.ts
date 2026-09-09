@@ -301,17 +301,12 @@ export class MenusService implements OnModuleInit {
   ) {}
 
   /**
-   * 启动时补齐内置菜单。
-   * 已存在的菜单只做安全兜底，不覆盖 name/path/icon/sort/permissionCode 等可编辑字段，
-   * 避免管理员在「菜单管理」里维护名称、路由后被服务重启还原。
+   * 启动时仅补齐缺失的内置菜单。
+   * 已存在的菜单由管理员维护，启动过程不写入任何字段，避免重启服务后
+   * 覆盖父子关系、排序、名称、路由或图标等配置。
    */
   async onModuleInit() {
     for (const seed of SEED_MENUS) {
-      const parent = seed.parentPath
-        ? await this.menuRepository.findOne({
-            where: { path: seed.parentPath },
-          })
-        : null;
       const { parentPath, ...menuSeed } = seed;
       const exist = await this.menuRepository.findOne({
         where: [
@@ -319,67 +314,20 @@ export class MenusService implements OnModuleInit {
           ...(menuSeed.name ? [{ name: menuSeed.name }] : []),
         ],
       });
-      if (!exist) {
-        await this.menuRepository.save(
-          this.menuRepository.create({
-            ...menuSeed,
-            parentId: parent?.id ?? menuSeed.parentId ?? null,
-          }),
-        );
-        continue;
-      }
-      if (parent && exist.parentId !== parent.id) {
-        exist.parentId = parent.id;
-        await this.menuRepository.save(exist);
-      }
+      if (exist) continue;
+
+      const parent = parentPath
+        ? await this.menuRepository.findOne({
+            where: { path: parentPath },
+          })
+        : null;
+      await this.menuRepository.save(
+        this.menuRepository.create({
+          ...menuSeed,
+          parentId: parent?.id ?? menuSeed.parentId ?? null,
+        }),
+      );
     }
-    await this.migrateChatManagementMenus();
-  }
-
-  private async migrateChatManagementMenus() {
-    const parent = await this.menuRepository.findOne({
-      where: { path: '/chat-management' },
-    });
-    if (!parent) return;
-    await this.moveSeedMenu({
-      names: ['AI 问答测试'],
-      paths: ['/system-config/ai-chat', '/chat-management/ai-chat'],
-      parentId: parent.id,
-      targetName: 'AI 问答测试',
-      targetPath: '/chat-management/ai-chat',
-      sort: 10,
-    });
-    await this.moveSeedMenu({
-      names: ['问题记录', '问答记录'],
-      paths: ['/system-config/ai-record', '/chat-management/records'],
-      parentId: parent.id,
-      targetName: '问答记录',
-      targetPath: '/chat-management/records',
-      sort: 40,
-    });
-  }
-
-  private async moveSeedMenu(options: {
-    names: string[];
-    paths: string[];
-    parentId: number;
-    targetName: string;
-    targetPath: string;
-    sort: number;
-  }) {
-    const menu = await this.menuRepository.findOne({
-      where: [
-        ...options.paths.map((path) => ({ path })),
-        ...options.names.map((name) => ({ name })),
-      ],
-    });
-    if (!menu) return;
-    menu.name = options.targetName;
-    menu.path = options.targetPath;
-    menu.parentId = options.parentId;
-    menu.icon = '';
-    menu.sort = options.sort;
-    await this.menuRepository.save(menu);
   }
 
   /** 全部菜单（扁平，按 sort 升序） */
