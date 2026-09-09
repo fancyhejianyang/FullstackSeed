@@ -11,7 +11,7 @@ export class AiFeatureConfig extends BaseEntity {
   name: string;
 
   @Index()
-  @Column({ length: 40 })
+  @Column({ type: 'varchar', length: 40 })
   featureType: AiFeatureType;
 
   @Column({ type: 'int', nullable: true })
@@ -50,7 +50,7 @@ export class AiFeatureConfig extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   rules: string | null;
 
-  @Column({ length: 40, default: 'text' })
+  @Column({ type: 'varchar', length: 40, default: 'text' })
   responseFormat: AiResponseFormat;
 
   @Column({ type: 'tinyint', default: true })

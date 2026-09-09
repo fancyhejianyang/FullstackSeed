@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-09-09 增加 TypeORM 实体列必检规则
+- 新增：
+  - `server/scripts/check-typeorm-entity-columns.js`（扫描全部实体，发现 `@Column` 未显式声明类型且属性可能在运行时反射为 `Object` 时直接失败并定位字段）
+- 修改：
+  - `server/package.json`（构建、测试和各启动命令前自动执行实体列校验）
+  - `server/src/knowledge-ai-chat/entities/knowledge-ai-chat-message.entity.ts`（为 `qaMatchMethod` 显式声明 MySQL `varchar`，修复启动失败）
+  - `server/src/ai-command-definitions/`、`ai-feature-configs/`、`knowledge-retrieval-configs/`、`knowledge-routing-rules/`、`knowledge-standard-qas/` 实体（为全部已检出的类型别名字段显式声明 `varchar`）
+  - `AGENTS-BACKEND.md`、`CHANGELOG.md`（沉淀后端必检规范与本次变更）
+- 删除：无
+- 说明：该校验不访问数据库；会阻止联合类型、对象、数组、接口和类型别名被 TypeORM 反射成 MySQL 不支持的 `Object` 列类型。
+
 ### 2026-09-09 新增 AI 指令集管理与受控能力开关
 - 新增：
   - `server/src/ai-command-definitions/`（AI 指令白名单目录、定义实体、查询/更新接口和启动时初始化；支持指令标识、语义关键词、参数 Schema、上下文绑定、聊天可调用、人工确认及启停配置）

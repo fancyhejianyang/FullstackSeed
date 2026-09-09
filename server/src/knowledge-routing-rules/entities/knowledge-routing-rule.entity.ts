@@ -25,10 +25,10 @@ export class KnowledgeRoutingRule extends BaseEntity {
   @Column({ length: 160 })
   term: string;
 
-  @Column({ length: 20, default: 'generic' })
+  @Column({ type: 'varchar', length: 20, default: 'generic' })
   ruleType: KnowledgeRoutingRuleType;
 
-  @Column({ length: 20, default: 'contains' })
+  @Column({ type: 'varchar', length: 20, default: 'contains' })
   matchMode: KnowledgeRoutingMatchMode;
 
   @Column({

@@ -17,10 +17,10 @@ export class AiCommandDefinition extends BaseEntity {
   @Column({ type: 'simple-json', nullable: true })
   semanticKeywords: string[] | null;
 
-  @Column({ length: 20 })
+  @Column({ type: 'varchar', length: 20 })
   action: AiCommandAction;
 
-  @Column({ length: 20 })
+  @Column({ type: 'varchar', length: 20 })
   executionMode: AiCommandExecutionMode;
 
   @Column({ length: 100 })

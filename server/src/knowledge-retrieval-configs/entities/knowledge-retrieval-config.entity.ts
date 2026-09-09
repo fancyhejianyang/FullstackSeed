@@ -8,7 +8,7 @@ export class KnowledgeRetrievalConfig extends BaseEntity {
   @Column({ length: 120 })
   name: string;
 
-  @Column({ length: 40, default: 'hybrid' })
+  @Column({ type: 'varchar', length: 40, default: 'hybrid' })
   retrievalMode: KnowledgeRetrievalMode;
 
   @Column({ type: 'simple-json', nullable: true })

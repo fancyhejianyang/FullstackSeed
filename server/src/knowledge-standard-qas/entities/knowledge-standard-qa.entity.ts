@@ -12,7 +12,8 @@ export type KnowledgeStandardQaStatus =
 
 const decimalTransformer = {
   to: (value?: number | null) => value ?? 0.88,
-  from: (value: string | number | null) => (value === null ? 0.88 : Number(value)),
+  from: (value: string | number | null) =>
+    value === null ? 0.88 : Number(value),
 };
 
 @Entity('knowledge_standard_qas')
@@ -49,7 +50,7 @@ export class KnowledgeStandardQa extends BaseEntity {
   matchThreshold: number;
 
   @Index()
-  @Column({ length: 20, default: 'draft' })
+  @Column({ type: 'varchar', length: 20, default: 'draft' })
   status: KnowledgeStandardQaStatus;
 
   @Column({ type: 'datetime', nullable: true })

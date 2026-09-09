@@ -72,7 +72,7 @@ export class KnowledgeAiChatMessage extends BaseEntity {
   @Column({ type: 'decimal', precision: 8, scale: 4, nullable: true })
   qaMatchScore: number | null;
 
-  @Column({ length: 40, nullable: true })
+  @Column({ type: 'varchar', length: 40, nullable: true })
   qaMatchMethod: 'exact' | 'semantic-keyword' | null;
 
   @Column({ type: 'simple-json', nullable: true })

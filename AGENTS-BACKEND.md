@@ -51,6 +51,7 @@ demo 覆盖的能力：
 - 安装：`npm install`
 - 开发：`npm run start:dev`（watch）
 - 构建：`npm run build`
+- TypeORM 实体列校验：`npm run check:entities`（build、test、start 前会自动执行）
 - 生产：`npm run start:prod`
 - Lint：`npm run lint`
 - 测试：`npm run test`
@@ -63,6 +64,7 @@ demo 覆盖的能力：
 
 - **JWT `signOptions.expiresIn` 类型**：`configService.get<string>(...)` 会触发 `TS2322`；须 `as JwtModuleOptions['signOptions']`。
 - **PowerShell 执行策略**：`npm`/`nest` 直调报 `UnauthorizedAccess`；用 `npm.cmd`。
+- **TypeORM `@Column` 类型**：联合类型、对象、数组、接口/类型别名字段必须显式填写 `type`；`npm run check:entities` 会在构建、测试和启动前阻止 `Object` 类型进入 MySQL。
 
 ## 黑名单目录（禁止改动）
 
