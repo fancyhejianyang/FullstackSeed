@@ -105,6 +105,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '聊天管理', permission: 'Menu.read' },
       },
       {
+        path: 'collaboration-center',
+        name: 'collaboration-center',
+        redirect: '/collaboration-center/approvals',
+        meta: { title: '协作中心', permission: 'ApprovalRequest.read' },
+      },
+      {
+        path: 'collaboration-center/approvals',
+        name: 'collaboration-center-approvals',
+        component: () => import('@/views/approval-request/Index.vue'),
+        meta: { title: '审批管理', permission: 'ApprovalRequest.read' },
+      },
+      {
         path: 'chat-management/ai-chat',
         name: 'chat-management-ai-chat',
         component: () => import('@/views/knowledge-ai-chat/Index.vue'),

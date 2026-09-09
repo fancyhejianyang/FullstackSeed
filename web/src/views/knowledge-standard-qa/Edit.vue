@@ -6,11 +6,9 @@ import Form, { type FormField } from '@/components/Form.vue';
 import {
   createKnowledgeStandardQa,
   getKnowledgeStandardQa,
-  knowledgeStandardQaStatusOptions,
   updateKnowledgeStandardQa,
   type KnowledgeStandardQa,
   type KnowledgeStandardQaForm,
-  type KnowledgeStandardQaStatus,
 } from '@/api/knowledgeStandardQa';
 import {
   getKnowledgeRetrievalConfigs,
@@ -44,7 +42,6 @@ type StandardQaEditForm = {
   retrievalConfigId: number | '';
   priority: number | null;
   matchThreshold: number | null;
-  status: KnowledgeStandardQaStatus;
   sourceChatMessageId: number | null;
   sourceChunkIds: number[];
   description: string;
@@ -58,7 +55,6 @@ const form = reactive<StandardQaEditForm>({
   retrievalConfigId: '',
   priority: 0,
   matchThreshold: 0.88,
-  status: 'draft',
   sourceChatMessageId: null,
   sourceChunkIds: [],
   description: '',
@@ -104,7 +100,6 @@ const fields = computed<FormField[]>(() => [
     component: 'InputNumber',
     componentProps: { min: 0.5, max: 1, precision: 4 },
   },
-  { prop: 'status', label: '发布状态', type: 'select', options: [...knowledgeStandardQaStatusOptions] },
   { prop: 'description', label: '说明', type: 'textarea', rows: 2 },
 ]);
 
@@ -112,7 +107,6 @@ const rules = computed<FormRules>(() => ({
   question: [{ required: true, message: '请输入标准问题', trigger: 'blur' }],
   answer: [{ required: true, message: '请输入标准答案', trigger: 'blur' }],
   matchThreshold: [{ required: true, message: '请输入最低匹配度', trigger: 'blur' }],
-  status: [{ required: true, message: '请选择发布状态', trigger: 'change' }],
 }));
 
 watch(visible, async (value) => {
@@ -139,7 +133,6 @@ function resetForm(prefill?: KnowledgeStandardQaPrefill | null) {
   form.retrievalConfigId = '';
   form.priority = 0;
   form.matchThreshold = 0.88;
-  form.status = prefill ? 'draft' : 'draft';
   form.sourceChatMessageId = prefill?.sourceChatMessageId ?? null;
   form.sourceChunkIds = prefill?.sourceChunkIds ?? [];
   form.description = prefill ? '来源：问答记录人工收录，请审核后发布。' : '';
@@ -153,7 +146,6 @@ function fillForm(data: KnowledgeStandardQa) {
   form.retrievalConfigId = data.retrievalConfigId ?? '';
   form.priority = Number(data.priority ?? 0);
   form.matchThreshold = Number(data.matchThreshold ?? 0.88);
-  form.status = data.status ?? 'draft';
   form.sourceChatMessageId = data.sourceChatMessageId ?? null;
   form.sourceChunkIds = data.sourceChunkIds ?? [];
   form.description = data.description ?? '';
@@ -172,7 +164,6 @@ function buildPayload(): KnowledgeStandardQaForm {
     retrievalConfigId: form.retrievalConfigId ? Number(form.retrievalConfigId) : null,
     priority: Number(form.priority),
     matchThreshold: Number(form.matchThreshold),
-    status: form.status,
     sourceChatMessageId: form.sourceChatMessageId,
     sourceChunkIds: form.sourceChunkIds,
     description: form.description.trim(),
@@ -209,7 +200,7 @@ async function handleSubmit() {
     <div v-loading="loading">
       <Form ref="formRef" v-model="form" :fields="fields" :rules="rules" label-width="120px" />
       <div class="knowledge-standard-qa-edit__tip">
-        已发布问答会在知识库检索前优先比对；只有达到最低匹配度且结果明确时才会直接返回答案，其他问题仍进入原有检索流程。
+        保存后先保留为草稿；编辑确认无误后，请在标准问答库提交审批。管理员通过后才会发布并参与 AI 问答匹配。
       </div>
     </div>
   </Dialog>

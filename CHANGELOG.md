@@ -1,5 +1,18 @@
 # CHANGELOG
 
+### 2026-09-09 新增协作中心与标准问答审批
+- 新增：
+  - `server/src/approval-requests/`（轻量审批记录、提交标准问答、管理员通过/驳回、内容快照与申请/审批人留痕）
+  - `server/src/migrations/1788854400000-CreateApprovalRequests.ts`（创建审批记录表）
+  - `web/src/api/approvalRequest.ts`、`web/src/views/approval-request/`（审批管理接口封装与管理页）
+- 修改：
+  - `server/src/knowledge-standard-qas/`（标准问答增加 `pending` 状态；草稿提交后锁定编辑，管理员通过后发布，驳回后回退草稿；禁止直接把 QA 设为待审批或发布）
+  - `server/src/app.module.ts`、`server/src/users/users.service.ts`、`server/src/menus/menus.service.ts`、`web/src/router/index.ts`（挂载审批模块、管理员权限、“协作中心 / 审批管理”菜单和路由）
+  - `web/src/views/knowledge-standard-qa/`、`web/src/api/knowledgeStandardQa.ts`（标准问答编辑默认保存草稿，列表增加“提交审批”入口与待审批状态）
+  - `CHANGELOG.md`（记录本次功能）
+- 删除：无
+- 说明：审批权限使用 `ApprovalRequest.update`，但后端额外强制校验当前用户 `isAdmin`；普通用户即使拿到接口地址也不能通过或驳回。第一期审批对象为标准问答，后续业务可复用审批记录结构扩展。
+
 ### 2026-09-09 增加 TypeORM 实体列必检规则
 - 新增：
   - `server/scripts/check-typeorm-entity-columns.js`（扫描全部实体，发现 `@Column` 未显式声明类型且属性可能在运行时反射为 `Object` 时直接失败并定位字段）

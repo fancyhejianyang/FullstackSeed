@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, In, Like, Repository } from 'typeorm';
 import { KnowledgeAiChatMessage } from '../knowledge-ai-chat/entities/knowledge-ai-chat-message.entity';
@@ -76,10 +80,15 @@ export class KnowledgeStandardQasService {
 
   async update(id: number, dto: UpdateKnowledgeStandardQaDto) {
     const qa = await this.findEntity(id);
+    if (qa.status === 'pending') {
+      throw new BadRequestException('标准问答正在审批中，不能编辑');
+    }
     const payload = await this.toEntityPayload(dto, false);
     const changedAnswer =
-      payload.answer !== undefined && payload.answer.trim() !== qa.answer.trim();
-    const publishingNow = payload.status === 'published' && qa.status !== 'published';
+      payload.answer !== undefined &&
+      payload.answer.trim() !== qa.answer.trim();
+    const publishingNow =
+      payload.status === 'published' && qa.status !== 'published';
     Object.assign(qa, payload);
     if (changedAnswer || publishingNow) {
       qa.version += 1;
@@ -90,7 +99,10 @@ export class KnowledgeStandardQasService {
   }
 
   async remove(id: number) {
-    await this.findEntity(id);
+    const qa = await this.findEntity(id);
+    if (qa.status === 'pending') {
+      throw new BadRequestException('标准问答正在审批中，不能删除');
+    }
     await this.qaRepository.softDelete(id);
     return { id };
   }
@@ -100,9 +112,14 @@ export class KnowledgeStandardQasService {
       (id) => Number.isInteger(id) && id > 0,
     );
     if (!uniqueIds.length) return { ids: [] };
-    const count = await this.qaRepository.count({ where: { id: In(uniqueIds) } });
-    if (count !== uniqueIds.length) {
+    const entries = await this.qaRepository.find({
+      where: { id: In(uniqueIds) },
+    });
+    if (entries.length !== uniqueIds.length) {
       throw new NotFoundException('部分标准问答不存在');
+    }
+    if (entries.some((item) => item.status === 'pending')) {
+      throw new BadRequestException('存在正在审批中的标准问答，不能删除');
     }
     await this.qaRepository.softDelete(uniqueIds);
     return { ids: uniqueIds };
@@ -144,9 +161,15 @@ export class KnowledgeStandardQasService {
     const winner = matched[0];
     if (!winner) return null;
     const runnerUp = matched[1];
-    const threshold = Math.max(0.5, Number(winner.entry.matchThreshold ?? 0.88));
+    const threshold = Math.max(
+      0.5,
+      Number(winner.entry.matchThreshold ?? 0.88),
+    );
     const hasClearLead = !runnerUp || winner.score - runnerUp.score >= 0.04;
-    if (winner.score < threshold || (!hasClearLead && winner.method !== 'exact')) {
+    if (
+      winner.score < threshold ||
+      (!hasClearLead && winner.method !== 'exact')
+    ) {
       return null;
     }
     await this.qaRepository.update(winner.entry.id, {
@@ -170,7 +193,11 @@ export class KnowledgeStandardQasService {
     }
 
     const entryText = this.normalizeForMatch(
-      [entry.question, ...(entry.aliases ?? []), ...(entry.keywords ?? [])].join(' '),
+      [
+        entry.question,
+        ...(entry.aliases ?? []),
+        ...(entry.keywords ?? []),
+      ].join(' '),
     );
     const terms = Array.from(
       new Set(
@@ -183,7 +210,9 @@ export class KnowledgeStandardQasService {
     const matchedTerms = terms.filter((term) => entryText.includes(term));
     const coverage = matchedTerms.length / terms.length;
     const containment = variants.some(
-      (variant) => variant.length >= 4 && (query.includes(variant) || variant.includes(query)),
+      (variant) =>
+        variant.length >= 4 &&
+        (query.includes(variant) || variant.includes(query)),
     );
     const score = Math.min(0.98, coverage * 0.8 + (containment ? 0.15 : 0));
     if (score < 0.5) return null;
@@ -205,20 +234,28 @@ export class KnowledgeStandardQasService {
       if (!answer) throw new BadRequestException('标准答案不能为空');
       payload.answer = answer;
     }
-    if (dto.aliases !== undefined) payload.aliases = this.normalizeTexts(dto.aliases);
-    if (dto.keywords !== undefined) payload.keywords = this.normalizeTexts(dto.keywords);
+    if (dto.aliases !== undefined)
+      payload.aliases = this.normalizeTexts(dto.aliases);
+    if (dto.keywords !== undefined)
+      payload.keywords = this.normalizeTexts(dto.keywords);
     if (dto.retrievalConfigId !== undefined) {
       const id = dto.retrievalConfigId ? Number(dto.retrievalConfigId) : null;
       if (id) await this.assertRetrievalConfig(id);
       payload.retrievalConfigId = id;
     }
     if (dto.priority !== undefined) payload.priority = Number(dto.priority);
-    if (dto.matchThreshold !== undefined) payload.matchThreshold = Number(dto.matchThreshold);
+    if (dto.matchThreshold !== undefined)
+      payload.matchThreshold = Number(dto.matchThreshold);
     if (dto.status !== undefined || isCreate) {
+      if (dto.status === 'pending' || dto.status === 'published') {
+        throw new BadRequestException('请通过审批流程提交或发布标准问答');
+      }
       payload.status = dto.status ?? 'draft';
     }
-    if (dto.effectiveAt !== undefined) payload.effectiveAt = this.toDate(dto.effectiveAt);
-    if (dto.expiresAt !== undefined) payload.expiresAt = this.toDate(dto.expiresAt);
+    if (dto.effectiveAt !== undefined)
+      payload.effectiveAt = this.toDate(dto.effectiveAt);
+    if (dto.expiresAt !== undefined)
+      payload.expiresAt = this.toDate(dto.expiresAt);
     if (
       payload.effectiveAt &&
       payload.expiresAt &&
@@ -227,9 +264,13 @@ export class KnowledgeStandardQasService {
       throw new BadRequestException('失效时间不能早于生效时间');
     }
     if (dto.sourceChatMessageId !== undefined) {
-      const sourceId = dto.sourceChatMessageId ? Number(dto.sourceChatMessageId) : null;
+      const sourceId = dto.sourceChatMessageId
+        ? Number(dto.sourceChatMessageId)
+        : null;
       if (sourceId) {
-        const source = await this.chatMessageRepository.findOne({ where: { id: sourceId } });
+        const source = await this.chatMessageRepository.findOne({
+          where: { id: sourceId },
+        });
         if (!source) throw new BadRequestException('来源问答记录不存在');
         payload.sourceChatMessageId = source.id;
         if (dto.sourceChunkIds === undefined) {
@@ -239,8 +280,10 @@ export class KnowledgeStandardQasService {
         payload.sourceChatMessageId = null;
       }
     }
-    if (dto.sourceChunkIds !== undefined) payload.sourceChunkIds = this.normalizeIds(dto.sourceChunkIds);
-    if (dto.description !== undefined) payload.description = this.toNullableText(dto.description);
+    if (dto.sourceChunkIds !== undefined)
+      payload.sourceChunkIds = this.normalizeIds(dto.sourceChunkIds);
+    if (dto.description !== undefined)
+      payload.description = this.toNullableText(dto.description);
     if (isCreate) {
       payload.version = 1;
       payload.reviewedAt = payload.status === 'published' ? new Date() : null;
@@ -253,22 +296,31 @@ export class KnowledgeStandardQasService {
   private async toViews(entries: KnowledgeStandardQa[]) {
     if (!entries.length) return [];
     const configIds = Array.from(
-      new Set(entries.map((item) => item.retrievalConfigId).filter((id): id is number => !!id)),
+      new Set(
+        entries
+          .map((item) => item.retrievalConfigId)
+          .filter((id): id is number => !!id),
+      ),
     );
     const configs = configIds.length
-      ? await this.retrievalConfigRepository.find({ where: { id: In(configIds) } })
+      ? await this.retrievalConfigRepository.find({
+          where: { id: In(configIds) },
+        })
       : [];
     const configMap = new Map(configs.map((item) => [item.id, item.name]));
     return entries.map((entry) => ({
       ...entry,
       retrievalConfigName: entry.retrievalConfigId
-        ? (configMap.get(entry.retrievalConfigId) ?? `检索配置 #${entry.retrievalConfigId}`)
+        ? (configMap.get(entry.retrievalConfigId) ??
+          `检索配置 #${entry.retrievalConfigId}`)
         : '全局',
     }));
   }
 
   private async assertRetrievalConfig(id: number) {
-    const config = await this.retrievalConfigRepository.findOne({ where: { id } });
+    const config = await this.retrievalConfigRepository.findOne({
+      where: { id },
+    });
     if (!config) throw new BadRequestException('所属知识库检索配置不存在');
   }
 
@@ -279,7 +331,9 @@ export class KnowledgeStandardQasService {
   }
 
   private normalizeTexts(values?: string[]) {
-    const texts = Array.from(new Set((values ?? []).map((item) => item.trim()).filter(Boolean)));
+    const texts = Array.from(
+      new Set((values ?? []).map((item) => item.trim()).filter(Boolean)),
+    );
     return texts.length ? texts : null;
   }
 
@@ -298,7 +352,8 @@ export class KnowledgeStandardQasService {
   private toDate(value?: string | null) {
     if (!value) return null;
     const date = new Date(value);
-    if (Number.isNaN(date.getTime())) throw new BadRequestException('时间格式不正确');
+    if (Number.isNaN(date.getTime()))
+      throw new BadRequestException('时间格式不正确');
     return date;
   }
 

@@ -14,6 +14,8 @@ import {
   type KnowledgeStandardQaStatus,
   type QueryKnowledgeStandardQaParams,
 } from '@/api/knowledgeStandardQa';
+import { submitStandardQaApproval } from '@/api/approvalRequest';
+import { ElMessage } from 'element-plus';
 import {
   getKnowledgeRetrievalConfigs,
   type KnowledgeRetrievalConfig,
@@ -70,6 +72,10 @@ function openCreate() {
 }
 
 function handleEdit(row: KnowledgeStandardQa) {
+  if (row.status === 'pending') {
+    ElMessage.warning('该标准问答正在审批中，暂不能编辑');
+    return;
+  }
   editingRow.value = row;
   editVisible.value = true;
 }
@@ -80,6 +86,12 @@ function deleteRequest(row: KnowledgeStandardQa) {
 
 async function batchDeleteRequest(payload: { ids: Array<string | number> }) {
   await batchDeleteKnowledgeStandardQas(payload.ids);
+}
+
+async function submitApproval(row: KnowledgeStandardQa) {
+  await submitStandardQaApproval(row.id);
+  ElMessage.success('已提交审批，请等待管理员处理');
+  await tableRef.value?.refresh();
 }
 
 function getStatusLabel(status: KnowledgeStandardQaStatus) {
@@ -105,7 +117,7 @@ function getStatusType(status: KnowledgeStandardQaStatus) {
       :show-view="false"
       :delete-request="deleteRequest"
       :batch-delete-request="batchDeleteRequest"
-      action-width="150"
+      action-width="210"
       @edit="handleEdit"
     >
       <template #toolbar>
@@ -122,6 +134,18 @@ function getStatusType(status: KnowledgeStandardQaStatus) {
       </template>
       <template #column-updatedAt="{ row }">
         {{ formatDateTime(row.updatedAt) }}
+      </template>
+      <template #actions="{ row }">
+        <Button
+          v-if="row.status === 'draft'"
+          perm="KnowledgeStandardQa.update"
+          link
+          :confirm="true"
+          confirm-text="确认提交该标准问答审批？"
+          @click="submitApproval(row)"
+        >
+          提交审批
+        </Button>
       </template>
     </Table>
     <Edit v-model:visible="editVisible" :row="editingRow" @success="tableRef?.refresh()" />

@@ -31,6 +31,7 @@ import { VectorConfigsModule } from './vector-configs/vector-configs.module';
 import { DocumentParseRulesModule } from './document-parse-rules/document-parse-rules.module';
 import { KnowledgeStandardQasModule } from './knowledge-standard-qas/knowledge-standard-qas.module';
 import { AiCommandDefinitionsModule } from './ai-command-definitions/ai-command-definitions.module';
+import { ApprovalRequestsModule } from './approval-requests/approval-requests.module';
 
 @Module({
   imports: [
@@ -124,6 +125,7 @@ import { AiCommandDefinitionsModule } from './ai-command-definitions/ai-command-
     KnowledgeRetrievalConfigsModule,
     KnowledgeRoutingRulesModule,
     KnowledgeStandardQasModule,
+    ApprovalRequestsModule,
     AiCommandDefinitionsModule,
     KnowledgeChunkConfigsModule,
     VectorConfigsModule,

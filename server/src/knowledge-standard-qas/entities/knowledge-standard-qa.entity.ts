@@ -3,6 +3,7 @@ import { BaseEntity } from '../../common/entities/base.entity';
 
 export const KNOWLEDGE_STANDARD_QA_STATUSES = [
   'draft',
+  'pending',
   'published',
   'disabled',
 ] as const;

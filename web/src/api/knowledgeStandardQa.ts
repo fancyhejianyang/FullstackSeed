@@ -1,6 +1,6 @@
 import request from '@/utils/request';
 
-export type KnowledgeStandardQaStatus = 'draft' | 'published' | 'disabled';
+export type KnowledgeStandardQaStatus = 'draft' | 'pending' | 'published' | 'disabled';
 
 export interface KnowledgeStandardQa {
   id: number;
@@ -55,6 +55,7 @@ export interface KnowledgeStandardQaForm {
 
 export const knowledgeStandardQaStatusOptions = [
   { label: '草稿', value: 'draft' },
+  { label: '待审批', value: 'pending' },
   { label: '已发布', value: 'published' },
   { label: '已停用', value: 'disabled' },
 ] as const;

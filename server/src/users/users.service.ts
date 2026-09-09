@@ -28,6 +28,7 @@ const ADMIN_PERMISSION_MODULES = [
   'KnowledgeRoutingRule',
   'KnowledgeStandardQa',
   'AiCommandDefinition',
+  'ApprovalRequest',
   'User',
   'Role',
   'Permission',
