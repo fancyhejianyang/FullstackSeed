@@ -8,8 +8,10 @@ import { KnowledgeBaseDocument } from '../knowledge-bases/entities/knowledge-bas
 import { KnowledgeBase } from '../knowledge-bases/entities/knowledge-base.entity';
 import { KnowledgeRetrievalConfigsModule } from '../knowledge-retrieval-configs/knowledge-retrieval-configs.module';
 import { KnowledgeRoutingRulesModule } from '../knowledge-routing-rules/knowledge-routing-rules.module';
+import { KnowledgeStandardQasModule } from '../knowledge-standard-qas/knowledge-standard-qas.module';
 import { KnowledgeVectorsModule } from '../knowledge-vectors/knowledge-vectors.module';
 import { KnowledgeAiChatController } from './knowledge-ai-chat.controller';
+import { KnowledgeAiChatCommandService } from './knowledge-ai-chat-command.service';
 import { KnowledgeAiChatRetrievalService } from './knowledge-ai-chat-retrieval.service';
 import { KnowledgeAiChatService } from './knowledge-ai-chat.service';
 import { KnowledgeAiChatMessage } from './entities/knowledge-ai-chat-message.entity';
@@ -28,10 +30,15 @@ import { KnowledgeAiChatSession } from './entities/knowledge-ai-chat-session.ent
     AiFeatureConfigsModule,
     KnowledgeRetrievalConfigsModule,
     KnowledgeRoutingRulesModule,
+    KnowledgeStandardQasModule,
     KnowledgeAiProvidersModule,
     KnowledgeVectorsModule,
   ],
   controllers: [KnowledgeAiChatController],
-  providers: [KnowledgeAiChatService, KnowledgeAiChatRetrievalService],
+  providers: [
+    KnowledgeAiChatService,
+    KnowledgeAiChatRetrievalService,
+    KnowledgeAiChatCommandService,
+  ],
 })
 export class KnowledgeAiChatModule {}

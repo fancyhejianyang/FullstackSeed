@@ -26,6 +26,7 @@ const ADMIN_PERMISSION_MODULES = [
   'Demo',
   'KnowledgeBase',
   'KnowledgeRoutingRule',
+  'KnowledgeStandardQa',
   'User',
   'Role',
   'Permission',

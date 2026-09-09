@@ -135,6 +135,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '知识库路由规则', permission: 'KnowledgeRoutingRule.read' },
       },
       {
+        path: 'chat-management/standard-qas',
+        name: 'chat-management-standard-qas',
+        component: () => import('@/views/knowledge-standard-qa/Index.vue'),
+        meta: { title: '标准问答库', permission: 'KnowledgeStandardQa.read' },
+      },
+      {
         path: 'chat-management/records',
         name: 'chat-management-records',
         component: () => import('@/views/knowledge-ai-record/Index.vue'),

@@ -29,6 +29,7 @@ import { KnowledgeRoutingRulesModule } from './knowledge-routing-rules/knowledge
 import { KnowledgeChunkConfigsModule } from './knowledge-chunk-configs/knowledge-chunk-configs.module';
 import { VectorConfigsModule } from './vector-configs/vector-configs.module';
 import { DocumentParseRulesModule } from './document-parse-rules/document-parse-rules.module';
+import { KnowledgeStandardQasModule } from './knowledge-standard-qas/knowledge-standard-qas.module';
 
 @Module({
   imports: [
@@ -121,6 +122,7 @@ import { DocumentParseRulesModule } from './document-parse-rules/document-parse-
     AiFeatureConfigsModule,
     KnowledgeRetrievalConfigsModule,
     KnowledgeRoutingRulesModule,
+    KnowledgeStandardQasModule,
     KnowledgeChunkConfigsModule,
     VectorConfigsModule,
     DocumentParseRulesModule,

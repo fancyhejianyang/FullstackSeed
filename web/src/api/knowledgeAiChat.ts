@@ -55,6 +55,17 @@ export interface KnowledgeAiChatMessage {
   hitChunkIds: number[] | null;
   retrievalHits: KnowledgeRetrievalHit[] | null;
   rerankApplied: boolean;
+  qaEntryId: number | null;
+  qaMatchScore: number | null;
+  qaMatchMethod: 'exact' | 'semantic-keyword' | null;
+  qaQuestionAnalysis: {
+    standaloneQuestion: string;
+    keywords: string[];
+    intent: string;
+    entity: string | null;
+    isFollowUp: boolean;
+  } | null;
+  qaCommandIds: string[] | null;
   isSuccess: boolean;
   errorMessage: string | null;
   elapsedMilliseconds: number;
@@ -132,6 +143,16 @@ export type KnowledgeAiChatStreamEvent =
         aiFeatureConfigName?: string | null;
         retrievalConfigId?: number | null;
         retrievalConfigName?: string | null;
+      };
+    }
+  | {
+      event: 'standard-qa';
+      data: {
+        matched: boolean;
+        entryId: number | null;
+        question: string | null;
+        score: number | null;
+        method: 'exact' | 'semantic-keyword' | null;
       };
     }
   | {

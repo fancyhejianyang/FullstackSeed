@@ -65,6 +65,28 @@ export class KnowledgeAiChatMessage extends BaseEntity {
   @Column({ type: 'tinyint', default: false })
   rerankApplied: boolean;
 
+  /** 命中标准问答后直接返回答案，不再进入知识库检索与生成。 */
+  @Column({ type: 'int', nullable: true })
+  qaEntryId: number | null;
+
+  @Column({ type: 'decimal', precision: 8, scale: 4, nullable: true })
+  qaMatchScore: number | null;
+
+  @Column({ length: 40, nullable: true })
+  qaMatchMethod: 'exact' | 'semantic-keyword' | null;
+
+  @Column({ type: 'simple-json', nullable: true })
+  qaQuestionAnalysis: {
+    standaloneQuestion: string;
+    keywords: string[];
+    intent: string;
+    entity: string | null;
+    isFollowUp: boolean;
+  } | null;
+
+  @Column({ type: 'simple-json', nullable: true })
+  qaCommandIds: string[] | null;
+
   @Column({ type: 'tinyint', default: true })
   isSuccess: boolean;
 

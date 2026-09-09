@@ -15,6 +15,7 @@ import {
   type KnowledgeAiChatSessionDetail,
   type QueryKnowledgeAiChatSessionParams,
 } from '@/api/knowledgeAiChat';
+import Edit, { type KnowledgeStandardQaPrefill } from '@/views/knowledge-standard-qa/Edit.vue';
 
 const tableRef = ref<{
   refresh: () => Promise<void>;
@@ -23,6 +24,8 @@ const tableRef = ref<{
 const detailVisible = ref(false);
 const detailLoading = ref(false);
 const currentDetail = ref<KnowledgeAiChatSessionDetail | null>(null);
+const collectVisible = ref(false);
+const collectingPrefill = ref<KnowledgeStandardQaPrefill | null>(null);
 
 const columns: TableColumn[] = [
   { prop: 'title', label: '会话标题', minWidth: 220 },
@@ -83,6 +86,16 @@ function formatTokenUsage(message: KnowledgeAiChatSessionDetail['messages'][numb
   const promptTokens = message.promptTokens ?? '-';
   const completionTokens = message.completionTokens ?? '-';
   return `Token：${message.totalTokens}（输入 ${promptTokens} / 输出 ${completionTokens}）`;
+}
+
+function openCollect(message: KnowledgeAiChatSessionDetail['messages'][number]) {
+  collectingPrefill.value = {
+    question: message.question,
+    answer: message.answer || '',
+    sourceChatMessageId: message.id,
+    sourceChunkIds: message.hitChunkIds ?? [],
+  };
+  collectVisible.value = true;
 }
 
 async function batchDeleteRequest(payload: { ids: Array<string | number> }) {
@@ -194,9 +207,28 @@ async function handleView(row: KnowledgeAiChatSession) {
             {{ formatTokenUsage(message) }} /
             {{ formatDateTime(message.createdAt) }}
           </div>
+          <div class="ai-record__actions">
+            <el-tag v-if="message.qaEntryId" type="success" size="small">
+              标准问答 #{{ message.qaEntryId }} / {{ message.qaMatchScore?.toFixed(3) ?? '-' }}
+            </el-tag>
+            <Button
+              v-else
+              perm="KnowledgeStandardQa.create"
+              link
+              :disabled="!message.answer"
+              @click="openCollect(message)"
+            >
+              收录为标准问答
+            </Button>
+          </div>
         </div>
       </div>
     </Dialog>
+    <Edit
+      v-model:visible="collectVisible"
+      :prefill="collectingPrefill"
+      @success="collectingPrefill = null"
+    />
   </PageContainer>
 </template>
 
@@ -249,5 +281,12 @@ async function handleView(row: KnowledgeAiChatSession) {
   margin-top: 8px;
   color: #909399;
   font-size: 12px;
+}
+
+.ai-record__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
 }
 </style>

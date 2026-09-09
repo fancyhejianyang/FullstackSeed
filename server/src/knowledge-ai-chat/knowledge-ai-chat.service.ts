@@ -18,11 +18,15 @@ import {
 import { KnowledgeAiChatMessage } from './entities/knowledge-ai-chat-message.entity';
 import { KnowledgeAiChatSession } from './entities/knowledge-ai-chat-session.entity';
 import {
-  KnowledgeAiChatRetrievalService,
   type KnowledgeReferenceImage,
   type KnowledgeRetrievalHit,
 } from './knowledge-ai-chat-retrieval.service';
 import type { KnowledgeRoutingRuleMatch } from '../knowledge-routing-rules/knowledge-routing-rules.service';
+import {
+  KnowledgeAiChatCommandService,
+  KNOWLEDGE_AI_CHAT_COMMANDS,
+} from './knowledge-ai-chat-command.service';
+import type { KnowledgeStandardQaQuestionAnalysis } from '../knowledge-standard-qas/knowledge-standard-qas.service';
 
 export interface KnowledgeAiChatStreamWriter {
   writeEvent: (event: string, data: unknown) => void;
@@ -47,6 +51,18 @@ interface KnowledgeRetrievalState {
   referenceImages: KnowledgeReferenceImage[];
 }
 
+interface KnowledgeStandardQaState {
+  entryId: number | null;
+  question: string | null;
+  answer: string | null;
+  score: number | null;
+  method: 'exact' | 'semantic-keyword' | null;
+  analysis: KnowledgeStandardQaQuestionAnalysis | null;
+  commandIds: string[];
+  usage: KnowledgeAiTokenUsage | null;
+  elapsedMilliseconds: number;
+}
+
 type ThinkingEventKind = 'status' | 'summary';
 
 const USER_VISIBLE_THINKING_SYSTEM_PROMPT = [
@@ -68,7 +84,7 @@ export class KnowledgeAiChatService {
     private readonly messageRepository: Repository<KnowledgeAiChatMessage>,
     private readonly featureConfigsService: AiFeatureConfigsService,
     private readonly providersService: KnowledgeAiProvidersService,
-    private readonly retrievalService: KnowledgeAiChatRetrievalService,
+    private readonly commandService: KnowledgeAiChatCommandService,
   ) {}
 
   async findSessions(query: QueryKnowledgeAiChatSessionDto) {
@@ -116,20 +132,28 @@ export class KnowledgeAiChatService {
       : await this.createSession(dto, target);
     const history = await this.getSessionHistory(session.id);
     const retrievalConfigId = dto.retrievalConfigId ?? null;
-    const retrieval = await this.buildRetrievalState(
-      dto.question,
-      retrievalConfigId,
-      session,
-      history.length > 0,
-    );
-    const messages = this.buildChatMessages(dto, config, retrieval, history);
-    const result = await this.providersService.callChat({
-      id: target.providerId,
-      model: target.model,
+    const standardQa = await this.buildStandardQaState({
       question: dto.question,
-      messages,
-      thinkingParameters: this.resolveThinkingParameters(config),
+      target,
+      retrievalConfigId,
     });
+    const retrieval = standardQa.answer
+      ? this.emptyRetrievalState()
+      : await this.buildRetrievalState(
+          dto.question,
+          retrievalConfigId,
+          session,
+          history.length > 0,
+        );
+    const result = standardQa.answer
+      ? this.buildStandardQaAnswerResult(target, standardQa)
+      : await this.providersService.callChat({
+          id: target.providerId,
+          model: target.model,
+          question: dto.question,
+          messages: this.buildChatMessages(dto, config, retrieval, history),
+          thinkingParameters: this.resolveThinkingParameters(config),
+        });
     const message = await this.saveMessage(
       dto,
       session,
@@ -137,6 +161,7 @@ export class KnowledgeAiChatService {
       result,
       config,
       retrieval,
+      standardQa,
     );
 
     return {
@@ -169,12 +194,28 @@ export class KnowledgeAiChatService {
       retrievalConfigName: externalApp?.retrievalConfigName ?? null,
     });
 
-    const retrieval = await this.buildRetrievalState(
-      dto.question,
-      externalApp?.retrievalConfigId ?? dto.retrievalConfigId ?? null,
-      session,
-      history.length > 0,
-    );
+    const retrievalConfigId =
+      externalApp?.retrievalConfigId ?? dto.retrievalConfigId ?? null;
+    const standardQa = await this.buildStandardQaState({
+      question: dto.question,
+      target,
+      retrievalConfigId,
+    });
+    writer.writeEvent('standard-qa', {
+      matched: Boolean(standardQa.answer),
+      entryId: standardQa.entryId,
+      question: standardQa.question,
+      score: standardQa.score,
+      method: standardQa.method,
+    });
+    const retrieval = standardQa.answer
+      ? this.emptyRetrievalState()
+      : await this.buildRetrievalState(
+          dto.question,
+          retrievalConfigId,
+          session,
+          history.length > 0,
+        );
     writer.writeEvent('retrieval', {
       retrievalConfigId: retrieval.configId,
       hasReference: Boolean(retrieval.context),
@@ -190,19 +231,33 @@ export class KnowledgeAiChatService {
       referenceImages: retrieval.referenceImages,
     });
 
-    const messages = this.buildChatMessages(dto, config, retrieval, history);
     const thinkingParameters = this.resolveThinkingParameters(config);
     if (thinkingParameters) {
-      this.writeThinkingEvent(writer, 'status', '正在分析问题并生成回答…');
+      this.writeThinkingEvent(
+        writer,
+        'status',
+        standardQa.answer ? '正在匹配已审核问答…' : '正在分析问题并生成回答…',
+      );
     }
-    const result = await this.providersService.callChatStream({
-      target,
-      messages,
-      thinkingParameters,
-      onDelta: (content) => writer.writeEvent('delta', { content }),
-    });
+    const result = standardQa.answer
+      ? this.buildStandardQaAnswerResult(target, standardQa)
+      : await this.providersService.callChatStream({
+          target,
+          messages: this.buildChatMessages(dto, config, retrieval, history),
+          thinkingParameters,
+          onDelta: (content) => writer.writeEvent('delta', { content }),
+        });
+    if (standardQa.answer) {
+      writer.writeEvent('delta', { content: standardQa.answer });
+    }
     const summary =
-      thinkingParameters && result.isSuccess && result.answer.trim()
+      thinkingParameters && standardQa.answer
+        ? {
+            content: '已命中已审核的标准问答，并直接返回固定答案。',
+            usage: null,
+            elapsedMilliseconds: 0,
+          }
+        : thinkingParameters && result.isSuccess && result.answer.trim()
         ? await this.buildUserVisibleThinkingSummary(
             target,
             dto.question,
@@ -230,6 +285,7 @@ export class KnowledgeAiChatService {
       finalResult,
       config,
       retrieval,
+      standardQa,
     );
     writer.writeEvent(finalResult.isSuccess ? 'done' : 'error', {
       sessionId: session.id,
@@ -375,7 +431,7 @@ export class KnowledgeAiChatService {
     hasHistory = false,
   ): Promise<KnowledgeRetrievalState> {
     const normalizedConfigId = configId ?? null;
-    const result = await this.retrievalService.buildReferenceResult(
+    const result = await this.commandService.retrieveKnowledge(
       question,
       normalizedConfigId,
       {
@@ -406,6 +462,72 @@ export class KnowledgeAiChatService {
     };
   }
 
+  private async buildStandardQaState(params: {
+    question: string;
+    target: KnowledgeAiChatTarget;
+    retrievalConfigId?: number | null;
+    previousQuestion?: string | null;
+  }): Promise<KnowledgeStandardQaState> {
+    const analysisResult = await this.commandService.analyzeQuestion({
+      target: params.target,
+      question: params.question,
+      previousQuestion: params.previousQuestion,
+    });
+    const matched = await this.commandService.searchStandardQa({
+      retrievalConfigId: params.retrievalConfigId,
+      analysis: analysisResult.analysis,
+    });
+    return {
+      entryId: matched?.entry.id ?? null,
+      question: matched?.entry.question ?? null,
+      answer: matched?.entry.answer ?? null,
+      score: matched?.score ?? null,
+      method: matched?.method ?? null,
+      analysis: analysisResult.analysis,
+      commandIds: [
+        KNOWLEDGE_AI_CHAT_COMMANDS.analyzeQuestion,
+        KNOWLEDGE_AI_CHAT_COMMANDS.searchStandardQa,
+      ],
+      usage: analysisResult.usage,
+      elapsedMilliseconds: analysisResult.elapsedMilliseconds,
+    };
+  }
+
+  private emptyRetrievalState(): KnowledgeRetrievalState {
+    return {
+      configId: null,
+      query: '',
+      queryRewritten: false,
+      context: '',
+      knowledgeBaseNames: [],
+      knowledgeBaseIds: [],
+      chunkIds: [],
+      routedKnowledgeBaseIds: [],
+      activeKnowledgeBaseId: null,
+      inventoryQuery: false,
+      sessionContextReused: false,
+      rerankApplied: false,
+      rerankTokenUsage: null,
+      routingRuleMatches: [],
+      hits: [],
+      referenceImages: [],
+    };
+  }
+
+  private buildStandardQaAnswerResult(
+    target: KnowledgeAiChatTarget,
+    standardQa: KnowledgeStandardQaState,
+  ) {
+    return {
+      isSuccess: true,
+      model: target.model,
+      answer: standardQa.answer ?? '',
+      errorMessage: null,
+      elapsedMilliseconds: standardQa.elapsedMilliseconds,
+      usage: standardQa.usage,
+    };
+  }
+
   private async getSessionHistory(sessionId: number) {
     const history = await this.messageRepository.find({
       where: { sessionId },
@@ -429,6 +551,7 @@ export class KnowledgeAiChatService {
     },
     config?: AiFeatureConfig | null,
     retrieval?: KnowledgeRetrievalState,
+    standardQa?: KnowledgeStandardQaState,
   ) {
     const hitKnowledgeBaseNames = this.serializeKnowledgeBaseNames(
       retrieval?.knowledgeBaseNames ?? [],
@@ -453,6 +576,11 @@ export class KnowledgeAiChatService {
         retrievalHits: retrieval?.hits ?? null,
         routingRuleMatches: retrieval?.routingRuleMatches ?? null,
         rerankApplied: retrieval?.rerankApplied ?? false,
+        qaEntryId: standardQa?.entryId ?? null,
+        qaMatchScore: standardQa?.score ?? null,
+        qaMatchMethod: standardQa?.method ?? null,
+        qaQuestionAnalysis: standardQa?.analysis ?? null,
+        qaCommandIds: standardQa?.commandIds ?? null,
         isSuccess: result.isSuccess,
         errorMessage: result.errorMessage,
         elapsedMilliseconds: result.elapsedMilliseconds,

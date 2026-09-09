@@ -182,6 +182,15 @@ const SEED_MENUS: SeedMenu[] = [
     parentPath: '/chat-management',
   },
   {
+    name: '标准问答库',
+    path: '/chat-management/standard-qas',
+    icon: '',
+    sort: 37,
+    permissionCode: 'KnowledgeStandardQa.read',
+    isSystem: true,
+    parentPath: '/chat-management',
+  },
+  {
     name: '问题记录',
     path: '/chat-management/records',
     icon: '',

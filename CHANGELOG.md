@@ -1,5 +1,19 @@
 # CHANGELOG
 
+### 2026-09-09 新增标准问答库并前置 AI 问答匹配
+- 新增：
+  - `server/src/knowledge-standard-qas/`（标准问题、相似问法、关键词、审核状态、适用检索配置、答案版本和命中统计的 CRUD 与高置信匹配服务）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat-command.service.ts`（以 `question.analyze`、`qa.search`、`knowledge.retrieve` 作为受控聊天能力标识，后端映射到实际服务）
+  - `server/src/migrations/1788847200000-CreateKnowledgeStandardQas.ts`（创建标准问答表，并在问答消息中记录 QA 命中、分数、问题理解结果和能力调用标识）
+  - `web/src/api/knowledgeStandardQa.ts`、`web/src/views/knowledge-standard-qa/`（标准问答库管理页及收录/编辑表单）
+- 修改：
+  - `server/src/knowledge-ai-chat/`（每轮先调用模型将问题整理为结构化 JSON，再在当前检索配置范围内匹配已发布 QA；命中后直接返回已审核答案，未命中才继续会话上下文、路由、知识库检索和重排）
+  - `server/src/app.module.ts`、`server/src/users/users.service.ts`、`server/src/menus/menus.service.ts`、`web/src/router/index.ts`（挂载模块、权限和“标准问答库”菜单）
+  - `web/src/api/knowledgeAiChat.ts`、`web/src/views/knowledge-ai-record/Index.vue`（流式协议增加标准问答命中事件；问答记录可一键带入问题、答案、来源分片，创建草稿后人工审核发布）
+  - `CHANGELOG.md`（记录本次功能）
+- 删除：无
+- 说明：模型不会得到任何内部 API 地址、数据库结构或执行权限；它只参与 `question.analyze` 的问题理解。标准答案仅在匹配度达到该条目的阈值且候选结果明确时直接返回；未命中、低分或歧义情况一律回退到原有知识库链路。
+
 ### 2026-09-08 增加用户可见的 AI 推理摘要
 - 新增：无
 - 修改：
