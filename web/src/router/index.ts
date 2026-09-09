@@ -123,6 +123,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'AI 功能配置', permission: 'Menu.read' },
       },
       {
+        path: 'chat-management/commands',
+        name: 'chat-management-commands',
+        component: () => import('@/views/ai-command-definition/Index.vue'),
+        meta: { title: 'AI 指令集', permission: 'AiCommandDefinition.read' },
+      },
+      {
         path: 'chat-management/retrieval-configs',
         name: 'chat-management-retrieval-configs',
         component: () => import('@/views/knowledge-retrieval-config/Index.vue'),

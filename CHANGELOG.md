@@ -1,5 +1,18 @@
 # CHANGELOG
 
+### 2026-09-09 新增 AI 指令集管理与受控能力开关
+- 新增：
+  - `server/src/ai-command-definitions/`（AI 指令白名单目录、定义实体、查询/更新接口和启动时初始化；支持指令标识、语义关键词、参数 Schema、上下文绑定、聊天可调用、人工确认及启停配置）
+  - `server/src/migrations/1788850800000-CreateAiCommandDefinitions.ts`（创建 AI 指令定义表）
+  - `web/src/api/aiCommandDefinition.ts`、`web/src/views/ai-command-definition/`（AI 指令集列表、筛选和编辑页）
+- 修改：
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat-command.service.ts`（问题拆解、标准问答查询、知识库检索在执行前统一校验对应指令是否启用且允许聊天调用）
+  - `server/src/app.module.ts`、`server/src/knowledge-ai-chat/knowledge-ai-chat.module.ts`、`server/src/users/users.service.ts`、`server/src/menus/menus.service.ts`、`web/src/router/index.ts`（挂载模块、权限、菜单和管理端路由）
+  - `web/src/views/knowledge-standard-qa/Edit.vue`（修复发布状态选项的只读数组类型，确保前端生产构建通过）
+  - `CHANGELOG.md`（记录本次功能）
+- 删除：无
+- 说明：指令的执行目标、动作和调用映射由后端内置白名单固定，管理端仅可维护语义、输入约束、上下文绑定和开关，不能配置任意 URL。聊天模型不会获取 API 地址；新增能力需由开发在白名单目录登记后才会出现在管理端。
+
 ### 2026-09-09 新增标准问答库并前置 AI 问答匹配
 - 新增：
   - `server/src/knowledge-standard-qas/`（标准问题、相似问法、关键词、审核状态、适用检索配置、答案版本和命中统计的 CRUD 与高置信匹配服务）

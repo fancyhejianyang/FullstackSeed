@@ -9,6 +9,7 @@ import {
   type KnowledgeStandardQaMatch,
   type KnowledgeStandardQaQuestionAnalysis,
 } from '../knowledge-standard-qas/knowledge-standard-qas.service';
+import { AiCommandDefinitionsService } from '../ai-command-definitions/ai-command-definitions.service';
 import { KnowledgeAiChatRetrievalService } from './knowledge-ai-chat-retrieval.service';
 
 /**
@@ -42,6 +43,7 @@ export class KnowledgeAiChatCommandService {
     private readonly providersService: KnowledgeAiProvidersService,
     private readonly standardQasService: KnowledgeStandardQasService,
     private readonly retrievalService: KnowledgeAiChatRetrievalService,
+    private readonly commandDefinitionsService: AiCommandDefinitionsService,
   ) {}
 
   async analyzeQuestion(params: {
@@ -49,7 +51,13 @@ export class KnowledgeAiChatCommandService {
     question: string;
     previousQuestion?: string | null;
   }): Promise<KnowledgeAiQuestionAnalysisResult> {
-    const fallback = this.buildFallbackAnalysis(params.question, params.previousQuestion);
+    await this.commandDefinitionsService.findChatCommand(
+      KNOWLEDGE_AI_CHAT_COMMANDS.analyzeQuestion,
+    );
+    const fallback = this.buildFallbackAnalysis(
+      params.question,
+      params.previousQuestion,
+    );
     const prompt = [
       `当前问题：${params.question.trim().slice(0, 1200)}`,
       params.previousQuestion?.trim()
@@ -78,22 +86,47 @@ export class KnowledgeAiChatCommandService {
     retrievalConfigId?: number | null;
     analysis: KnowledgeStandardQaQuestionAnalysis;
   }): Promise<KnowledgeStandardQaMatch | null> {
+    return this.findStandardQa(params);
+  }
+
+  private async findStandardQa(params: {
+    retrievalConfigId?: number | null;
+    analysis: KnowledgeStandardQaQuestionAnalysis;
+  }): Promise<KnowledgeStandardQaMatch | null> {
+    await this.commandDefinitionsService.findChatCommand(
+      KNOWLEDGE_AI_CHAT_COMMANDS.searchStandardQa,
+    );
     return this.standardQasService.matchForChat(params);
   }
 
-  retrieveKnowledge: KnowledgeAiChatRetrievalService['buildReferenceResult'] = (
-    question,
-    configId,
-    options,
-  ) => this.retrievalService.buildReferenceResult(question, configId, options);
+  async retrieveKnowledge(
+    question: string,
+    configId?: number | null,
+    options?: Parameters<
+      KnowledgeAiChatRetrievalService['buildReferenceResult']
+    >[2],
+  ): ReturnType<KnowledgeAiChatRetrievalService['buildReferenceResult']> {
+    await this.commandDefinitionsService.findChatCommand(
+      KNOWLEDGE_AI_CHAT_COMMANDS.retrieveKnowledge,
+    );
+    return this.retrievalService.buildReferenceResult(
+      question,
+      configId,
+      options,
+    );
+  }
 
   private parseQuestionAnalysis(
     content: string,
     fallback: KnowledgeStandardQaQuestionAnalysis,
   ): KnowledgeStandardQaQuestionAnalysis {
     try {
-      const parsed = JSON.parse(this.extractJson(content)) as Record<string, unknown>;
-      const standaloneQuestion = this.toText(parsed.standaloneQuestion) || fallback.standaloneQuestion;
+      const parsed = JSON.parse(this.extractJson(content)) as Record<
+        string,
+        unknown
+      >;
+      const standaloneQuestion =
+        this.toText(parsed.standaloneQuestion) || fallback.standaloneQuestion;
       const keywords = this.normalizeKeywords(parsed.keywords);
       return {
         standaloneQuestion,
@@ -110,19 +143,27 @@ export class KnowledgeAiChatCommandService {
     }
   }
 
-  private buildFallbackAnalysis(question: string, previousQuestion?: string | null) {
+  private buildFallbackAnalysis(
+    question: string,
+    previousQuestion?: string | null,
+  ) {
     const standaloneQuestion = question.trim();
     return {
       standaloneQuestion,
       keywords: this.extractFallbackKeywords(standaloneQuestion),
       intent: '',
       entity: null,
-      isFollowUp: Boolean(previousQuestion?.trim()) && /^(那|它|这个|该|还|以及|然后)/.test(standaloneQuestion),
+      isFollowUp:
+        Boolean(previousQuestion?.trim()) &&
+        /^(那|它|这个|该|还|以及|然后)/.test(standaloneQuestion),
     };
   }
 
   private extractJson(value: string) {
-    const trimmed = value.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+    const trimmed = value
+      .trim()
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/, '');
     const start = trimmed.indexOf('{');
     const end = trimmed.lastIndexOf('}');
     return start >= 0 && end > start ? trimmed.slice(start, end + 1) : trimmed;

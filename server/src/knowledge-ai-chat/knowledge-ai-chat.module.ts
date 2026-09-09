@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ExternalAppsModule } from '../external-apps/external-apps.module';
 import { AiFeatureConfigsModule } from '../ai-feature-configs/ai-feature-configs.module';
+import { AiCommandDefinitionsModule } from '../ai-command-definitions/ai-command-definitions.module';
 import { KnowledgeAiProvidersModule } from '../knowledge-ai-providers/knowledge-ai-providers.module';
 import { KnowledgeBaseChunk } from '../knowledge-bases/entities/knowledge-base-chunk.entity';
 import { KnowledgeBaseDocument } from '../knowledge-bases/entities/knowledge-base-document.entity';
@@ -28,6 +29,7 @@ import { KnowledgeAiChatSession } from './entities/knowledge-ai-chat-session.ent
     ]),
     ExternalAppsModule,
     AiFeatureConfigsModule,
+    AiCommandDefinitionsModule,
     KnowledgeRetrievalConfigsModule,
     KnowledgeRoutingRulesModule,
     KnowledgeStandardQasModule,

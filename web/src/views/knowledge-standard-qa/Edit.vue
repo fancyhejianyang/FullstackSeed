@@ -104,7 +104,7 @@ const fields = computed<FormField[]>(() => [
     component: 'InputNumber',
     componentProps: { min: 0.5, max: 1, precision: 4 },
   },
-  { prop: 'status', label: '发布状态', type: 'select', options: knowledgeStandardQaStatusOptions },
+  { prop: 'status', label: '发布状态', type: 'select', options: [...knowledgeStandardQaStatusOptions] },
   { prop: 'description', label: '说明', type: 'textarea', rows: 2 },
 ]);
 

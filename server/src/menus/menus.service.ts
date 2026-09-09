@@ -164,6 +164,15 @@ const SEED_MENUS: SeedMenu[] = [
     parentPath: '/chat-management',
   },
   {
+    name: 'AI 指令集',
+    path: '/chat-management/commands',
+    icon: '',
+    sort: 32,
+    permissionCode: 'AiCommandDefinition.read',
+    isSystem: true,
+    parentPath: '/chat-management',
+  },
+  {
     name: '知识库检索配置',
     path: '/chat-management/retrieval-configs',
     icon: '',
