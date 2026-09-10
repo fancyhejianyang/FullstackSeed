@@ -69,21 +69,6 @@ export class KnowledgeAiChatMessage extends BaseEntity {
   @Column({ type: 'int', nullable: true })
   qaEntryId: number | null;
 
-  @Column({ type: 'decimal', precision: 8, scale: 4, nullable: true })
-  qaMatchScore: number | null;
-
-  @Column({ type: 'varchar', length: 40, nullable: true })
-  qaMatchMethod: 'exact' | 'semantic-keyword' | null;
-
-  @Column({ type: 'simple-json', nullable: true })
-  qaQuestionAnalysis: {
-    standaloneQuestion: string;
-    keywords: string[];
-    intent: string;
-    entity: string | null;
-    isFollowUp: boolean;
-  } | null;
-
   @Column({ type: 'simple-json', nullable: true })
   qaCommandIds: string[] | null;
 

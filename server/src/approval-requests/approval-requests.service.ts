@@ -143,15 +143,11 @@ export class ApprovalRequestsService {
       question: qa.question,
       answer: qa.answer,
       aliases: qa.aliases ?? [],
-      keywords: qa.keywords ?? [],
       retrievalConfigId: qa.retrievalConfigId,
-      priority: qa.priority,
-      matchThreshold: qa.matchThreshold,
       effectiveAt: qa.effectiveAt,
       expiresAt: qa.expiresAt,
       sourceChatMessageId: qa.sourceChatMessageId,
       sourceChunkIds: qa.sourceChunkIds ?? [],
-      description: qa.description,
     };
   }
 

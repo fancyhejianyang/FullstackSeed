@@ -30,8 +30,6 @@ const editingRow = ref<KnowledgeStandardQa | null>(null);
 const columns: TableColumn[] = [
   { prop: 'question', label: '标准问题', minWidth: 230 },
   { prop: 'retrievalConfigName', label: '适用范围', minWidth: 150 },
-  { prop: 'priority', label: '优先级', width: 90 },
-  { prop: 'matchThreshold', label: '最低匹配度', width: 120 },
   { prop: 'status', label: '状态', width: 100, slot: true },
   { prop: 'hitCount', label: '命中次数', width: 100 },
   { prop: 'reviewedAt', label: '最后审核', width: 180, slot: true },
@@ -54,7 +52,7 @@ const searchFields = computed<FormField[]>(() => [
     type: 'select',
     options: [{ label: '全部', value: '' }, ...knowledgeStandardQaStatusOptions],
   },
-  { prop: 'keyword', label: '关键词', type: 'input', placeholder: '问题、答案或说明' },
+  { prop: 'keyword', label: '关键词', type: 'input', placeholder: '标准问题或标准答案' },
 ]);
 
 onMounted(async () => {

@@ -26,7 +26,6 @@ import {
   KnowledgeAiChatCommandService,
   KNOWLEDGE_AI_CHAT_COMMANDS,
 } from './knowledge-ai-chat-command.service';
-import type { KnowledgeStandardQaQuestionAnalysis } from '../knowledge-standard-qas/knowledge-standard-qas.service';
 
 export interface KnowledgeAiChatStreamWriter {
   writeEvent: (event: string, data: unknown) => void;
@@ -55,12 +54,7 @@ interface KnowledgeStandardQaState {
   entryId: number | null;
   question: string | null;
   answer: string | null;
-  score: number | null;
-  method: 'exact' | 'semantic-keyword' | null;
-  analysis: KnowledgeStandardQaQuestionAnalysis | null;
   commandIds: string[];
-  usage: KnowledgeAiTokenUsage | null;
-  elapsedMilliseconds: number;
 }
 
 type ThinkingEventKind = 'status' | 'summary';
@@ -134,7 +128,6 @@ export class KnowledgeAiChatService {
     const retrievalConfigId = dto.retrievalConfigId ?? null;
     const standardQa = await this.buildStandardQaState({
       question: dto.question,
-      target,
       retrievalConfigId,
     });
     const retrieval = standardQa.answer
@@ -199,15 +192,12 @@ export class KnowledgeAiChatService {
       externalApp?.retrievalConfigId ?? dto.retrievalConfigId ?? null;
     const standardQa = await this.buildStandardQaState({
       question: dto.question,
-      target,
       retrievalConfigId,
     });
     writer.writeEvent('standard-qa', {
       matched: Boolean(standardQa.answer),
       entryId: standardQa.entryId,
       question: standardQa.question,
-      score: standardQa.score,
-      method: standardQa.method,
     });
     const retrieval = standardQa.answer
       ? this.emptyRetrievalState()
@@ -466,32 +456,17 @@ export class KnowledgeAiChatService {
 
   private async buildStandardQaState(params: {
     question: string;
-    target: KnowledgeAiChatTarget;
     retrievalConfigId?: number | null;
-    previousQuestion?: string | null;
   }): Promise<KnowledgeStandardQaState> {
-    const analysisResult = await this.commandService.analyzeQuestion({
-      target: params.target,
-      question: params.question,
-      previousQuestion: params.previousQuestion,
-    });
     const matched = await this.commandService.searchStandardQa({
       retrievalConfigId: params.retrievalConfigId,
-      analysis: analysisResult.analysis,
+      question: params.question,
     });
     return {
       entryId: matched?.entry.id ?? null,
       question: matched?.entry.question ?? null,
       answer: matched?.entry.answer ?? null,
-      score: matched?.score ?? null,
-      method: matched?.method ?? null,
-      analysis: analysisResult.analysis,
-      commandIds: [
-        KNOWLEDGE_AI_CHAT_COMMANDS.analyzeQuestion,
-        KNOWLEDGE_AI_CHAT_COMMANDS.searchStandardQa,
-      ],
-      usage: analysisResult.usage,
-      elapsedMilliseconds: analysisResult.elapsedMilliseconds,
+      commandIds: [KNOWLEDGE_AI_CHAT_COMMANDS.searchStandardQa],
     };
   }
 
@@ -525,8 +500,8 @@ export class KnowledgeAiChatService {
       model: target.model,
       answer: standardQa.answer ?? '',
       errorMessage: null,
-      elapsedMilliseconds: standardQa.elapsedMilliseconds,
-      usage: standardQa.usage,
+      elapsedMilliseconds: 0,
+      usage: null,
     };
   }
 
@@ -579,9 +554,6 @@ export class KnowledgeAiChatService {
         routingRuleMatches: retrieval?.routingRuleMatches ?? null,
         rerankApplied: retrieval?.rerankApplied ?? false,
         qaEntryId: standardQa?.entryId ?? null,
-        qaMatchScore: standardQa?.score ?? null,
-        qaMatchMethod: standardQa?.method ?? null,
-        qaQuestionAnalysis: standardQa?.analysis ?? null,
         qaCommandIds: standardQa?.commandIds ?? null,
         isSuccess: result.isSuccess,
         errorMessage: result.errorMessage,

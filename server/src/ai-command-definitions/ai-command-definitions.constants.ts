@@ -38,32 +38,6 @@ const toJson = (value: unknown) => JSON.stringify(value, null, 2);
  */
 export const AI_COMMAND_CATALOG: AiCommandCatalogItem[] = [
   {
-    commandKey: 'question.analyze',
-    name: '问题拆解',
-    action: 'execute',
-    executionMode: 'service',
-    handlerKey: 'question.analyze',
-    executionTarget: 'KnowledgeAiChatCommandService.analyzeQuestion',
-    apiMethod: 'POST',
-    apiPath: 'service://question-analysis',
-    requestSchema: toJson({
-      type: 'object',
-      required: ['question'],
-      properties: {
-        question: { type: 'string' },
-        previousQuestion: { type: 'string' },
-      },
-    }),
-    contextBindings: toJson({
-      providerId: '$chat.providerId',
-      model: '$chat.model',
-    }),
-    chatCallable: true,
-    requireApproval: false,
-    semanticKeywords: ['问题拆解', '意图识别', '关键词提取'],
-    description: '将当前问题整理为结构化检索条件，不生成最终答案。',
-  },
-  {
     commandKey: 'qa.search',
     name: '标准问答查询',
     action: 'read',
@@ -74,9 +48,9 @@ export const AI_COMMAND_CATALOG: AiCommandCatalogItem[] = [
     apiPath: 'service://knowledge-standard-qas/match',
     requestSchema: toJson({
       type: 'object',
-      required: ['analysis'],
+      required: ['question'],
       properties: {
-        analysis: { type: 'object' },
+        question: { type: 'string' },
         retrievalConfigId: { type: 'integer' },
       },
     }),
@@ -87,7 +61,7 @@ export const AI_COMMAND_CATALOG: AiCommandCatalogItem[] = [
     chatCallable: true,
     requireApproval: false,
     semanticKeywords: ['标准问答', '固定答案', 'FAQ', '常见问题'],
-    description: '仅在当前应用范围内查询已发布且有效的标准问答。',
+    description: '仅在当前应用范围内精确匹配已发布且有效的标准问题或相似问法。',
   },
   {
     commandKey: 'knowledge.retrieve',

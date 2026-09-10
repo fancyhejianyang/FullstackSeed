@@ -209,7 +209,7 @@ async function handleView(row: KnowledgeAiChatSession) {
           </div>
           <div class="ai-record__actions">
             <el-tag v-if="message.qaEntryId" type="success" size="small">
-              标准问答 #{{ message.qaEntryId }} / {{ message.qaMatchScore?.toFixed(3) ?? '-' }}
+              已命中标准问答 #{{ message.qaEntryId }}
             </el-tag>
             <Button
               v-else

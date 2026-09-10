@@ -26,10 +26,7 @@ function createStandardQa(status: KnowledgeStandardQa['status'] = 'draft') {
     question: '公司的年假制度是什么？',
     answer: '按员工工龄享受对应年假天数。',
     aliases: ['年假有几天？'],
-    keywords: ['年假', '制度'],
     retrievalConfigId: null,
-    priority: 0,
-    matchThreshold: 0.88,
     status,
     effectiveAt: null,
     expiresAt: null,
@@ -39,7 +36,6 @@ function createStandardQa(status: KnowledgeStandardQa['status'] = 'draft') {
     reviewedAt: null,
     hitCount: 0,
     lastHitAt: null,
-    description: null,
   } as KnowledgeStandardQa;
 }
 

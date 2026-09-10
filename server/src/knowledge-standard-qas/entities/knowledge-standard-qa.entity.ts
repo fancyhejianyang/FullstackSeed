@@ -11,12 +11,6 @@ export const KNOWLEDGE_STANDARD_QA_STATUSES = [
 export type KnowledgeStandardQaStatus =
   (typeof KNOWLEDGE_STANDARD_QA_STATUSES)[number];
 
-const decimalTransformer = {
-  to: (value?: number | null) => value ?? 0.88,
-  from: (value: string | number | null) =>
-    value === null ? 0.88 : Number(value),
-};
-
 @Entity('knowledge_standard_qas')
 export class KnowledgeStandardQa extends BaseEntity {
   @Column({ type: 'text' })
@@ -24,9 +18,6 @@ export class KnowledgeStandardQa extends BaseEntity {
 
   @Column({ type: 'simple-json', nullable: true })
   aliases: string[] | null;
-
-  @Column({ type: 'simple-json', nullable: true })
-  keywords: string[] | null;
 
   @Column({ type: 'text' })
   answer: string;
@@ -37,18 +28,6 @@ export class KnowledgeStandardQa extends BaseEntity {
   @Index()
   @Column({ type: 'int', nullable: true })
   retrievalConfigId: number | null;
-
-  @Column({ type: 'int', default: 0 })
-  priority: number;
-
-  @Column({
-    type: 'decimal',
-    precision: 8,
-    scale: 4,
-    default: 0.88,
-    transformer: decimalTransformer,
-  })
-  matchThreshold: number;
 
   @Index()
   @Column({ type: 'varchar', length: 20, default: 'draft' })
@@ -78,6 +57,4 @@ export class KnowledgeStandardQa extends BaseEntity {
   @Column({ type: 'datetime', nullable: true })
   lastHitAt: Date | null;
 
-  @Column({ type: 'text', nullable: true })
-  description: string | null;
 }

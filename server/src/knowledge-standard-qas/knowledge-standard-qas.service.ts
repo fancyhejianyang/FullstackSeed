@@ -18,18 +18,8 @@ import {
   type KnowledgeStandardQaStatus,
 } from './entities/knowledge-standard-qa.entity';
 
-export interface KnowledgeStandardQaQuestionAnalysis {
-  standaloneQuestion: string;
-  keywords: string[];
-  intent: string;
-  entity: string | null;
-  isFollowUp: boolean;
-}
-
 export interface KnowledgeStandardQaMatch {
   entry: KnowledgeStandardQa;
-  score: number;
-  method: 'exact' | 'semantic-keyword';
 }
 
 @Injectable()
@@ -56,12 +46,11 @@ export class KnowledgeStandardQasService {
       ? [
           { ...where, question: Like(`%${query.keyword.trim()}%`) },
           { ...where, answer: Like(`%${query.keyword.trim()}%`) },
-          { ...where, description: Like(`%${query.keyword.trim()}%`) },
         ]
       : where;
     const [list, total] = await this.qaRepository.findAndCount({
       where: conditions,
-      order: { priority: 'DESC', id: 'DESC' },
+      order: { id: 'DESC' },
       skip: (page - 1) * pageSize,
       take: pageSize,
     });
@@ -127,8 +116,10 @@ export class KnowledgeStandardQasService {
 
   async matchForChat(params: {
     retrievalConfigId?: number | null;
-    analysis: KnowledgeStandardQaQuestionAnalysis;
+    question: string;
   }): Promise<KnowledgeStandardQaMatch | null> {
+    const normalizedQuestion = this.normalizeForMatch(params.question);
+    if (!normalizedQuestion) return null;
     const now = new Date();
     const entries = await this.qaRepository
       .createQueryBuilder('qa')
@@ -145,78 +136,35 @@ export class KnowledgeStandardQasService {
           }
         }),
       )
-      .orderBy('qa.priority', 'DESC')
-      .addOrderBy('qa.id', 'ASC')
+      .orderBy('qa.id', 'DESC')
       .getMany();
     if (!entries.length) return null;
 
-    const matched = entries
-      .map((entry) => this.scoreMatch(entry, params.analysis))
-      .filter((item): item is KnowledgeStandardQaMatch => item !== null)
-      .sort((left, right) =>
-        right.score === left.score
-          ? right.entry.priority - left.entry.priority
-          : right.score - left.score,
-      );
-    const winner = matched[0];
+    const winner = entries
+      .filter((entry) => this.matchesQuestion(entry, normalizedQuestion))
+      .sort((left, right) => {
+        const leftIsScoped =
+          left.retrievalConfigId === params.retrievalConfigId ? 1 : 0;
+        const rightIsScoped =
+          right.retrievalConfigId === params.retrievalConfigId ? 1 : 0;
+        return rightIsScoped - leftIsScoped || right.id - left.id;
+      })[0];
     if (!winner) return null;
-    const runnerUp = matched[1];
-    const threshold = Math.max(
-      0.5,
-      Number(winner.entry.matchThreshold ?? 0.88),
-    );
-    const hasClearLead = !runnerUp || winner.score - runnerUp.score >= 0.04;
-    if (
-      winner.score < threshold ||
-      (!hasClearLead && winner.method !== 'exact')
-    ) {
-      return null;
-    }
-    await this.qaRepository.update(winner.entry.id, {
-      hitCount: winner.entry.hitCount + 1,
+    await this.qaRepository.update(winner.id, {
+      hitCount: winner.hitCount + 1,
       lastHitAt: now,
     });
-    return winner;
+    return { entry: winner };
   }
 
-  private scoreMatch(
+  private matchesQuestion(
     entry: KnowledgeStandardQa,
-    analysis: KnowledgeStandardQaQuestionAnalysis,
-  ): KnowledgeStandardQaMatch | null {
-    const query = this.normalizeForMatch(analysis.standaloneQuestion);
-    if (!query) return null;
+    normalizedQuestion: string,
+  ) {
     const variants = [entry.question, ...(entry.aliases ?? [])]
       .map((item) => this.normalizeForMatch(item))
       .filter(Boolean);
-    if (variants.some((item) => item === query)) {
-      return { entry, score: 1, method: 'exact' };
-    }
-
-    const entryText = this.normalizeForMatch(
-      [
-        entry.question,
-        ...(entry.aliases ?? []),
-        ...(entry.keywords ?? []),
-      ].join(' '),
-    );
-    const terms = Array.from(
-      new Set(
-        [...analysis.keywords, analysis.entity ?? '', analysis.intent]
-          .map((item) => this.normalizeForMatch(item))
-          .filter((item) => item.length >= 2),
-      ),
-    );
-    if (!terms.length) return null;
-    const matchedTerms = terms.filter((term) => entryText.includes(term));
-    const coverage = matchedTerms.length / terms.length;
-    const containment = variants.some(
-      (variant) =>
-        variant.length >= 4 &&
-        (query.includes(variant) || variant.includes(query)),
-    );
-    const score = Math.min(0.98, coverage * 0.8 + (containment ? 0.15 : 0));
-    if (score < 0.5) return null;
-    return { entry, score, method: 'semantic-keyword' };
+    return variants.includes(normalizedQuestion);
   }
 
   private async toEntityPayload(
@@ -236,16 +184,11 @@ export class KnowledgeStandardQasService {
     }
     if (dto.aliases !== undefined)
       payload.aliases = this.normalizeTexts(dto.aliases);
-    if (dto.keywords !== undefined)
-      payload.keywords = this.normalizeTexts(dto.keywords);
     if (dto.retrievalConfigId !== undefined) {
       const id = dto.retrievalConfigId ? Number(dto.retrievalConfigId) : null;
       if (id) await this.assertRetrievalConfig(id);
       payload.retrievalConfigId = id;
     }
-    if (dto.priority !== undefined) payload.priority = Number(dto.priority);
-    if (dto.matchThreshold !== undefined)
-      payload.matchThreshold = Number(dto.matchThreshold);
     if (dto.status !== undefined || isCreate) {
       if (dto.status === 'pending' || dto.status === 'published') {
         throw new BadRequestException('请通过审批流程提交或发布标准问答');
@@ -282,8 +225,6 @@ export class KnowledgeStandardQasService {
     }
     if (dto.sourceChunkIds !== undefined)
       payload.sourceChunkIds = this.normalizeIds(dto.sourceChunkIds);
-    if (dto.description !== undefined)
-      payload.description = this.toNullableText(dto.description);
     if (isCreate) {
       payload.version = 1;
       payload.reviewedAt = payload.status === 'published' ? new Date() : null;
@@ -342,11 +283,6 @@ export class KnowledgeStandardQasService {
       (id) => Number.isInteger(id) && id > 0,
     );
     return values.length ? values : null;
-  }
-
-  private toNullableText(value?: string | null) {
-    const text = value?.trim() ?? '';
-    return text || null;
   }
 
   private toDate(value?: string | null) {

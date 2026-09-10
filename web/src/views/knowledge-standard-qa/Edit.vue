@@ -37,27 +37,19 @@ const retrievalConfigs = ref<KnowledgeRetrievalConfig[]>([]);
 type StandardQaEditForm = {
   question: string;
   aliasesText: string;
-  keywordsText: string;
   answer: string;
   retrievalConfigId: number | '';
-  priority: number | null;
-  matchThreshold: number | null;
   sourceChatMessageId: number | null;
   sourceChunkIds: number[];
-  description: string;
 };
 
 const form = reactive<StandardQaEditForm>({
   question: '',
   aliasesText: '',
-  keywordsText: '',
   answer: '',
   retrievalConfigId: '',
-  priority: 0,
-  matchThreshold: 0.88,
   sourceChatMessageId: null,
   sourceChunkIds: [],
-  description: '',
 });
 
 const retrievalConfigOptions = computed(() => [
@@ -66,19 +58,21 @@ const retrievalConfigOptions = computed(() => [
 ]);
 
 const fields = computed<FormField[]>(() => [
-  { prop: 'question', label: '标准问题', type: 'textarea', rows: 2, placeholder: '填写稳定、可复用的问题' },
+  {
+    prop: 'question',
+    label: '标准问题',
+    type: 'textarea',
+    rows: 2,
+    placeholder: '填写稳定、可复用的问题',
+    hint: '仅当用户问题与标准问题或相似问法一致时，系统才会直接返回本条标准答案。',
+  },
   {
     prop: 'aliasesText',
     label: '相似问法',
     type: 'textarea',
     rows: 3,
-    placeholder: '一行一个相似问法；用于高置信匹配',
-  },
-  {
-    prop: 'keywordsText',
-    label: '关键词',
-    type: 'input',
-    placeholder: '多个关键词使用逗号分隔，如 公司,历史,文化',
+    placeholder: '一行一个与标准问题含义完全相同的问法',
+    hint: '会忽略大小写、空格和标点；不会按关键词或语义进行模糊猜测。',
   },
   { prop: 'answer', label: '标准答案', type: 'textarea', rows: 8, placeholder: '支持 Markdown、链接和图片' },
   {
@@ -91,37 +85,11 @@ const fields = computed<FormField[]>(() => [
       ? '当前仅在所选检索配置的 AI 应用中参与标准问答匹配。'
       : '当前为全局标准问答：所有启用的检索配置均可命中它。',
   },
-  {
-    prop: 'priority',
-    label: '优先级',
-    component: 'InputNumber',
-    componentProps: { mode: 'integer', min: -10000, max: 10000 },
-    hint:
-      Number(form.priority) > 0
-        ? `当前 ${form.priority}：相似度接近时优先选择此条；值越大，优先级越高。`
-        : Number(form.priority) < 0
-          ? `当前 ${form.priority}：相似度接近时会后置此条，适合保留但不希望优先命中的答案。`
-          : '当前为 0：不额外调整优先级，主要按问题匹配度决定。',
-  },
-  {
-    prop: 'matchThreshold',
-    label: '最低匹配度',
-    component: 'InputNumber',
-    componentProps: { min: 0.5, max: 1, precision: 4 },
-    hint:
-      Number(form.matchThreshold) < 0.7
-        ? `当前 ${form.matchThreshold}：匹配范围较宽，命中率更高，但相近问题可能误用标准答案。`
-        : Number(form.matchThreshold) < 0.9
-          ? `当前 ${form.matchThreshold}：命中率与准确性较平衡，适合大多数稳定问答。`
-          : `当前 ${form.matchThreshold}：只接受非常接近的问法，答案更稳妥但可能回退到知识库检索。`,
-  },
-  { prop: 'description', label: '说明', type: 'textarea', rows: 2 },
 ]);
 
 const rules = computed<FormRules>(() => ({
   question: [{ required: true, message: '请输入标准问题', trigger: 'blur' }],
   answer: [{ required: true, message: '请输入标准答案', trigger: 'blur' }],
-  matchThreshold: [{ required: true, message: '请输入最低匹配度', trigger: 'blur' }],
 }));
 
 watch(visible, async (value) => {
@@ -143,27 +111,19 @@ watch(visible, async (value) => {
 function resetForm(prefill?: KnowledgeStandardQaPrefill | null) {
   form.question = prefill?.question ?? '';
   form.aliasesText = '';
-  form.keywordsText = '';
   form.answer = prefill?.answer ?? '';
   form.retrievalConfigId = '';
-  form.priority = 0;
-  form.matchThreshold = 0.88;
   form.sourceChatMessageId = prefill?.sourceChatMessageId ?? null;
   form.sourceChunkIds = prefill?.sourceChunkIds ?? [];
-  form.description = prefill ? '来源：问答记录人工收录，请审核后发布。' : '';
 }
 
 function fillForm(data: KnowledgeStandardQa) {
   form.question = data.question ?? '';
   form.aliasesText = (data.aliases ?? []).join('\n');
-  form.keywordsText = (data.keywords ?? []).join(', ');
   form.answer = data.answer ?? '';
   form.retrievalConfigId = data.retrievalConfigId ?? '';
-  form.priority = Number(data.priority ?? 0);
-  form.matchThreshold = Number(data.matchThreshold ?? 0.88);
   form.sourceChatMessageId = data.sourceChatMessageId ?? null;
   form.sourceChunkIds = data.sourceChunkIds ?? [];
-  form.description = data.description ?? '';
 }
 
 function splitTexts(value: string, separator: RegExp) {
@@ -174,14 +134,10 @@ function buildPayload(): KnowledgeStandardQaForm {
   return {
     question: form.question.trim(),
     aliases: splitTexts(form.aliasesText, /\r?\n/),
-    keywords: splitTexts(form.keywordsText, /[,，\r?\n]/),
     answer: form.answer.trim(),
     retrievalConfigId: form.retrievalConfigId ? Number(form.retrievalConfigId) : null,
-    priority: Number(form.priority),
-    matchThreshold: Number(form.matchThreshold),
     sourceChatMessageId: form.sourceChatMessageId,
     sourceChunkIds: form.sourceChunkIds,
-    description: form.description.trim(),
   };
 }
 
@@ -215,7 +171,7 @@ async function handleSubmit() {
     <div v-loading="loading">
       <Form ref="formRef" v-model="form" :fields="fields" :rules="rules" label-width="120px" />
       <div class="knowledge-standard-qa-edit__tip">
-        保存后先保留为草稿；编辑确认无误后，请在标准问答库提交审批。管理员通过后才会发布并参与 AI 问答匹配。
+        保存后先保留为草稿；编辑确认无误后，请在标准问答库提交审批。管理员通过后，只有标准问题或相似问法被精确命中时才会直接返回固定答案。
       </div>
     </div>
   </Dialog>

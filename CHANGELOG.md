@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-09-10 精简标准问答为固定答案直出
+- 新增：
+  - `server/src/migrations/1788865200000-SimplifyKnowledgeStandardQas.ts`（移除标准问答的关键词、优先级、最低匹配度、说明，以及问答记录中的匹配分数和问题拆解记录）
+- 修改：
+  - `server/src/knowledge-standard-qas/`、`web/src/api/knowledgeStandardQa.ts`、`web/src/views/knowledge-standard-qa/`（录入页只保留标准问题、相似问法、标准答案和适用检索配置；列表不再展示优先级或匹配度）
+  - `server/src/knowledge-ai-chat/`、`web/src/api/knowledgeAiChat.ts`、`web/src/views/knowledge-ai-record/`（标准问答改为本地规范化精确匹配，不再调用模型问题拆解、不产生匹配分数；命中后直接返回固定答案）
+  - `server/src/ai-command-definitions/`、`server/src/approval-requests/`（移除已废弃的问题拆解指令及其标准问答快照字段）
+  - `CHANGELOG.md`（记录本次调整）
+- 删除：无
+- 说明：匹配会忽略大小写、空格和标点；只有标准问题或相似问法完全一致才会命中。若同一问法同时有全局和当前检索配置专属版本，优先使用专属版本；无命中则继续走正常知识库检索。
+
 ### 2026-09-10 调整 AI 功能配置温度与模型校验
 - 新增：
   - `server/src/migrations/1788861600000-ReplaceAiFeatureConfigRulesWithTemperature.ts`（将已有规则文本合并到提示词，新增温度列并删除规则列）

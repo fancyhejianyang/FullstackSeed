@@ -6,12 +6,9 @@ export interface KnowledgeStandardQa {
   id: number;
   question: string;
   aliases: string[] | null;
-  keywords: string[] | null;
   answer: string;
   retrievalConfigId: number | null;
   retrievalConfigName: string;
-  priority: number;
-  matchThreshold: number;
   status: KnowledgeStandardQaStatus;
   effectiveAt: string | null;
   expiresAt: string | null;
@@ -21,7 +18,6 @@ export interface KnowledgeStandardQa {
   reviewedAt: string | null;
   hitCount: number;
   lastHitAt: string | null;
-  description: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -42,15 +38,11 @@ export interface QueryKnowledgeStandardQaParams {
 export interface KnowledgeStandardQaForm {
   question: string;
   aliases?: string[];
-  keywords?: string[];
   answer: string;
   retrievalConfigId?: number | null;
-  priority?: number;
-  matchThreshold?: number;
   status?: KnowledgeStandardQaStatus;
   sourceChatMessageId?: number | null;
   sourceChunkIds?: number[];
-  description?: string;
 }
 
 export const knowledgeStandardQaStatusOptions = [

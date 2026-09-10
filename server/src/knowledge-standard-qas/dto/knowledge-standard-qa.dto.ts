@@ -5,10 +5,8 @@ import {
   IsDateString,
   IsIn,
   IsInt,
-  IsNumber,
   IsOptional,
   IsString,
-  Max,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -28,12 +26,6 @@ export class CreateKnowledgeStandardQaDto {
   @IsOptional()
   aliases?: string[];
 
-  @IsArray()
-  @IsString({ each: true })
-  @MaxLength(100, { each: true })
-  @IsOptional()
-  keywords?: string[];
-
   @IsString()
   answer: string;
 
@@ -42,20 +34,6 @@ export class CreateKnowledgeStandardQaDto {
   @Min(1)
   @IsOptional()
   retrievalConfigId?: number | null;
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(-10000)
-  @Max(10000)
-  @IsOptional()
-  priority?: number;
-
-  @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 4 })
-  @Min(0.5)
-  @Max(1)
-  @IsOptional()
-  matchThreshold?: number;
 
   @IsIn(KNOWLEDGE_STANDARD_QA_STATUSES)
   @IsOptional()
@@ -82,9 +60,6 @@ export class CreateKnowledgeStandardQaDto {
   @IsOptional()
   sourceChunkIds?: number[];
 
-  @IsString()
-  @IsOptional()
-  description?: string;
 }
 
 export class UpdateKnowledgeStandardQaDto extends PartialType(

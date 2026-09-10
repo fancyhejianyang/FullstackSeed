@@ -56,15 +56,6 @@ export interface KnowledgeAiChatMessage {
   retrievalHits: KnowledgeRetrievalHit[] | null;
   rerankApplied: boolean;
   qaEntryId: number | null;
-  qaMatchScore: number | null;
-  qaMatchMethod: 'exact' | 'semantic-keyword' | null;
-  qaQuestionAnalysis: {
-    standaloneQuestion: string;
-    keywords: string[];
-    intent: string;
-    entity: string | null;
-    isFollowUp: boolean;
-  } | null;
   qaCommandIds: string[] | null;
   isSuccess: boolean;
   errorMessage: string | null;
@@ -151,8 +142,6 @@ export type KnowledgeAiChatStreamEvent =
         matched: boolean;
         entryId: number | null;
         question: string | null;
-        score: number | null;
-        method: 'exact' | 'semantic-keyword' | null;
       };
     }
   | {
