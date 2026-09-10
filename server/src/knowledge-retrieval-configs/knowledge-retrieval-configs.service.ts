@@ -165,7 +165,7 @@ export class KnowledgeRetrievalConfigsService {
     if (dto.rerankAiFeatureConfigId !== undefined) {
       if (dto.rerankAiFeatureConfigId) {
         const rerankConfig =
-          await this.aiFeatureConfigsService.findUsableChatConfig(
+          await this.aiFeatureConfigsService.findUsableRerankConfig(
             dto.rerankAiFeatureConfigId,
           );
         payload.rerankAiFeatureConfigId = rerankConfig.id;
@@ -186,12 +186,12 @@ export class KnowledgeRetrievalConfigsService {
   private async ensureRerankOptions(config: Partial<KnowledgeRetrievalConfig>) {
     if (!config.enableRerank) return;
     const rerankConfig = config.rerankAiFeatureConfigId
-      ? await this.aiFeatureConfigsService.findUsableChatConfig(
+      ? await this.aiFeatureConfigsService.findUsableRerankConfig(
           config.rerankAiFeatureConfigId,
         )
-      : await this.aiFeatureConfigsService.findEnabledByFeature('chat');
+      : await this.aiFeatureConfigsService.findEnabledByFeature('rerank');
     if (!rerankConfig) {
-      throw new BadRequestException('启用重排需要至少一个已启用的聊天 AI 配置');
+      throw new BadRequestException('启用重排需要至少一个已启用的 LLM 重排配置');
     }
     config.rerankAiFeatureConfigId = rerankConfig.id;
     config.rerankAiFeatureConfigName = rerankConfig.name;

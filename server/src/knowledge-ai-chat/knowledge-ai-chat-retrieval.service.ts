@@ -1140,14 +1140,14 @@ export class KnowledgeAiChatRetrievalService {
   private async resolveRerankConfig(configId?: number | null) {
     if (configId) {
       try {
-        return await this.aiFeatureConfigsService.findUsableChatConfig(
+        return await this.aiFeatureConfigsService.findUsableRerankConfig(
           configId,
         );
       } catch {
-        // 已选择的重排配置停用或删除后，回退到当前启用的聊天配置。
+        // 已选择的重排配置停用或删除后，回退到当前启用的 LLM 重排配置。
       }
     }
-    return this.aiFeatureConfigsService.findEnabledByFeature('chat');
+    return this.aiFeatureConfigsService.findEnabledByFeature('rerank');
   }
 
   private parseRerankScores(value: string) {

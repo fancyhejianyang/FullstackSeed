@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-09-10 拆分 LLM 重排配置并移除 AI 功能向量化类型
+- 新增：
+  - `server/src/migrations/1788872400000-ReplaceEmbeddingFeatureConfigWithLlmRerank.ts`（将旧向量化功能配置保留为停用的重排候选；把检索配置引用的聊天模型复制为独立 LLM 重排配置并回写引用）
+- 修改：
+  - `server/src/ai-feature-configs/`（功能类型改为聊天、文档解析、OCR、LLM 重排；重排固定使用温度 0、内置安全评分提示词和 JSON 输出，不允许 Think、MinerU 或聊天提示词；允许多个启用的重排配置供不同检索策略选择）
+  - `server/src/knowledge-retrieval-configs/`、`server/src/knowledge-ai-chat/`（检索配置和重排执行只接受 `rerank` 类型配置；聊天配置不再作为重排依赖或回退项）
+  - `server/src/knowledge-ai-providers/`（拆分“功能配置类型”与“模型校验能力类型”，保留向量模型校验给向量配置使用）
+  - `web/src/views/ai-feature-config/`、`web/src/views/knowledge-retrieval-config/`、相关 API 类型（移除向量化选项，新增 LLM 重排；按类型隐藏重排不适用的温度、提示词、返回格式、Think 和 MinerU 字段，并显示固定执行语义）
+  - `CHANGELOG.md`（记录本次调整）
+- 删除：无
+- 说明：LLM 重排仍可使用套餐内的通用文本模型，但仅接收问题与候选片段并返回评分排序；向量模型及 Collection 仍只在“向量化配置”管理。迁移不重置数据库，也不删除旧记录。
+
 ### 2026-09-10 新增口语化表达词库与问题定性改写
 - 新增：
   - `server/src/knowledge-colloquial-terms/`（口语表达词条 CRUD、适用检索配置、排除短语和确定性问题改写服务）

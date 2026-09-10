@@ -7,7 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Like, Not, Repository } from 'typeorm';
 import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
 import { MineruConfigsService } from '../mineru-configs/mineru-configs.service';
-import type { AiFeatureType } from './ai-feature-config.constants';
+import type { AiFeatureConfigType } from './ai-feature-config.constants';
 import {
   CreateAiFeatureConfigDto,
   QueryAiFeatureConfigDto,
@@ -81,13 +81,27 @@ export class AiFeatureConfigsService {
     return config;
   }
 
-  async findEnabledByFeature(featureType: AiFeatureType) {
+  async findUsableRerankConfig(id: number) {
+    const config = await this.findOne(id);
+    if (config.featureType !== 'rerank') {
+      throw new BadRequestException('请选择 LLM 重排类型的 AI 功能配置');
+    }
+    if (!config.isEnabled) {
+      throw new BadRequestException('该 LLM 重排配置未启用');
+    }
+    if (!config.providerId || !config.model) {
+      throw new BadRequestException('LLM 重排配置缺少大模型账号或模型');
+    }
+    return config;
+  }
+
+  async findEnabledByFeature(featureType: AiFeatureConfigType) {
     const configs = await this.configRepository.find({
       where: { featureType, isEnabled: true },
       order: { id: 'DESC' },
       take: 2,
     });
-    if (configs.length > 1) {
+    if (configs.length > 1 && featureType !== 'rerank') {
       await this.disableOtherFeatureConfigs(featureType, configs[0].id);
     }
     return configs[0] ?? null;
@@ -98,7 +112,7 @@ export class AiFeatureConfigsService {
     const entity = this.configRepository.create(payload);
     this.normalizeFeatureSpecificSettings(entity);
     await this.assertExecutableConfig(entity);
-    if (entity.isEnabled) {
+    if (entity.isEnabled && entity.featureType !== 'rerank') {
       await this.disableOtherFeatureConfigs(entity.featureType);
     }
     const saved = await this.configRepository.save(entity);
@@ -110,7 +124,7 @@ export class AiFeatureConfigsService {
     Object.assign(config, await this.toEntityPayload(dto, false));
     this.normalizeFeatureSpecificSettings(config);
     await this.assertExecutableConfig(config);
-    if (config.isEnabled) {
+    if (config.isEnabled && config.featureType !== 'rerank') {
       await this.disableOtherFeatureConfigs(config.featureType, config.id);
     }
     return this.configRepository.save(config);
@@ -201,6 +215,17 @@ export class AiFeatureConfigsService {
   }
 
   private normalizeFeatureSpecificSettings(config: Partial<AiFeatureConfig>) {
+    if (config.featureType === 'rerank') {
+      config.enableThinking = false;
+      config.thinkingParameters = null;
+      config.useMineru = false;
+      config.mineruConfigId = null;
+      config.mineruConfigName = null;
+      config.systemPrompt = null;
+      config.temperature = 0;
+      config.responseFormat = 'json';
+      return;
+    }
     if (config.featureType !== 'chat') {
       config.enableThinking = false;
       config.thinkingParameters = null;
@@ -227,7 +252,7 @@ export class AiFeatureConfigsService {
   }
 
   private async disableOtherFeatureConfigs(
-    featureType: AiFeatureType,
+    featureType: AiFeatureConfigType,
     excludeId?: number,
   ) {
     const where = excludeId

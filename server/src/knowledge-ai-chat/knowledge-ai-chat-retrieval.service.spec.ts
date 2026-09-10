@@ -164,12 +164,12 @@ describe('KnowledgeAiChatRetrievalService', () => {
       {} as KnowledgeEmbeddingService,
       {} as KnowledgeVectorService,
       {
-        findUsableChatConfig: jest
+        findUsableRerankConfig: jest
           .fn()
           .mockResolvedValue({ providerId: 3, model: 'rerank-model' }),
         findEnabledByFeature: jest.fn().mockResolvedValue({
           id: 3,
-          name: '默认聊天配置',
+          name: '默认 LLM 重排配置',
           providerId: 3,
           model: 'rerank-model',
         }),
@@ -646,7 +646,7 @@ describe('KnowledgeAiChatRetrievalService', () => {
     expect(expanded[1].content).toBe('相邻片段内容');
   });
 
-  it('invokes the selected chat config when reranking is enabled', async () => {
+  it('invokes the selected LLM rerank config when reranking is enabled', async () => {
     providerCall.mockResolvedValue({
       isSuccess: true,
       answer: '[{"id":"chunk:1","score":0.93}]',
@@ -669,7 +669,7 @@ describe('KnowledgeAiChatRetrievalService', () => {
     expect(result.candidates[0].score).toBeGreaterThan(0.7);
   });
 
-  it('falls back to the enabled chat config for default reranking', async () => {
+  it('falls back to the enabled LLM rerank config for default reranking', async () => {
     providerCall.mockResolvedValue({
       isSuccess: true,
       answer: '[{"id":"chunk:1","score":0.88}]',

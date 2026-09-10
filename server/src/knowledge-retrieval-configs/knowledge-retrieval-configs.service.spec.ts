@@ -6,7 +6,7 @@ import { KnowledgeRetrievalConfig } from './entities/knowledge-retrieval-config.
 import { KnowledgeRetrievalConfigsService } from './knowledge-retrieval-configs.service';
 
 describe('KnowledgeRetrievalConfigsService', () => {
-  it('enables reranking and selects the active chat config by default', async () => {
+  it('enables reranking and selects the active LLM rerank config by default', async () => {
     const create = jest.fn(
       (payload: Partial<KnowledgeRetrievalConfig>) => payload,
     );
@@ -20,7 +20,7 @@ describe('KnowledgeRetrievalConfigsService', () => {
       {
         findEnabledByFeature: jest.fn().mockResolvedValue({
           id: 3,
-          name: '默认聊天配置',
+          name: '默认 LLM 重排配置',
         }),
       } as unknown as AiFeatureConfigsService,
     );
@@ -30,7 +30,7 @@ describe('KnowledgeRetrievalConfigsService', () => {
     expect(result.enableRerank).toBe(true);
     expect(result.sessionContextTimeoutMinutes).toBe(15);
     expect(result.rerankAiFeatureConfigId).toBe(3);
-    expect(result.rerankAiFeatureConfigName).toBe('默认聊天配置');
+    expect(result.rerankAiFeatureConfigName).toBe('默认 LLM 重排配置');
     expect(save).toHaveBeenCalledTimes(1);
   });
 });

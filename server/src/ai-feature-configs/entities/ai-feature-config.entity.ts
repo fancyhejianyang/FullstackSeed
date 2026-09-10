@@ -1,7 +1,7 @@
 import { Column, Entity, Index } from 'typeorm';
 import { BaseEntity } from '../../common/entities/base.entity';
 import type {
-  AiFeatureType,
+  AiFeatureConfigType,
   AiResponseFormat,
 } from '../ai-feature-config.constants';
 
@@ -12,7 +12,7 @@ export class AiFeatureConfig extends BaseEntity {
 
   @Index()
   @Column({ type: 'varchar', length: 40 })
-  featureType: AiFeatureType;
+  featureType: AiFeatureConfigType;
 
   @Column({ type: 'int', nullable: true })
   providerId: number | null;
@@ -24,7 +24,7 @@ export class AiFeatureConfig extends BaseEntity {
   model: string | null;
 
   /**
-   * 项目侧 Think 总开关。仅聊天配置生效，避免把供应商特有参数误用于 OCR、向量化等调用。
+   * 项目侧 Think 总开关。仅聊天配置生效，避免把供应商特有参数误用于 OCR、解析或重排调用。
    */
   @Column({ type: 'tinyint', default: false })
   enableThinking: boolean;

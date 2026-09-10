@@ -1,6 +1,6 @@
 import request from '@/utils/request';
 
-export type AiFeatureType = 'chat' | 'documentParse' | 'ocr' | 'embedding';
+export type AiFeatureType = 'chat' | 'documentParse' | 'ocr' | 'rerank';
 export type AiResponseFormat = 'text' | 'json' | 'markdown';
 
 export interface AiFeatureConfig {

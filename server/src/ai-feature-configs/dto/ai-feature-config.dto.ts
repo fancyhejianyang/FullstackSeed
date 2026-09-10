@@ -16,9 +16,9 @@ import {
 } from 'class-validator';
 import { PartialType } from '@nestjs/swagger';
 import {
-  AI_FEATURE_TYPES,
+  AI_FEATURE_CONFIG_TYPES,
   AI_RESPONSE_FORMATS,
-  type AiFeatureType,
+  type AiFeatureConfigType,
   type AiResponseFormat,
 } from '../ai-feature-config.constants';
 import { toBoolLike } from '../../common/utils/bool-like';
@@ -29,8 +29,8 @@ export class CreateAiFeatureConfigDto {
   @MaxLength(120)
   name: string;
 
-  @IsIn(AI_FEATURE_TYPES)
-  featureType: AiFeatureType;
+  @IsIn(AI_FEATURE_CONFIG_TYPES)
+  featureType: AiFeatureConfigType;
 
   @ValidateIf(
     (dto: CreateAiFeatureConfigDto) =>
@@ -123,9 +123,9 @@ export class QueryAiFeatureConfigDto {
   @IsOptional()
   keyword?: string;
 
-  @IsIn(AI_FEATURE_TYPES)
+  @IsIn(AI_FEATURE_CONFIG_TYPES)
   @IsOptional()
-  featureType?: AiFeatureType;
+  featureType?: AiFeatureConfigType;
 
   @Type(() => Number)
   @IsInt()

@@ -63,7 +63,7 @@ const featureTypeOptions = [
   { label: '聊天', value: 'chat' },
   { label: '文档解析', value: 'documentParse' },
   { label: 'OCR', value: 'ocr' },
-  { label: '向量化', value: 'embedding' },
+  { label: 'LLM 重排', value: 'rerank' },
 ];
 
 const providerOptions = computed(() =>
@@ -87,15 +87,19 @@ const selectedProvider = computed(() =>
 const isParseFeature = computed(() => ['ocr', 'documentParse'].includes(form.featureType));
 const isMineruParseFeature = computed(() => isParseFeature.value && !!form.useMineru);
 const isChatFeature = computed(() => form.featureType === 'chat');
+const isRerankFeature = computed(() => form.featureType === 'rerank');
 const usesTemperature = computed(
-  () => !isMineruParseFeature.value && form.featureType !== 'embedding',
+  () => !isMineruParseFeature.value && !isRerankFeature.value,
+);
+const usesPromptSettings = computed(
+  () => !isMineruParseFeature.value && !isRerankFeature.value,
 );
 
 const modelOptions = computed(() => getModelOptions(selectedProvider.value, form.featureType));
 
 const modelPlaceholder = computed(() => {
   if (form.featureType === 'ocr') return '请选择视觉模型';
-  if (form.featureType === 'embedding') return '请选择向量模型';
+  if (form.featureType === 'rerank') return '请选择用于重排的通用文本模型';
   return '请选择模型';
 });
 
@@ -110,8 +114,8 @@ const fields = computed<FormField[]>(() => {
       hint:
         form.featureType === 'chat'
           ? '当前为聊天：所选模型负责生成对话与知识库问答的最终回复。'
-          : form.featureType === 'embedding'
-            ? '当前为向量化：所选模型只负责把文本转换为向量，不能直接对话。'
+          : form.featureType === 'rerank'
+            ? '当前为 LLM 重排：模型只给召回的知识片段评分和排序，不参与最终回答。'
             : form.featureType === 'ocr'
               ? '当前为 OCR：用于从图片或扫描件识别文字。'
               : '当前为文档解析：用于将文件转换为可切分、可索引的结构化文本。',
@@ -159,7 +163,10 @@ const fields = computed<FormField[]>(() => {
         placeholder: modelPlaceholder.value,
         hint: validatingModel.value
           ? `正在校验“${form.model}”是否可用…`
-          : modelValidationHint.value || '切换模型后会自动调用账号接口校验；确认不存在时会从该账号模型列表中移除。',
+          : modelValidationHint.value ||
+            (isRerankFeature.value
+              ? '请选择通用文本模型。系统会固定用温度 0 和内置 JSON 评分提示词调用它，不会生成最终回答。'
+              : '切换模型后会自动调用账号接口校验；确认不存在时会从该账号模型列表中移除。'),
       },
     );
     if (usesTemperature.value) {
@@ -200,39 +207,42 @@ const fields = computed<FormField[]>(() => {
     }
   }
 
+  if (usesPromptSettings.value) {
+    baseFields.push(
+      {
+        prop: 'systemPrompt',
+        label: '提示词',
+        type: 'textarea',
+        rows: 5,
+        placeholder: '该功能默认系统提示词，可被测试请求临时覆盖',
+        hint: (() => {
+          const prompt = form.systemPrompt?.trim() ?? '';
+          return prompt
+            ? `当前已填写 ${prompt.length} 个字符；业务规则、口吻和禁止项请直接写在此提示词中。`
+            : '未填写时将使用系统默认提示词；业务规则、口吻和禁止项请直接写在此处。';
+        })(),
+      },
+      {
+        prop: 'responseFormat',
+        label: '返回格式',
+        type: 'select',
+        options: [
+          { label: '文本', value: 'text' },
+          { label: 'JSON', value: 'json' },
+          { label: 'Markdown', value: 'markdown' },
+        ],
+        hint:
+          form.responseFormat === 'json'
+            ? '当前要求 JSON：适合被程序解析，提示词中应明确字段结构并避免附加说明。'
+            : form.responseFormat === 'markdown'
+              ? '当前要求 Markdown：适合保留标题、列表、表格等富文本结构。'
+              : '当前返回普通文本：兼容性最好，适合一般对话和简短结果。',
+      },
+    );
+  }
+
   return [
     ...baseFields,
-    {
-      prop: 'systemPrompt',
-      label: '提示词',
-      type: 'textarea',
-      rows: 5,
-      placeholder: isMineruParseFeature.value
-        ? '使用 MinerU 时可作为解析配置说明保留'
-        : '该功能默认系统提示词，可被测试请求临时覆盖',
-      hint: (() => {
-        const prompt = form.systemPrompt?.trim() ?? '';
-        return prompt
-          ? `当前已填写 ${prompt.length} 个字符；业务规则、口吻和禁止项请直接写在此提示词中。`
-          : '未填写时将使用系统默认提示词；业务规则、口吻和禁止项请直接写在此处。';
-      })(),
-    },
-    {
-      prop: 'responseFormat',
-      label: '返回格式',
-      type: 'select',
-      options: [
-        { label: '文本', value: 'text' },
-        { label: 'JSON', value: 'json' },
-        { label: 'Markdown', value: 'markdown' },
-      ],
-      hint:
-        form.responseFormat === 'json'
-          ? '当前要求 JSON：适合被程序解析，提示词中应明确字段结构并避免附加说明。'
-          : form.responseFormat === 'markdown'
-            ? '当前要求 Markdown：适合保留标题、列表、表格等富文本结构。'
-            : '当前返回普通文本：兼容性最好，适合一般对话和简短结果。',
-    },
     {
       prop: 'isEnabled',
       label: '是否启用',
@@ -292,6 +302,11 @@ watch(
     if (!isChatFeature.value) {
       form.enableThinking = false;
       form.thinkingParametersText = '';
+    }
+    if (isRerankFeature.value) {
+      form.systemPrompt = '';
+      form.temperature = 0;
+      form.responseFormat = 'json';
     }
     if (isMineruParseFeature.value) {
       form.providerId = '';
@@ -374,9 +389,9 @@ function buildPayload(): AiFeatureConfigForm {
     thinkingParameters: resolveThinkingParameters(),
     useMineru: !!form.useMineru,
     mineruConfigId: isMineruParseFeature.value ? Number(form.mineruConfigId) : null,
-    systemPrompt: form.systemPrompt?.trim(),
-    temperature: Number(form.temperature),
-    responseFormat: form.responseFormat,
+    systemPrompt: isRerankFeature.value ? '' : form.systemPrompt?.trim(),
+    temperature: isRerankFeature.value ? 0 : Number(form.temperature),
+    responseFormat: isRerankFeature.value ? 'json' : form.responseFormat,
     isEnabled: form.isEnabled,
     description: form.description?.trim(),
   };
@@ -429,14 +444,15 @@ async function handleSubmit() {
 
 function getModelText(provider: KnowledgeAiProvider | undefined, featureType: AiFeatureType) {
   if (!provider) return '';
-  if (featureType === 'chat' || featureType === 'documentParse') {
+  if (
+    featureType === 'chat' ||
+    featureType === 'documentParse' ||
+    featureType === 'rerank'
+  ) {
     return joinModelTexts(provider.models, provider.textModels);
   }
   if (featureType === 'ocr') {
     return joinModelTexts(provider.visionModels, provider.models);
-  }
-  if (featureType === 'embedding') {
-    return provider.embeddingModels || '';
   }
   return '';
 }
@@ -531,6 +547,18 @@ function joinModelTexts(...values: Array<string | null | undefined>) {
   >
     <div v-loading="loading">
       <Form ref="formRef" v-model="form" :fields="fields" :rules="rules" label-width="110px" />
+      <div v-if="isRerankFeature" class="ai-feature-config-edit__rerank-tip">
+        LLM 重排固定以温度 0 和 JSON 评分格式执行，系统会把“用户问题 + 初步召回片段”交给所选模型重新排序；聊天提示词、Think 和返回格式均不适用于此类型。
+      </div>
     </div>
   </Dialog>
 </template>
+
+<style scoped>
+.ai-feature-config-edit__rerank-tip {
+  margin-top: 8px;
+  color: #909399;
+  font-size: 12px;
+  line-height: 1.6;
+}
+</style>

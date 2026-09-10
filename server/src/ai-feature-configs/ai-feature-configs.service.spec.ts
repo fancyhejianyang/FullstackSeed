@@ -50,4 +50,31 @@ describe('AiFeatureConfigsService', () => {
     expect(config.enableThinking).toBe(false);
     expect(config.thinkingParameters).toBeNull();
   });
+
+  it('locks LLM rerank configurations to the internal deterministic JSON scorer', () => {
+    const config: Partial<AiFeatureConfig> = {
+      featureType: 'rerank',
+      enableThinking: true,
+      thinkingParameters: { enable_thinking: true },
+      useMineru: true,
+      mineruConfigId: 8,
+      mineruConfigName: '默认 MinerU',
+      systemPrompt: '请随意回答',
+      temperature: 1,
+      responseFormat: 'markdown',
+    };
+
+    internals.normalizeFeatureSpecificSettings(config);
+
+    expect(config).toMatchObject({
+      enableThinking: false,
+      thinkingParameters: null,
+      useMineru: false,
+      mineruConfigId: null,
+      mineruConfigName: null,
+      systemPrompt: null,
+      temperature: 0,
+      responseFormat: 'json',
+    });
+  });
 });

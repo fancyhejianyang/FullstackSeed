@@ -14,8 +14,8 @@ import {
 import { PartialType } from '@nestjs/swagger';
 import { toBoolLike } from '../../common/utils/bool-like';
 import {
-  AI_FEATURE_TYPES,
-  type AiFeatureType,
+  AI_MODEL_FEATURE_TYPES,
+  type AiModelFeatureType,
 } from '../../ai-feature-configs/ai-feature-config.constants';
 
 export class CreateKnowledgeAiProviderDto {
@@ -128,6 +128,6 @@ export class ValidateKnowledgeAiProviderModelDto {
   @MaxLength(120)
   model: string;
 
-  @IsIn(AI_FEATURE_TYPES)
-  featureType: AiFeatureType;
+  @IsIn(AI_MODEL_FEATURE_TYPES)
+  featureType: AiModelFeatureType;
 }

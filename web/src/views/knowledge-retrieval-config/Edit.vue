@@ -202,11 +202,11 @@ const fields = computed<FormField[]>(() => {
   if (form.enableRerank) {
     items.push({
       prop: 'rerankAiFeatureConfigId',
-      label: '重排 AI 配置',
+      label: 'LLM 重排配置',
       type: 'select',
       options: rerankConfigOptions,
-      placeholder: '请选择重排 AI 配置',
-      hint: '该配置只用于给候选片段排序；应选择可用的聊天/重排模型账号，不会直接生成最终回答。',
+      placeholder: '请选择 LLM 重排配置',
+      hint: '该配置只用于给候选片段评分和排序；只能选择“LLM 重排”类型，不会使用聊天提示词或生成最终回答。',
     });
   }
 
@@ -270,7 +270,7 @@ async function fetchOptions() {
   const [knowledgeBaseResult, categoryResult, configResult] = await Promise.all([
     getKnowledgeBases({ page: 1, pageSize: 500 }),
     getKnowledgeBaseCategoryTree({}),
-    getAiFeatureConfigs({ page: 1, pageSize: 500, featureType: 'chat' }),
+    getAiFeatureConfigs({ page: 1, pageSize: 500, featureType: 'rerank' }),
   ]);
   knowledgeBases.value = knowledgeBaseResult.list;
   categoryTree.value = categoryResult;

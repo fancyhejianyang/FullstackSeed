@@ -7,7 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Like, Repository } from 'typeorm';
 import { KnowledgeAiProvider } from './entities/knowledge-ai-provider.entity';
 import { AiFeatureConfig } from '../ai-feature-configs/entities/ai-feature-config.entity';
-import type { AiFeatureType } from '../ai-feature-configs/ai-feature-config.constants';
+import type { AiModelFeatureType } from '../ai-feature-configs/ai-feature-config.constants';
 import { LogRecordsService } from '../log-records/log-records.service';
 import {
   CreateKnowledgeAiProviderDto,
@@ -227,7 +227,7 @@ export class KnowledgeAiProvidersService {
   async assertModelSupported(payload: {
     id: number;
     model: string;
-    featureType: AiFeatureType;
+    featureType: AiModelFeatureType;
   }) {
     const provider = await this.findEntity(payload.id);
     const model = payload.model.trim();
@@ -402,7 +402,7 @@ export class KnowledgeAiProvidersService {
 
   private resolveFeatureTarget(
     provider: KnowledgeAiProvider,
-    featureType: AiFeatureType,
+    featureType: AiModelFeatureType,
     model: string,
   ): KnowledgeAiChatTarget {
     if (!provider.isEnabled) {
@@ -434,7 +434,7 @@ export class KnowledgeAiProvidersService {
 
   private getFeatureModels(
     provider: KnowledgeAiProvider,
-    featureType: AiFeatureType,
+    featureType: AiModelFeatureType,
   ) {
     if (featureType === 'embedding') return provider.embeddingModels;
     if (featureType === 'ocr') {

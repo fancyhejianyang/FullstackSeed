@@ -61,7 +61,7 @@ export interface TestKnowledgeAiProviderResult {
 export interface ValidateKnowledgeAiProviderModelPayload {
   id: number;
   model: string;
-  featureType: 'chat' | 'documentParse' | 'ocr' | 'embedding';
+  featureType: 'chat' | 'documentParse' | 'ocr' | 'rerank' | 'embedding';
 }
 
 export interface ValidateKnowledgeAiProviderModelResult {
