@@ -26,6 +26,7 @@ import {
   KnowledgeAiChatCommandService,
   KNOWLEDGE_AI_CHAT_COMMANDS,
 } from './knowledge-ai-chat-command.service';
+import type { KnowledgeColloquialTermMatch } from '../knowledge-colloquial-terms/knowledge-colloquial-terms.service';
 
 export interface KnowledgeAiChatStreamWriter {
   writeEvent: (event: string, data: unknown) => void;
@@ -45,6 +46,7 @@ interface KnowledgeRetrievalState {
   sessionContextReused: boolean;
   rerankApplied: boolean;
   rerankTokenUsage: KnowledgeAiTokenUsage | null;
+  semanticContext: string;
   routingRuleMatches: KnowledgeRoutingRuleMatch[];
   hits: KnowledgeRetrievalHit[];
   referenceImages: KnowledgeReferenceImage[];
@@ -54,6 +56,9 @@ interface KnowledgeStandardQaState {
   entryId: number | null;
   question: string | null;
   answer: string | null;
+  rewrittenQuestion: string;
+  semanticContext: string;
+  colloquialTermMatches: KnowledgeColloquialTermMatch[];
   commandIds: string[];
 }
 
@@ -133,10 +138,11 @@ export class KnowledgeAiChatService {
     const retrieval = standardQa.answer
       ? this.emptyRetrievalState()
       : await this.buildRetrievalState(
-          dto.question,
+          standardQa.rewrittenQuestion,
           retrievalConfigId,
           session,
           history.length > 0,
+          standardQa.semanticContext,
         );
     const result = standardQa.answer
       ? this.buildStandardQaAnswerResult(target, standardQa)
@@ -199,13 +205,18 @@ export class KnowledgeAiChatService {
       entryId: standardQa.entryId,
       question: standardQa.question,
     });
+    writer.writeEvent('colloquial-terms', {
+      rewrittenQuestion: standardQa.rewrittenQuestion,
+      matches: standardQa.colloquialTermMatches,
+    });
     const retrieval = standardQa.answer
       ? this.emptyRetrievalState()
       : await this.buildRetrievalState(
-          dto.question,
+          standardQa.rewrittenQuestion,
           retrievalConfigId,
           session,
           history.length > 0,
+          standardQa.semanticContext,
         );
     writer.writeEvent('retrieval', {
       retrievalConfigId: retrieval.configId,
@@ -421,6 +432,7 @@ export class KnowledgeAiChatService {
     configId?: number | null,
     session?: KnowledgeAiChatSession,
     hasHistory = false,
+    semanticContext = '',
   ): Promise<KnowledgeRetrievalState> {
     const normalizedConfigId = configId ?? null;
     const result = await this.commandService.retrieveKnowledge(
@@ -448,6 +460,7 @@ export class KnowledgeAiChatService {
       sessionContextReused: result.sessionContextReused,
       rerankApplied: result.rerankApplied,
       rerankTokenUsage: result.rerankTokenUsage,
+      semanticContext,
       routingRuleMatches: result.routingRuleMatches,
       hits: result.hits,
       referenceImages: result.referenceImages,
@@ -458,15 +471,48 @@ export class KnowledgeAiChatService {
     question: string;
     retrievalConfigId?: number | null;
   }): Promise<KnowledgeStandardQaState> {
-    const matched = await this.commandService.searchStandardQa({
+    const directMatch = await this.commandService.searchStandardQa({
       retrievalConfigId: params.retrievalConfigId,
       question: params.question,
     });
+    if (directMatch) {
+      return {
+        entryId: directMatch.entry.id,
+        question: directMatch.entry.question,
+        answer: directMatch.entry.answer,
+        rewrittenQuestion: params.question.trim(),
+        semanticContext: '',
+        colloquialTermMatches: [],
+        commandIds: [KNOWLEDGE_AI_CHAT_COMMANDS.searchStandardQa],
+      };
+    }
+    const rewrite = await this.commandService.rewriteColloquialQuestion({
+      retrievalConfigId: params.retrievalConfigId,
+      question: params.question,
+    });
+    const hasRewrittenQuestion =
+      this.normalizeQuestion(rewrite.rewrittenQuestion) !==
+      this.normalizeQuestion(params.question);
+    const rewrittenMatch = hasRewrittenQuestion
+      ? await this.commandService.searchStandardQa({
+          retrievalConfigId: params.retrievalConfigId,
+          question: rewrite.rewrittenQuestion,
+        })
+      : null;
     return {
-      entryId: matched?.entry.id ?? null,
-      question: matched?.entry.question ?? null,
-      answer: matched?.entry.answer ?? null,
-      commandIds: [KNOWLEDGE_AI_CHAT_COMMANDS.searchStandardQa],
+      entryId: rewrittenMatch?.entry.id ?? null,
+      question: rewrittenMatch?.entry.question ?? null,
+      answer: rewrittenMatch?.entry.answer ?? null,
+      rewrittenQuestion: rewrite.rewrittenQuestion,
+      semanticContext: rewrite.semanticContext,
+      colloquialTermMatches: rewrite.matches,
+      commandIds: [
+        KNOWLEDGE_AI_CHAT_COMMANDS.searchStandardQa,
+        KNOWLEDGE_AI_CHAT_COMMANDS.rewriteColloquialQuestion,
+        ...(hasRewrittenQuestion
+          ? [KNOWLEDGE_AI_CHAT_COMMANDS.searchStandardQa]
+          : []),
+      ],
     };
   }
 
@@ -485,6 +531,7 @@ export class KnowledgeAiChatService {
       sessionContextReused: false,
       rerankApplied: false,
       rerankTokenUsage: null,
+      semanticContext: '',
       routingRuleMatches: [],
       hits: [],
       referenceImages: [],
@@ -554,6 +601,7 @@ export class KnowledgeAiChatService {
         routingRuleMatches: retrieval?.routingRuleMatches ?? null,
         rerankApplied: retrieval?.rerankApplied ?? false,
         qaEntryId: standardQa?.entryId ?? null,
+        colloquialTermMatches: standardQa?.colloquialTermMatches ?? null,
         qaCommandIds: standardQa?.commandIds ?? null,
         isSuccess: result.isSuccess,
         errorMessage: result.errorMessage,
@@ -750,12 +798,21 @@ export class KnowledgeAiChatService {
     retrieval?: KnowledgeRetrievalState | null,
   ) {
     const trimmedQuestion = question.trim();
-    if (!retrieval?.configId) return trimmedQuestion;
+    const semanticContext = retrieval?.semanticContext?.trim();
+    const semanticInstructions = semanticContext
+      ? ['', `人工维护的术语理解：\n${semanticContext}`]
+      : [];
+    if (!retrieval?.configId) {
+      return semanticInstructions.length
+        ? [`用户问题：\n${trimmedQuestion}`, ...semanticInstructions].join('\n')
+        : trimmedQuestion;
+    }
     if (!retrieval.context) {
       return [
         '当前问题已启用知识库检索，但没有检索到任何可用参考资料。',
         '你必须只基于知识库参考资料回答，严禁使用互联网常识、模型训练知识或自行推测。',
         '因此本次应明确回答：知识库中未找到相关内容，无法确认。',
+        ...semanticInstructions,
         '',
         `用户问题：\n${trimmedQuestion}`,
       ].join('\n');
@@ -769,6 +826,7 @@ export class KnowledgeAiChatService {
             '资料中的 Markdown 图片属于原文资源；图片直接支持回答时，必须原样保留其 `![说明](URL)`，放在对应说明文字的下一行。不得虚构图片 URL。',
           ]
         : []),
+      ...semanticInstructions,
       '',
       `知识库参考资料：\n${retrieval.context}`,
       '',
@@ -784,5 +842,9 @@ export class KnowledgeAiChatService {
       return '返回格式：请使用 Markdown 输出。';
     }
     return '';
+  }
+
+  private normalizeQuestion(value: string) {
+    return value.toLocaleLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '');
   }
 }

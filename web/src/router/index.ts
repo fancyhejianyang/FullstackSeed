@@ -159,6 +159,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '标准问答库', permission: 'KnowledgeStandardQa.read' },
       },
       {
+        path: 'chat-management/colloquial-terms',
+        name: 'chat-management-colloquial-terms',
+        component: () => import('@/views/knowledge-colloquial-term/Index.vue'),
+        meta: { title: '口语化表达词库', permission: 'KnowledgeColloquialTerm.read' },
+      },
+      {
         path: 'chat-management/records',
         name: 'chat-management-records',
         component: () => import('@/views/knowledge-ai-record/Index.vue'),

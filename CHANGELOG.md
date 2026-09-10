@@ -1,5 +1,18 @@
 # CHANGELOG
 
+### 2026-09-10 新增口语化表达词库与问题定性改写
+- 新增：
+  - `server/src/knowledge-colloquial-terms/`（口语表达词条 CRUD、适用检索配置、排除短语和确定性问题改写服务）
+  - `server/src/migrations/1788868800000-CreateKnowledgeColloquialTerms.ts`（创建口语词条表，并为问答消息保存命中的词条）
+  - `web/src/api/knowledgeColloquialTerm.ts`、`web/src/views/knowledge-colloquial-term/`（口语化表达词库管理接口及动态说明表单）
+- 修改：
+  - `server/src/knowledge-ai-chat/`、`server/src/ai-command-definitions/`（在原问题精确命中标准问答失败后，执行受控的词条改写；改写后再精确匹配标准问答，最后才走知识库检索）
+  - `server/src/app.module.ts`、`server/src/users/users.service.ts`、`server/src/menus/menus.service.ts`、`web/src/router/index.ts`（挂载模块、管理员权限、“口语化表达词库”菜单和管理端路由）
+  - `web/src/api/knowledgeAiChat.ts`、`web/src/views/knowledge-ai-record/Index.vue`（流式事件和问答记录展示命中的口语词条）
+  - `CHANGELOG.md`（记录本次调整）
+- 删除：无
+- 说明：词条只做人工维护的确定性替换和术语定性，不直接提供业务答案。可组合产品简称与属性词，例如“小蓝” → “蓝虎机器人 Pro”、“多重” → “的重量是多少？”，最终将“小蓝多重”改写为“蓝虎机器人 Pro 的重量是多少？”。语义解释和推荐单位会传给检索及回答模型，但模型仍须以知识库资料为事实依据；“多重因素”等同形异义可用排除短语避免误改写。
+
 ### 2026-09-10 精简标准问答为固定答案直出
 - 新增：
   - `server/src/migrations/1788865200000-SimplifyKnowledgeStandardQas.ts`（移除标准问答的关键词、优先级、最低匹配度、说明，以及问答记录中的匹配分数和问题拆解记录）

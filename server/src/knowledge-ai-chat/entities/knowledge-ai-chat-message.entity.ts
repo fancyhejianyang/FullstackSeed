@@ -69,6 +69,17 @@ export class KnowledgeAiChatMessage extends BaseEntity {
   @Column({ type: 'int', nullable: true })
   qaEntryId: number | null;
 
+  /** 本轮由人工维护的口语化表达词库实际命中的词条。 */
+  @Column({ type: 'simple-json', nullable: true })
+  colloquialTermMatches: Array<{
+    id: number;
+    term: string;
+    replacement: string;
+    semanticType: 'product-alias' | 'attribute' | 'business-term' | 'custom';
+    semanticDefinition: string;
+    answerUnit: string | null;
+  }> | null;
+
   @Column({ type: 'simple-json', nullable: true })
   qaCommandIds: string[] | null;
 

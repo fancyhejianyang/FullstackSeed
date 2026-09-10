@@ -56,6 +56,7 @@ export interface KnowledgeAiChatMessage {
   retrievalHits: KnowledgeRetrievalHit[] | null;
   rerankApplied: boolean;
   qaEntryId: number | null;
+  colloquialTermMatches: KnowledgeColloquialTermMatch[] | null;
   qaCommandIds: string[] | null;
   isSuccess: boolean;
   errorMessage: string | null;
@@ -82,6 +83,15 @@ export interface QueryKnowledgeAiChatSessionParams {
   keyword?: string;
   providerId?: number;
   isSuccess?: boolean | '';
+}
+
+export interface KnowledgeColloquialTermMatch {
+  id: number;
+  term: string;
+  replacement: string;
+  semanticType: 'product-alias' | 'attribute' | 'business-term' | 'custom';
+  semanticDefinition: string;
+  answerUnit: string | null;
 }
 
 export interface AskKnowledgeAiPayload {
@@ -142,6 +152,13 @@ export type KnowledgeAiChatStreamEvent =
         matched: boolean;
         entryId: number | null;
         question: string | null;
+      };
+    }
+  | {
+      event: 'colloquial-terms';
+      data: {
+        rewrittenQuestion: string;
+        matches: KnowledgeColloquialTermMatch[];
       };
     }
   | {

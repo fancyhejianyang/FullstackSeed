@@ -30,6 +30,7 @@ import { KnowledgeChunkConfigsModule } from './knowledge-chunk-configs/knowledge
 import { VectorConfigsModule } from './vector-configs/vector-configs.module';
 import { DocumentParseRulesModule } from './document-parse-rules/document-parse-rules.module';
 import { KnowledgeStandardQasModule } from './knowledge-standard-qas/knowledge-standard-qas.module';
+import { KnowledgeColloquialTermsModule } from './knowledge-colloquial-terms/knowledge-colloquial-terms.module';
 import { AiCommandDefinitionsModule } from './ai-command-definitions/ai-command-definitions.module';
 import { ApprovalRequestsModule } from './approval-requests/approval-requests.module';
 
@@ -125,6 +126,7 @@ import { ApprovalRequestsModule } from './approval-requests/approval-requests.mo
     KnowledgeRetrievalConfigsModule,
     KnowledgeRoutingRulesModule,
     KnowledgeStandardQasModule,
+    KnowledgeColloquialTermsModule,
     ApprovalRequestsModule,
     AiCommandDefinitionsModule,
     KnowledgeChunkConfigsModule,

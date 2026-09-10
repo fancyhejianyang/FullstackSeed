@@ -10,6 +10,7 @@ import { KnowledgeBase } from '../knowledge-bases/entities/knowledge-base.entity
 import { KnowledgeRetrievalConfigsModule } from '../knowledge-retrieval-configs/knowledge-retrieval-configs.module';
 import { KnowledgeRoutingRulesModule } from '../knowledge-routing-rules/knowledge-routing-rules.module';
 import { KnowledgeStandardQasModule } from '../knowledge-standard-qas/knowledge-standard-qas.module';
+import { KnowledgeColloquialTermsModule } from '../knowledge-colloquial-terms/knowledge-colloquial-terms.module';
 import { KnowledgeVectorsModule } from '../knowledge-vectors/knowledge-vectors.module';
 import { KnowledgeAiChatController } from './knowledge-ai-chat.controller';
 import { KnowledgeAiChatCommandService } from './knowledge-ai-chat-command.service';
@@ -33,6 +34,7 @@ import { KnowledgeAiChatSession } from './entities/knowledge-ai-chat-session.ent
     KnowledgeRetrievalConfigsModule,
     KnowledgeRoutingRulesModule,
     KnowledgeStandardQasModule,
+    KnowledgeColloquialTermsModule,
     KnowledgeAiProvidersModule,
     KnowledgeVectorsModule,
   ],

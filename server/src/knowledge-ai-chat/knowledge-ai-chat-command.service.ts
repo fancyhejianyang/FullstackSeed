@@ -3,6 +3,10 @@ import {
   KnowledgeStandardQasService,
   type KnowledgeStandardQaMatch,
 } from '../knowledge-standard-qas/knowledge-standard-qas.service';
+import {
+  KnowledgeColloquialTermsService,
+  type KnowledgeColloquialQuestionRewrite,
+} from '../knowledge-colloquial-terms/knowledge-colloquial-terms.service';
 import { AiCommandDefinitionsService } from '../ai-command-definitions/ai-command-definitions.service';
 import { KnowledgeAiChatRetrievalService } from './knowledge-ai-chat-retrieval.service';
 
@@ -11,6 +15,7 @@ import { KnowledgeAiChatRetrievalService } from './knowledge-ai-chat-retrieval.s
  */
 export const KNOWLEDGE_AI_CHAT_COMMANDS = {
   searchStandardQa: 'qa.search',
+  rewriteColloquialQuestion: 'colloquial.rewrite',
   retrieveKnowledge: 'knowledge.retrieve',
 } as const;
 
@@ -21,6 +26,7 @@ export type KnowledgeAiChatCommand =
 export class KnowledgeAiChatCommandService {
   constructor(
     private readonly standardQasService: KnowledgeStandardQasService,
+    private readonly colloquialTermsService: KnowledgeColloquialTermsService,
     private readonly retrievalService: KnowledgeAiChatRetrievalService,
     private readonly commandDefinitionsService: AiCommandDefinitionsService,
   ) {}
@@ -32,6 +38,13 @@ export class KnowledgeAiChatCommandService {
     return this.findStandardQa(params);
   }
 
+  rewriteColloquialQuestion(params: {
+    retrievalConfigId?: number | null;
+    question: string;
+  }): Promise<KnowledgeColloquialQuestionRewrite> {
+    return this.rewriteQuestion(params);
+  }
+
   private async findStandardQa(params: {
     retrievalConfigId?: number | null;
     question: string;
@@ -40,6 +53,16 @@ export class KnowledgeAiChatCommandService {
       KNOWLEDGE_AI_CHAT_COMMANDS.searchStandardQa,
     );
     return this.standardQasService.matchForChat(params);
+  }
+
+  private async rewriteQuestion(params: {
+    retrievalConfigId?: number | null;
+    question: string;
+  }): Promise<KnowledgeColloquialQuestionRewrite> {
+    await this.commandDefinitionsService.findChatCommand(
+      KNOWLEDGE_AI_CHAT_COMMANDS.rewriteColloquialQuestion,
+    );
+    return this.colloquialTermsService.rewriteQuestion(params);
   }
 
   async retrieveKnowledge(

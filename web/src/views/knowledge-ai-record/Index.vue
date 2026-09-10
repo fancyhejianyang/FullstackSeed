@@ -207,6 +207,17 @@ async function handleView(row: KnowledgeAiChatSession) {
             {{ formatTokenUsage(message) }} /
             {{ formatDateTime(message.createdAt) }}
           </div>
+          <div v-if="message.colloquialTermMatches?.length" class="ai-record__retrieval-hits">
+            <el-tag
+              v-for="term in message.colloquialTermMatches"
+              :key="term.id"
+              type="primary"
+              effect="light"
+              size="small"
+            >
+              术语：{{ term.term }} → {{ term.replacement }}
+            </el-tag>
+          </div>
           <div class="ai-record__actions">
             <el-tag v-if="message.qaEntryId" type="success" size="small">
               已命中标准问答 #{{ message.qaEntryId }}

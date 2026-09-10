@@ -38,6 +38,32 @@ const toJson = (value: unknown) => JSON.stringify(value, null, 2);
  */
 export const AI_COMMAND_CATALOG: AiCommandCatalogItem[] = [
   {
+    commandKey: 'colloquial.rewrite',
+    name: '口语化表达改写',
+    action: 'read',
+    executionMode: 'service',
+    handlerKey: 'colloquial.rewrite',
+    executionTarget: 'KnowledgeColloquialTermsService.rewriteQuestion',
+    apiMethod: 'POST',
+    apiPath: 'service://knowledge-colloquial-terms/rewrite',
+    requestSchema: toJson({
+      type: 'object',
+      required: ['question'],
+      properties: {
+        question: { type: 'string' },
+        retrievalConfigId: { type: 'integer' },
+      },
+    }),
+    contextBindings: toJson({
+      retrievalConfigId: '$chat.retrievalConfigId',
+      source: 'manual-colloquial-terms',
+    }),
+    chatCallable: true,
+    requireApproval: false,
+    semanticKeywords: ['口语化', '简称', '标准表达', '术语理解'],
+    description: '使用人工维护的口语化表达词库改写问题，并附加业务定性约束。',
+  },
+  {
     commandKey: 'qa.search',
     name: '标准问答查询',
     action: 'read',

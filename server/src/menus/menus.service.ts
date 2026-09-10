@@ -217,6 +217,15 @@ const SEED_MENUS: SeedMenu[] = [
     parentPath: '/chat-management',
   },
   {
+    name: '口语化表达词库',
+    path: '/chat-management/colloquial-terms',
+    icon: '',
+    sort: 38,
+    permissionCode: 'KnowledgeColloquialTerm.read',
+    isSystem: true,
+    parentPath: '/chat-management',
+  },
+  {
     name: '问题记录',
     path: '/chat-management/records',
     icon: '',
