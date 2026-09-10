@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-09-10 调整客服问答为先校准、后匹配标准问答
+- 新增：无。
+- 修改：
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat.service.ts`（移除原问题优先直查标准问答的快捷分支；所有问题均先经过口语词条校准，再用校准后的问题精确匹配标准问答，未命中才进入路由、检索和重排）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat.service.spec.ts`（覆盖“先校准、后标准问答”的调用顺序与校准后问题传递）
+  - `CHANGELOG.md`（记录本次调整）
+- 删除：无。
+- 说明：无口语词条命中时，校准结果保持为原问题，仍会执行一次标准问答匹配；校准后的问题会继续作为后续路由、检索、重排与回答阶段的检索问题。
+
 ### 2026-09-10 精简口语词条并支持 JSON 语义约束
 - 新增：
   - `server/src/migrations/1788876000000-SimplifyKnowledgeColloquialTerms.ts`（将旧推荐单位并入语义定义后，移除 `answerUnit`、`matchMode` 两列）

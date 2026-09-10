@@ -471,34 +471,14 @@ export class KnowledgeAiChatService {
     question: string;
     retrievalConfigId?: number | null;
   }): Promise<KnowledgeStandardQaState> {
-    const directMatch = await this.commandService.searchStandardQa({
-      retrievalConfigId: params.retrievalConfigId,
-      question: params.question,
-    });
-    if (directMatch) {
-      return {
-        entryId: directMatch.entry.id,
-        question: directMatch.entry.question,
-        answer: directMatch.entry.answer,
-        rewrittenQuestion: params.question.trim(),
-        semanticContext: '',
-        colloquialTermMatches: [],
-        commandIds: [KNOWLEDGE_AI_CHAT_COMMANDS.searchStandardQa],
-      };
-    }
     const rewrite = await this.commandService.rewriteColloquialQuestion({
       retrievalConfigId: params.retrievalConfigId,
       question: params.question,
     });
-    const hasRewrittenQuestion =
-      this.normalizeQuestion(rewrite.rewrittenQuestion) !==
-      this.normalizeQuestion(params.question);
-    const rewrittenMatch = hasRewrittenQuestion
-      ? await this.commandService.searchStandardQa({
-          retrievalConfigId: params.retrievalConfigId,
-          question: rewrite.rewrittenQuestion,
-        })
-      : null;
+    const rewrittenMatch = await this.commandService.searchStandardQa({
+      retrievalConfigId: params.retrievalConfigId,
+      question: rewrite.rewrittenQuestion,
+    });
     return {
       entryId: rewrittenMatch?.entry.id ?? null,
       question: rewrittenMatch?.entry.question ?? null,
@@ -507,11 +487,8 @@ export class KnowledgeAiChatService {
       semanticContext: rewrite.semanticContext,
       colloquialTermMatches: rewrite.matches,
       commandIds: [
-        KNOWLEDGE_AI_CHAT_COMMANDS.searchStandardQa,
         KNOWLEDGE_AI_CHAT_COMMANDS.rewriteColloquialQuestion,
-        ...(hasRewrittenQuestion
-          ? [KNOWLEDGE_AI_CHAT_COMMANDS.searchStandardQa]
-          : []),
+        KNOWLEDGE_AI_CHAT_COMMANDS.searchStandardQa,
       ],
     };
   }
@@ -844,7 +821,4 @@ export class KnowledgeAiChatService {
     return '';
   }
 
-  private normalizeQuestion(value: string) {
-    return value.toLocaleLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '');
-  }
 }
