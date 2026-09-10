@@ -2,6 +2,7 @@ import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -12,6 +13,10 @@ import {
 } from 'class-validator';
 import { PartialType } from '@nestjs/swagger';
 import { toBoolLike } from '../../common/utils/bool-like';
+import {
+  AI_FEATURE_TYPES,
+  type AiFeatureType,
+} from '../../ai-feature-configs/ai-feature-config.constants';
 
 export class CreateKnowledgeAiProviderDto {
   @IsString()
@@ -110,4 +115,19 @@ export class TestKnowledgeAiProviderDto {
   @IsString()
   @IsNotEmpty()
   question: string;
+}
+
+export class ValidateKnowledgeAiProviderModelDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  id: number;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(120)
+  model: string;
+
+  @IsIn(AI_FEATURE_TYPES)
+  featureType: AiFeatureType;
 }

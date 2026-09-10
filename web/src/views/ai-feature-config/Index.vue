@@ -39,6 +39,7 @@ const columns: TableColumn[] = [
   { prop: 'executeMode', label: '执行方式', width: 120, slot: true },
   { prop: 'providerName', label: '配置/账号', minWidth: 160, slot: true },
   { prop: 'model', label: '模型', minWidth: 160, slot: true },
+  { prop: 'temperature', label: '温度', width: 90 },
   { prop: 'enableThinking', label: 'Think 模式', width: 105, slot: true },
   { prop: 'responseFormat', label: '返回格式', width: 120, slot: true },
   { prop: 'isEnabled', label: '状态', width: 90, slot: true },

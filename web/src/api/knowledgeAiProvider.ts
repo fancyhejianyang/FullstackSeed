@@ -58,6 +58,21 @@ export interface TestKnowledgeAiProviderResult {
   elapsedMilliseconds: number;
 }
 
+export interface ValidateKnowledgeAiProviderModelPayload {
+  id: number;
+  model: string;
+  featureType: 'chat' | 'documentParse' | 'ocr' | 'embedding';
+}
+
+export interface ValidateKnowledgeAiProviderModelResult {
+  isAvailable: boolean;
+  model: string;
+  removed: boolean;
+  disabledConfigCount: number;
+  errorMessage: string | null;
+  provider: KnowledgeAiProvider;
+}
+
 export function getKnowledgeAiProviders(params: QueryKnowledgeAiProviderParams) {
   return request.get<unknown, KnowledgeAiProviderListResult>(
     '/knowledge-ai-providers',
@@ -97,6 +112,15 @@ export function batchDeleteKnowledgeAiProviders(ids: Array<string | number>) {
 export function testKnowledgeAiProvider(data: TestKnowledgeAiProviderPayload) {
   return request.post<unknown, TestKnowledgeAiProviderResult>(
     '/knowledge-ai-providers/test',
+    data,
+  );
+}
+
+export function validateKnowledgeAiProviderModel(
+  data: ValidateKnowledgeAiProviderModelPayload,
+) {
+  return request.post<unknown, ValidateKnowledgeAiProviderModelResult>(
+    '/knowledge-ai-providers/validate-model',
     data,
   );
 }

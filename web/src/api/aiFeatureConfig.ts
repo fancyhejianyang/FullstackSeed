@@ -16,7 +16,7 @@ export interface AiFeatureConfig {
   mineruConfigId: number | null;
   mineruConfigName: string | null;
   systemPrompt: string | null;
-  rules: string | null;
+  temperature: number;
   responseFormat: AiResponseFormat;
   isEnabled: boolean;
   description: string | null;
@@ -48,7 +48,7 @@ export interface AiFeatureConfigForm {
   useMineru?: boolean;
   mineruConfigId?: number | '' | null;
   systemPrompt?: string;
-  rules?: string;
+  temperature?: number;
   responseFormat?: AiResponseFormat;
   isEnabled?: boolean;
   description?: string;

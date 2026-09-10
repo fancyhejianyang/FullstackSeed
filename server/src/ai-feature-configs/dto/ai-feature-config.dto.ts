@@ -4,11 +4,13 @@ import {
   IsBoolean,
   IsIn,
   IsInt,
+  IsNumber,
   IsNotEmpty,
   IsObject,
   IsOptional,
   IsString,
   MaxLength,
+  Max,
   Min,
   ValidateIf,
 } from 'class-validator';
@@ -66,9 +68,12 @@ export class CreateAiFeatureConfigDto {
   @IsOptional()
   systemPrompt?: string;
 
-  @IsString()
+  @Type(() => Number)
+  @IsNumber({ allowNaN: false, maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(2)
   @IsOptional()
-  rules?: string;
+  temperature?: number;
 
   @IsIn(AI_RESPONSE_FORMATS)
   @IsOptional()

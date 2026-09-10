@@ -97,7 +97,7 @@ export class AiFeatureConfigsService {
     const payload = await this.toEntityPayload(dto, true);
     const entity = this.configRepository.create(payload);
     this.normalizeFeatureSpecificSettings(entity);
-    this.assertExecutableConfig(entity);
+    await this.assertExecutableConfig(entity);
     if (entity.isEnabled) {
       await this.disableOtherFeatureConfigs(entity.featureType);
     }
@@ -109,7 +109,7 @@ export class AiFeatureConfigsService {
     const config = await this.findOne(id);
     Object.assign(config, await this.toEntityPayload(dto, false));
     this.normalizeFeatureSpecificSettings(config);
-    this.assertExecutableConfig(config);
+    await this.assertExecutableConfig(config);
     if (config.isEnabled) {
       await this.disableOtherFeatureConfigs(config.featureType, config.id);
     }
@@ -174,7 +174,9 @@ export class AiFeatureConfigsService {
     if (dto.systemPrompt !== undefined) {
       payload.systemPrompt = this.toNullableText(dto.systemPrompt);
     }
-    if (dto.rules !== undefined) payload.rules = this.toNullableText(dto.rules);
+    if (dto.temperature !== undefined || isCreate) {
+      payload.temperature = this.toTemperature(dto.temperature);
+    }
     if (dto.responseFormat !== undefined || isCreate) {
       payload.responseFormat = dto.responseFormat ?? 'text';
     }
@@ -234,7 +236,7 @@ export class AiFeatureConfigsService {
     await this.configRepository.update(where, { isEnabled: false });
   }
 
-  private assertExecutableConfig(config: Partial<AiFeatureConfig>) {
+  private async assertExecutableConfig(config: Partial<AiFeatureConfig>) {
     if (
       ['ocr', 'documentParse'].includes(config.featureType ?? '') &&
       config.useMineru
@@ -247,11 +249,22 @@ export class AiFeatureConfigsService {
     if (!config.providerId || !config.model?.trim()) {
       throw new BadRequestException('请选择大模型账号和模型');
     }
+    await this.providersService.assertModelSupported({
+      id: config.providerId,
+      model: config.model,
+      featureType: config.featureType ?? 'chat',
+    });
   }
 
   private toNullableText(value?: string) {
     const text = value?.trim() ?? '';
     return text || null;
+  }
+
+  private toTemperature(value?: number) {
+    const temperature = Number(value);
+    if (!Number.isFinite(temperature)) return 0.2;
+    return Math.min(2, Math.max(0, temperature));
   }
 
   private isNonEmptyObject(

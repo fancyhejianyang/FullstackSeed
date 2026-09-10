@@ -152,6 +152,7 @@ export class KnowledgeAiChatService {
           model: target.model,
           question: dto.question,
           messages: this.buildChatMessages(dto, config, retrieval, history),
+          temperature: config?.temperature,
           thinkingParameters: this.resolveThinkingParameters(config),
         });
     const message = await this.saveMessage(
@@ -244,6 +245,7 @@ export class KnowledgeAiChatService {
       : await this.providersService.callChatStream({
           target,
           messages: this.buildChatMessages(dto, config, retrieval, history),
+          temperature: config?.temperature,
           thinkingParameters,
           onDelta: (content) => writer.writeEvent('delta', { content }),
         });
@@ -685,7 +687,6 @@ export class KnowledgeAiChatService {
       overridePrompt?.trim() ||
         config?.systemPrompt?.trim() ||
         '你是通用 AI 助手。请根据用户问题给出简洁、准确的中文回答。',
-      config?.rules?.trim() ? `规则：\n${config.rules.trim()}` : '',
       this.buildResponseFormatInstruction(config?.responseFormat),
     ].filter(Boolean);
     return parts.join('\n\n');

@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-09-10 调整 AI 功能配置温度与模型校验
+- 新增：
+  - `server/src/migrations/1788861600000-ReplaceAiFeatureConfigRulesWithTemperature.ts`（将已有规则文本合并到提示词，新增温度列并删除规则列）
+  - `POST /api/knowledge-ai-providers/validate-model`（按功能类型验证模型；明确模型不存在或不可用时自动从账号模型列表移除，并停用引用该模型的 AI 功能配置）
+- 修改：
+  - `server/src/ai-feature-configs/`、`web/src/api/aiFeatureConfig.ts`（删除 `rules` 字段，新增范围为 `0–2` 的 `temperature` 字段及校验）
+  - `web/src/views/ai-feature-config/`（移除规则输入，独立显示温度及动态语义说明；模型、账号或功能类型切换后自动校验模型；列表新增温度列）
+  - `server/src/knowledge-ai-chat/`、`knowledge-ai-providers/`、`knowledge-bases/`（聊天、流式聊天、文本解析和视觉 OCR 均使用功能配置温度；规则内容不再作为独立提示词段传递）
+  - `CHANGELOG.md`（记录本次调整）
+- 删除：无
+- 说明：温度为 `0–0.2` 时强调稳定与可复现，`0.2–0.8` 较均衡，超过 `0.8` 时输出更发散。模型校验不会因网络、密钥或权限异常而删除模型，只处理明确的模型不存在/未开通类错误。
+
 ### 2026-09-10 增加 AI 配置项动态语义说明
 - 新增：无
 - 修改：

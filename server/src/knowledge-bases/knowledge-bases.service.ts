@@ -1346,6 +1346,7 @@ export class KnowledgeBasesService implements OnModuleInit {
     const result = await this.providersService.callChat({
       id: config.providerId!,
       model: config.model!,
+      temperature: config.temperature,
       systemPrompt:
         config.systemPrompt ||
         '你是文档解析助手。请将输入内容整理为适合知识库保存的正文。',
@@ -1353,7 +1354,6 @@ export class KnowledgeBasesService implements OnModuleInit {
         content: sourceContent,
         fileName,
         contentType,
-        rules: config.rules,
         responseFormat: config.responseFormat,
       }),
     });
@@ -1433,7 +1433,7 @@ export class KnowledgeBasesService implements OnModuleInit {
       target,
       imageDataUrls,
       systemPrompt: ocrConfig.systemPrompt,
-      rules: ocrConfig.rules,
+      temperature: ocrConfig.temperature,
       responseFormat: ocrConfig.responseFormat,
     });
     if (!result.isSuccess) {
@@ -2348,7 +2348,7 @@ export class KnowledgeBasesService implements OnModuleInit {
       target,
       imageDataUrls,
       systemPrompt: ocrConfig.systemPrompt,
-      rules: ocrConfig.rules,
+      temperature: ocrConfig.temperature,
       responseFormat: ocrConfig.responseFormat,
     });
     if (!result.isSuccess) {
@@ -2393,6 +2393,7 @@ export class KnowledgeBasesService implements OnModuleInit {
       const result = await this.providersService.callChat({
         id: config.providerId!,
         model: config.model!,
+        temperature: config.temperature,
         systemPrompt:
           config.systemPrompt ||
           '你是文档解析助手。请将输入内容整理为适合知识库保存的正文。',
@@ -2400,7 +2401,6 @@ export class KnowledgeBasesService implements OnModuleInit {
           content: part.content,
           fileName: base.fileName || base.name,
           contentType,
-          rules: config.rules,
           responseFormat: config.responseFormat,
         }),
       });
@@ -2915,7 +2915,6 @@ export class KnowledgeBasesService implements OnModuleInit {
     content: string;
     fileName?: string | null;
     contentType: 'text' | 'word';
-    rules?: string | null;
     responseFormat?: string | null;
   }) {
     const formatMap: Record<string, string> = {
@@ -2927,7 +2926,6 @@ export class KnowledgeBasesService implements OnModuleInit {
       `文件名称：${params.fileName || '-'}`,
       `文件类型：${params.contentType === 'word' ? 'Word' : '文本'}`,
       `返回格式：${formatMap[params.responseFormat || 'text'] || '纯文本'}`,
-      params.rules ? `业务规则：${params.rules}` : '',
       '请整理以下文档正文，保留可用于知识库检索和回答的有效内容。',
       '如果内容中包含“（链接：URL）”，必须保留在对应语句后面，不要移除链接。',
       '只返回整理后的正文，不要输出解释。',

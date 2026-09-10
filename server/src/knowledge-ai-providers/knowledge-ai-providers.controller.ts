@@ -17,6 +17,7 @@ import {
   QueryKnowledgeAiProviderDto,
   TestKnowledgeAiProviderDto,
   UpdateKnowledgeAiProviderDto,
+  ValidateKnowledgeAiProviderModelDto,
 } from './dto/knowledge-ai-provider.dto';
 import { KnowledgeAiProvidersService } from './knowledge-ai-providers.service';
 
@@ -78,5 +79,12 @@ export class KnowledgeAiProvidersController {
   @ApiOperation({ summary: '测试大模型账号调用' })
   test(@Body() dto: TestKnowledgeAiProviderDto) {
     return this.knowledgeAiProvidersService.test(dto);
+  }
+
+  @Post('validate-model')
+  @RequirePermissions('Menu.read')
+  @ApiOperation({ summary: '验证模型可用性并清理失效模型' })
+  validateModel(@Body() dto: ValidateKnowledgeAiProviderModelDto) {
+    return this.knowledgeAiProvidersService.validateModel(dto);
   }
 }

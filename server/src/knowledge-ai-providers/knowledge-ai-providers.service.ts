@@ -6,12 +6,15 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Like, Repository } from 'typeorm';
 import { KnowledgeAiProvider } from './entities/knowledge-ai-provider.entity';
+import { AiFeatureConfig } from '../ai-feature-configs/entities/ai-feature-config.entity';
+import type { AiFeatureType } from '../ai-feature-configs/ai-feature-config.constants';
 import { LogRecordsService } from '../log-records/log-records.service';
 import {
   CreateKnowledgeAiProviderDto,
   QueryKnowledgeAiProviderDto,
   TestKnowledgeAiProviderDto,
   UpdateKnowledgeAiProviderDto,
+  ValidateKnowledgeAiProviderModelDto,
 } from './dto/knowledge-ai-provider.dto';
 
 interface ChatCompletionResponse {
@@ -104,6 +107,7 @@ export interface KnowledgeAiChatTarget {
 export interface KnowledgeAiChatStreamPayload {
   target: KnowledgeAiChatTarget;
   messages: KnowledgeAiChatMessagePayload[];
+  temperature?: number;
   thinkingParameters?: Record<string, unknown> | null;
   onDelta: (content: string) => void;
   onThinkingDelta?: (content: string) => void;
@@ -113,7 +117,7 @@ export interface KnowledgeAiVisionOcrPayload {
   target: KnowledgeAiChatTarget;
   imageDataUrls: string[];
   systemPrompt?: string | null;
-  rules?: string | null;
+  temperature?: number;
   responseFormat?: string | null;
 }
 
@@ -145,6 +149,8 @@ export class KnowledgeAiProvidersService {
   constructor(
     @InjectRepository(KnowledgeAiProvider)
     private readonly providerRepository: Repository<KnowledgeAiProvider>,
+    @InjectRepository(AiFeatureConfig)
+    private readonly featureConfigRepository: Repository<AiFeatureConfig>,
     private readonly logRecordsService: LogRecordsService,
   ) {}
 
@@ -216,6 +222,103 @@ export class KnowledgeAiProvidersService {
 
   async test(dto: TestKnowledgeAiProviderDto) {
     return this.callChat(dto);
+  }
+
+  async assertModelSupported(payload: {
+    id: number;
+    model: string;
+    featureType: AiFeatureType;
+  }) {
+    const provider = await this.findEntity(payload.id);
+    const model = payload.model.trim();
+    const available = this.parseModels(
+      this.getFeatureModels(provider, payload.featureType),
+    );
+    if (!available.some((item) => item.code === model)) {
+      throw new BadRequestException(
+        '所选模型不在当前大模型账号对应类型的模型列表中',
+      );
+    }
+  }
+
+  async validateModel(dto: ValidateKnowledgeAiProviderModelDto) {
+    const provider = await this.findEntity(dto.id);
+    const model = dto.model.trim();
+    let currentProvider = provider;
+    let disabledConfigCount = 0;
+    try {
+      const target = this.resolveFeatureTarget(provider, dto.featureType, model);
+      const response =
+        dto.featureType === 'embedding'
+          ? await fetch(target.url, {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${target.secretKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ model: target.model, input: ['模型可用性校验'] }),
+            })
+          : await fetch(target.url, {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${target.secretKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(
+                this.buildChatRequestBody({
+                  model: target.model,
+                  messages: [{ role: 'user', content: '请仅回复 OK。' }],
+                  temperature: 0,
+                }),
+              ),
+            });
+      if (response.ok) {
+        return {
+          isAvailable: true,
+          model,
+          removed: false,
+          disabledConfigCount,
+          errorMessage: null,
+          provider: this.toView(currentProvider),
+        };
+      }
+
+      const errorMessage = await response.text();
+      if (this.isMissingModelError(response.status, errorMessage)) {
+        currentProvider = await this.removeMissingModel(provider, model);
+        const result = await this.featureConfigRepository.update(
+          { providerId: provider.id, model },
+          { isEnabled: false },
+        );
+        disabledConfigCount = result.affected ?? 0;
+        return {
+          isAvailable: false,
+          model,
+          removed: true,
+          disabledConfigCount,
+          errorMessage: '模型不存在、未开通或当前账号不可用，已从账号模型列表移除。',
+          provider: this.toView(currentProvider),
+        };
+      }
+
+      return {
+        isAvailable: false,
+        model,
+        removed: false,
+        disabledConfigCount,
+        errorMessage: `模型校验失败：${response.status} ${errorMessage.slice(0, 300)}`,
+        provider: this.toView(currentProvider),
+      };
+    } catch (error) {
+      return {
+        isAvailable: false,
+        model,
+        removed: false,
+        disabledConfigCount,
+        errorMessage: error instanceof Error ? error.message : '模型校验失败',
+        provider: this.toView(currentProvider),
+      };
+    }
   }
 
   async resolveChatTarget(
@@ -295,6 +398,83 @@ export class KnowledgeAiProvidersService {
       url: this.buildEmbeddingUrl(provider),
       secretKey: this.normalizeSecretKey(provider.secretKey),
     };
+  }
+
+  private resolveFeatureTarget(
+    provider: KnowledgeAiProvider,
+    featureType: AiFeatureType,
+    model: string,
+  ): KnowledgeAiChatTarget {
+    if (!provider.isEnabled) {
+      throw new BadRequestException('该大模型账号未启用');
+    }
+    if (!provider.secretKey) {
+      throw new BadRequestException('该大模型账号未配置密钥');
+    }
+    const available = this.parseModels(
+      this.getFeatureModels(provider, featureType),
+    );
+    if (!available.some((item) => item.code === model)) {
+      throw new BadRequestException(
+        '所选模型不在当前大模型账号对应类型的模型列表中',
+      );
+    }
+    return {
+      providerId: provider.id,
+      providerName: provider.name,
+      workspaceId: provider.workspaceId ?? null,
+      model,
+      url:
+        featureType === 'embedding'
+          ? this.buildEmbeddingUrl(provider)
+          : this.buildChatUrl(provider),
+      secretKey: this.normalizeSecretKey(provider.secretKey),
+    };
+  }
+
+  private getFeatureModels(
+    provider: KnowledgeAiProvider,
+    featureType: AiFeatureType,
+  ) {
+    if (featureType === 'embedding') return provider.embeddingModels;
+    if (featureType === 'ocr') {
+      return this.joinModelTexts(provider.visionModels, provider.models);
+    }
+    return this.joinModelTexts(provider.models, provider.textModels);
+  }
+
+  private async removeMissingModel(
+    provider: KnowledgeAiProvider,
+    model: string,
+  ) {
+    provider.models = this.removeModelFromList(provider.models, model);
+    provider.textModels = this.removeModelFromList(provider.textModels, model);
+    provider.visionModels = this.removeModelFromList(provider.visionModels, model);
+    provider.embeddingModels = this.removeModelFromList(
+      provider.embeddingModels,
+      model,
+    );
+    return this.providerRepository.save(provider);
+  }
+
+  private removeModelFromList(models: string | null, model: string) {
+    const remaining = (models || '')
+      .split(/\r?\n/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .filter((item) => item.split('#')[0].trim() !== model)
+      .join('\n');
+    return remaining || null;
+  }
+
+  private isMissingModelError(status: number, message: string) {
+    const normalized = message.replace(/\s+/g, ' ').trim();
+    return (
+      status >= 400 &&
+      /(?:model|模型).{0,50}(?:not found|does not exist|not exist|不存在|未找到|无效|不可用|unsupported)|(?:not found|不存在|未找到).{0,50}(?:model|模型)/i.test(
+        normalized,
+      )
+    );
   }
 
   async callChat(
@@ -383,7 +563,7 @@ export class KnowledgeAiProvidersService {
           this.buildChatRequestBody({
             model: payload.target.model,
             messages: payload.messages,
-            temperature: 0.2,
+            temperature: this.resolveTemperature(payload.temperature),
             stream: true,
             thinkingParameters: payload.thinkingParameters,
           }),
@@ -446,7 +626,7 @@ export class KnowledgeAiProvidersService {
         body: JSON.stringify({
           model: payload.target.model,
           messages: this.buildVisionOcrMessages(payload),
-          temperature: 0,
+          temperature: this.resolveTemperature(payload.temperature),
         }),
       });
 
@@ -880,7 +1060,6 @@ export class KnowledgeAiProvidersService {
             type: 'text',
             text: [
               prompt,
-              payload.rules ? `业务规则：${payload.rules}` : '',
               `返回格式：${responseFormat}`,
               '请识别以下图片中的文字。只返回识别结果，不要添加解释。',
               '如果返回 Markdown，可保留标题、列表和表格结构。',

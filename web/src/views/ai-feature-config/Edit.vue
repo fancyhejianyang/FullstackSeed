@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, nextTick, reactive, ref, watch } from 'vue';
 import { ElMessage, type FormRules } from 'element-plus';
 import Dialog from '@/components/Dialog.vue';
 import Form, { type FormField } from '@/components/Form.vue';
@@ -13,6 +13,7 @@ import {
 } from '@/api/aiFeatureConfig';
 import {
   getKnowledgeAiProviders,
+  validateKnowledgeAiProviderModel,
   type KnowledgeAiProvider,
 } from '@/api/knowledgeAiProvider';
 import {
@@ -32,6 +33,10 @@ const submitting = ref(false);
 const formRef = ref<InstanceType<typeof Form>>();
 const providers = ref<KnowledgeAiProvider[]>([]);
 const mineruConfigs = ref<MineruConfig[]>([]);
+const formReadyForModelValidation = ref(false);
+const validatingModel = ref(false);
+const modelValidationHint = ref('');
+let modelValidationSequence = 0;
 
 type AiFeatureConfigEditForm = AiFeatureConfigForm & {
   thinkingParametersText: string;
@@ -48,7 +53,7 @@ const form = reactive<AiFeatureConfigEditForm>({
   useMineru: false,
   mineruConfigId: '',
   systemPrompt: '',
-  rules: '',
+  temperature: 0.2,
   responseFormat: 'text',
   isEnabled: true,
   description: '',
@@ -82,6 +87,9 @@ const selectedProvider = computed(() =>
 const isParseFeature = computed(() => ['ocr', 'documentParse'].includes(form.featureType));
 const isMineruParseFeature = computed(() => isParseFeature.value && !!form.useMineru);
 const isChatFeature = computed(() => form.featureType === 'chat');
+const usesTemperature = computed(
+  () => !isMineruParseFeature.value && form.featureType !== 'embedding',
+);
 
 const modelOptions = computed(() => getModelOptions(selectedProvider.value, form.featureType));
 
@@ -149,8 +157,25 @@ const fields = computed<FormField[]>(() => {
         type: 'select',
         options: modelOptions,
         placeholder: modelPlaceholder.value,
+        hint: validatingModel.value
+          ? `正在校验“${form.model}”是否可用…`
+          : modelValidationHint.value || '切换模型后会自动调用账号接口校验；确认不存在时会从该账号模型列表中移除。',
       },
     );
+    if (usesTemperature.value) {
+      baseFields.push({
+        prop: 'temperature',
+        label: '温度',
+        component: 'InputNumber',
+        componentProps: { min: 0, max: 2, precision: 2, step: 0.1 },
+        hint:
+          Number(form.temperature) <= 0.2
+            ? `当前 ${form.temperature}：输出更稳定、可复现，适合客服、解析和结构化结果。`
+            : Number(form.temperature) <= 0.8
+              ? `当前 ${form.temperature}：稳定性与表达多样性较均衡，适合常规对话。`
+              : `当前 ${form.temperature}：表达更发散、随机性更强，可能降低格式与事实的一致性。`,
+      });
+    }
   }
 
   if (isChatFeature.value) {
@@ -185,13 +210,12 @@ const fields = computed<FormField[]>(() => {
       placeholder: isMineruParseFeature.value
         ? '使用 MinerU 时可作为解析配置说明保留'
         : '该功能默认系统提示词，可被测试请求临时覆盖',
-    },
-    {
-      prop: 'rules',
-      label: '规则',
-      type: 'textarea',
-      rows: 4,
-      placeholder: '如温度、口吻、禁止输出内容等业务规则说明',
+      hint: (() => {
+        const prompt = form.systemPrompt?.trim() ?? '';
+        return prompt
+          ? `当前已填写 ${prompt.length} 个字符；业务规则、口吻和禁止项请直接写在此提示词中。`
+          : '未填写时将使用系统默认提示词；业务规则、口吻和禁止项请直接写在此处。';
+      })(),
     },
     {
       prop: 'responseFormat',
@@ -230,10 +254,17 @@ const rules = computed<FormRules>(() => ({
         providerId: [{ required: true, message: '请选择大模型账号', trigger: 'change' }],
         model: [{ required: true, message: '请选择模型', trigger: 'change' }],
       }),
+  ...(usesTemperature.value
+    ? {
+        temperature: [{ required: true, message: '请输入温度', trigger: 'blur' }],
+      }
+    : {}),
 }));
 
 watch(visible, async (value) => {
   if (!value) return;
+  formReadyForModelValidation.value = false;
+  modelValidationHint.value = '';
   loading.value = true;
   try {
     await fetchOptions();
@@ -244,12 +275,17 @@ watch(visible, async (value) => {
     }
   } finally {
     loading.value = false;
+    await nextTick();
+    formReadyForModelValidation.value = true;
   }
 });
 
 watch(
   () => [form.featureType, form.providerId, form.useMineru, providers.value.length],
   () => {
+    modelValidationSequence += 1;
+    validatingModel.value = false;
+    modelValidationHint.value = '';
     if (!isParseFeature.value) {
       form.useMineru = false;
     }
@@ -267,6 +303,21 @@ watch(
     if (selectedProvider.value && !options.some((item) => item.value === form.model)) {
       form.model = '';
     }
+  },
+);
+
+watch(
+  () => [form.model, form.providerId, form.featureType, form.useMineru] as const,
+  () => {
+    if (
+      !formReadyForModelValidation.value ||
+      isMineruParseFeature.value ||
+      !form.providerId ||
+      !form.model
+    ) {
+      return;
+    }
+    void validateSelectedModel();
   },
 );
 
@@ -289,7 +340,7 @@ function resetForm() {
   form.useMineru = false;
   form.mineruConfigId = '';
   form.systemPrompt = '';
-  form.rules = '';
+  form.temperature = 0.2;
   form.responseFormat = 'text';
   form.isEnabled = true;
   form.description = '';
@@ -307,7 +358,7 @@ function fillForm(data: AiFeatureConfig) {
   form.useMineru = !!data.useMineru;
   form.mineruConfigId = data.mineruConfigId ?? '';
   form.systemPrompt = data.systemPrompt ?? '';
-  form.rules = data.rules ?? '';
+  form.temperature = Number(data.temperature ?? 0.2);
   form.responseFormat = data.responseFormat ?? 'text';
   form.isEnabled = !!data.isEnabled;
   form.description = data.description ?? '';
@@ -324,7 +375,7 @@ function buildPayload(): AiFeatureConfigForm {
     useMineru: !!form.useMineru,
     mineruConfigId: isMineruParseFeature.value ? Number(form.mineruConfigId) : null,
     systemPrompt: form.systemPrompt?.trim(),
-    rules: form.rules?.trim(),
+    temperature: Number(form.temperature),
     responseFormat: form.responseFormat,
     isEnabled: form.isEnabled,
     description: form.description?.trim(),
@@ -378,16 +429,57 @@ async function handleSubmit() {
 
 function getModelText(provider: KnowledgeAiProvider | undefined, featureType: AiFeatureType) {
   if (!provider) return '';
-  if (featureType === 'chat') {
+  if (featureType === 'chat' || featureType === 'documentParse') {
     return joinModelTexts(provider.models, provider.textModels);
   }
   if (featureType === 'ocr') {
-    return provider.visionModels || '';
+    return joinModelTexts(provider.visionModels, provider.models);
   }
   if (featureType === 'embedding') {
-    return joinModelTexts(provider.embeddingModels, provider.models);
+    return provider.embeddingModels || '';
   }
-  return joinModelTexts(provider.visionModels, provider.textModels, provider.models);
+  return '';
+}
+
+async function validateSelectedModel() {
+  const providerId = Number(form.providerId);
+  const model = form.model?.trim() ?? '';
+  if (!providerId || !model) return;
+  const requestSequence = ++modelValidationSequence;
+  validatingModel.value = true;
+  modelValidationHint.value = '';
+  try {
+    const result = await validateKnowledgeAiProviderModel({
+      id: providerId,
+      model,
+      featureType: form.featureType,
+    });
+    if (requestSequence !== modelValidationSequence) return;
+    providers.value = providers.value.map((item) =>
+      item.id === result.provider.id ? result.provider : item,
+    );
+    if (result.isAvailable) {
+      modelValidationHint.value = `“${model}”已通过当前账号可用性校验。`;
+      return;
+    }
+    modelValidationHint.value = result.errorMessage || `“${model}”暂时无法校验。`;
+    if (result.removed) {
+      form.model = '';
+      ElMessage.warning(
+        result.disabledConfigCount
+          ? `模型“${model}”已从账号列表移除，并停用了 ${result.disabledConfigCount} 个关联配置。`
+          : `模型“${model}”已从账号列表移除，请重新选择可用模型。`,
+      );
+    }
+  } catch {
+    if (requestSequence === modelValidationSequence) {
+      modelValidationHint.value = `“${model}”校验请求失败，请检查账号网络、密钥或模型授权。`;
+    }
+  } finally {
+    if (requestSequence === modelValidationSequence) {
+      validatingModel.value = false;
+    }
+  }
 }
 
 function getModelOptions(provider: KnowledgeAiProvider | undefined, featureType: AiFeatureType) {

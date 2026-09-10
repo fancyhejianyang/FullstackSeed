@@ -47,8 +47,8 @@ export class AiFeatureConfig extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   systemPrompt: string | null;
 
-  @Column({ type: 'text', nullable: true })
-  rules: string | null;
+  @Column({ type: 'double', default: 0.2 })
+  temperature: number;
 
   @Column({ type: 'varchar', length: 40, default: 'text' })
   responseFormat: AiResponseFormat;

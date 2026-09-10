@@ -1,5 +1,6 @@
 import { Repository } from 'typeorm';
 import { LogRecordsService } from '../log-records/log-records.service';
+import { AiFeatureConfig } from '../ai-feature-configs/entities/ai-feature-config.entity';
 import { KnowledgeAiProvider } from './entities/knowledge-ai-provider.entity';
 import { KnowledgeAiProvidersService } from './knowledge-ai-providers.service';
 
@@ -25,11 +26,18 @@ interface ProviderInternals {
     thinkingContent: string;
     isDone: boolean;
   };
+  getFeatureModels: (
+    provider: KnowledgeAiProvider,
+    featureType: 'chat' | 'documentParse' | 'ocr' | 'embedding',
+  ) => string | null;
+  removeModelFromList: (models: string | null, model: string) => string | null;
+  isMissingModelError: (status: number, message: string) => boolean;
 }
 
 describe('KnowledgeAiProvidersService', () => {
   const service = new KnowledgeAiProvidersService(
     {} as Repository<KnowledgeAiProvider>,
+    {} as Repository<AiFeatureConfig>,
     {} as LogRecordsService,
   );
   const internals = service as unknown as ProviderInternals;
@@ -93,5 +101,37 @@ describe('KnowledgeAiProvidersService', () => {
       thinkingContent: '先核对资料。',
       content: '最终答案',
     });
+  });
+
+  it('uses the model list matching the AI feature type', () => {
+    const provider = {
+      models: 'chat-model',
+      textModels: 'text-model',
+      visionModels: 'vision-model',
+      embeddingModels: 'embedding-model',
+    } as KnowledgeAiProvider;
+
+    expect(internals.getFeatureModels(provider, 'chat')).toBe(
+      'chat-model\ntext-model',
+    );
+    expect(internals.getFeatureModels(provider, 'documentParse')).toBe(
+      'chat-model\ntext-model',
+    );
+    expect(internals.getFeatureModels(provider, 'ocr')).toBe(
+      'vision-model\nchat-model',
+    );
+    expect(internals.getFeatureModels(provider, 'embedding')).toBe(
+      'embedding-model',
+    );
+  });
+
+  it('removes only the invalid model entry and recognizes model-not-found errors', () => {
+    expect(
+      internals.removeModelFromList('valid#可用\nmissing#失效', 'missing'),
+    ).toBe('valid#可用');
+    expect(
+      internals.isMissingModelError(404, 'The requested model was not found'),
+    ).toBe(true);
+    expect(internals.isMissingModelError(401, 'Invalid API key')).toBe(false);
   });
 });
