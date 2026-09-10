@@ -12,9 +12,7 @@ import {
 } from 'class-validator';
 import { toBoolLike } from '../../common/utils/bool-like';
 import {
-  KNOWLEDGE_COLLOQUIAL_MATCH_MODES,
   KNOWLEDGE_COLLOQUIAL_SEMANTIC_TYPES,
-  type KnowledgeColloquialMatchMode,
   type KnowledgeColloquialSemanticType,
 } from '../entities/knowledge-colloquial-term.entity';
 
@@ -35,20 +33,11 @@ export class CreateKnowledgeColloquialTermDto {
   @MaxLength(2000)
   semanticDefinition: string;
 
-  @IsString()
-  @MaxLength(160)
-  @IsOptional()
-  answerUnit?: string;
-
   @Type(() => Number)
   @IsInt()
   @Min(1)
   @IsOptional()
   retrievalConfigId?: number | null;
-
-  @IsIn(KNOWLEDGE_COLLOQUIAL_MATCH_MODES)
-  @IsOptional()
-  matchMode?: KnowledgeColloquialMatchMode;
 
   @IsArray()
   @IsString({ each: true })

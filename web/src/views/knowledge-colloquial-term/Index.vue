@@ -9,9 +9,7 @@ import {
   batchDeleteKnowledgeColloquialTerms,
   deleteKnowledgeColloquialTerm,
   getKnowledgeColloquialTerms,
-  knowledgeColloquialMatchModeOptions,
   knowledgeColloquialSemanticTypeOptions,
-  type KnowledgeColloquialMatchMode,
   type KnowledgeColloquialSemanticType,
   type KnowledgeColloquialTerm,
   type QueryKnowledgeColloquialTermParams,
@@ -34,9 +32,7 @@ const columns: TableColumn[] = [
   { prop: 'term', label: '口语表达', minWidth: 150 },
   { prop: 'replacement', label: '标准替换文本', minWidth: 210 },
   { prop: 'semanticType', label: '表达类型', width: 120, slot: true },
-  { prop: 'answerUnit', label: '推荐单位', width: 120 },
   { prop: 'retrievalConfigName', label: '适用范围', minWidth: 150, slot: true },
-  { prop: 'matchMode', label: '匹配方式', width: 110, slot: true },
   { prop: 'isEnabled', label: '状态', width: 90, slot: true },
   { prop: 'updatedAt', label: '更新时间', width: 180, slot: true },
 ];
@@ -101,9 +97,6 @@ function getSemanticTypeLabel(value: KnowledgeColloquialSemanticType) {
   return knowledgeColloquialSemanticTypeOptions.find((item) => item.value === value)?.label || value;
 }
 
-function getMatchModeLabel(value: KnowledgeColloquialMatchMode) {
-  return knowledgeColloquialMatchModeOptions.find((item) => item.value === value)?.label || value;
-}
 </script>
 
 <template>
@@ -140,10 +133,6 @@ function getMatchModeLabel(value: KnowledgeColloquialMatchMode) {
 
       <template #column-retrievalConfigName="{ row }">
         {{ row.retrievalConfigName || '全局' }}
-      </template>
-
-      <template #column-matchMode="{ row }">
-        {{ getMatchModeLabel(row.matchMode) }}
       </template>
 
       <template #column-isEnabled="{ row }">

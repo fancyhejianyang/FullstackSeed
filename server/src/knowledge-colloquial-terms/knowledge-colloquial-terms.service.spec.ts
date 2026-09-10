@@ -15,9 +15,7 @@ function createTerm(
     replacement,
     semanticType: 'custom',
     semanticDefinition: `${term} 的人工维护语义`,
-    answerUnit: null,
     retrievalConfigId: null,
-    matchMode: 'contains',
     excludePhrases: null,
     isEnabled: true,
     ...options,
@@ -45,8 +43,10 @@ describe('KnowledgeColloquialTermsService', () => {
       }),
       createTerm(2, '多重', ' 的重量是多少？', {
         semanticType: 'attribute',
-        semanticDefinition: '此处“多重”询问物品质量 / 重量',
-        answerUnit: 'kg 或 g',
+        semanticDefinition: JSON.stringify({
+          intent: '询问物品质量 / 重量',
+          answerUnit: ['kg', 'g'],
+        }),
       }),
     ]);
 
@@ -57,9 +57,9 @@ describe('KnowledgeColloquialTermsService', () => {
         rewrittenQuestion: '蓝虎机器人 Pro 的重量是多少？',
         matches: [
           expect.objectContaining({ id: 1, term: '小蓝' }),
-          expect.objectContaining({ id: 2, term: '多重', answerUnit: 'kg 或 g' }),
+          expect.objectContaining({ id: 2, term: '多重' }),
         ],
-        semanticContext: expect.stringContaining('物品质量 / 重量'),
+        semanticContext: expect.stringContaining('"answerUnit"'),
       }),
     );
   });
@@ -95,5 +95,18 @@ describe('KnowledgeColloquialTermsService', () => {
       semanticContext: '',
       matches: [],
     });
+  });
+
+  it('serializes plain-language semantic definitions into the same JSON constraint payload', async () => {
+    termRepository.find.mockResolvedValue([
+      createTerm(1, '多重', '重量', {
+        semanticType: 'attribute',
+        semanticDefinition: '此处“多重”询问物品质量，而不是多重因素。',
+      }),
+    ]);
+
+    const result = await service.rewriteQuestion({ question: '多重' });
+
+    expect(result.semanticContext).toContain('"semantic": "此处“多重”询问物品质量，而不是多重因素。"');
   });
 });

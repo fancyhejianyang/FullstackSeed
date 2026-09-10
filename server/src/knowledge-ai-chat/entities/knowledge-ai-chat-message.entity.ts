@@ -77,7 +77,6 @@ export class KnowledgeAiChatMessage extends BaseEntity {
     replacement: string;
     semanticType: 'product-alias' | 'attribute' | 'business-term' | 'custom';
     semanticDefinition: string;
-    answerUnit: string | null;
   }> | null;
 
   @Column({ type: 'simple-json', nullable: true })

@@ -6,10 +6,8 @@ import Form, { type FormField } from '@/components/Form.vue';
 import {
   createKnowledgeColloquialTerm,
   getKnowledgeColloquialTerm,
-  knowledgeColloquialMatchModeOptions,
   knowledgeColloquialSemanticTypeOptions,
   updateKnowledgeColloquialTerm,
-  type KnowledgeColloquialMatchMode,
   type KnowledgeColloquialSemanticType,
   type KnowledgeColloquialTerm,
   type KnowledgeColloquialTermForm,
@@ -35,9 +33,7 @@ type ColloquialTermEditForm = {
   replacement: string;
   semanticType: KnowledgeColloquialSemanticType;
   semanticDefinition: string;
-  answerUnit: string;
   retrievalConfigId: number | '';
-  matchMode: KnowledgeColloquialMatchMode;
   excludePhrasesText: string;
   isEnabled: boolean;
 };
@@ -47,9 +43,7 @@ const form = reactive<ColloquialTermEditForm>({
   replacement: '',
   semanticType: 'custom',
   semanticDefinition: '',
-  answerUnit: '',
   retrievalConfigId: '',
-  matchMode: 'contains',
   excludePhrasesText: '',
   isEnabled: true,
 });
@@ -74,6 +68,17 @@ const semanticTypeHint = computed(() => {
     return '业务术语：把口语说法统一为业务、制度或产品中的标准术语。';
   }
   return '自定义表达：用于不属于以上分类、但需要统一理解和改写的口语表达。';
+});
+
+const isSemanticJson = computed(() => {
+  const value = form.semanticDefinition.trim();
+  if (!value) return false;
+  try {
+    JSON.parse(value);
+    return true;
+  } catch {
+    return false;
+  }
 });
 
 const replacementHint = computed(() => {
@@ -110,20 +115,13 @@ const fields = computed<FormField[]>(() => [
   },
   {
     prop: 'semanticDefinition',
-    label: '语义解释',
+    label: '语义定义',
     type: 'textarea',
-    rows: 3,
-    placeholder: '如 此处“多重”询问物品质量 / 重量，不是“多重因素”等抽象含义',
-    hint: '该说明会作为人工维护的术语约束传给检索和回答模型，帮助避免跑偏；它不会被当作事实答案。',
-  },
-  {
-    prop: 'answerUnit',
-    label: '推荐单位',
-    type: 'input',
-    placeholder: '如 kg、g',
-    hint: form.answerUnit.trim()
-      ? `当前推荐以“${form.answerUnit.trim()}”为单位表达；模型仍须以知识库事实为准。`
-      : '可选。填写回答该属性时的推荐单位，例如重量用 kg 或 g。',
+    rows: 5,
+    placeholder: '可填写自然语言，或 JSON 对象。\n例如 {\n  "intent": "询问物品质量 / 重量",\n  "units": ["kg", "g"],\n  "excludeMeaning": "多重因素"\n}',
+    hint: isSemanticJson.value
+      ? '当前为合法 JSON：命中后会作为结构化术语约束传给回答模型。'
+      : '当前为自然语言语义：命中后会被包装为结构化术语约束传给回答模型，不会作为事实答案。',
   },
   {
     prop: 'retrievalConfigId',
@@ -133,16 +131,6 @@ const fields = computed<FormField[]>(() => [
     hint: selectedRetrievalConfig.value
       ? `当前只在“${selectedRetrievalConfig.value.name}”检索时生效。`
       : '当前全局生效：所有知识库检索配置都可使用该表达。',
-  },
-  {
-    prop: 'matchMode',
-    label: '匹配方式',
-    type: 'select',
-    options: knowledgeColloquialMatchModeOptions.map((item) => ({ ...item })),
-    hint:
-      form.matchMode === 'exact'
-        ? '当前为精确匹配：只有整个用户问题与口语表达一致才替换，触发更谨慎。'
-        : '当前为包含匹配：问题中出现该词就替换，适合产品简称、属性词等可组合表达。',
   },
   {
     prop: 'excludePhrasesText',
@@ -191,9 +179,7 @@ function resetForm() {
   form.replacement = '';
   form.semanticType = 'custom';
   form.semanticDefinition = '';
-  form.answerUnit = '';
   form.retrievalConfigId = '';
-  form.matchMode = 'contains';
   form.excludePhrasesText = '';
   form.isEnabled = true;
 }
@@ -203,9 +189,7 @@ function fillForm(data: KnowledgeColloquialTerm) {
   form.replacement = data.replacement ?? '';
   form.semanticType = data.semanticType;
   form.semanticDefinition = data.semanticDefinition ?? '';
-  form.answerUnit = data.answerUnit ?? '';
   form.retrievalConfigId = data.retrievalConfigId ?? '';
-  form.matchMode = data.matchMode ?? 'contains';
   form.excludePhrasesText = (data.excludePhrases ?? []).join('\n');
   form.isEnabled = !!data.isEnabled;
 }
@@ -220,9 +204,7 @@ function buildPayload(): KnowledgeColloquialTermForm {
     replacement: form.replacement.trim(),
     semanticType: form.semanticType,
     semanticDefinition: form.semanticDefinition.trim(),
-    answerUnit: form.answerUnit.trim() || null,
     retrievalConfigId: form.retrievalConfigId ? Number(form.retrievalConfigId) : null,
-    matchMode: form.matchMode,
     excludePhrases: splitTexts(form.excludePhrasesText),
     isEnabled: form.isEnabled,
   };
@@ -258,7 +240,7 @@ async function handleSubmit() {
     <div v-loading="loading">
       <Form ref="formRef" v-model="form" :fields="fields" :rules="rules" label-width="120px" />
       <div class="knowledge-colloquial-term-edit__tip">
-        执行顺序：先精确匹配原始标准问答；未命中时改写口语表达，再精确匹配标准问答；仍未命中才检索知识库。产品简称与属性词可组合改写，例如“小蓝多重” → “蓝虎机器人 Pro 的重量是多少？”。
+        执行顺序：先精确匹配原始标准问答；未命中时按包含关系改写口语表达，再精确匹配标准问答；仍未命中才检索知识库。每个命中的词条都会把其语义定义以 JSON 约束传给回答模型；JSON 中的内容是术语解释，不是业务事实答案。
       </div>
     </div>
   </Dialog>

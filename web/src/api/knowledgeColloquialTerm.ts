@@ -6,18 +6,14 @@ export type KnowledgeColloquialSemanticType =
   | 'business-term'
   | 'custom';
 
-export type KnowledgeColloquialMatchMode = 'contains' | 'exact';
-
 export interface KnowledgeColloquialTerm {
   id: number;
   term: string;
   replacement: string;
   semanticType: KnowledgeColloquialSemanticType;
   semanticDefinition: string;
-  answerUnit: string | null;
   retrievalConfigId: number | null;
   retrievalConfigName: string | null;
-  matchMode: KnowledgeColloquialMatchMode;
   excludePhrases: string[];
   isEnabled: boolean;
   createdAt: string;
@@ -43,9 +39,7 @@ export interface KnowledgeColloquialTermForm {
   replacement: string;
   semanticType: KnowledgeColloquialSemanticType;
   semanticDefinition: string;
-  answerUnit?: string | null;
   retrievalConfigId?: number | null;
-  matchMode: KnowledgeColloquialMatchMode;
   excludePhrases?: string[];
   isEnabled: boolean;
 }
@@ -55,11 +49,6 @@ export const knowledgeColloquialSemanticTypeOptions = [
   { label: '属性 / 指标', value: 'attribute' },
   { label: '业务术语', value: 'business-term' },
   { label: '自定义表达', value: 'custom' },
-] as const;
-
-export const knowledgeColloquialMatchModeOptions = [
-  { label: '包含匹配', value: 'contains' },
-  { label: '精确匹配', value: 'exact' },
 ] as const;
 
 export function getKnowledgeColloquialTerms(params: QueryKnowledgeColloquialTermParams) {

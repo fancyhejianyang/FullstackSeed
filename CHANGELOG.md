@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-09-10 精简口语词条并支持 JSON 语义约束
+- 新增：
+  - `server/src/migrations/1788876000000-SimplifyKnowledgeColloquialTerms.ts`（将旧推荐单位并入语义定义后，移除 `answerUnit`、`matchMode` 两列）
+- 修改：
+  - `server/src/knowledge-colloquial-terms/`（固定采用不区分大小写的包含匹配；语义定义支持自然语言或合法 JSON，并将所有命中词条组织为 `matchedTerms` JSON 约束）
+  - `server/src/knowledge-ai-chat/entities/knowledge-ai-chat-message.entity.ts`、`web/src/api/knowledgeAiChat.ts`（问答记录的口语词条匹配结构移除推荐单位）
+  - `web/src/api/knowledgeColloquialTerm.ts`、`web/src/views/knowledge-colloquial-term/`（移除推荐单位和匹配方式；语义定义输入框按 JSON 是否有效动态说明传递方式）
+  - `CHANGELOG.md`（记录本次调整）
+- 删除：
+  - 口语词条的推荐单位及匹配方式字段与界面。
+- 说明：命中词条后，替换文本用于检索问题改写，语义定义作为结构化约束随检索结果一并传给最终回答模型；其内容用于理解意图，不能覆盖知识库事实，也不作为可执行指令。旧推荐单位不会丢失：迁移会把它合并进原语义定义后再删列。
+
 ### 2026-09-10 拆分 LLM 重排配置并移除 AI 功能向量化类型
 - 新增：
   - `server/src/migrations/1788872400000-ReplaceEmbeddingFeatureConfigWithLlmRerank.ts`（将旧向量化功能配置保留为停用的重排候选；把检索配置引用的聊天模型复制为独立 LLM 重排配置并回写引用）
