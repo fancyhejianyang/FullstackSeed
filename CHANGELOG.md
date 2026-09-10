@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-09-10 增加 AI 配置项动态语义说明
+- 新增：无
+- 修改：
+  - `web/src/components/Form.vue`（字段配置新增 `hint`，支持 `ref/computed` 动态解包并统一显示在输入控件下方）
+  - `web/src/views/ai-feature-config/`、`document-parse-rule/`、`knowledge-base/`、`knowledge-chunk-config/`、`knowledge-retrieval-config/`、`knowledge-routing-rule/`、`knowledge-standard-qa/`、`mineru-config/`、`vector-config/`（为关键模式、阈值、权重、时长、分片大小与向量维度补充随当前值变化的说明）
+  - `AGENTS-COMPONENTS.md`（补充 Form 的 `hint` 字段契约）
+  - `CHANGELOG.md`（记录本次调整）
+- 删除：无
+- 说明：路由权重说明按实际执行逻辑区分公共词/别名/专属路由；向量配置明确提示 Collection 内向量维度必须一致，切换维度需要使用新集合或重建索引。
+
 ### 2026-09-09 修复菜单种子覆盖已有菜单位置
 - 新增：无
 - 修改：

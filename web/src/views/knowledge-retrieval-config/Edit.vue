@@ -103,6 +103,12 @@ const fields = computed<FormField[]>(() => {
       label: '检索模式',
       type: 'select',
       options: retrievalModeOptions,
+      hint:
+        form.retrievalMode === 'hybrid'
+          ? '当前为混合检索：合并关键词命中和语义相似度，适合大多数知识库。'
+          : form.retrievalMode === 'fullText'
+            ? '当前仅全文检索：更看重用户原词、编号和专有名词。'
+            : '当前仅向量检索：更擅长匹配同义表达，但对精确编号较弱。',
     },
     {
       prop: 'knowledgeScopeKeys',
@@ -114,30 +120,56 @@ const fields = computed<FormField[]>(() => {
       label: '召回上限',
       component: 'InputNumber',
       componentProps: { mode: 'integer', min: 1, max: 100 },
+      hint:
+        Number(form.topK) <= 3
+          ? `当前取前 ${form.topK} 条：回答更聚焦、提示词更短，但可能漏掉补充信息。`
+          : Number(form.topK) <= 8
+            ? `当前取前 ${form.topK} 条：覆盖度与回答聚焦度较均衡。`
+            : `当前取前 ${form.topK} 条：覆盖更广，但上下文更长，可能带入噪声并增加模型成本。`,
     },
     {
       prop: 'minScore',
       label: '最低相关度',
       component: 'InputNumber',
       componentProps: { min: 0, max: 1, precision: 4 },
+      hint:
+        Number(form.minScore) < 0.25
+          ? `当前 ${form.minScore}：门槛较低，能保留更多候选，但无关内容进入回答的风险更高。`
+          : Number(form.minScore) <= 0.45
+            ? `当前 ${form.minScore}：相关度过滤较均衡，适合作为通用起点。`
+            : `当前 ${form.minScore}：门槛较高，答案更谨慎，但可能因无片段达标而拒答。`,
     },
     {
       prop: 'rrfK',
       label: 'RRF K',
       component: 'InputNumber',
       componentProps: { mode: 'integer', min: 1, max: 500 },
+      hint:
+        Number(form.rrfK) <= 20
+          ? `当前 ${form.rrfK}：更强调各检索通道的头部排名，排序差异更明显。`
+          : Number(form.rrfK) <= 80
+            ? `当前 ${form.rrfK}：平衡各通道排名，是混合检索的常用范围。`
+            : `当前 ${form.rrfK}：各名次差距会被拉平，更多候选有机会参与融合。`,
     },
     {
       prop: 'textWeight',
       label: '文本权重',
       component: 'InputNumber',
       componentProps: { min: 0, max: 1, precision: 4 },
+      hint:
+        Number(form.textWeight) <= 0
+          ? '当前为 0：全文检索结果不参与融合排序。'
+          : `当前全文融合占比约 ${Math.round((Number(form.textWeight) / Math.max(Number(form.textWeight) + Number(form.vectorWeight), 0.0001)) * 100)}%；提高它会更重视原词、编号和关键词。`,
     },
     {
       prop: 'vectorWeight',
       label: '向量权重',
       component: 'InputNumber',
       componentProps: { min: 0, max: 1, precision: 4 },
+      hint:
+        Number(form.vectorWeight) <= 0
+          ? '当前为 0：向量检索结果不参与融合排序。'
+          : `当前语义融合占比约 ${Math.round((Number(form.vectorWeight) / Math.max(Number(form.textWeight) + Number(form.vectorWeight), 0.0001)) * 100)}%；提高它会更重视语义相近和同义表达。`,
     },
     {
       prop: 'sessionContextTimeoutMinutes',
@@ -149,12 +181,21 @@ const fields = computed<FormField[]>(() => {
         max: 1440,
         placeholder: '默认 15，填 0 则每次独立检索',
       },
+      hint:
+        Number(form.sessionContextTimeoutMinutes) <= 0
+          ? '当前为 0：每次提问都独立检索，不沿用上一轮命中的知识库。'
+          : Number(form.sessionContextTimeoutMinutes) <= 15
+            ? `当前 ${form.sessionContextTimeoutMinutes} 分钟：短时间追问可沿用上下文，切换话题的干扰较少。`
+            : `当前 ${form.sessionContextTimeoutMinutes} 分钟：连续对话保持更久，但用户换话题后可能受旧上下文影响。`,
     },
     {
       prop: 'enableRerank',
       label: '启用重排',
       component: 'Switch',
       componentProps: { activeText: '启用', inactiveText: '关闭' },
+      hint: form.enableRerank
+        ? '当前启用：先召回候选，再由所选 AI 配置重新排序，相关性通常更好但会增加一次模型调用。'
+        : '当前关闭：直接使用融合排序，响应更快且不消耗额外模型调用。',
     },
   ];
 
@@ -165,6 +206,7 @@ const fields = computed<FormField[]>(() => {
       type: 'select',
       options: rerankConfigOptions,
       placeholder: '请选择重排 AI 配置',
+      hint: '该配置只用于给候选片段排序；应选择可用的聊天/重排模型账号，不会直接生成最终回答。',
     });
   }
 

@@ -78,6 +78,10 @@ const baseFields = computed<FormField[]>(() => [
     label: '匹配优先级',
     component: 'InputNumber',
     componentProps: { mode: 'integer', min: 1, max: 9999 },
+    hint:
+      Number(form.matchPriority) <= 10
+        ? `当前 ${form.matchPriority}：仅做轻微优先级调整，主要仍由内容相关度决定。`
+        : `当前 ${form.matchPriority}：该知识库在同等相关度下会更靠前；数值过高可能压制其他知识库。`,
   },
   {
     prop: 'isEnabled',
@@ -94,6 +98,14 @@ const contentFields = computed<FormField[]>(() => [
     type: 'select',
     options: contentTypeOptions,
     placeholder: '请选择内容类型',
+    hint:
+      form.contentType === 'text'
+        ? '当前为文本：可直接输入内容或上传 TXT / Markdown，解析最快。'
+        : form.contentType === 'pdf'
+          ? '当前为 PDF：将按文档解析与分片规则处理。'
+          : form.contentType === 'word'
+            ? '当前为 Word：将按段落解析并进入后续分片。'
+            : '当前为图片：需要 OCR 或视觉模型提取文字后再建立索引。',
   },
   form.contentType === 'text'
     ? {

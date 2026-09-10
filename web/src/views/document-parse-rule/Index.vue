@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { ElMessage, type FormRules } from 'element-plus';
 import PageContainer from '@/components/PageContainer.vue';
 import Button from '@/components/Button.vue';
@@ -27,31 +27,47 @@ const form = reactive<DocumentParseRuleForm>({
   isEnabled: true,
 });
 
-const fields: FormField[] = [
+const fields = computed<FormField[]>(() => [
   { prop: 'name', label: '规则名称', type: 'input', placeholder: '如 系统默认文档解析规则' },
   {
     prop: 'textMaxSizeMb',
     label: 'TXT目标大小',
     component: 'InputNumber',
     componentProps: { mode: 'integer', min: 1, max: 50, suffixText: 'MB' },
+    hint:
+      form.textMaxSizeMb <= 2
+        ? `当前 ${form.textMaxSizeMb} MB：拆分更细，解析任务更多但单次失败影响更小。`
+        : `当前 ${form.textMaxSizeMb} MB：单个解析任务可承载更多内容，任务更少但单次处理更重。`,
   },
   {
     prop: 'textMaxLines',
     label: 'TXT最大行数',
     component: 'InputNumber',
     componentProps: { mode: 'integer', min: 100, max: 1000000, suffixText: '行' },
+    hint:
+      form.textMaxLines <= 10000
+        ? `当前 ${form.textMaxLines} 行：会较早按行数拆分，适合结构复杂或超长日志文本。`
+        : `当前 ${form.textMaxLines} 行：允许单份文本保留更多上下文，但单次解析耗时会增加。`,
   },
   {
     prop: 'pdfPagesPerPart',
     label: 'PDF每份页数',
     component: 'InputNumber',
     componentProps: { mode: 'integer', min: 1, max: 200, suffixText: '页' },
+    hint:
+      form.pdfPagesPerPart <= 20
+        ? `当前 ${form.pdfPagesPerPart} 页：PDF 会被拆成较小任务，便于重试和并发处理。`
+        : `当前 ${form.pdfPagesPerPart} 页：每份保留更多连续页面，适合版式连贯的文档，但处理更重。`,
   },
   {
     prop: 'wordParagraphsPerPart',
     label: 'Word每份段落',
     component: 'InputNumber',
     componentProps: { mode: 'integer', min: 10, max: 10000, suffixText: '段' },
+    hint:
+      form.wordParagraphsPerPart <= 500
+        ? `当前 ${form.wordParagraphsPerPart} 段：拆分粒度较细，可降低单次 Word 解析压力。`
+        : `当前 ${form.wordParagraphsPerPart} 段：每份保留更多段落上下文，适合长篇连续内容。`,
   },
   {
     prop: 'preferSentenceBoundary',
@@ -65,7 +81,7 @@ const fields: FormField[] = [
     component: 'Switch',
     componentProps: { activeText: '启用', inactiveText: '停用' },
   },
-];
+]);
 
 const rules: FormRules = {
   name: [{ required: true, message: '请输入规则名称', trigger: 'blur' }],

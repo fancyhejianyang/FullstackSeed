@@ -99,6 +99,14 @@ const fields = computed<FormField[]>(() => {
       label: '功能类型',
       type: 'select',
       options: featureTypeOptions,
+      hint:
+        form.featureType === 'chat'
+          ? '当前为聊天：所选模型负责生成对话与知识库问答的最终回复。'
+          : form.featureType === 'embedding'
+            ? '当前为向量化：所选模型只负责把文本转换为向量，不能直接对话。'
+            : form.featureType === 'ocr'
+              ? '当前为 OCR：用于从图片或扫描件识别文字。'
+              : '当前为文档解析：用于将文件转换为可切分、可索引的结构化文本。',
     },
   ];
 
@@ -111,6 +119,9 @@ const fields = computed<FormField[]>(() => {
         activeText: 'MinerU',
         inactiveText: form.featureType === 'ocr' ? '视觉模型' : 'AI 模型',
       },
+      hint: form.useMineru
+        ? '当前使用 MinerU：由所选 MinerU 配置异步解析文档，不需要再选择大模型账号。'
+        : '当前使用模型解析：由大模型账号直接处理，需要选择与该功能兼容的模型。',
     });
   }
 
@@ -148,6 +159,9 @@ const fields = computed<FormField[]>(() => {
       label: 'Think 模式',
       component: 'Switch',
       componentProps: { activeText: '开启', inactiveText: '关闭' },
+      hint: form.enableThinking
+        ? '当前开启：推理模型会先进行内部思考，复杂任务通常更稳，但响应更慢、成本更高。'
+        : '当前关闭：直接生成回复，延迟与消耗更低。',
     });
     if (form.enableThinking) {
       baseFields.push({
@@ -188,6 +202,12 @@ const fields = computed<FormField[]>(() => {
         { label: 'JSON', value: 'json' },
         { label: 'Markdown', value: 'markdown' },
       ],
+      hint:
+        form.responseFormat === 'json'
+          ? '当前要求 JSON：适合被程序解析，提示词中应明确字段结构并避免附加说明。'
+          : form.responseFormat === 'markdown'
+            ? '当前要求 Markdown：适合保留标题、列表、表格等富文本结构。'
+            : '当前返回普通文本：兼容性最好，适合一般对话和简短结果。',
     },
     {
       prop: 'isEnabled',

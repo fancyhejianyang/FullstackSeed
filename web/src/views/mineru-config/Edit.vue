@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { ElMessage, type FormRules } from 'element-plus';
 import Dialog from '@/components/Dialog.vue';
 import Form, { type FormField } from '@/components/Form.vue';
@@ -43,7 +43,7 @@ const authModeOptions = [
   { label: 'TokenHeader', value: 'TokenHeader' },
 ];
 
-const fields: FormField[] = [
+const fields = computed<FormField[]>(() => [
   { prop: 'name', label: '配置名称', type: 'input', placeholder: '如 MinerU生产配置' },
   { prop: 'baseUrl', label: '服务地址', type: 'input', placeholder: 'https://mineru.net' },
   {
@@ -59,6 +59,10 @@ const fields: FormField[] = [
     type: 'select',
     options: authModeOptions,
     componentProps: { clearable: false },
+    hint:
+      form.authMode === 'Bearer'
+        ? '当前使用 Authorization: Bearer <令牌> 的标准认证方式。'
+        : '当前使用服务方约定的 Token 请求头认证方式。',
   },
   { prop: 'modelVersion', label: '模型版本', type: 'input', placeholder: 'vlm' },
   {
@@ -78,12 +82,22 @@ const fields: FormField[] = [
     label: '轮询间隔',
     component: 'InputNumber',
     componentProps: { mode: 'integer', min: 1, precision: 0 },
+    hint:
+      Number(form.pollIntervalSeconds) <= 3
+        ? `当前每 ${form.pollIntervalSeconds} 秒查询一次：状态反馈更快，但会增加对 MinerU 的请求次数。`
+        : Number(form.pollIntervalSeconds) <= 10
+          ? `当前每 ${form.pollIntervalSeconds} 秒查询一次：反馈速度与请求频率较均衡。`
+          : `当前每 ${form.pollIntervalSeconds} 秒查询一次：请求更少，但完成后的感知会更慢。`,
   },
   {
     prop: 'timeoutMinutes',
     label: '超时时间',
     component: 'InputNumber',
     componentProps: { mode: 'integer', min: 1, precision: 0 },
+    hint:
+      Number(form.timeoutMinutes) <= 10
+        ? `当前 ${form.timeoutMinutes} 分钟：可快速释放异常任务，复杂文档可能来不及完成。`
+        : `当前 ${form.timeoutMinutes} 分钟：允许复杂文档处理更久，但异常反馈会更晚。`,
   },
   {
     prop: 'isOcr',
@@ -109,7 +123,7 @@ const fields: FormField[] = [
     component: 'Switch',
     componentProps: { activeText: '启用', inactiveText: '停用' },
   },
-];
+]);
 
 const rules: FormRules = {
   name: [{ required: true, message: '请输入配置名称', trigger: 'blur' }],

@@ -87,18 +87,33 @@ const fields = computed<FormField[]>(() => [
     type: 'select',
     options: retrievalConfigOptions.value,
     placeholder: '不选则在所有应用中生效',
+    hint: form.retrievalConfigId
+      ? '当前仅在所选检索配置的 AI 应用中参与标准问答匹配。'
+      : '当前为全局标准问答：所有启用的检索配置均可命中它。',
   },
   {
     prop: 'priority',
     label: '优先级',
     component: 'InputNumber',
     componentProps: { mode: 'integer', min: -10000, max: 10000 },
+    hint:
+      Number(form.priority) > 0
+        ? `当前 ${form.priority}：相似度接近时优先选择此条；值越大，优先级越高。`
+        : Number(form.priority) < 0
+          ? `当前 ${form.priority}：相似度接近时会后置此条，适合保留但不希望优先命中的答案。`
+          : '当前为 0：不额外调整优先级，主要按问题匹配度决定。',
   },
   {
     prop: 'matchThreshold',
     label: '最低匹配度',
     component: 'InputNumber',
     componentProps: { min: 0.5, max: 1, precision: 4 },
+    hint:
+      Number(form.matchThreshold) < 0.7
+        ? `当前 ${form.matchThreshold}：匹配范围较宽，命中率更高，但相近问题可能误用标准答案。`
+        : Number(form.matchThreshold) < 0.9
+          ? `当前 ${form.matchThreshold}：命中率与准确性较平衡，适合大多数稳定问答。`
+          : `当前 ${form.matchThreshold}：只接受非常接近的问法，答案更稳妥但可能回退到知识库检索。`,
   },
   { prop: 'description', label: '说明', type: 'textarea', rows: 2 },
 ]);

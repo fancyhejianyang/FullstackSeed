@@ -120,18 +120,36 @@ const fields = computed<FormField[]>(() => [
     label: '规则类型',
     type: 'select',
     options: knowledgeRoutingRuleTypeOptions.map((item) => ({ ...item })),
+    hint:
+      form.ruleType === 'generic'
+        ? '公共词降权：命中后降低关联范围在检索结果中的优先级，避免泛词干扰。'
+        : form.ruleType === 'alias'
+          ? '别名路由：命中简称、口语说法后提升目标范围，帮助定位正确知识库。'
+          : '专属路由：命中后只在目标分类或知识库内检索，适合必须强制限定范围的词。',
   },
   {
     prop: 'matchMode',
     label: '匹配方式',
     type: 'select',
     options: knowledgeRoutingMatchModeOptions.map((item) => ({ ...item })),
+    hint:
+      form.matchMode === 'exact'
+        ? '当前为完全匹配：仅当用户问题与路由词一致时生效，误触发更少。'
+        : '当前为包含匹配：问题中出现路由词即可生效，覆盖更广，也更容易误触发。',
   },
   {
     prop: 'weight',
     label: '路由权重',
     component: 'InputNumber',
     componentProps: { min: -1, max: 1, precision: 4 },
+    hint:
+      form.ruleType === 'exclusive'
+        ? '专属路由以目标范围为准；当前数值不会改变候选排序，可保持默认值。'
+        : Number(form.weight) === 0
+          ? '当前为 0：命中规则但不改变目标范围的排序倾向。'
+          : Number(form.weight) > 0
+            ? `当前 ${form.weight}：提升目标范围的排序，越接近 1，提升越明显。`
+            : `当前 ${form.weight}：降低目标范围的排序，越接近 -1，降权越明显。`,
   },
   {
     prop: 'retrievalConfigId',
@@ -139,6 +157,9 @@ const fields = computed<FormField[]>(() => [
     type: 'select',
     options: retrievalConfigOptions,
     placeholder: '请选择检索配置',
+    hint: selectedRetrievalConfig.value
+      ? `规则只会在“${selectedRetrievalConfig.value.name}”检索时生效，不会影响其他 AI 应用。`
+      : '请选择检索配置；路由规则必须绑定检索范围，避免跨知识库误生效。',
   },
   {
     prop: 'categoryIds',
@@ -146,6 +167,9 @@ const fields = computed<FormField[]>(() => [
     type: 'selectMultiple',
     options: categoryOptions,
     placeholder: needsTargets.value ? '请选择目标分类或知识库' : '公共词可不关联目标范围',
+    hint: needsTargets.value
+      ? '别名和专属路由至少需指定一个目标分类或知识库。'
+      : '公共词规则可按分类限定；不需限制范围时可留空。',
   },
   {
     prop: 'knowledgeBaseIds',
@@ -153,6 +177,9 @@ const fields = computed<FormField[]>(() => [
     type: 'selectMultiple',
     options: knowledgeBaseOptions,
     placeholder: form.categoryIds.length ? '可选；仅能选择目标分类下的知识库' : '可选；用于精确限定路由范围',
+    hint: form.knowledgeBaseIds.length
+      ? `当前精确限定 ${form.knowledgeBaseIds.length} 个知识库。`
+      : '留空时按目标分类或检索配置范围处理；选择具体知识库可提高路由精度。',
   },
   {
     prop: 'isEnabled',

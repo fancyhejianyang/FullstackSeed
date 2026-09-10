@@ -78,6 +78,7 @@ const fields = computed<FormField[]>(() => [
     type: 'select',
     options: vectorDbTypeOptions,
     componentProps: { clearable: false },
+    hint: '当前使用 Chroma：向量会按 Collection 组织，Collection 的维度必须保持一致。',
   },
   {
     prop: 'providerId',
@@ -106,6 +107,10 @@ const fields = computed<FormField[]>(() => [
       required: true,
       suffixText: '维',
     },
+    hint:
+      Number(form.embeddingDimension) <= 768
+        ? `当前 ${form.embeddingDimension} 维：索引占用相对更低；必须与写入该 Collection 的向量维度一致。`
+        : `当前 ${form.embeddingDimension} 维：表达能力和索引占用通常更高；不得与已有不同维度向量混写到同一 Collection。`,
   },
   {
     prop: 'providerEmbeddingDimension',
@@ -117,6 +122,9 @@ const fields = computed<FormField[]>(() => [
       min: 1,
       suffixText: '维',
     },
+    hint: form.providerEmbeddingDimension
+      ? `当前供应商实际返回 ${form.providerEmbeddingDimension} 维：调用与校验会以此为准，需与目标 Collection 的维度一致。`
+      : `当前留空：暂按向量服务维度 ${form.embeddingDimension || 768} 校验；建议检测模型实际维度后再保存。`,
   },
   {
     prop: 'chromaUrl',
@@ -129,6 +137,7 @@ const fields = computed<FormField[]>(() => [
     label: 'Collection',
     type: 'input',
     placeholder: 'knowledge_chunks',
+    hint: `“${form.collectionName || '未命名'}”是向量库中的索引集合；若切换到 ${form.providerEmbeddingDimension || form.embeddingDimension || 768} 维模型，应使用空的新 Collection 或先重建索引。`,
   },
   { prop: 'tenant', label: 'Tenant', type: 'input', placeholder: 'default_tenant' },
   {

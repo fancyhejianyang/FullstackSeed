@@ -37,13 +37,16 @@ export interface FormField {
   inputMode?: Extract<InputMode, 'text' | 'password' | 'search'>;
   placeholder?: string;
   options?: FormOption[] | Ref<FormOption[]>;
+  /** 字段下方的辅助说明；支持传入 ref/computed，适合显示随当前值变化的语义提示 */
+  hint?: string | Ref<string | undefined>;
   rows?: number;
   // 是否使用具名插槽 #field-[prop] 自定义渲染
   slot?: boolean;
 }
 
-type ResolvedFormField = Omit<FormField, 'options'> & {
+type ResolvedFormField = Omit<FormField, 'options' | 'hint'> & {
   options?: FormOption[];
+  hint?: string;
 };
 
 const props = withDefaults(
@@ -70,11 +73,12 @@ defineEmits<{
 
 const formRef = ref<FormInstance>();
 
-/** 将 fields 中可能为 Ref 的 options 统一解包 */
+/** 将 fields 中可能为 Ref 的 options / hint 统一解包 */
 const resolvedFields = computed<ResolvedFormField[]>(() =>
   props.fields.map((field) => ({
     ...field,
     options: unref(field.options),
+    hint: unref(field.hint),
   })),
 );
 
@@ -202,8 +206,19 @@ defineExpose({ validate, resetFields });
         @enter="$emit('enter')"
         @blur="$emit('blur', field.prop, $event)"
       />
+      <div v-if="field.hint" class="form-field__hint">{{ field.hint }}</div>
     </el-form-item>
     <!-- 额外操作区（如搜索栏的查询/重置按钮） -->
     <slot name="actions" />
   </el-form>
 </template>
+
+<style scoped>
+.form-field__hint {
+  flex-basis: 100%;
+  margin-top: 6px;
+  color: #909399;
+  font-size: 12px;
+  line-height: 1.5;
+}
+</style>
