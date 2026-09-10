@@ -64,7 +64,7 @@ describe('KnowledgeAiChatService', () => {
     ).toBe('已核对问题中的订单信息。\n已结合命中资料组织回答。');
   });
 
-  it('calibrates colloquial terms before every standard QA lookup', async () => {
+  it('checks standard QA again with the calibrated question after the original question misses', async () => {
     const calls: string[] = [];
     const commandService = {
       rewriteColloquialQuestion: jest.fn().mockImplementation(async () => {
@@ -77,6 +77,7 @@ describe('KnowledgeAiChatService', () => {
       }),
       searchStandardQa: jest.fn().mockImplementation(async ({ question }) => {
         calls.push(`standard-qa:${question}`);
+        if (question === '小蓝多重？') return null;
         return {
           entry: {
             id: 7,
@@ -100,6 +101,7 @@ describe('KnowledgeAiChatService', () => {
     });
 
     expect(calls).toEqual([
+      'standard-qa:小蓝多重？',
       'rewrite',
       'standard-qa:蓝虎机器人 Pro 的重量是多少？',
     ]);
@@ -108,7 +110,7 @@ describe('KnowledgeAiChatService', () => {
         entryId: 7,
         answer: '重量为 12 kg。',
         rewrittenQuestion: '蓝虎机器人 Pro 的重量是多少？',
-        commandIds: ['colloquial.rewrite', 'qa.search'],
+        commandIds: ['qa.search', 'colloquial.rewrite', 'qa.search'],
       }),
     );
   });
