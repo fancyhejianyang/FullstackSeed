@@ -29,6 +29,8 @@ const ADMIN_PERMISSION_MODULES = [
   'KnowledgeStandardQa',
   'KnowledgeColloquialTerm',
   'AiCommandDefinition',
+  'Product',
+  'ProductSku',
   'ApprovalRequest',
   'User',
   'Role',

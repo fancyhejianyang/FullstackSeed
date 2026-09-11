@@ -8,6 +8,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { randomBytes } from 'crypto';
 import { In, Like, Repository } from 'typeorm';
 import { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-configs.service';
+import {
+  AI_COMMAND_CATALOG_MAP,
+  AI_CORE_CHAT_COMMAND_KEYS,
+} from '../ai-command-definitions/ai-command-definitions.constants';
 import { KnowledgeRetrievalConfigsService } from '../knowledge-retrieval-configs/knowledge-retrieval-configs.service';
 import {
   CreateExternalAppDto,
@@ -80,6 +84,10 @@ export class ExternalAppsService {
         aiFeatureConfigName: config?.name ?? null,
         retrievalConfigId: retrievalConfig?.id ?? null,
         retrievalConfigName: retrievalConfig?.name ?? null,
+        commandKeys:
+          dto.commandKeys === undefined
+            ? null
+            : this.normalizeCommandKeys(dto.commandKeys),
         isEnabled: dto.isEnabled ?? true,
         description: this.toNullableText(dto.description),
       }),
@@ -117,6 +125,9 @@ export class ExternalAppsService {
         : null;
       app.retrievalConfigId = retrievalConfig?.id ?? null;
       app.retrievalConfigName = retrievalConfig?.name ?? null;
+    }
+    if (dto.commandKeys !== undefined) {
+      app.commandKeys = this.normalizeCommandKeys(dto.commandKeys);
     }
     if (dto.isEnabled !== undefined) app.isEnabled = dto.isEnabled;
     if (dto.description !== undefined) {
@@ -192,6 +203,19 @@ export class ExternalAppsService {
   private toNullableText(value?: string) {
     const text = value?.trim() ?? '';
     return text || null;
+  }
+
+  private normalizeCommandKeys(commandKeys: string[]) {
+    const keys = Array.from(
+      new Set([...AI_CORE_CHAT_COMMAND_KEYS, ...commandKeys.map((item) => item.trim())]),
+    ).filter(Boolean);
+    for (const key of keys) {
+      const catalog = AI_COMMAND_CATALOG_MAP.get(key);
+      if (!catalog || !catalog.chatCallable) {
+        throw new ConflictException(`指令“${key}”不存在或不允许由聊天应用调用`);
+      }
+    }
+    return keys;
   }
 
   private assertDomainAllowed(app: ExternalApp, requestDomain?: string | null) {

@@ -40,6 +40,12 @@ export class CreateExternalAppDto {
   @Min(1)
   retrievalConfigId?: number | null;
 
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(100, { each: true })
+  @IsOptional()
+  commandKeys?: string[];
+
   @IsBoolean()
   @IsOptional()
   isEnabled?: boolean;

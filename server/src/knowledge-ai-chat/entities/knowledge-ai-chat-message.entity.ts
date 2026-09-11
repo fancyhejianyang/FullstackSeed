@@ -1,5 +1,6 @@
 import { Column, Entity } from 'typeorm';
 import { BaseEntity } from '../../common/entities/base.entity';
+import type { ProductSkuChatContext } from '../../product-catalog/product-catalog.service';
 
 @Entity('knowledge_ai_chat_messages')
 export class KnowledgeAiChatMessage extends BaseEntity {
@@ -81,6 +82,10 @@ export class KnowledgeAiChatMessage extends BaseEntity {
 
   @Column({ type: 'simple-json', nullable: true })
   qaCommandIds: string[] | null;
+
+  /** 本轮由已授权业务指令读取到的受控系统事实。 */
+  @Column({ type: 'simple-json', nullable: true })
+  businessContext: ProductSkuChatContext | null;
 
   @Column({ type: 'tinyint', default: true })
   isSuccess: boolean;

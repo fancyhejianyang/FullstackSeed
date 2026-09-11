@@ -105,6 +105,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '聊天管理', permission: 'Menu.read' },
       },
       {
+        path: 'business-data',
+        name: 'business-data',
+        redirect: '/business-data/products',
+        meta: { title: '业务数据', permission: 'Product.read' },
+      },
+      {
         path: 'collaboration-center',
         name: 'collaboration-center',
         redirect: '/collaboration-center/approvals',
@@ -121,6 +127,18 @@ const routes: RouteRecordRaw[] = [
         name: 'chat-management-ai-chat',
         component: () => import('@/views/knowledge-ai-chat/Index.vue'),
         meta: { title: 'AI 问答测试', permission: 'Menu.read' },
+      },
+      {
+        path: 'business-data/products',
+        name: 'business-data-products',
+        component: () => import('@/views/product/Index.vue'),
+        meta: { title: '产品库', permission: 'Product.read' },
+      },
+      {
+        path: 'business-data/product-skus',
+        name: 'business-data-product-skus',
+        component: () => import('@/views/product-sku/Index.vue'),
+        meta: { title: 'SKU 库', permission: 'ProductSku.read' },
       },
       {
         path: 'chat-management/apps',

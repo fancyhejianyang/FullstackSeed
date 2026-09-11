@@ -30,6 +30,13 @@ export interface AiCommandCatalogItem {
   description: string;
 }
 
+/** 所有聊天应用默认保留的基础问答链路能力。 */
+export const AI_CORE_CHAT_COMMAND_KEYS = [
+  'qa.search',
+  'colloquial.rewrite',
+  'knowledge.retrieve',
+] as const;
+
 const toJson = (value: unknown) => JSON.stringify(value, null, 2);
 
 /**
@@ -114,6 +121,35 @@ export const AI_COMMAND_CATALOG: AiCommandCatalogItem[] = [
     requireApproval: false,
     semanticKeywords: ['知识库', '文档检索', '资料查询'],
     description: '按当前应用、会话和路由范围检索知识库资料。',
+  },
+  {
+    commandKey: 'product.sku.lookup',
+    name: '产品与 SKU 事实查询',
+    action: 'read',
+    executionMode: 'service',
+    handlerKey: 'product.sku.lookup',
+    executionTarget: 'ProductCatalogService.findSkuContextForChat',
+    apiMethod: 'POST',
+    apiPath: 'service://product-catalog/sku-context',
+    requestSchema: toJson({
+      type: 'object',
+      required: ['question'],
+      properties: {
+        question: {
+          type: 'string',
+          description: '已完成口语校准的用户问题，可包含产品名、别名或 SKU 编码。',
+        },
+      },
+    }),
+    contextBindings: toJson({
+      source: 'product-catalog',
+      result: 'product-and-sku-facts',
+    }),
+    chatCallable: true,
+    requireApproval: false,
+    semanticKeywords: ['产品', 'SKU', '规格', '参数', '重量', '尺寸', '型号'],
+    description:
+      '按问题识别产品或 SKU，并返回受控的结构化事实；无法唯一定位 SKU 时仅返回候选项，不得猜测参数。',
   },
   {
     commandKey: 'session.context.read',

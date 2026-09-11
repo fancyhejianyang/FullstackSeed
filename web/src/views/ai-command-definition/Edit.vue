@@ -21,8 +21,6 @@ const mapping = ref<AiCommandDefinition | null>(null);
 const form = reactive({
   name: '',
   semanticKeywordsText: '',
-  requestSchema: '',
-  contextBindings: '',
   chatCallable: false,
   requireApproval: false,
   isEnabled: true,
@@ -38,8 +36,6 @@ const fields = computed<FormField[]>(() => [
     rows: 2,
     placeholder: '使用逗号分隔，用于模型/编排层识别该能力',
   },
-  { prop: 'requestSchema', label: '参数 Schema', type: 'textarea', rows: 8 },
-  { prop: 'contextBindings', label: '上下文绑定', type: 'textarea', rows: 6 },
   {
     prop: 'chatCallable',
     label: '聊天可调用',
@@ -63,8 +59,6 @@ const fields = computed<FormField[]>(() => [
 
 const rules: FormRules = {
   name: [{ required: true, message: '请输入指令名称', trigger: 'blur' }],
-  requestSchema: [{ required: true, message: '请输入参数 Schema', trigger: 'blur' }],
-  contextBindings: [{ required: true, message: '请输入上下文绑定', trigger: 'blur' }],
 };
 
 watch(visible, async (value) => {
@@ -81,8 +75,6 @@ function fillForm(data: AiCommandDefinition) {
   mapping.value = data;
   form.name = data.name;
   form.semanticKeywordsText = (data.semanticKeywords ?? []).join(', ');
-  form.requestSchema = data.requestSchema;
-  form.contextBindings = data.contextBindings;
   form.chatCallable = !!data.chatCallable;
   form.requireApproval = !!data.requireApproval;
   form.isEnabled = !!data.isEnabled;
@@ -95,8 +87,6 @@ function buildPayload(): UpdateAiCommandDefinitionForm {
     semanticKeywords: Array.from(
       new Set(form.semanticKeywordsText.split(/[,，\r?\n]/).map((item) => item.trim()).filter(Boolean)),
     ),
-    requestSchema: form.requestSchema.trim(),
-    contextBindings: form.contextBindings.trim(),
     chatCallable: form.chatCallable,
     requireApproval: form.requireApproval,
     isEnabled: form.isEnabled,
@@ -126,10 +116,16 @@ async function handleSubmit() {
         <div><span>执行目标</span><code>{{ mapping.executionTarget }}</code></div>
         <div><span>调用映射</span><code>{{ mapping.apiMethod }} {{ mapping.apiPath }}</code></div>
         <div><span>执行方式</span><el-tag type="info">{{ mapping.executionMode === 'service' ? '内部服务' : '管理 API' }}</el-tag></div>
+        <div class="ai-command-definition-edit__contract">
+          <span>请求参数</span><pre>{{ mapping.requestSchema }}</pre>
+        </div>
+        <div class="ai-command-definition-edit__contract">
+          <span>上下文绑定</span><pre>{{ mapping.contextBindings }}</pre>
+        </div>
       </div>
       <Form ref="formRef" v-model="form" :fields="fields" :rules="rules" label-width="120px" />
       <div class="ai-command-definition-edit__tip">
-        执行目标和调用映射由系统白名单固定，不能改为任意 URL。上下文绑定中的 <code>$chat</code>、<code>$session</code>、<code>$operator</code> 由服务端注入，模型不能自行伪造。
+        执行目标、请求参数 Schema 和上下文绑定由系统白名单在服务启动时同步，不能改为任意 URL。人工可维护名称、关键词、启停和聊天授权；上下文中的 <code>$chat</code>、<code>$session</code>、<code>$operator</code> 由服务端注入，模型不能自行伪造。
       </div>
     </div>
   </Dialog>
@@ -157,6 +153,25 @@ async function handleSubmit() {
 .ai-command-definition-edit__mapping code,
 .ai-command-definition-edit__tip code {
   color: #409eff;
+}
+
+.ai-command-definition-edit__contract {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: start;
+}
+
+.ai-command-definition-edit__contract pre {
+  margin: 0;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 4px;
+  background: #eef3f8;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .ai-command-definition-edit__tip {

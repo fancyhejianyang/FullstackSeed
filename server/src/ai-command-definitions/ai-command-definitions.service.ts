@@ -24,18 +24,31 @@ export class AiCommandDefinitionsService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
+    await this.syncCatalog();
+  }
+
+  /**
+   * 系统启动时同步代码白名单的执行契约。
+   * 人工维护的名称、关键词、启停和调用授权保持不变；请求参数和执行映射
+   * 始终以最新业务模块的注册结果为准，避免接口迭代后指令 Schema 过期。
+   */
+  async syncCatalog() {
     for (const item of AI_COMMAND_CATALOG) {
       const exists = await this.definitionRepository.findOne({
         where: { commandKey: item.commandKey },
       });
-      if (exists) continue;
-      await this.definitionRepository.save(
-        this.definitionRepository.create({
-          ...item,
-          semanticKeywords: item.semanticKeywords,
-          isEnabled: true,
-        }),
-      );
+      if (!exists) {
+        await this.definitionRepository.save(
+          this.definitionRepository.create({
+            ...item,
+            semanticKeywords: item.semanticKeywords,
+            isEnabled: true,
+          }),
+        );
+        continue;
+      }
+      this.applyCatalogContract(exists);
+      await this.definitionRepository.save(exists);
     }
   }
 
@@ -70,7 +83,10 @@ export class AiCommandDefinitionsService implements OnModuleInit {
     return this.findEntity(id);
   }
 
-  async findChatCommand(commandKey: string) {
+  async findChatCommand(commandKey: string, allowedCommandKeys?: string[]) {
+    if (allowedCommandKeys && !allowedCommandKeys.includes(commandKey)) {
+      throw new BadRequestException(`当前聊天应用未授权指令“${commandKey}”`);
+    }
     const definition = await this.definitionRepository.findOne({
       where: { commandKey, isEnabled: true, chatCallable: true },
     });
@@ -116,18 +132,6 @@ export class AiCommandDefinitionsService implements OnModuleInit {
       );
       payload.semanticKeywords = keywords.length ? keywords : null;
     }
-    if (dto.requestSchema !== undefined) {
-      payload.requestSchema = this.normalizeJson(
-        dto.requestSchema,
-        '参数 Schema',
-      );
-    }
-    if (dto.contextBindings !== undefined) {
-      payload.contextBindings = this.normalizeJson(
-        dto.contextBindings,
-        '上下文绑定',
-      );
-    }
     if (dto.chatCallable !== undefined) {
       if (dto.chatCallable && !catalogChatCallable) {
         throw new BadRequestException('该指令不允许开放给聊天模型');
@@ -155,13 +159,13 @@ export class AiCommandDefinitionsService implements OnModuleInit {
     if (!catalog.chatCallable) definition.chatCallable = false;
   }
 
-  private normalizeJson(value: string, label: string) {
-    try {
-      return JSON.stringify(JSON.parse(value), null, 2);
-    } catch {
-      throw new BadRequestException(`${label}必须是合法 JSON`);
-    }
+  private applyCatalogContract(definition: AiCommandDefinition) {
+    const catalog = AI_COMMAND_CATALOG_MAP.get(definition.commandKey)!;
+    this.applyCatalogMapping(definition);
+    definition.requestSchema = catalog.requestSchema;
+    definition.contextBindings = catalog.contextBindings;
   }
+
 
   private async findEntity(id: number) {
     const definition = await this.definitionRepository.findOne({

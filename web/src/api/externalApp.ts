@@ -9,6 +9,7 @@ export interface ExternalApp {
   aiFeatureConfigName: string | null;
   retrievalConfigId: number | null;
   retrievalConfigName: string | null;
+  commandKeys: string[] | null;
   isEnabled: boolean;
   description: string | null;
   createdAt: string;
@@ -33,6 +34,7 @@ export interface ExternalAppForm {
   domain?: string;
   aiFeatureConfigId?: number | null;
   retrievalConfigId?: number | null;
+  commandKeys?: string[];
   isEnabled?: boolean;
   description?: string;
 }

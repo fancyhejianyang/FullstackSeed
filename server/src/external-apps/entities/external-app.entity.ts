@@ -25,6 +25,10 @@ export class ExternalApp extends BaseEntity {
   @Column({ type: 'varchar', length: 120, nullable: true })
   retrievalConfigName: string | null;
 
+  /** 为空的旧应用仅使用系统基础问答指令；额外业务指令必须显式授权。 */
+  @Column({ type: 'simple-json', nullable: true })
+  commandKeys: string[] | null;
+
   @Column({ type: 'tinyint', default: true })
   isEnabled: boolean;
 

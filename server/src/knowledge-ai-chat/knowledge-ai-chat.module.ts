@@ -11,6 +11,7 @@ import { KnowledgeRetrievalConfigsModule } from '../knowledge-retrieval-configs/
 import { KnowledgeRoutingRulesModule } from '../knowledge-routing-rules/knowledge-routing-rules.module';
 import { KnowledgeStandardQasModule } from '../knowledge-standard-qas/knowledge-standard-qas.module';
 import { KnowledgeColloquialTermsModule } from '../knowledge-colloquial-terms/knowledge-colloquial-terms.module';
+import { ProductCatalogModule } from '../product-catalog/product-catalog.module';
 import { KnowledgeVectorsModule } from '../knowledge-vectors/knowledge-vectors.module';
 import { KnowledgeAiChatController } from './knowledge-ai-chat.controller';
 import { KnowledgeAiChatCommandService } from './knowledge-ai-chat-command.service';
@@ -35,6 +36,7 @@ import { KnowledgeAiChatSession } from './entities/knowledge-ai-chat-session.ent
     KnowledgeRoutingRulesModule,
     KnowledgeStandardQasModule,
     KnowledgeColloquialTermsModule,
+    ProductCatalogModule,
     KnowledgeAiProvidersModule,
     KnowledgeVectorsModule,
   ],

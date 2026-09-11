@@ -40,13 +40,13 @@ export interface QueryAiCommandDefinitionParams {
 export interface UpdateAiCommandDefinitionForm {
   name?: string;
   semanticKeywords?: string[];
-  requestSchema?: string;
-  contextBindings?: string;
   chatCallable?: boolean;
   requireApproval?: boolean;
   isEnabled?: boolean;
   description?: string;
 }
+
+export interface AiCommandCatalogItem extends Omit<AiCommandDefinition, 'id' | 'createdAt' | 'updatedAt' | 'isEnabled'> {}
 
 export function getAiCommandDefinitions(params: QueryAiCommandDefinitionParams) {
   return request.get<unknown, AiCommandDefinitionListResult>('/ai-command-definitions', {
@@ -56,6 +56,10 @@ export function getAiCommandDefinitions(params: QueryAiCommandDefinitionParams) 
 
 export function getAiCommandDefinition(id: number) {
   return request.get<unknown, AiCommandDefinition>(`/ai-command-definitions/${id}`);
+}
+
+export function getAiCommandCatalog() {
+  return request.get<unknown, AiCommandCatalogItem[]>('/ai-command-definitions/catalog');
 }
 
 export function updateAiCommandDefinition(id: number, data: UpdateAiCommandDefinitionForm) {

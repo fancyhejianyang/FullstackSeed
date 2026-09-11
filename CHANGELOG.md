@@ -1,5 +1,21 @@
 # CHANGELOG
 
+### 2026-09-11 新增产品 SKU 业务事实查询与聊天应用指令授权
+- 新增：
+  - `server/src/product-catalog/`（产品、SKU 的真实业务数据 CRUD；按产品简称、编码、SKU 编码和结构化规格受控匹配，并在 SKU 未唯一时只返回候选项）
+  - `server/src/migrations/1788880000000-CreateProductCatalogAndBusinessCommands.ts`（创建产品与 SKU 表，并为聊天应用和问答记录增加业务指令、业务事实字段）
+  - `web/src/api/productCatalog.ts`、`web/src/views/product/`、`web/src/views/product-sku/`（产品库、SKU 库管理页面）
+  - `server/src/product-catalog/product-catalog.service.spec.ts`、`server/src/ai-command-definitions/ai-command-definitions.service.spec.ts`（验证 SKU 精确定位、候选澄清和启动时指令契约同步）
+- 修改：
+  - `server/src/ai-command-definitions/`（新增只读 `product.sku.lookup` 白名单指令；每次服务启动同步执行目标、参数 Schema 和上下文绑定，保留人工维护的名称、关键词、启停及授权）
+  - `server/src/external-apps/`、`web/src/views/external-app/Edit.vue`（聊天应用可单独授权业务指令；标准问答、口语校准和知识库检索为基础链路自动保留）
+  - `server/src/knowledge-ai-chat/`（标准问答未命中后，使用校准问题读取获授权的产品/SKU 最小 JSON，并将其与检索资料、语义约束一起传给回答模型；记录业务事实轨迹）
+  - `server/src/app.module.ts`、`server/src/users/users.service.ts`、`server/src/menus/menus.service.ts`、`web/src/router/index.ts`（注册模块、权限及“业务数据 / 产品库 / SKU 库”菜单）
+  - `CHANGELOG.md`（记录本次调整）
+- 删除：
+  - AI 指令编辑中可手工修改的请求参数 Schema、上下文绑定输入；改为展示服务启动时自动同步的只读契约。
+- 说明：通用知识库客服不勾选产品指令，业务客服才勾选。业务数据不写入向量库，模型只得到最小、只读的后端查询结果，避免直接连接数据库或在多个 SKU 之间猜测。迁移只新增表/列，不会重置已有数据库或菜单。
+
 ### 2026-09-10 恢复原问题标准问答的前置命中
 - 新增：无。
 - 修改：

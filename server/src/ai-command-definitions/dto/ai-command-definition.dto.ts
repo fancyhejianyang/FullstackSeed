@@ -22,14 +22,6 @@ export class UpdateAiCommandDefinitionDto {
   @IsOptional()
   semanticKeywords?: string[];
 
-  @IsString()
-  @IsOptional()
-  requestSchema?: string;
-
-  @IsString()
-  @IsOptional()
-  contextBindings?: string;
-
   @IsBoolean()
   @IsOptional()
   chatCallable?: boolean;

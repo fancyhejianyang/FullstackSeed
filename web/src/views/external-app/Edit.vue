@@ -18,6 +18,7 @@ import {
   getKnowledgeRetrievalConfigs,
   type KnowledgeRetrievalConfig,
 } from '@/api/knowledgeRetrievalConfig';
+import { getAiCommandCatalog, type AiCommandCatalogItem } from '@/api/aiCommandDefinition';
 
 const props = defineProps<{
   row?: ExternalApp | null;
@@ -31,6 +32,12 @@ const submitting = ref(false);
 const formRef = ref<InstanceType<typeof Form>>();
 const chatConfigs = ref<AiFeatureConfig[]>([]);
 const retrievalConfigs = ref<KnowledgeRetrievalConfig[]>([]);
+const commandCatalog = ref<AiCommandCatalogItem[]>([]);
+const coreChatCommandKeys = new Set([
+  'qa.search',
+  'colloquial.rewrite',
+  'knowledge.retrieve',
+]);
 
 const form = reactive<ExternalAppForm>({
   name: '',
@@ -38,6 +45,7 @@ const form = reactive<ExternalAppForm>({
   domain: '',
   aiFeatureConfigId: null,
   retrievalConfigId: null,
+  commandKeys: [],
   isEnabled: true,
   description: '',
 });
@@ -74,6 +82,15 @@ const fields = computed<FormField[]>(() => [
     ],
   },
   {
+    prop: 'commandKeys',
+    label: '可用 AI 指令',
+    type: 'selectMultiple',
+    options: commandCatalog.value
+      .filter((item) => item.chatCallable && !coreChatCommandKeys.has(item.commandKey))
+      .map((item) => ({ label: `${item.name}（${item.commandKey}）`, value: item.commandKey })),
+    hint: '基础问答指令会自动保留；仅勾选产品/SKU等已审核的只读业务指令，避免通用客服读取业务数据。',
+  },
+  {
     prop: 'domain',
     label: '白名单域名',
     type: 'textarea',
@@ -103,6 +120,7 @@ function resetForm() {
   form.aiFeatureConfigId = chatConfigs.value.length === 1 ? chatConfigs.value[0].id : null;
   form.retrievalConfigId =
     retrievalConfigs.value.length === 1 ? retrievalConfigs.value[0].id : null;
+  form.commandKeys = [];
   form.isEnabled = true;
   form.description = '';
 }
@@ -115,6 +133,7 @@ function fillForm(data: ExternalApp) {
     data.aiFeatureConfigId ??
     (chatConfigs.value.length === 1 ? chatConfigs.value[0].id : null);
   form.retrievalConfigId = data.retrievalConfigId ?? null;
+  form.commandKeys = data.commandKeys ?? [];
   form.isEnabled = !!data.isEnabled;
   form.description = data.description ?? '';
 }
@@ -140,7 +159,7 @@ watch(visible, async (value) => {
 });
 
 async function fetchChatConfigs() {
-  const [chatResult, retrievalResult] = await Promise.all([
+  const [chatResult, retrievalResult, commandResult] = await Promise.all([
     getAiFeatureConfigs({
       page: 1,
       pageSize: 200,
@@ -150,9 +169,11 @@ async function fetchChatConfigs() {
       page: 1,
       pageSize: 200,
     }),
+    getAiCommandCatalog(),
   ]);
   chatConfigs.value = chatResult.list.filter((item) => item.isEnabled);
   retrievalConfigs.value = retrievalResult.list.filter((item) => item.isEnabled);
+  commandCatalog.value = commandResult;
   if (!chatConfigs.value.length) {
     ElMessage.warning('请先新增并启用聊天类型的 AI 功能配置');
   }
@@ -167,6 +188,7 @@ function buildPayload() {
     retrievalConfigId: form.retrievalConfigId
       ? Number(form.retrievalConfigId)
       : null,
+    commandKeys: form.commandKeys ?? [],
     isEnabled: form.isEnabled,
     description: form.description?.trim(),
   };

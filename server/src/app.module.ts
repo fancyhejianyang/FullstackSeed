@@ -33,6 +33,7 @@ import { KnowledgeStandardQasModule } from './knowledge-standard-qas/knowledge-s
 import { KnowledgeColloquialTermsModule } from './knowledge-colloquial-terms/knowledge-colloquial-terms.module';
 import { AiCommandDefinitionsModule } from './ai-command-definitions/ai-command-definitions.module';
 import { ApprovalRequestsModule } from './approval-requests/approval-requests.module';
+import { ProductCatalogModule } from './product-catalog/product-catalog.module';
 
 @Module({
   imports: [
@@ -127,6 +128,7 @@ import { ApprovalRequestsModule } from './approval-requests/approval-requests.mo
     KnowledgeRoutingRulesModule,
     KnowledgeStandardQasModule,
     KnowledgeColloquialTermsModule,
+    ProductCatalogModule,
     ApprovalRequestsModule,
     AiCommandDefinitionsModule,
     KnowledgeChunkConfigsModule,
