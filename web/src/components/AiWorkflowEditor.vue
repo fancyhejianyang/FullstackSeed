@@ -26,6 +26,9 @@ const NODE_WIDTH = 160;
 const NODE_HEIGHT = 60;
 const CANVAS_WIDTH = 650;
 const CANVAS_HEIGHT = 960;
+const CANVAS_VIEWPORT_HEIGHT = 620;
+const MIN_CANVAS_ZOOM = 0.4;
+const MAX_CANVAS_ZOOM = 1.6;
 type SourcePort = Extract<AiWorkflowNodePort, 'right' | 'bottom'>;
 type TargetPort = Extract<AiWorkflowNodePort, 'left' | 'top'>;
 type NodeFrame = { x: number; y: number; width: number; height: number };
@@ -33,12 +36,21 @@ type NodeFrame = { x: number; y: number; width: number; height: number };
 const selectedNodeId = ref<string | null>(null);
 const connectionError = ref('');
 const canvasRef = ref<HTMLElement>();
+const canvasViewportRef = ref<HTMLElement>();
+const canvasZoom = ref(1);
+const canvasPan = ref({ x: 0, y: 0 });
 const nodeSizes = ref<Record<string, Pick<NodeFrame, 'width' | 'height'>>>({});
 const observedNodeElements = new Map<string, HTMLElement>();
 const nodeElementIds = new WeakMap<HTMLElement, string>();
 let nodeResizeObserver: ResizeObserver | undefined;
 const dragState = ref<{
   id: string;
+  startX: number;
+  startY: number;
+  originX: number;
+  originY: number;
+} | null>(null);
+const canvasPanState = ref<{
   startX: number;
   startY: number;
   originX: number;
@@ -54,6 +66,13 @@ const connectionDrag = ref<{
 } | null>(null);
 
 const workflow = computed(() => normalizeAiWorkflowDefinition(model.value));
+const canvasStyle = computed(() => ({
+  width: `${CANVAS_WIDTH}px`,
+  height: `${CANVAS_HEIGHT}px`,
+  transform: `translate3d(${canvasPan.value.x}px, ${canvasPan.value.y}px, 0) scale(${canvasZoom.value})`,
+  transformOrigin: 'top left',
+}));
+const canvasZoomLabel = computed(() => `${Math.round(canvasZoom.value * 100)}%`);
 const workflowFlags = computed(() => getAiWorkflowFlags(workflow.value));
 const workflowPlan = computed(() => getAiWorkflowExecutionPlan(workflow.value));
 const validationErrors = computed(() => getWorkflowValidationErrors(workflow.value));
@@ -324,6 +343,85 @@ function edgeColor(condition: AiWorkflowEdgeCondition) {
   return '#409eff';
 }
 
+function clampCanvasZoom(value: number) {
+  return Math.min(MAX_CANVAS_ZOOM, Math.max(MIN_CANVAS_ZOOM, value));
+}
+
+function updateCanvasZoom(nextZoom: number, anchor?: { clientX: number; clientY: number }) {
+  const viewport = canvasViewportRef.value;
+  const zoom = clampCanvasZoom(nextZoom);
+  if (!viewport || zoom === canvasZoom.value) return;
+  const bounds = viewport.getBoundingClientRect();
+  const anchorX = anchor ? anchor.clientX - bounds.left : viewport.clientWidth / 2;
+  const anchorY = anchor ? anchor.clientY - bounds.top : viewport.clientHeight / 2;
+  const contentX = (anchorX - canvasPan.value.x) / canvasZoom.value;
+  const contentY = (anchorY - canvasPan.value.y) / canvasZoom.value;
+  canvasZoom.value = zoom;
+  canvasPan.value = {
+    x: anchorX - contentX * zoom,
+    y: anchorY - contentY * zoom,
+  };
+}
+
+function handleCanvasWheel(event: WheelEvent) {
+  const factor = Math.exp(-event.deltaY * 0.0015);
+  updateCanvasZoom(canvasZoom.value * factor, event);
+}
+
+function zoomCanvasBy(factor: number) {
+  updateCanvasZoom(canvasZoom.value * factor);
+}
+
+function resetCanvasView() {
+  canvasZoom.value = 1;
+  canvasPan.value = { x: 0, y: 0 };
+}
+
+function fitCanvasView() {
+  const viewport = canvasViewportRef.value;
+  if (!viewport) return;
+  const padding = 24;
+  const zoom = clampCanvasZoom(
+    Math.min(
+      (viewport.clientWidth - padding) / CANVAS_WIDTH,
+      (viewport.clientHeight - padding) / CANVAS_HEIGHT,
+    ),
+  );
+  canvasZoom.value = zoom;
+  canvasPan.value = {
+    x: Math.max(12, (viewport.clientWidth - CANVAS_WIDTH * zoom) / 2),
+    y: Math.max(12, (viewport.clientHeight - CANVAS_HEIGHT * zoom) / 2),
+  };
+}
+
+function startCanvasPan(event: PointerEvent) {
+  if (event.button !== 0 || dragState.value || connectionDrag.value) return;
+  event.preventDefault();
+  clearSelection();
+  canvasPanState.value = {
+    startX: event.clientX,
+    startY: event.clientY,
+    originX: canvasPan.value.x,
+    originY: canvasPan.value.y,
+  };
+  window.addEventListener('pointermove', handleCanvasPanMove);
+  window.addEventListener('pointerup', stopCanvasPan, { once: true });
+}
+
+function handleCanvasPanMove(event: PointerEvent) {
+  const state = canvasPanState.value;
+  if (!state) return;
+  canvasPan.value = {
+    x: state.originX + event.clientX - state.startX,
+    y: state.originY + event.clientY - state.startY,
+  };
+}
+
+function stopCanvasPan() {
+  canvasPanState.value = null;
+  window.removeEventListener('pointermove', handleCanvasPanMove);
+}
+
 function startDrag(event: PointerEvent, node: AiWorkflowNodeDefinition) {
   if (event.button !== 0 || !node.position) return;
   selectNode(node.id);
@@ -346,8 +444,8 @@ function handlePointerMove(event: PointerEvent) {
     if (!node) return;
     const frame = getNodeFrame(node);
     node.position = {
-      x: Math.min(CANVAS_WIDTH - frame.width - 20, Math.max(20, state.originX + event.clientX - state.startX)),
-      y: Math.min(CANVAS_HEIGHT - frame.height - 20, Math.max(20, state.originY + event.clientY - state.startY)),
+      x: Math.min(CANVAS_WIDTH - frame.width - 20, Math.max(20, state.originX + (event.clientX - state.startX) / canvasZoom.value)),
+      y: Math.min(CANVAS_HEIGHT - frame.height - 20, Math.max(20, state.originY + (event.clientY - state.startY) / canvasZoom.value)),
     };
   });
 }
@@ -361,8 +459,8 @@ function getCanvasPoint(event: PointerEvent) {
   const bounds = canvasRef.value?.getBoundingClientRect();
   if (!bounds) return null;
   return {
-    x: Math.min(CANVAS_WIDTH, Math.max(0, event.clientX - bounds.left)),
-    y: Math.min(CANVAS_HEIGHT, Math.max(0, event.clientY - bounds.top)),
+    x: Math.min(CANVAS_WIDTH, Math.max(0, (event.clientX - bounds.left) / canvasZoom.value)),
+    y: Math.min(CANVAS_HEIGHT, Math.max(0, (event.clientY - bounds.top) / canvasZoom.value)),
   };
 }
 
@@ -416,6 +514,7 @@ function finishConnection(event: PointerEvent, target: AiWorkflowNodeDefinition)
 onBeforeUnmount(() => {
   stopDrag();
   stopConnection();
+  stopCanvasPan();
   nodeResizeObserver?.disconnect();
 });
 </script>
@@ -423,7 +522,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="ai-workflow-editor">
     <div class="ai-workflow-editor__intro">
-      新建流程仅保留输入清洗入口。按需从节点库加入节点，并从节点右侧或底部蓝点拖到目标节点建立流向；服务端会校验循环、入口和回答出口。
+      新建流程仅保留输入清洗入口。按需从节点库加入节点，并从节点右侧或底部蓝点拖到目标节点建立流向；可在画布空白处按住拖动，滚轮缩放查看完整流程。
     </div>
 
     <div v-if="availableNodeTypes.length" class="ai-workflow-editor__palette">
@@ -440,82 +539,102 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="ai-workflow-editor__layout">
-      <div class="ai-workflow-editor__canvas-viewport">
+      <div class="ai-workflow-editor__canvas-area">
+        <div class="ai-workflow-editor__canvas-toolbar">
+          <span>画布视图</span>
+          <span class="ai-workflow-editor__canvas-hint">滚轮缩放 · 按住空白处拖动</span>
+          <div class="ai-workflow-editor__canvas-actions">
+            <el-button size="small" @click="zoomCanvasBy(0.85)">−</el-button>
+            <span>{{ canvasZoomLabel }}</span>
+            <el-button size="small" @click="zoomCanvasBy(1.18)">+</el-button>
+            <el-button size="small" plain @click="fitCanvasView">适应画布</el-button>
+            <el-button size="small" text @click="resetCanvasView">重置</el-button>
+          </div>
+        </div>
         <div
-          ref="canvasRef"
-          class="ai-workflow-editor__canvas"
-          :style="{ width: `${CANVAS_WIDTH}px`, height: `${CANVAS_HEIGHT}px` }"
-          @click.self="clearSelection"
+          ref="canvasViewportRef"
+          class="ai-workflow-editor__canvas-viewport"
+          :style="{ height: `${CANVAS_VIEWPORT_HEIGHT}px` }"
+          @wheel.prevent="handleCanvasWheel"
         >
-          <svg class="ai-workflow-editor__edges" :viewBox="`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`" aria-label="工作流连线">
-            <defs>
-              <marker id="workflow-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                <path d="M 0 0 L 10 5 L 0 10 z" fill="#a0cfff" />
-              </marker>
-            </defs>
-            <g v-for="edge in edgeLayouts" :key="edge.id">
+          <div
+            ref="canvasRef"
+            class="ai-workflow-editor__canvas"
+            :class="{ 'is-panning': Boolean(canvasPanState) }"
+            :style="canvasStyle"
+            @click.self="clearSelection"
+            @pointerdown.self="startCanvasPan"
+          >
+            <svg class="ai-workflow-editor__edges" :viewBox="`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`" aria-label="工作流连线">
+              <defs>
+                <marker id="workflow-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="#a0cfff" />
+                </marker>
+              </defs>
+              <g v-for="edge in edgeLayouts" :key="edge.id">
+                <line
+                  :x1="edge.x1"
+                  :y1="edge.y1"
+                  :x2="edge.x2"
+                  :y2="edge.y2"
+                  :stroke="edgeColor(edge.condition)"
+                  stroke-width="2"
+                  marker-end="url(#workflow-arrow)"
+                />
+                <text :x="edge.labelX" :y="edge.labelY" :fill="edgeColor(edge.condition)" text-anchor="middle">
+                  {{ AI_WORKFLOW_CONDITION_META[edge.condition].label }}
+                </text>
+              </g>
               <line
-                :x1="edge.x1"
-                :y1="edge.y1"
-                :x2="edge.x2"
-                :y2="edge.y2"
-                :stroke="edgeColor(edge.condition)"
-                stroke-width="2"
+                v-if="connectionDrag"
+                :x1="connectionDrag.x1"
+                :y1="connectionDrag.y1"
+                :x2="connectionDrag.x2"
+                :y2="connectionDrag.y2"
+                class="ai-workflow-editor__edge-preview"
                 marker-end="url(#workflow-arrow)"
               />
-              <text :x="edge.labelX" :y="edge.labelY" :fill="edgeColor(edge.condition)" text-anchor="middle">
-                {{ AI_WORKFLOW_CONDITION_META[edge.condition].label }}
-              </text>
-            </g>
-            <line
-              v-if="connectionDrag"
-              :x1="connectionDrag.x1"
-              :y1="connectionDrag.y1"
-              :x2="connectionDrag.x2"
-              :y2="connectionDrag.y2"
-              class="ai-workflow-editor__edge-preview"
-              marker-end="url(#workflow-arrow)"
-            />
-          </svg>
+            </svg>
 
-          <button
-            v-for="node in workflow.nodes"
-            :key="node.id"
-            :ref="(element) => setNodeElement(node.id, element)"
-            class="workflow-node"
-            :class="getNodeClass(node)"
-            :style="{ left: `${node.position?.x ?? 20}px`, top: `${node.position?.y ?? 20}px` }"
-            type="button"
-            @click="selectNode(node.id)"
-            @pointerdown="startDrag($event, node)"
-            @pointerup="finishConnection($event, node)"
-          >
-            <span class="workflow-node__drag">⋮⋮ 拖拽</span>
-            <span class="workflow-node__title">{{ AI_WORKFLOW_STEP_META[node.type].title }}</span>
-            <span class="workflow-node__state">{{ node.enabled ? '启用' : '跳过' }}</span>
-            <span
-              v-if="node.type !== 'preflight'"
-              class="workflow-node__connector workflow-node__connector--input workflow-node__connector--top"
-              aria-hidden="true"
-            />
-            <span
-              v-if="node.type !== 'preflight'"
-              class="workflow-node__connector workflow-node__connector--input workflow-node__connector--left"
-              aria-hidden="true"
-            />
-            <span
-              v-if="node.type !== 'answer'"
-              class="workflow-node__connector workflow-node__connector--output workflow-node__connector--right"
-              title="从右侧拖到目标节点以建立连线"
-              @pointerdown.stop="startConnection($event, node, 'right')"
-            />
-            <span
-              v-if="node.type !== 'answer'"
-              class="workflow-node__connector workflow-node__connector--output workflow-node__connector--bottom"
-              title="从底部拖到目标节点以建立向下连线"
-              @pointerdown.stop="startConnection($event, node, 'bottom')"
-            />
-          </button>
+            <button
+              v-for="node in workflow.nodes"
+              :key="node.id"
+              :ref="(element) => setNodeElement(node.id, element)"
+              class="workflow-node"
+              :class="getNodeClass(node)"
+              :style="{ left: `${node.position?.x ?? 20}px`, top: `${node.position?.y ?? 20}px` }"
+              type="button"
+              @click="selectNode(node.id)"
+              @pointerdown="startDrag($event, node)"
+              @pointerup="finishConnection($event, node)"
+            >
+              <span class="workflow-node__drag">⋮⋮ 拖拽</span>
+              <span class="workflow-node__title">{{ AI_WORKFLOW_STEP_META[node.type].title }}</span>
+              <span class="workflow-node__state">{{ node.enabled ? '启用' : '跳过' }}</span>
+              <span
+                v-if="node.type !== 'preflight'"
+                class="workflow-node__connector workflow-node__connector--input workflow-node__connector--top"
+                aria-hidden="true"
+              />
+              <span
+                v-if="node.type !== 'preflight'"
+                class="workflow-node__connector workflow-node__connector--input workflow-node__connector--left"
+                aria-hidden="true"
+              />
+              <span
+                v-if="node.type !== 'answer'"
+                class="workflow-node__connector workflow-node__connector--output workflow-node__connector--right"
+                title="从右侧拖到目标节点以建立连线"
+                @pointerdown.stop="startConnection($event, node, 'right')"
+              />
+              <span
+                v-if="node.type !== 'answer'"
+                class="workflow-node__connector workflow-node__connector--output workflow-node__connector--bottom"
+                title="从底部拖到目标节点以建立向下连线"
+                @pointerdown.stop="startConnection($event, node, 'bottom')"
+              />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -602,8 +721,14 @@ onBeforeUnmount(() => {
 .ai-workflow-editor__palette :deep(.el-button) { flex: 0 0 auto; }
 .ai-workflow-editor__palette-label, .ai-workflow-editor__connection-title { color: #303133; font-size: 13px; font-weight: 600; }
 .ai-workflow-editor__layout { display: grid; grid-template-columns: 650px minmax(270px, 320px); justify-content: center; gap: 14px; margin-top: 12px; }
-.ai-workflow-editor__canvas-viewport { width: 650px; max-width: 100%; max-height: 760px; overflow: auto; border: 1px solid #d9ecff; border-radius: 8px; background: #f8fbff; }
-.ai-workflow-editor__canvas { position: relative; min-width: 650px; margin: 0 auto; background-image: radial-gradient(#d9ecff 1px, transparent 1px); background-size: 16px 16px; }
+.ai-workflow-editor__canvas-area { width: 650px; max-width: 100%; }
+.ai-workflow-editor__canvas-toolbar { display: flex; align-items: center; gap: 8px; min-height: 30px; margin-bottom: 6px; color: #303133; font-size: 13px; font-weight: 600; }
+.ai-workflow-editor__canvas-hint { color: #909399; font-size: 12px; font-weight: 400; }
+.ai-workflow-editor__canvas-actions { display: flex; align-items: center; gap: 4px; margin-left: auto; color: #606266; font-size: 12px; font-weight: 400; white-space: nowrap; }
+.ai-workflow-editor__canvas-actions :deep(.el-button) { margin: 0; }
+.ai-workflow-editor__canvas-viewport { width: 650px; max-width: 100%; overflow: hidden; border: 1px solid #d9ecff; border-radius: 8px; background: #f8fbff; touch-action: none; }
+.ai-workflow-editor__canvas { position: relative; min-width: 650px; margin: 0; background-image: radial-gradient(#d9ecff 1px, transparent 1px); background-size: 16px 16px; cursor: grab; will-change: transform; }
+.ai-workflow-editor__canvas.is-panning { cursor: grabbing; }
 .ai-workflow-editor__edges { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
 .ai-workflow-editor__edges text { font-size: 11px; font-weight: 600; paint-order: stroke; stroke: #f8fbff; stroke-width: 4px; }
 .ai-workflow-editor__edge-preview { stroke: #409eff; stroke-width: 2; stroke-dasharray: 5 4; }
@@ -637,5 +762,5 @@ onBeforeUnmount(() => {
 .ai-workflow-editor__edge-condition { width: 82px; }
 .ai-workflow-editor__summary { margin-top: 16px; padding-top: 12px; border-top: 1px solid #ebeef5; color: #606266; font-size: 12px; line-height: 1.9; }
 .ai-workflow-editor__error { margin-top: 8px; color: #f56c6c; font-size: 12px; line-height: 1.5; }
-@media (max-width: 860px) { .ai-workflow-editor__layout { grid-template-columns: 1fr; } }
+@media (max-width: 860px) { .ai-workflow-editor__layout { grid-template-columns: 1fr; } .ai-workflow-editor__canvas-toolbar { flex-wrap: wrap; } .ai-workflow-editor__canvas-actions { margin-left: 0; } }
 </style>

@@ -21,7 +21,7 @@ const tableRef = ref<{
 }>();
 
 const columns: TableColumn[] = [
-  { prop: 'name', label: '工作流名称', minWidth: 180 },
+  { prop: 'name', label: '工作流名称', minWidth: 180, slot: true },
   { prop: 'workflowDefinition', label: '流程能力', minWidth: 250, slot: true },
   { prop: 'aiInstruction', label: 'AI 执行说明', minWidth: 260 },
   { prop: 'isEnabled', label: '状态', width: 90, slot: true },
@@ -83,6 +83,7 @@ function getFlowSummary(row: AiWorkflow) {
       :check-able="true"
       :delete-request="(row) => deleteAiWorkflow(row.id)"
       :batch-delete-request="({ ids }) => batchDeleteAiWorkflows(ids)"
+      :show-view="false"
       action-width="150"
       @edit="handleEdit"
     >
@@ -99,6 +100,19 @@ function getFlowSummary(row: AiWorkflow) {
 
       <template #column-workflowDefinition="{ row }">
         {{ getFlowSummary(row) }}
+      </template>
+
+      <template #column-name="{ row }">
+        <Button
+          class="ai-workflow-name-link"
+          perm="AiWorkflow.read"
+          link
+          :auto-icon="false"
+          :confirm="false"
+          @click="handleEdit(row)"
+        >
+          {{ row.name }}
+        </Button>
       </template>
 
       <template #column-isEnabled="{ row }">
@@ -119,3 +133,7 @@ function getFlowSummary(row: AiWorkflow) {
     />
   </PageContainer>
 </template>
+
+<style scoped>
+.ai-workflow-name-link { font-weight: 600; }
+</style>
