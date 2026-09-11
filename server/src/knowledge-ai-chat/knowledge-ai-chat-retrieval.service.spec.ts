@@ -297,6 +297,12 @@ describe('KnowledgeAiChatRetrievalService', () => {
           knowledgeBaseIds: [],
           categoryIds: [],
         }),
+        resolveWorkflowRuntime: jest.fn().mockResolvedValue({
+          workflowId: null,
+          workflowName: null,
+          workflowDefinition: null,
+          aiInstruction: '',
+        }),
       } as unknown as KnowledgeRetrievalConfigsService,
       {} as KnowledgeEmbeddingService,
       {} as KnowledgeVectorService,
@@ -339,6 +345,26 @@ describe('KnowledgeAiChatRetrievalService', () => {
           vectorWeight: 1,
           enableKnowledgeRetrieval: false,
           enableRerank: true,
+        }),
+        resolveWorkflowRuntime: jest.fn().mockResolvedValue({
+          workflowId: null,
+          workflowName: null,
+          workflowDefinition: {
+            version: 2,
+            nodes: [
+              { id: 'preflight', type: 'preflight', enabled: true },
+              { id: 'answer', type: 'answer', enabled: true },
+            ],
+            edges: [
+              {
+                id: 'direct-answer',
+                source: 'preflight',
+                target: 'answer',
+                condition: 'always',
+              },
+            ],
+          },
+          aiInstruction: '',
         }),
       } as unknown as KnowledgeRetrievalConfigsService,
       {} as KnowledgeEmbeddingService,

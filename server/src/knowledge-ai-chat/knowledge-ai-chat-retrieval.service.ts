@@ -13,9 +13,9 @@ import { KnowledgeRetrievalConfig } from '../knowledge-retrieval-configs/entitie
 import { KnowledgeRetrievalConfigsService } from '../knowledge-retrieval-configs/knowledge-retrieval-configs.service';
 import {
   getAiWorkflowDerivedFlags,
-  normalizeAiWorkflowDefinition,
   type AiWorkflowDefinition,
 } from '../knowledge-retrieval-configs/workflow-definition';
+import type { AiWorkflowExecutionRuntime } from '../ai-workflows/ai-workflows.service';
 import {
   KnowledgeRoutingRulesService,
   type KnowledgeRoutingRuleMatch,
@@ -116,7 +116,10 @@ export interface KnowledgeRetrievalConfigSnapshot {
   rrfK: number;
   textWeight: number;
   vectorWeight: number;
+  workflowId: number | null;
+  workflowName: string | null;
   workflowDefinition: AiWorkflowDefinition;
+  aiInstruction: string;
   enableStandardQa: boolean;
   enableColloquial: boolean;
   enableKnowledgeRetrieval: boolean;
@@ -245,10 +248,11 @@ export class KnowledgeAiChatRetrievalService {
 
     const config =
       await this.retrievalConfigsService.findUsableConfig(configId);
-    const configSnapshot = this.toConfigSnapshot(config);
+    const workflowRuntime =
+      await this.retrievalConfigsService.resolveWorkflowRuntime(config);
+    const configSnapshot = this.toConfigSnapshot(config, workflowRuntime);
     const workflowFlags = getAiWorkflowDerivedFlags(
-      config.workflowDefinition,
-      config,
+      workflowRuntime.workflowDefinition,
     );
     if (!workflowFlags.enableKnowledgeRetrieval) {
       return this.emptyResult(originalQuestion, { config: configSnapshot });
@@ -428,12 +432,11 @@ export class KnowledgeAiChatRetrievalService {
 
   private toConfigSnapshot(
     config: KnowledgeRetrievalConfig,
+    workflowRuntime: AiWorkflowExecutionRuntime,
   ): KnowledgeRetrievalConfigSnapshot {
-    const workflowDefinition = normalizeAiWorkflowDefinition(
-      config.workflowDefinition,
-      config,
+    const workflowFlags = getAiWorkflowDerivedFlags(
+      workflowRuntime.workflowDefinition,
     );
-    const workflowFlags = getAiWorkflowDerivedFlags(workflowDefinition);
     return {
       id: config.id,
       name: config.name,
@@ -443,7 +446,10 @@ export class KnowledgeAiChatRetrievalService {
       rrfK: Number(config.rrfK ?? 60),
       textWeight: Number(config.textWeight ?? 0.8),
       vectorWeight: Number(config.vectorWeight ?? 1),
-      workflowDefinition,
+      workflowId: workflowRuntime.workflowId,
+      workflowName: workflowRuntime.workflowName,
+      workflowDefinition: workflowRuntime.workflowDefinition,
+      aiInstruction: workflowRuntime.aiInstruction,
       enableStandardQa: workflowFlags.enableStandardQa,
       enableColloquial: workflowFlags.enableColloquial,
       enableKnowledgeRetrieval: workflowFlags.enableKnowledgeRetrieval,

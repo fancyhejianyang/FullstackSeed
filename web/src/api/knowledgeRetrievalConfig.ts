@@ -64,6 +64,9 @@ export interface KnowledgeRetrievalConfig {
   textWeight: number;
   vectorWeight: number;
   sessionContextTimeoutMinutes: number;
+  workflowId: number | null;
+  workflowName: string | null;
+  /** 存量配置兼容字段；新的流程定义保存在 AI 工作流模块。 */
   workflowDefinition: AiWorkflowDefinition | null;
   enableStandardQa: boolean;
   enableColloquial: boolean;
@@ -102,6 +105,7 @@ export interface KnowledgeRetrievalConfigForm {
   textWeight?: number | null;
   vectorWeight?: number | null;
   sessionContextTimeoutMinutes?: number | null;
+  workflowId?: number | null;
   workflowDefinition?: AiWorkflowDefinition;
   enableStandardQa?: boolean;
   enableColloquial?: boolean;

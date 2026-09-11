@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AiFeatureConfigsModule } from '../ai-feature-configs/ai-feature-configs.module';
+import { AiWorkflowsModule } from '../ai-workflows/ai-workflows.module';
 import { KnowledgeBaseCategory } from '../knowledge-bases/entities/knowledge-base-category.entity';
 import { KnowledgeBase } from '../knowledge-bases/entities/knowledge-base.entity';
 import { KnowledgeRetrievalConfig } from './entities/knowledge-retrieval-config.entity';
@@ -15,6 +16,7 @@ import { KnowledgeRetrievalConfigsService } from './knowledge-retrieval-configs.
       KnowledgeBaseCategory,
     ]),
     AiFeatureConfigsModule,
+    AiWorkflowsModule,
   ],
   controllers: [KnowledgeRetrievalConfigsController],
   providers: [KnowledgeRetrievalConfigsService],

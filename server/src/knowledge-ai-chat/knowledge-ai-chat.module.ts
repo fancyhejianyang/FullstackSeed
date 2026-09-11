@@ -7,7 +7,6 @@ import { KnowledgeAiProvidersModule } from '../knowledge-ai-providers/knowledge-
 import { KnowledgeBaseChunk } from '../knowledge-bases/entities/knowledge-base-chunk.entity';
 import { KnowledgeBaseDocument } from '../knowledge-bases/entities/knowledge-base-document.entity';
 import { KnowledgeBase } from '../knowledge-bases/entities/knowledge-base.entity';
-import { KnowledgeRetrievalConfig } from '../knowledge-retrieval-configs/entities/knowledge-retrieval-config.entity';
 import { KnowledgeRetrievalConfigsModule } from '../knowledge-retrieval-configs/knowledge-retrieval-configs.module';
 import { KnowledgeRoutingRulesModule } from '../knowledge-routing-rules/knowledge-routing-rules.module';
 import { KnowledgeStandardQasModule } from '../knowledge-standard-qas/knowledge-standard-qas.module';
@@ -29,7 +28,6 @@ import { KnowledgeAiChatSession } from './entities/knowledge-ai-chat-session.ent
       KnowledgeBase,
       KnowledgeBaseDocument,
       KnowledgeBaseChunk,
-      KnowledgeRetrievalConfig,
     ]),
     ExternalAppsModule,
     AiFeatureConfigsModule,

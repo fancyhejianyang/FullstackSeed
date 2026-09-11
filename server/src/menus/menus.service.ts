@@ -215,15 +215,24 @@ const SEED_MENUS: SeedMenu[] = [
     isSystem: true,
     parentPath: '/chat-management',
   },
-  {
-    name: 'AI 工作流配置',
-    path: '/chat-management/retrieval-configs',
-    icon: '',
-    sort: 35,
-    permissionCode: 'Menu.read',
-    isSystem: true,
-    parentPath: '/chat-management',
-  },
+    {
+      name: '知识库检索配置',
+      path: '/chat-management/retrieval-configs',
+      icon: '',
+      sort: 35,
+      permissionCode: 'Menu.read',
+      isSystem: true,
+      parentPath: '/chat-management',
+    },
+    {
+      name: 'AI 工作流',
+      path: '/chat-management/workflows',
+      icon: '',
+      sort: 34,
+      permissionCode: 'AiWorkflow.read',
+      isSystem: true,
+      parentPath: '/chat-management',
+    },
   {
     name: '知识库路由规则',
     path: '/chat-management/routing-rules',
@@ -337,8 +346,8 @@ export class MenusService implements OnModuleInit {
 
   /**
    * 启动时仅补齐缺失的内置菜单。
-   * 已存在的菜单由管理员维护，启动过程不写入任何字段，避免重启服务后
-   * 覆盖父子关系、排序、名称、路由或图标等配置。
+   * 已存在的菜单由管理员维护，启动过程不写入任何字段；仅把本次拆分前
+   * 未被人工改名的默认“AI 工作流配置”升级为“知识库检索配置”。
    */
   async onModuleInit() {
     for (const seed of SEED_MENUS) {
@@ -349,7 +358,17 @@ export class MenusService implements OnModuleInit {
           ...(menuSeed.name ? [{ name: menuSeed.name }] : []),
         ],
       });
-      if (exist) continue;
+      if (exist) {
+        if (
+          menuSeed.path === '/chat-management/retrieval-configs' &&
+          exist.name === 'AI 工作流配置'
+        ) {
+          await this.menuRepository.update(exist.id, {
+            name: '知识库检索配置',
+          });
+        }
+        continue;
+      }
 
       const parent = parentPath
         ? await this.menuRepository.findOne({

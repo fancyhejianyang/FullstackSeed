@@ -6,6 +6,10 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Like, Repository } from 'typeorm';
 import { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-configs.service';
+import {
+  AiWorkflowsService,
+  type AiWorkflowExecutionRuntime,
+} from '../ai-workflows/ai-workflows.service';
 import { KnowledgeBaseCategory } from '../knowledge-bases/entities/knowledge-base-category.entity';
 import { KnowledgeBase } from '../knowledge-bases/entities/knowledge-base.entity';
 import {
@@ -30,6 +34,7 @@ export class KnowledgeRetrievalConfigsService {
     @InjectRepository(KnowledgeBaseCategory)
     private readonly categoryRepository: Repository<KnowledgeBaseCategory>,
     private readonly aiFeatureConfigsService: AiFeatureConfigsService,
+    private readonly aiWorkflowsService: AiWorkflowsService,
   ) {}
 
   async findAll(query: QueryKnowledgeRetrievalConfigDto) {
@@ -45,6 +50,7 @@ export class KnowledgeRetrievalConfigsService {
           { ...baseWhere, name: Like(`%${keyword}%`) },
           { ...baseWhere, categoryNames: Like(`%${keyword}%`) },
           { ...baseWhere, knowledgeBaseNames: Like(`%${keyword}%`) },
+          { ...baseWhere, workflowName: Like(`%${keyword}%`) },
           { ...baseWhere, rerankAiFeatureConfigName: Like(`%${keyword}%`) },
           { ...baseWhere, description: Like(`%${keyword}%`) },
         ]
@@ -61,7 +67,7 @@ export class KnowledgeRetrievalConfigsService {
   async findOne(id: number) {
     const config = await this.configRepository.findOne({ where: { id } });
     if (!config) {
-      throw new NotFoundException('AI 工作流配置不存在');
+      throw new NotFoundException('知识库检索配置不存在');
     }
     return config;
   }
@@ -69,8 +75,9 @@ export class KnowledgeRetrievalConfigsService {
   async findUsableConfig(id: number) {
     const config = await this.findOne(id);
     if (!config.isEnabled) {
-      throw new BadRequestException('该 AI 工作流未启用');
+      throw new BadRequestException('该知识库检索配置未启用');
     }
+    await this.resolveWorkflowRuntime(config);
     return config;
   }
 
@@ -86,9 +93,9 @@ export class KnowledgeRetrievalConfigsService {
     const config = await this.findOne(id);
     const payload = await this.toEntityPayload(dto, false);
     Object.assign(config, payload);
-    if (dto.workflowDefinition !== undefined) {
+    if (dto.workflowId === undefined && dto.workflowDefinition !== undefined) {
       this.applyWorkflowDefinition(config, dto.workflowDefinition);
-    } else if (this.hasLegacyWorkflowFlag(dto)) {
+    } else if (dto.workflowId === undefined && this.hasLegacyWorkflowFlag(dto)) {
       this.applyWorkflowDefinition(config, null);
     }
     await this.ensureRerankOptions(config);
@@ -108,7 +115,7 @@ export class KnowledgeRetrievalConfigsService {
       where: { id: In(uniqueIds) },
     });
     if (count !== uniqueIds.length) {
-      throw new NotFoundException('部分 AI 工作流配置不存在');
+      throw new NotFoundException('部分知识库检索配置不存在');
     }
     await this.configRepository.softDelete(uniqueIds);
     return { ids: uniqueIds };
@@ -119,6 +126,8 @@ export class KnowledgeRetrievalConfigsService {
     isCreate: boolean,
   ): Promise<Partial<KnowledgeRetrievalConfig>> {
     const payload: Partial<KnowledgeRetrievalConfig> = {};
+    const usesLinkedWorkflow =
+      dto.workflowId !== undefined && Number(dto.workflowId) > 0;
     if (dto.name !== undefined) payload.name = dto.name.trim();
     if (dto.retrievalMode !== undefined || isCreate) {
       payload.retrievalMode = dto.retrievalMode ?? 'hybrid';
@@ -166,19 +175,44 @@ export class KnowledgeRetrievalConfigsService {
       payload.sessionContextTimeoutMinutes =
         dto.sessionContextTimeoutMinutes ?? 15;
     }
-    if (dto.enableStandardQa !== undefined || isCreate) {
+    if (usesLinkedWorkflow && dto.workflowId) {
+      const workflow = await this.aiWorkflowsService.findUsable(dto.workflowId);
+      const workflowDefinition = normalizeAiWorkflowDefinition(
+        workflow.workflowDefinition,
+        payload,
+      );
+      const flags = getAiWorkflowDerivedFlags(workflowDefinition);
+      payload.workflowId = workflow.id;
+      payload.workflowName = workflow.name;
+      payload.enableStandardQa = flags.enableStandardQa;
+      payload.enableColloquial = flags.enableColloquial;
+      payload.enableKnowledgeRetrieval = flags.enableKnowledgeRetrieval;
+      payload.enableBusinessCommands = flags.enableBusinessCommands;
+      payload.enableRerank = flags.enableRerank;
+      if (!flags.enableRerank) {
+        payload.rerankAiFeatureConfigId = null;
+        payload.rerankAiFeatureConfigName = null;
+      }
+    } else if (dto.workflowId === null) {
+      payload.workflowId = null;
+      payload.workflowName = null;
+    }
+    if (!usesLinkedWorkflow && (dto.enableStandardQa !== undefined || isCreate)) {
       payload.enableStandardQa = dto.enableStandardQa ?? true;
     }
-    if (dto.enableColloquial !== undefined || isCreate) {
+    if (!usesLinkedWorkflow && (dto.enableColloquial !== undefined || isCreate)) {
       payload.enableColloquial = dto.enableColloquial ?? true;
     }
-    if (dto.enableKnowledgeRetrieval !== undefined || isCreate) {
+    if (
+      !usesLinkedWorkflow &&
+      (dto.enableKnowledgeRetrieval !== undefined || isCreate)
+    ) {
       payload.enableKnowledgeRetrieval = dto.enableKnowledgeRetrieval ?? true;
     }
-    if (dto.enableBusinessCommands !== undefined || isCreate) {
+    if (!usesLinkedWorkflow && (dto.enableBusinessCommands !== undefined || isCreate)) {
       payload.enableBusinessCommands = dto.enableBusinessCommands ?? false;
     }
-    if (dto.enableRerank !== undefined || isCreate) {
+    if (!usesLinkedWorkflow && (dto.enableRerank !== undefined || isCreate)) {
       payload.enableRerank = dto.enableRerank ?? true;
       if (!payload.enableRerank) {
         payload.rerankAiFeatureConfigId = null;
@@ -203,10 +237,32 @@ export class KnowledgeRetrievalConfigsService {
     if (dto.description !== undefined) {
       payload.description = this.toNullableText(dto.description);
     }
-    if (isCreate) {
+    if (isCreate && dto.workflowDefinition !== undefined && !dto.workflowId) {
       this.applyWorkflowDefinition(payload, dto.workflowDefinition ?? null);
     }
     return payload;
+  }
+
+  /**
+   * 新配置优先使用独立工作流；旧配置没有关联时继续解释内嵌 JSON，
+   * 以便升级后不重置已存在的检索配置。
+   */
+  async resolveWorkflowRuntime(
+    config: KnowledgeRetrievalConfig,
+  ): Promise<AiWorkflowExecutionRuntime> {
+    if (config.workflowId) {
+      const workflow = await this.aiWorkflowsService.findUsable(config.workflowId);
+      return this.aiWorkflowsService.toExecutionRuntime(workflow, config);
+    }
+    return {
+      workflowId: null,
+      workflowName: null,
+      workflowDefinition: normalizeAiWorkflowDefinition(
+        config.workflowDefinition,
+        config,
+      ),
+      aiInstruction: '',
+    };
   }
 
   private applyWorkflowDefinition(

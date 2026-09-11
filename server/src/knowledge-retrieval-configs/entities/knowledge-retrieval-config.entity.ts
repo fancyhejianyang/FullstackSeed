@@ -42,7 +42,14 @@ export class KnowledgeRetrievalConfig extends BaseEntity {
   @Column({ type: 'int', default: 15 })
   sessionContextTimeoutMinutes: number;
 
-  /** 受约束的 AI 工作流节点定义；旧开关字段继续保留给兼容接口使用。 */
+  /** 已关联的可复用 AI 工作流；为空时继续兼容读取旧工作流定义。 */
+  @Column({ type: 'int', nullable: true })
+  workflowId: number | null;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  workflowName: string | null;
+
+  /** 存量检索配置的内嵌工作流定义，保留用于兼容，不再由新页面编辑。 */
   @Column({ type: 'simple-json', nullable: true })
   workflowDefinition: AiWorkflowDefinition | null;
 

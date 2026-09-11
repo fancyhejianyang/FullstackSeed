@@ -25,11 +25,10 @@ import {
   type KnowledgeRoutedKnowledgeBase,
 } from './knowledge-ai-chat-retrieval.service';
 import type { KnowledgeRoutingRuleMatch } from '../knowledge-routing-rules/knowledge-routing-rules.service';
-import { KnowledgeRetrievalConfig } from '../knowledge-retrieval-configs/entities/knowledge-retrieval-config.entity';
+import { KnowledgeRetrievalConfigsService } from '../knowledge-retrieval-configs/knowledge-retrieval-configs.service';
 import {
   getAiWorkflowDerivedFlags,
   getAiWorkflowExecutionPlan,
-  normalizeAiWorkflowDefinition,
 } from '../knowledge-retrieval-configs/workflow-definition';
 import { AI_CORE_CHAT_COMMAND_KEYS } from '../ai-command-definitions/ai-command-definitions.constants';
 import type { ProductSkuChatContext } from '../product-catalog/product-catalog.service';
@@ -123,8 +122,7 @@ export class KnowledgeAiChatService {
     private readonly sessionRepository: Repository<KnowledgeAiChatSession>,
     @InjectRepository(KnowledgeAiChatMessage)
     private readonly messageRepository: Repository<KnowledgeAiChatMessage>,
-    @InjectRepository(KnowledgeRetrievalConfig)
-    private readonly retrievalConfigRepository: Repository<KnowledgeRetrievalConfig>,
+    private readonly retrievalConfigsService: KnowledgeRetrievalConfigsService,
     private readonly featureConfigsService: AiFeatureConfigsService,
     private readonly providersService: KnowledgeAiProvidersService,
     private readonly commandService: KnowledgeAiChatCommandService,
@@ -516,7 +514,11 @@ export class KnowledgeAiChatService {
     const messages: KnowledgeAiChatMessagePayload[] = [
       {
         role: 'system',
-        content: this.buildSystemMessageContent(dto.systemPrompt, config),
+        content: this.buildSystemMessageContent(
+          dto.systemPrompt,
+          config,
+          retrieval?.config?.aiInstruction,
+        ),
       },
     ];
     for (const item of history) {
@@ -854,7 +856,11 @@ export class KnowledgeAiChatService {
         providerId: target.providerId,
         providerName: target.providerName,
         model: result.model,
-        systemPrompt: this.buildSystemMessageContent(dto.systemPrompt, config),
+        systemPrompt: this.buildSystemMessageContent(
+          dto.systemPrompt,
+          config,
+          retrieval?.config?.aiInstruction,
+        ),
         question: dto.question.trim(),
         answer: result.answer || null,
         hitKnowledgeBaseNames,
@@ -994,15 +1000,12 @@ export class KnowledgeAiChatService {
     configId: number | null,
   ): Promise<KnowledgeRetrievalConfigSnapshot | null> {
     if (!configId) return null;
-    const config = await this.retrievalConfigRepository.findOne({
-      where: { id: configId },
-    });
-    if (!config) return null;
-    const workflowDefinition = normalizeAiWorkflowDefinition(
-      config.workflowDefinition,
-      config,
+    const config = await this.retrievalConfigsService.findOne(configId);
+    const workflowRuntime =
+      await this.retrievalConfigsService.resolveWorkflowRuntime(config);
+    const workflowFlags = getAiWorkflowDerivedFlags(
+      workflowRuntime.workflowDefinition,
     );
-    const workflowFlags = getAiWorkflowDerivedFlags(workflowDefinition);
     return {
       id: config.id,
       name: config.name,
@@ -1012,7 +1015,10 @@ export class KnowledgeAiChatService {
       rrfK: Number(config.rrfK ?? 60),
       textWeight: Number(config.textWeight ?? 0.8),
       vectorWeight: Number(config.vectorWeight ?? 1),
-      workflowDefinition,
+      workflowId: workflowRuntime.workflowId,
+      workflowName: workflowRuntime.workflowName,
+      workflowDefinition: workflowRuntime.workflowDefinition,
+      aiInstruction: workflowRuntime.aiInstruction,
       enableStandardQa: workflowFlags.enableStandardQa,
       enableColloquial: workflowFlags.enableColloquial,
       enableKnowledgeRetrieval: workflowFlags.enableKnowledgeRetrieval,
@@ -1143,11 +1149,15 @@ export class KnowledgeAiChatService {
   private buildSystemMessageContent(
     overridePrompt?: string,
     config?: AiFeatureConfig | null,
+    workflowInstruction?: string | null,
   ) {
     const parts = [
       overridePrompt?.trim() ||
         config?.systemPrompt?.trim() ||
         '你是通用 AI 助手。请根据用户问题给出简洁、准确的中文回答。',
+      workflowInstruction?.trim()
+        ? `【AI 工作流执行说明】\n${workflowInstruction.trim()}`
+        : '',
       this.buildResponseFormatInstruction(config?.responseFormat),
     ].filter(Boolean);
     return parts.join('\n\n');

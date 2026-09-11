@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-09-11 拆分 AI 工作流与知识库检索配置
+- 新增：
+  - `server/src/ai-workflows/`、`web/src/views/ai-workflow/`、`web/src/api/aiWorkflow.ts`（独立 AI 工作流 CRUD、画布编辑与 AI 执行说明文本）。
+  - `server/src/migrations/1788893200000-CreateAiWorkflows.ts`（新增 `ai_workflows` 表和检索配置工作流关联字段）。
+- 修改：
+  - `server/src/knowledge-retrieval-configs/`、`web/src/views/knowledge-retrieval-config/`（检索配置改为选择单个 AI 工作流，画布不再混入检索参数；列表与弹窗统一更名为“知识库检索配置”）。
+  - `server/src/knowledge-ai-chat/`、`web/src/api/knowledgeAiChat.ts`（运行时优先读取关联工作流，冻结工作流名称与说明到检索轨迹，并将人工维护的 AI 执行说明提供给回答模型）。
+  - `server/src/users/users.service.ts`、`server/src/menus/menus.service.ts`、`web/src/router/index.ts`（新增 AI 工作流权限、菜单和页面路由；仅升级未人工改名的旧默认菜单）。
+  - 相关工作流与聊天服务测试、`CHANGELOG.md`。
+- 删除：无。
+- 说明：现有检索配置未关联工作流时继续解释其原有 `workflowDefinition`，不会自动重置或覆盖数据库中的菜单、知识库和既有流程。关联中的工作流不能删除或停用，防止运行时流程失效。
+
 ### 2026-09-11 修正 AI 工作流端点定位并支持向下连线
 - 新增：无。
 - 修改：

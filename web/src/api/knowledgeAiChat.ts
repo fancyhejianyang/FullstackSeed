@@ -50,7 +50,10 @@ export interface KnowledgeRetrievalConfigSnapshot {
   rrfK: number;
   textWeight: number;
   vectorWeight: number;
+  workflowId: number | null;
+  workflowName: string | null;
   workflowDefinition: AiWorkflowDefinition;
+  aiInstruction: string;
   enableStandardQa: boolean;
   enableColloquial: boolean;
   enableKnowledgeRetrieval: boolean;

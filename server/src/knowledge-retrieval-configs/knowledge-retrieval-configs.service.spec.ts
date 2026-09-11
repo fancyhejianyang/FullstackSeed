@@ -1,5 +1,6 @@
 import { Repository } from 'typeorm';
 import { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-configs.service';
+import { AiWorkflowsService } from '../ai-workflows/ai-workflows.service';
 import { KnowledgeBaseCategory } from '../knowledge-bases/entities/knowledge-base-category.entity';
 import { KnowledgeBase } from '../knowledge-bases/entities/knowledge-base.entity';
 import { KnowledgeRetrievalConfig } from './entities/knowledge-retrieval-config.entity';
@@ -29,6 +30,7 @@ describe('KnowledgeRetrievalConfigsService', () => {
           name: '默认 LLM 重排配置',
         }),
       } as unknown as AiFeatureConfigsService,
+      {} as AiWorkflowsService,
     );
 
     const result = await service.create({ name: '默认检索配置' });
@@ -38,6 +40,53 @@ describe('KnowledgeRetrievalConfigsService', () => {
     expect(result.rerankAiFeatureConfigId).toBe(3);
     expect(result.rerankAiFeatureConfigName).toBe('默认 LLM 重排配置');
     expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the selected standalone workflow instead of replacing it with legacy flags', async () => {
+    const create = jest.fn(
+      (payload: Partial<KnowledgeRetrievalConfig>) => payload,
+    );
+    const service = new KnowledgeRetrievalConfigsService(
+      { create, save: jest.fn((payload) => Promise.resolve(payload)) } as unknown as Repository<KnowledgeRetrievalConfig>,
+      {} as Repository<KnowledgeBase>,
+      {} as Repository<KnowledgeBaseCategory>,
+      {} as AiFeatureConfigsService,
+      {
+        findUsable: jest.fn().mockResolvedValue({
+          id: 8,
+          name: '业务数据优先',
+          workflowDefinition: {
+            version: 2,
+            nodes: [
+              { id: 'preflight', type: 'preflight', enabled: true },
+              { id: 'answer', type: 'answer', enabled: true },
+            ],
+            edges: [
+              {
+                id: 'direct-answer',
+                source: 'preflight',
+                target: 'answer',
+                condition: 'always',
+              },
+            ],
+          },
+        }),
+      } as unknown as AiWorkflowsService,
+    );
+
+    const result = await service.create({
+      name: '业务客服检索配置',
+      workflowId: 8,
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        workflowId: 8,
+        workflowName: '业务数据优先',
+        enableKnowledgeRetrieval: false,
+        enableRerank: false,
+      }),
+    );
   });
 
   it('normalizes the workflow and prevents reranking without knowledge retrieval', () => {

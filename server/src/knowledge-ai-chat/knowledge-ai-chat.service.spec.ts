@@ -1,7 +1,7 @@
 import { Repository } from 'typeorm';
 import { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-configs.service';
 import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
-import { KnowledgeRetrievalConfig } from '../knowledge-retrieval-configs/entities/knowledge-retrieval-config.entity';
+import { KnowledgeRetrievalConfigsService } from '../knowledge-retrieval-configs/knowledge-retrieval-configs.service';
 import { KnowledgeAiChatMessage } from './entities/knowledge-ai-chat-message.entity';
 import { KnowledgeAiChatSession } from './entities/knowledge-ai-chat-session.entity';
 import { KnowledgeAiChatCommandService } from './knowledge-ai-chat-command.service';
@@ -26,13 +26,18 @@ interface KnowledgeAiChatServiceInternals {
     retrieval: { knowledgeBaseNames: string[]; context?: string },
   ) => string;
   normalizeUserVisibleThinkingSummary: (value?: string | null) => string;
+  buildSystemMessageContent: (
+    overridePrompt?: string,
+    config?: { systemPrompt?: string | null; responseFormat?: string | null } | null,
+    workflowInstruction?: string | null,
+  ) => string;
 }
 
 describe('KnowledgeAiChatService', () => {
   const service = new KnowledgeAiChatService(
     {} as Repository<KnowledgeAiChatSession>,
     {} as Repository<KnowledgeAiChatMessage>,
-    {} as Repository<KnowledgeRetrievalConfig>,
+    {} as KnowledgeRetrievalConfigsService,
     {} as AiFeatureConfigsService,
     {} as KnowledgeAiProvidersService,
     {} as KnowledgeAiChatCommandService,
@@ -68,6 +73,17 @@ describe('KnowledgeAiChatService', () => {
     ).toBe('已核对问题中的订单信息。\n已结合命中资料组织回答。');
   });
 
+  it('adds the selected workflow instruction to the answer-model system message', () => {
+    const message = internals.buildSystemMessageContent(
+      undefined,
+      null,
+      '仅依据业务数据和知识库资料回答；资料不足时明确说明。',
+    );
+
+    expect(message).toContain('【AI 工作流执行说明】');
+    expect(message).toContain('仅依据业务数据和知识库资料回答');
+  });
+
   it('checks standard QA again with the calibrated question after the original question misses', async () => {
     const calls: string[] = [];
     const commandService = {
@@ -94,7 +110,7 @@ describe('KnowledgeAiChatService', () => {
     const pipelineService = new KnowledgeAiChatService(
       {} as Repository<KnowledgeAiChatSession>,
       {} as Repository<KnowledgeAiChatMessage>,
-      {} as Repository<KnowledgeRetrievalConfig>,
+      {} as KnowledgeRetrievalConfigsService,
       {} as AiFeatureConfigsService,
       {} as KnowledgeAiProvidersService,
       commandService,
@@ -153,7 +169,7 @@ describe('KnowledgeAiChatService', () => {
     const pipelineService = new KnowledgeAiChatService(
       {} as Repository<KnowledgeAiChatSession>,
       {} as Repository<KnowledgeAiChatMessage>,
-      {} as Repository<KnowledgeRetrievalConfig>,
+      {} as KnowledgeRetrievalConfigsService,
       {} as AiFeatureConfigsService,
       {} as KnowledgeAiProvidersService,
       commandService,

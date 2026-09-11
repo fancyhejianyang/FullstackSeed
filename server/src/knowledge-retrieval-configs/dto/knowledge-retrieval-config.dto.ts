@@ -84,6 +84,13 @@ export class CreateKnowledgeRetrievalConfigDto {
   @IsOptional()
   sessionContextTimeoutMinutes?: number;
 
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  workflowId?: number | null;
+
+  /** 兼容存量接口；新配置应关联独立的 AI 工作流。 */
   @IsObject()
   @IsOptional()
   workflowDefinition?: AiWorkflowDefinition;

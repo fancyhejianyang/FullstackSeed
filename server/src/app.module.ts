@@ -34,6 +34,7 @@ import { KnowledgeColloquialTermsModule } from './knowledge-colloquial-terms/kno
 import { AiCommandDefinitionsModule } from './ai-command-definitions/ai-command-definitions.module';
 import { ApprovalRequestsModule } from './approval-requests/approval-requests.module';
 import { ProductCatalogModule } from './product-catalog/product-catalog.module';
+import { AiWorkflowsModule } from './ai-workflows/ai-workflows.module';
 
 @Module({
   imports: [
@@ -124,6 +125,7 @@ import { ProductCatalogModule } from './product-catalog/product-catalog.module';
     UploadsModule,
     KnowledgeAiProvidersModule,
     AiFeatureConfigsModule,
+    AiWorkflowsModule,
     KnowledgeRetrievalConfigsModule,
     KnowledgeRoutingRulesModule,
     KnowledgeStandardQasModule,

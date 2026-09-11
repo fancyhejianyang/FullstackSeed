@@ -27,13 +27,13 @@ const retrievalModeOptions = [
 ];
 
 const columns: TableColumn[] = [
-  { prop: 'name', label: '工作流名称', minWidth: 180 },
+  { prop: 'name', label: '检索配置名称', minWidth: 180 },
+  { prop: 'workflowName', label: '关联工作流', minWidth: 160, slot: true },
   { prop: 'retrievalMode', label: '检索模式', width: 120, slot: true },
   { prop: 'knowledgeBaseNames', label: '知识库范围', minWidth: 220, slot: true },
   { prop: 'topK', label: '召回上限', width: 100 },
   { prop: 'minScore', label: '最低分', width: 100 },
   { prop: 'sessionContextTimeoutMinutes', label: '上下文有效期', width: 130, slot: true },
-  { prop: 'enableRerank', label: '重排', width: 90, slot: true },
   { prop: 'isEnabled', label: '状态', width: 90, slot: true },
   { prop: 'updatedAt', label: '更新时间', width: 180, slot: true },
 ];
@@ -55,7 +55,7 @@ const searchFields: FormField[] = [
       { label: '停用', value: false },
     ],
   },
-  { prop: 'keyword', label: '关键词', type: 'input', placeholder: '工作流/知识库/描述' },
+  { prop: 'keyword', label: '关键词', type: 'input', placeholder: '检索配置/工作流/知识库/描述' },
 ];
 
 const editVisible = ref(false);
@@ -97,7 +97,7 @@ function getScopeText(row: KnowledgeRetrievalConfig) {
 </script>
 
 <template>
-  <PageContainer title="AI 工作流配置">
+  <PageContainer title="知识库检索配置">
     <Table
       ref="tableRef"
       :columns="columns"
@@ -111,7 +111,7 @@ function getScopeText(row: KnowledgeRetrievalConfig) {
       @edit="handleEdit"
     >
       <template #toolbar>
-        <Button type="primary" icon="Plus" @click="openCreate">新增工作流</Button>
+        <Button type="primary" icon="Plus" @click="openCreate">新增检索配置</Button>
         <Button
           icon="Delete"
           type="danger"
@@ -126,14 +126,12 @@ function getScopeText(row: KnowledgeRetrievalConfig) {
         {{ getModeLabel(row.retrievalMode) }}
       </template>
 
-      <template #column-knowledgeBaseNames="{ row }">
-        {{ getScopeText(row) }}
+      <template #column-workflowName="{ row }">
+        {{ row.workflowName || '旧版内嵌流程（待迁移）' }}
       </template>
 
-      <template #column-enableRerank="{ row }">
-        <el-tag :type="row.enableRerank ? 'success' : 'info'">
-          {{ row.enableRerank ? '启用' : '关闭' }}
-        </el-tag>
+      <template #column-knowledgeBaseNames="{ row }">
+        {{ getScopeText(row) }}
       </template>
 
       <template #column-sessionContextTimeoutMinutes="{ row }">

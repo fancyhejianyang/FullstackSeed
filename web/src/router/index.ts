@@ -159,10 +159,16 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'AI 指令集', permission: 'AiCommandDefinition.read' },
       },
       {
+        path: 'chat-management/workflows',
+        name: 'chat-management-workflows',
+        component: () => import('@/views/ai-workflow/Index.vue'),
+        meta: { title: 'AI 工作流', permission: 'AiWorkflow.read' },
+      },
+      {
         path: 'chat-management/retrieval-configs',
         name: 'chat-management-retrieval-configs',
         component: () => import('@/views/knowledge-retrieval-config/Index.vue'),
-        meta: { title: 'AI 工作流配置', permission: 'Menu.read' },
+        meta: { title: '知识库检索配置', permission: 'Menu.read' },
       },
       {
         path: 'chat-management/routing-rules',
