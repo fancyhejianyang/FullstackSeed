@@ -12,6 +12,11 @@ import {
 import { KnowledgeRetrievalConfig } from '../knowledge-retrieval-configs/entities/knowledge-retrieval-config.entity';
 import { KnowledgeRetrievalConfigsService } from '../knowledge-retrieval-configs/knowledge-retrieval-configs.service';
 import {
+  getAiWorkflowDerivedFlags,
+  normalizeAiWorkflowDefinition,
+  type AiWorkflowDefinition,
+} from '../knowledge-retrieval-configs/workflow-definition';
+import {
   KnowledgeRoutingRulesService,
   type KnowledgeRoutingRuleMatch,
 } from '../knowledge-routing-rules/knowledge-routing-rules.service';
@@ -111,6 +116,7 @@ export interface KnowledgeRetrievalConfigSnapshot {
   rrfK: number;
   textWeight: number;
   vectorWeight: number;
+  workflowDefinition: AiWorkflowDefinition;
   enableStandardQa: boolean;
   enableColloquial: boolean;
   enableKnowledgeRetrieval: boolean;
@@ -240,7 +246,11 @@ export class KnowledgeAiChatRetrievalService {
     const config =
       await this.retrievalConfigsService.findUsableConfig(configId);
     const configSnapshot = this.toConfigSnapshot(config);
-    if (config.enableKnowledgeRetrieval === false) {
+    const workflowFlags = getAiWorkflowDerivedFlags(
+      config.workflowDefinition,
+      config,
+    );
+    if (!workflowFlags.enableKnowledgeRetrieval) {
       return this.emptyResult(originalQuestion, { config: configSnapshot });
     }
     const scopeBases = await this.resolveKnowledgeBases(
@@ -321,7 +331,10 @@ export class KnowledgeAiChatRetrievalService {
       ),
       plan.query,
     );
-    const reranked = await this.rerankCandidates(plan.query, fused, config);
+    const reranked = await this.rerankCandidates(plan.query, fused, {
+      ...config,
+      enableRerank: workflowFlags.enableRerank,
+    });
     const minScore = this.clamp(Number(config.minScore ?? 0.35));
     const scored = reranked.candidates
       .filter((candidate) => candidate.score >= minScore)
@@ -416,6 +429,11 @@ export class KnowledgeAiChatRetrievalService {
   private toConfigSnapshot(
     config: KnowledgeRetrievalConfig,
   ): KnowledgeRetrievalConfigSnapshot {
+    const workflowDefinition = normalizeAiWorkflowDefinition(
+      config.workflowDefinition,
+      config,
+    );
+    const workflowFlags = getAiWorkflowDerivedFlags(workflowDefinition);
     return {
       id: config.id,
       name: config.name,
@@ -425,12 +443,12 @@ export class KnowledgeAiChatRetrievalService {
       rrfK: Number(config.rrfK ?? 60),
       textWeight: Number(config.textWeight ?? 0.8),
       vectorWeight: Number(config.vectorWeight ?? 1),
-      enableStandardQa: config.enableStandardQa !== false,
-      enableColloquial: config.enableColloquial !== false,
-      enableKnowledgeRetrieval: config.enableKnowledgeRetrieval !== false,
-      enableBusinessCommands: Boolean(config.enableBusinessCommands),
-      enableRerank:
-        config.enableKnowledgeRetrieval !== false && Boolean(config.enableRerank),
+      workflowDefinition,
+      enableStandardQa: workflowFlags.enableStandardQa,
+      enableColloquial: workflowFlags.enableColloquial,
+      enableKnowledgeRetrieval: workflowFlags.enableKnowledgeRetrieval,
+      enableBusinessCommands: workflowFlags.enableBusinessCommands,
+      enableRerank: workflowFlags.enableRerank,
       rerankAiFeatureConfigName: config.rerankAiFeatureConfigName ?? null,
     };
   }

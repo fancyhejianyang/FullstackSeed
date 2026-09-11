@@ -1,4 +1,5 @@
 import request from '@/utils/request';
+import type { AiWorkflowDefinition } from './knowledgeRetrievalConfig';
 
 export interface KnowledgeAiChatSession {
   id: number;
@@ -49,6 +50,7 @@ export interface KnowledgeRetrievalConfigSnapshot {
   rrfK: number;
   textWeight: number;
   vectorWeight: number;
+  workflowDefinition: AiWorkflowDefinition;
   enableStandardQa: boolean;
   enableColloquial: boolean;
   enableKnowledgeRetrieval: boolean;

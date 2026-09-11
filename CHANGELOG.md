@@ -1,5 +1,18 @@
 # CHANGELOG
 
+### 2026-09-11 新增受约束的可视化 AI 工作流编排
+- 新增：
+  - `server/src/knowledge-retrieval-configs/workflow-definition.ts`、`web/src/utils/aiWorkflow.ts`（工作流节点契约、旧开关兼容归一化及派生执行标志）
+  - `web/src/components/AiWorkflowEditor.vue`（输入清洗、两次标准问答、口语校准、业务数据指令、知识库检索、LLM 重排、回答审计的可视化流程与命中/未命中分支）
+  - `server/src/migrations/1788889600000-AddAiWorkflowDefinition.ts`（为工作流配置新增持久化定义字段）
+- 修改：
+  - `server/src/knowledge-retrieval-configs/`（保存时校验并归一化工作流定义，同时同步既有开关字段；关闭知识库检索时自动关闭并清除重排配置）
+  - `server/src/knowledge-ai-chat/`（按原问题标准问答、校准后标准问答、口语校准、业务指令、检索和重排等独立节点执行，并在问答轨迹快照中冻结工作流定义）
+  - `web/src/views/knowledge-retrieval-config/Edit.vue`、相关 API 类型（以可视化工作流编辑器替代分散开关；检索和重排字段随节点启停动态显示）
+  - `CHANGELOG.md`（记录本次调整）
+- 删除：无。
+- 说明：本期是受约束工作流，不开放任意节点连线、脚本、SQL 或 HTTP 调用；命中/未命中分支和权限校验由服务端固定控制。旧 API、`retrievalConfigId` 与既有开关继续可用，存量配置会按原开关自动生成等价的默认流程。
+
 ### 2026-09-11 将知识库检索配置升级为 AI 工作流配置
 - 新增：
   - `server/src/migrations/1788886000000-AddAiWorkflowSteps.ts`（为既有配置增加标准问答、口语校准、知识库检索、业务数据指令四个开关；仅把未自定义的旧系统菜单重命名为“AI 工作流配置”）

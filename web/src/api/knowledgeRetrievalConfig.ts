@@ -2,6 +2,27 @@ import request from '@/utils/request';
 
 export type KnowledgeRetrievalMode = 'fullText' | 'vector' | 'hybrid';
 
+export type AiWorkflowStepType =
+  | 'preflight'
+  | 'standardQa'
+  | 'colloquial'
+  | 'calibratedStandardQa'
+  | 'businessCommand'
+  | 'knowledgeRetrieval'
+  | 'rerank'
+  | 'answer';
+
+export interface AiWorkflowStepDefinition {
+  id: AiWorkflowStepType;
+  type: AiWorkflowStepType;
+  enabled: boolean;
+}
+
+export interface AiWorkflowDefinition {
+  version: 1;
+  steps: AiWorkflowStepDefinition[];
+}
+
 export interface KnowledgeRetrievalConfig {
   id: number;
   name: string;
@@ -16,6 +37,7 @@ export interface KnowledgeRetrievalConfig {
   textWeight: number;
   vectorWeight: number;
   sessionContextTimeoutMinutes: number;
+  workflowDefinition: AiWorkflowDefinition | null;
   enableStandardQa: boolean;
   enableColloquial: boolean;
   enableKnowledgeRetrieval: boolean;
@@ -53,6 +75,7 @@ export interface KnowledgeRetrievalConfigForm {
   textWeight?: number | null;
   vectorWeight?: number | null;
   sessionContextTimeoutMinutes?: number | null;
+  workflowDefinition?: AiWorkflowDefinition;
   enableStandardQa?: boolean;
   enableColloquial?: boolean;
   enableKnowledgeRetrieval?: boolean;

@@ -26,6 +26,11 @@ import {
 } from './knowledge-ai-chat-retrieval.service';
 import type { KnowledgeRoutingRuleMatch } from '../knowledge-routing-rules/knowledge-routing-rules.service';
 import { KnowledgeRetrievalConfig } from '../knowledge-retrieval-configs/entities/knowledge-retrieval-config.entity';
+import {
+  getAiWorkflowDerivedFlags,
+  isAiWorkflowStepEnabled,
+  normalizeAiWorkflowDefinition,
+} from '../knowledge-retrieval-configs/workflow-definition';
 import { AI_CORE_CHAT_COMMAND_KEYS } from '../ai-command-definitions/ai-command-definitions.constants';
 import type { ProductSkuChatContext } from '../product-catalog/product-catalog.service';
 import {
@@ -87,8 +92,9 @@ interface KnowledgeStandardQaState {
 }
 
 interface KnowledgeAiWorkflowSteps {
-  enableStandardQa: boolean;
+  enableOriginalStandardQa: boolean;
   enableColloquial: boolean;
+  enableCalibratedStandardQa: boolean;
   enableKnowledgeRetrieval: boolean;
   enableBusinessCommands: boolean;
 }
@@ -174,8 +180,9 @@ export class KnowledgeAiChatService {
     const standardQa = await this.buildStandardQaState({
       question: dto.question,
       retrievalConfigId,
-      enableStandardQa: workflow.enableStandardQa,
+      enableOriginalStandardQa: workflow.enableOriginalStandardQa,
       enableColloquial: workflow.enableColloquial,
+      enableCalibratedStandardQa: workflow.enableCalibratedStandardQa,
     });
     const businessDataAuthorization = this.resolveBusinessDataAuthorization(
       configuredTrace,
@@ -266,8 +273,9 @@ export class KnowledgeAiChatService {
       question: dto.question,
       retrievalConfigId,
       commandOptions,
-      enableStandardQa: workflow.enableStandardQa,
+      enableOriginalStandardQa: workflow.enableOriginalStandardQa,
       enableColloquial: workflow.enableColloquial,
+      enableCalibratedStandardQa: workflow.enableCalibratedStandardQa,
     });
     writer.writeEvent('standard-qa', {
       matched: Boolean(standardQa.answer),
@@ -580,13 +588,16 @@ export class KnowledgeAiChatService {
     question: string;
     retrievalConfigId?: number | null;
     commandOptions?: KnowledgeAiChatCommandOptions;
-    enableStandardQa?: boolean;
+    enableOriginalStandardQa?: boolean;
     enableColloquial?: boolean;
+    enableCalibratedStandardQa?: boolean;
   }): Promise<KnowledgeStandardQaState> {
     const inputQuestion = params.question.trim();
-    const enableStandardQa = params.enableStandardQa !== false;
+    const enableOriginalStandardQa = params.enableOriginalStandardQa !== false;
     const enableColloquial = params.enableColloquial !== false;
-    const directMatch = enableStandardQa
+    const enableCalibratedStandardQa =
+      params.enableCalibratedStandardQa !== false;
+    const directMatch = enableOriginalStandardQa
       ? await this.commandService.searchStandardQa(
           {
             retrievalConfigId: params.retrievalConfigId,
@@ -629,9 +640,9 @@ export class KnowledgeAiChatService {
     }
     const originalQa = this.buildQaTraceStage(
       params.question,
-      enableStandardQa,
+      enableOriginalStandardQa,
       null,
-      enableStandardQa
+      enableOriginalStandardQa
         ? null
         : '当前 AI 工作流已关闭标准问答，未匹配原问题。',
     );
@@ -643,7 +654,7 @@ export class KnowledgeAiChatService {
         rewrittenQuestion: inputQuestion,
         semanticContext: '',
         colloquialTermMatches: [],
-        commandIds: enableStandardQa
+        commandIds: enableOriginalStandardQa
           ? [KNOWLEDGE_AI_CHAT_COMMANDS.searchStandardQa]
           : [],
         originalQa,
@@ -660,7 +671,7 @@ export class KnowledgeAiChatService {
           inputQuestion,
           false,
           null,
-          enableStandardQa
+          enableCalibratedStandardQa
             ? '口语化校准已关闭，未再次匹配标准问答。'
             : '当前 AI 工作流已关闭标准问答，未匹配校准后的问题。',
         ),
@@ -673,7 +684,7 @@ export class KnowledgeAiChatService {
     const hasRewrittenQuestion =
       this.normalizeQuestion(rewrite.rewrittenQuestion) !==
       this.normalizeQuestion(params.question);
-    const rewrittenMatch = enableStandardQa && hasRewrittenQuestion
+    const rewrittenMatch = enableCalibratedStandardQa && hasRewrittenQuestion
       ? await this.commandService.searchStandardQa({
           retrievalConfigId: params.retrievalConfigId,
           question: rewrite.rewrittenQuestion,
@@ -696,11 +707,11 @@ export class KnowledgeAiChatService {
       semanticContext: rewrite.semanticContext,
       colloquialTermMatches: rewrite.matches,
       commandIds: [
-        ...(enableStandardQa
+        ...(enableOriginalStandardQa
           ? [KNOWLEDGE_AI_CHAT_COMMANDS.searchStandardQa]
           : []),
         KNOWLEDGE_AI_CHAT_COMMANDS.rewriteColloquialQuestion,
-        ...(enableStandardQa && hasRewrittenQuestion
+        ...(enableCalibratedStandardQa && hasRewrittenQuestion
           ? [KNOWLEDGE_AI_CHAT_COMMANDS.searchStandardQa]
           : []),
       ],
@@ -708,9 +719,9 @@ export class KnowledgeAiChatService {
       colloquial,
       calibratedQa: this.buildQaTraceStage(
         rewrite.rewrittenQuestion,
-        enableStandardQa && hasRewrittenQuestion,
+        enableCalibratedStandardQa && hasRewrittenQuestion,
         rewrittenMatch,
-        !enableStandardQa
+        !enableCalibratedStandardQa
           ? '当前 AI 工作流已关闭标准问答，未匹配校准后的问题。'
           : hasRewrittenQuestion
             ? null
@@ -987,6 +998,11 @@ export class KnowledgeAiChatService {
       where: { id: configId },
     });
     if (!config) return null;
+    const workflowDefinition = normalizeAiWorkflowDefinition(
+      config.workflowDefinition,
+      config,
+    );
+    const workflowFlags = getAiWorkflowDerivedFlags(workflowDefinition);
     return {
       id: config.id,
       name: config.name,
@@ -996,11 +1012,12 @@ export class KnowledgeAiChatService {
       rrfK: Number(config.rrfK ?? 60),
       textWeight: Number(config.textWeight ?? 0.8),
       vectorWeight: Number(config.vectorWeight ?? 1),
-      enableStandardQa: config.enableStandardQa !== false,
-      enableColloquial: config.enableColloquial !== false,
-      enableKnowledgeRetrieval: config.enableKnowledgeRetrieval !== false,
-      enableBusinessCommands: Boolean(config.enableBusinessCommands),
-      enableRerank: Boolean(config.enableRerank),
+      workflowDefinition,
+      enableStandardQa: workflowFlags.enableStandardQa,
+      enableColloquial: workflowFlags.enableColloquial,
+      enableKnowledgeRetrieval: workflowFlags.enableKnowledgeRetrieval,
+      enableBusinessCommands: workflowFlags.enableBusinessCommands,
+      enableRerank: workflowFlags.enableRerank,
       rerankAiFeatureConfigName: config.rerankAiFeatureConfigName ?? null,
     };
   }
@@ -1019,11 +1036,33 @@ export class KnowledgeAiChatService {
   private resolveWorkflowSteps(
     config: KnowledgeRetrievalConfigSnapshot | null,
   ): KnowledgeAiWorkflowSteps {
+    const workflowDefinition = config?.workflowDefinition;
     return {
-      enableStandardQa: config?.enableStandardQa !== false,
-      enableColloquial: config?.enableColloquial !== false,
-      enableKnowledgeRetrieval: config?.enableKnowledgeRetrieval === true,
-      enableBusinessCommands: config?.enableBusinessCommands === true,
+      enableOriginalStandardQa: isAiWorkflowStepEnabled(
+        workflowDefinition,
+        'standardQa',
+        config?.enableStandardQa !== false,
+      ),
+      enableColloquial: isAiWorkflowStepEnabled(
+        workflowDefinition,
+        'colloquial',
+        config?.enableColloquial !== false,
+      ),
+      enableCalibratedStandardQa: isAiWorkflowStepEnabled(
+        workflowDefinition,
+        'calibratedStandardQa',
+        config?.enableStandardQa !== false,
+      ),
+      enableKnowledgeRetrieval: isAiWorkflowStepEnabled(
+        workflowDefinition,
+        'knowledgeRetrieval',
+        config?.enableKnowledgeRetrieval === true,
+      ),
+      enableBusinessCommands: isAiWorkflowStepEnabled(
+        workflowDefinition,
+        'businessCommand',
+        config?.enableBusinessCommands === true,
+      ),
     };
   }
 

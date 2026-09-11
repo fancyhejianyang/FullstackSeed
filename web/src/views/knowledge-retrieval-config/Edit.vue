@@ -3,6 +3,7 @@ import { computed, nextTick, reactive, ref, watch } from 'vue';
 import { ElMessage, type FormRules, type TreeInstance } from 'element-plus';
 import Dialog from '@/components/Dialog.vue';
 import Form, { type FormField } from '@/components/Form.vue';
+import AiWorkflowEditor from '@/components/AiWorkflowEditor.vue';
 import {
   createKnowledgeRetrievalConfig,
   getKnowledgeRetrievalConfig,
@@ -10,6 +11,7 @@ import {
   type KnowledgeRetrievalConfig,
   type KnowledgeRetrievalConfigForm,
   type KnowledgeRetrievalMode,
+  type AiWorkflowDefinition,
 } from '@/api/knowledgeRetrievalConfig';
 import {
   getKnowledgeBases,
@@ -21,6 +23,11 @@ import {
   getAiFeatureConfigs,
   type AiFeatureConfig,
 } from '@/api/aiFeatureConfig';
+import {
+  getAiWorkflowFlags,
+  getWorkflowFallbackFlags,
+  normalizeAiWorkflowDefinition,
+} from '@/utils/aiWorkflow';
 
 const props = defineProps<{
   row?: KnowledgeRetrievalConfig | null;
@@ -38,6 +45,7 @@ type RetrievalForm = {
   textWeight: number | null;
   vectorWeight: number | null;
   sessionContextTimeoutMinutes: number | null;
+  workflowDefinition: AiWorkflowDefinition;
   enableStandardQa: boolean;
   enableColloquial: boolean;
   enableKnowledgeRetrieval: boolean;
@@ -67,6 +75,13 @@ const form = reactive<RetrievalForm>({
   textWeight: 0.8,
   vectorWeight: 1,
   sessionContextTimeoutMinutes: 15,
+  workflowDefinition: normalizeAiWorkflowDefinition(null, {
+    enableStandardQa: true,
+    enableColloquial: true,
+    enableKnowledgeRetrieval: true,
+    enableBusinessCommands: false,
+    enableRerank: true,
+  }),
   enableStandardQa: true,
   enableColloquial: true,
   enableKnowledgeRetrieval: true,
@@ -103,6 +118,8 @@ const rerankConfigOptions = computed(() =>
     })),
 );
 
+const workflowFlags = computed(() => getAiWorkflowFlags(form.workflowDefinition));
+
 const fields = computed<FormField[]>(() => {
   const items: FormField[] = [
     {
@@ -113,40 +130,10 @@ const fields = computed<FormField[]>(() => {
       hint: '工作流决定一次提问会经过哪些处理环节；可同时用于通用知识库客服或业务客服。',
     },
     {
-      prop: 'enableStandardQa',
-      label: '标准问答',
-      component: 'Switch',
-      componentProps: { activeText: '启用', inactiveText: '关闭' },
-      hint: form.enableStandardQa
-        ? '当前启用：先用人工审核的固定问答精确匹配；命中后直接返回答案，不调用模型。'
-        : '当前关闭：不会使用固定问答拦截，问题会继续进入后续已启用的环节。',
-    },
-    {
-      prop: 'enableColloquial',
-      label: '口语校准',
-      component: 'Switch',
-      componentProps: { activeText: '启用', inactiveText: '关闭' },
-      hint: form.enableColloquial
-        ? '当前启用：把“多重”等口语词转换为人工维护的标准表达和语义约束，再带入后续处理。'
-        : '当前关闭：保留用户原问题，不读取口语化词库。',
-    },
-    {
-      prop: 'enableKnowledgeRetrieval',
-      label: '知识库检索',
-      component: 'Switch',
-      componentProps: { activeText: '启用', inactiveText: '关闭' },
-      hint: form.enableKnowledgeRetrieval
-        ? '当前启用：执行路由、召回、阈值筛选与重排，并让模型只依据命中的知识库资料回答。'
-        : '当前关闭：不访问知识库，也不执行路由和重排；适合只通过业务指令读取实时数据的客服。',
-    },
-    {
-      prop: 'enableBusinessCommands',
-      label: '业务数据指令',
-      component: 'Switch',
-      componentProps: { activeText: '启用', inactiveText: '关闭' },
-      hint: form.enableBusinessCommands
-        ? '当前启用：允许调用应用已勾选的只读业务指令，例如产品/SKU 查询；工作流和聊天应用均启用才会实际调用。'
-        : '当前关闭：即使聊天应用勾选了业务指令，也不会调用业务接口。',
+      prop: 'workflowDefinition',
+      label: '流程编排',
+      slot: true,
+      hint: '点击流程节点可查看语义并启停步骤；命中与未命中分支由系统固定校验，避免错误连线。',
     },
     {
       prop: 'retrievalMode',
@@ -238,18 +225,9 @@ const fields = computed<FormField[]>(() => {
             ? `当前 ${form.sessionContextTimeoutMinutes} 分钟：短时间追问可沿用上下文，切换话题的干扰较少。`
             : `当前 ${form.sessionContextTimeoutMinutes} 分钟：连续对话保持更久，但用户换话题后可能受旧上下文影响。`,
     },
-    {
-      prop: 'enableRerank',
-      label: '启用重排',
-      component: 'Switch',
-      componentProps: { activeText: '启用', inactiveText: '关闭' },
-      hint: form.enableRerank
-        ? '当前启用：先召回候选，再由所选 AI 配置重新排序，相关性通常更好但会增加一次模型调用。'
-        : '当前关闭：直接使用融合排序，响应更快且不消耗额外模型调用。',
-    },
   ];
 
-  if (form.enableKnowledgeRetrieval && form.enableRerank) {
+  if (workflowFlags.value.enableKnowledgeRetrieval && workflowFlags.value.enableRerank) {
     items.push({
       prop: 'rerankAiFeatureConfigId',
       label: 'LLM 重排配置',
@@ -260,7 +238,7 @@ const fields = computed<FormField[]>(() => {
     });
   }
 
-  const visibleItems = form.enableKnowledgeRetrieval
+  const visibleItems = workflowFlags.value.enableKnowledgeRetrieval
     ? items
     : items.filter((item) =>
         ![
@@ -272,7 +250,6 @@ const fields = computed<FormField[]>(() => {
           'textWeight',
           'vectorWeight',
           'sessionContextTimeoutMinutes',
-          'enableRerank',
           'rerankAiFeatureConfigId',
         ].includes(item.prop),
       );
@@ -291,7 +268,7 @@ const fields = computed<FormField[]>(() => {
 
 const rules = computed<FormRules>(() => ({
   name: [{ required: true, message: '请输入工作流名称', trigger: 'blur' }],
-  ...(form.enableKnowledgeRetrieval
+  ...(workflowFlags.value.enableKnowledgeRetrieval
     ? {
         retrievalMode: [{ required: true, message: '请选择检索模式', trigger: 'change' }],
         topK: [{ required: true, message: '请输入召回上限', trigger: 'blur' }],
@@ -300,7 +277,7 @@ const rules = computed<FormRules>(() => ({
         ],
       }
     : {}),
-  ...(form.enableKnowledgeRetrieval && form.enableRerank
+  ...(workflowFlags.value.enableKnowledgeRetrieval && workflowFlags.value.enableRerank
     ? {
         rerankAiFeatureConfigId: [
           { required: true, message: '请选择重排 AI 配置', trigger: 'change' },
@@ -325,7 +302,7 @@ watch(visible, async (value) => {
 });
 
 watch(
-  () => form.enableRerank,
+  () => workflowFlags.value.enableRerank,
   (value) => {
     if (!value) {
       form.rerankAiFeatureConfigId = '';
@@ -335,6 +312,12 @@ watch(
       form.rerankAiFeatureConfigId = rerankConfigOptions.value[0]?.value ?? '';
     }
   },
+);
+
+watch(
+  () => form.workflowDefinition,
+  () => syncLegacyWorkflowFlags(),
+  { deep: true },
 );
 
 async function fetchOptions() {
@@ -359,11 +342,14 @@ function resetForm() {
   form.textWeight = 0.8;
   form.vectorWeight = 1;
   form.sessionContextTimeoutMinutes = 15;
-  form.enableStandardQa = true;
-  form.enableColloquial = true;
-  form.enableKnowledgeRetrieval = true;
-  form.enableBusinessCommands = false;
-  form.enableRerank = true;
+  form.workflowDefinition = normalizeAiWorkflowDefinition(null, {
+    enableStandardQa: true,
+    enableColloquial: true,
+    enableKnowledgeRetrieval: true,
+    enableBusinessCommands: false,
+    enableRerank: true,
+  });
+  syncLegacyWorkflowFlags();
   form.rerankAiFeatureConfigId = rerankConfigOptions.value[0]?.value ?? '';
   form.isEnabled = true;
   form.description = '';
@@ -389,11 +375,11 @@ function fillForm(data: KnowledgeRetrievalConfig) {
   form.sessionContextTimeoutMinutes = Number(
     data.sessionContextTimeoutMinutes ?? 15,
   );
-  form.enableStandardQa = data.enableStandardQa !== false;
-  form.enableColloquial = data.enableColloquial !== false;
-  form.enableKnowledgeRetrieval = data.enableKnowledgeRetrieval !== false;
-  form.enableBusinessCommands = Boolean(data.enableBusinessCommands);
-  form.enableRerank = !!data.enableRerank;
+  form.workflowDefinition = normalizeAiWorkflowDefinition(
+    data.workflowDefinition,
+    getWorkflowFallbackFlags(data),
+  );
+  syncLegacyWorkflowFlags();
   form.rerankAiFeatureConfigId = data.rerankAiFeatureConfigId ?? '';
   form.isEnabled = !!data.isEnabled;
   form.description = data.description ?? '';
@@ -401,6 +387,8 @@ function fillForm(data: KnowledgeRetrievalConfig) {
 
 function buildPayload(): KnowledgeRetrievalConfigForm {
   const scope = splitScopeKeys(form.knowledgeScopeKeys);
+  const workflowDefinition = normalizeAiWorkflowDefinition(form.workflowDefinition);
+  const workflowFlags = getAiWorkflowFlags(workflowDefinition);
   return {
     name: form.name.trim(),
     retrievalMode: form.retrievalMode,
@@ -412,17 +400,27 @@ function buildPayload(): KnowledgeRetrievalConfigForm {
     textWeight: form.textWeight,
     vectorWeight: form.vectorWeight,
     sessionContextTimeoutMinutes: form.sessionContextTimeoutMinutes,
-    enableStandardQa: form.enableStandardQa,
-    enableColloquial: form.enableColloquial,
-    enableKnowledgeRetrieval: form.enableKnowledgeRetrieval,
-    enableBusinessCommands: form.enableBusinessCommands,
-    enableRerank: form.enableRerank,
-    rerankAiFeatureConfigId: form.enableRerank
+    workflowDefinition,
+    enableStandardQa: workflowFlags.enableStandardQa,
+    enableColloquial: workflowFlags.enableColloquial,
+    enableKnowledgeRetrieval: workflowFlags.enableKnowledgeRetrieval,
+    enableBusinessCommands: workflowFlags.enableBusinessCommands,
+    enableRerank: workflowFlags.enableRerank,
+    rerankAiFeatureConfigId: workflowFlags.enableRerank
       ? Number(form.rerankAiFeatureConfigId)
       : null,
     isEnabled: form.isEnabled,
     description: form.description.trim(),
   };
+}
+
+function syncLegacyWorkflowFlags() {
+  const flags = getAiWorkflowFlags(form.workflowDefinition);
+  form.enableStandardQa = flags.enableStandardQa;
+  form.enableColloquial = flags.enableColloquial;
+  form.enableKnowledgeRetrieval = flags.enableKnowledgeRetrieval;
+  form.enableBusinessCommands = flags.enableBusinessCommands;
+  form.enableRerank = flags.enableRerank;
 }
 
 function buildScopeTree(nodes: KnowledgeBaseCategoryTreeNode[]): ScopeTreeNode[] {
@@ -493,7 +491,7 @@ function setScopeTreeCheckedKeys(keys: string[]) {
 
 async function handleSubmit() {
   await formRef.value?.validate();
-  if (form.enableKnowledgeRetrieval && form.enableRerank && !form.rerankAiFeatureConfigId) {
+  if (workflowFlags.value.enableKnowledgeRetrieval && workflowFlags.value.enableRerank && !form.rerankAiFeatureConfigId) {
     ElMessage.warning('请选择重排 AI 配置');
     return;
   }
@@ -524,6 +522,9 @@ async function handleSubmit() {
   >
     <div v-loading="loading">
       <Form ref="formRef" v-model="form" :fields="fields" :rules="rules" label-width="120px">
+        <template #field-workflowDefinition>
+          <AiWorkflowEditor v-model="form.workflowDefinition" />
+        </template>
         <template #field-knowledgeScopeKeys>
           <div class="knowledge-retrieval-edit__scope">
             <el-tree
@@ -541,7 +542,7 @@ async function handleSubmit() {
           </div>
         </template>
       </Form>
-      <div v-if="form.enableKnowledgeRetrieval" class="knowledge-retrieval-edit__session-tip">
+      <div v-if="workflowFlags.enableKnowledgeRetrieval" class="knowledge-retrieval-edit__session-tip">
         有效期内，未明确切换知识库的追问会优先使用上一轮命中知识库；超过有效期按新问题重新检索。填 0 则关闭知识库上下文复用。
       </div>
     </div>

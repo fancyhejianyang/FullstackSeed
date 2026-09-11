@@ -11,8 +11,9 @@ interface KnowledgeAiChatServiceInternals {
   buildStandardQaState: (params: {
     question: string;
     retrievalConfigId?: number | null;
-    enableStandardQa?: boolean;
+    enableOriginalStandardQa?: boolean;
     enableColloquial?: boolean;
+    enableCalibratedStandardQa?: boolean;
   }) => Promise<{
     entryId: number | null;
     answer: string | null;
@@ -161,8 +162,9 @@ describe('KnowledgeAiChatService', () => {
     const result = await pipelineService.buildStandardQaState({
       question: '小蓝多重？',
       retrievalConfigId: 2,
-      enableStandardQa: false,
+      enableOriginalStandardQa: false,
       enableColloquial: true,
+      enableCalibratedStandardQa: false,
     });
 
     expect(calls).toEqual(['rewrite']);

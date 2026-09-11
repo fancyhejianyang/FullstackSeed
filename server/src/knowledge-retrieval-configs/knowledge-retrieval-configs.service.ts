@@ -14,6 +14,10 @@ import {
   UpdateKnowledgeRetrievalConfigDto,
 } from './dto/knowledge-retrieval-config.dto';
 import { KnowledgeRetrievalConfig } from './entities/knowledge-retrieval-config.entity';
+import {
+  getAiWorkflowDerivedFlags,
+  normalizeAiWorkflowDefinition,
+} from './workflow-definition';
 
 @Injectable()
 export class KnowledgeRetrievalConfigsService {
@@ -79,7 +83,13 @@ export class KnowledgeRetrievalConfigsService {
 
   async update(id: number, dto: UpdateKnowledgeRetrievalConfigDto) {
     const config = await this.findOne(id);
-    Object.assign(config, await this.toEntityPayload(dto, false));
+    const payload = await this.toEntityPayload(dto, false);
+    Object.assign(config, payload);
+    if (dto.workflowDefinition !== undefined) {
+      this.applyWorkflowDefinition(config, dto.workflowDefinition);
+    } else if (this.hasLegacyWorkflowFlag(dto)) {
+      this.applyWorkflowDefinition(config, null);
+    }
     await this.ensureRerankOptions(config);
     return this.configRepository.save(config);
   }
@@ -192,7 +202,46 @@ export class KnowledgeRetrievalConfigsService {
     if (dto.description !== undefined) {
       payload.description = this.toNullableText(dto.description);
     }
+    if (isCreate) {
+      this.applyWorkflowDefinition(payload, dto.workflowDefinition ?? null);
+    }
     return payload;
+  }
+
+  private applyWorkflowDefinition(
+    target: Partial<KnowledgeRetrievalConfig>,
+    definition: CreateKnowledgeRetrievalConfigDto['workflowDefinition'] | null,
+  ) {
+    const workflowDefinition = normalizeAiWorkflowDefinition(definition, {
+      enableStandardQa: target.enableStandardQa,
+      enableColloquial: target.enableColloquial,
+      enableKnowledgeRetrieval: target.enableKnowledgeRetrieval,
+      enableBusinessCommands: target.enableBusinessCommands,
+      enableRerank: target.enableRerank,
+    });
+    const flags = getAiWorkflowDerivedFlags(workflowDefinition);
+    target.workflowDefinition = workflowDefinition;
+    target.enableStandardQa = flags.enableStandardQa;
+    target.enableColloquial = flags.enableColloquial;
+    target.enableKnowledgeRetrieval = flags.enableKnowledgeRetrieval;
+    target.enableBusinessCommands = flags.enableBusinessCommands;
+    target.enableRerank = flags.enableRerank;
+    if (!flags.enableRerank) {
+      target.rerankAiFeatureConfigId = null;
+      target.rerankAiFeatureConfigName = null;
+    }
+  }
+
+  private hasLegacyWorkflowFlag(
+    dto: UpdateKnowledgeRetrievalConfigDto,
+  ) {
+    return [
+      dto.enableStandardQa,
+      dto.enableColloquial,
+      dto.enableKnowledgeRetrieval,
+      dto.enableBusinessCommands,
+      dto.enableRerank,
+    ].some((value) => value !== undefined);
   }
 
   private async ensureRerankOptions(config: Partial<KnowledgeRetrievalConfig>) {

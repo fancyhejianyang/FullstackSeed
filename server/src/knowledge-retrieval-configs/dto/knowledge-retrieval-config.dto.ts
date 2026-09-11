@@ -6,6 +6,7 @@ import {
   IsInt,
   IsNotEmpty,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   Max,
@@ -14,6 +15,7 @@ import {
 } from 'class-validator';
 import { PartialType } from '@nestjs/swagger';
 import type { KnowledgeRetrievalMode } from '../entities/knowledge-retrieval-config.entity';
+import type { AiWorkflowDefinition } from '../workflow-definition';
 import { toBoolLike } from '../../common/utils/bool-like';
 
 export class CreateKnowledgeRetrievalConfigDto {
@@ -81,6 +83,10 @@ export class CreateKnowledgeRetrievalConfigDto {
   @Max(1440)
   @IsOptional()
   sessionContextTimeoutMinutes?: number;
+
+  @IsObject()
+  @IsOptional()
+  workflowDefinition?: AiWorkflowDefinition;
 
   @IsBoolean()
   @IsOptional()

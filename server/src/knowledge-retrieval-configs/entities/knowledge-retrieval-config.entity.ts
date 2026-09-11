@@ -1,5 +1,6 @@
 import { Column, Entity } from 'typeorm';
 import { BaseEntity } from '../../common/entities/base.entity';
+import type { AiWorkflowDefinition } from '../workflow-definition';
 
 export type KnowledgeRetrievalMode = 'fullText' | 'vector' | 'hybrid';
 
@@ -40,6 +41,10 @@ export class KnowledgeRetrievalConfig extends BaseEntity {
 
   @Column({ type: 'int', default: 15 })
   sessionContextTimeoutMinutes: number;
+
+  /** 受约束的 AI 工作流节点定义；旧开关字段继续保留给兼容接口使用。 */
+  @Column({ type: 'simple-json', nullable: true })
+  workflowDefinition: AiWorkflowDefinition | null;
 
   /** 是否先用固定答案拦截已审核的标准问题。 */
   @Column({ type: 'tinyint', default: true })

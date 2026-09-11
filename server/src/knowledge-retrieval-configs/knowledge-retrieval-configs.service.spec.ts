@@ -4,6 +4,10 @@ import { KnowledgeBaseCategory } from '../knowledge-bases/entities/knowledge-bas
 import { KnowledgeBase } from '../knowledge-bases/entities/knowledge-base.entity';
 import { KnowledgeRetrievalConfig } from './entities/knowledge-retrieval-config.entity';
 import { KnowledgeRetrievalConfigsService } from './knowledge-retrieval-configs.service';
+import {
+  getAiWorkflowDerivedFlags,
+  normalizeAiWorkflowDefinition,
+} from './workflow-definition';
 
 describe('KnowledgeRetrievalConfigsService', () => {
   it('enables reranking and selects the active LLM rerank config by default', async () => {
@@ -32,5 +36,30 @@ describe('KnowledgeRetrievalConfigsService', () => {
     expect(result.rerankAiFeatureConfigId).toBe(3);
     expect(result.rerankAiFeatureConfigName).toBe('默认 LLM 重排配置');
     expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  it('normalizes the workflow and prevents reranking without knowledge retrieval', () => {
+    const definition = normalizeAiWorkflowDefinition(
+      {
+        version: 1,
+        steps: [
+          {
+            id: 'knowledgeRetrieval',
+            type: 'knowledgeRetrieval',
+            enabled: false,
+          },
+          { id: 'rerank', type: 'rerank', enabled: true },
+        ],
+      },
+      { enableRerank: true },
+    );
+
+    expect(definition.steps).toHaveLength(8);
+    expect(getAiWorkflowDerivedFlags(definition)).toEqual(
+      expect.objectContaining({
+        enableKnowledgeRetrieval: false,
+        enableRerank: false,
+      }),
+    );
   });
 });
