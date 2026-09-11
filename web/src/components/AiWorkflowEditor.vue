@@ -13,9 +13,6 @@ import {
   AI_WORKFLOW_STEP_META,
   AI_WORKFLOW_STEP_ORDER,
   getAiWorkflowNodeDefaultPosition,
-  getAiWorkflowExecutionPlan,
-  getAiWorkflowFlags,
-  getWorkflowValidationErrors,
   isSafeWorkflowEdge,
   normalizeAiWorkflowDefinition,
 } from '@/utils/aiWorkflow';
@@ -36,7 +33,6 @@ type TargetPort = Extract<AiWorkflowNodePort, 'left' | 'top'>;
 type NodeFrame = { x: number; y: number; width: number; height: number };
 
 const selectedNodeId = ref<string | null>(null);
-const connectionError = ref('');
 const canvasRef = ref<HTMLElement>();
 const canvasViewportRef = ref<HTMLElement>();
 const canvasZoom = ref(1);
@@ -77,9 +73,6 @@ const canvasStyle = computed(() => ({
   transformOrigin: 'top left',
 }));
 const canvasZoomLabel = computed(() => `${Math.round(canvasZoom.value * 100)}%`);
-const workflowFlags = computed(() => getAiWorkflowFlags(workflow.value));
-const workflowPlan = computed(() => getAiWorkflowExecutionPlan(workflow.value));
-const validationErrors = computed(() => getWorkflowValidationErrors(workflow.value));
 const selectedNode = computed(() =>
   selectedNodeId.value
     ? workflow.value.nodes.find((node) => node.id === selectedNodeId.value)
@@ -220,12 +213,10 @@ function updateWorkflow(mutator: (next: ReturnType<typeof normalizeAiWorkflowDef
 
 function selectNode(id: string) {
   selectedNodeId.value = id;
-  connectionError.value = '';
 }
 
 function clearSelection() {
   selectedNodeId.value = null;
-  connectionError.value = '';
 }
 
 function hasAddedNode(type: AiWorkflowStepType) {
@@ -331,7 +322,6 @@ function connectNodes(
 ) {
   const condition = getAvailableConditions(source, target)[0];
   if (!condition) {
-    connectionError.value = '这两个节点不能直接连线，请选择符合处理顺序的目标节点。';
     return false;
   }
   const duplicate = workflow.value.edges.some(
@@ -339,7 +329,6 @@ function connectNodes(
       edge.source === source.id && edge.target === target.id && edge.condition === condition,
   );
   if (duplicate) {
-    connectionError.value = '该连线已经存在。';
     return false;
   }
   updateWorkflow((next) => {
@@ -351,48 +340,7 @@ function connectNodes(
       ...ports,
     });
   });
-  connectionError.value = '';
   return true;
-}
-
-function removeEdge(id: string) {
-  updateWorkflow((next) => {
-    next.edges = next.edges.filter((edge) => edge.id !== id);
-  });
-}
-
-function updateEdgeCondition(id: string, condition: string) {
-  const nextCondition = condition as AiWorkflowEdgeCondition;
-  updateWorkflow((next) => {
-    const edge = next.edges.find((item) => item.id === id);
-    const source = next.nodes.find((node) => node.id === edge?.source);
-    const target = next.nodes.find((node) => node.id === edge?.target);
-    if (!edge || !source || !target || !isSafeWorkflowEdge(source.type, target.type, nextCondition)) {
-      connectionError.value = '该连线不支持所选的分支条件。';
-      return;
-    }
-    const duplicate = next.edges.some(
-      (item) =>
-        item.id !== edge.id &&
-        item.source === source.id &&
-        item.target === target.id &&
-        item.condition === nextCondition,
-    );
-    if (duplicate) {
-      connectionError.value = '该目标节点已存在相同分支条件的连线。';
-      return;
-    }
-    edge.condition = nextCondition;
-    edge.id = `edge-${source.id}-${target.id}-${nextCondition}`;
-    connectionError.value = '';
-  });
-}
-
-function getEdgeConditions(edge: { source: string; target: string }) {
-  return getAvailableConditions(
-    workflow.value.nodes.find((node) => node.id === edge.source),
-    workflow.value.nodes.find((node) => node.id === edge.target),
-  );
 }
 
 function getNodeClass(node: AiWorkflowNodeDefinition) {
@@ -739,50 +687,10 @@ onBeforeUnmount(() => {
           >
             从画布移除节点
           </el-button>
-
-          <div class="ai-workflow-editor__connection-title">拖拽建立连线</div>
-          <div class="ai-workflow-editor__condition-tip">
-            从右侧蓝点拖出横向连线，或从底部蓝点拖到下方节点建立纵向连线。标准问答节点默认创建“未命中”分支，可在下方修改为“命中”。
-          </div>
-          <div v-if="connectionError" class="ai-workflow-editor__error">{{ connectionError }}</div>
-          <div class="ai-workflow-editor__connection-title">当前连线</div>
-          <div class="ai-workflow-editor__edge-list">
-            <div v-for="edge in workflow.edges" :key="edge.id" class="ai-workflow-editor__edge-row">
-              <span>{{ AI_WORKFLOW_STEP_META[workflow.nodes.find((node) => node.id === edge.source)?.type ?? 'preflight'].title }}</span>
-              <el-select
-                :model-value="edge.condition"
-                size="small"
-                class="ai-workflow-editor__edge-condition"
-                @update:model-value="updateEdgeCondition(edge.id, $event)"
-              >
-                <el-option
-                  v-for="condition in getEdgeConditions(edge)"
-                  :key="condition"
-                  :label="AI_WORKFLOW_CONDITION_META[condition].label"
-                  :value="condition"
-                />
-              </el-select>
-              <span>{{ AI_WORKFLOW_STEP_META[workflow.nodes.find((node) => node.id === edge.target)?.type ?? 'answer'].title }}</span>
-              <el-button size="small" link type="danger" @click="removeEdge(edge.id)">移除</el-button>
-            </div>
-            <div v-if="!workflow.edges.length" class="ai-workflow-editor__muted">暂无连线，请先建立可达路径。</div>
-          </div>
-
-          <div class="ai-workflow-editor__summary">
-            <div>匹配标准问答：{{ workflowPlan.enableOriginalStandardQa ? '可达' : '不可达' }}</div>
-            <div>口语校准：{{ workflowPlan.enableColloquial ? '可达' : '不可达' }}</div>
-            <div>校准后匹配问答：{{ workflowPlan.enableCalibratedStandardQa ? '可达' : '不可达' }}</div>
-            <div>知识库检索：{{ workflowFlags.enableKnowledgeRetrieval ? '可达' : '不可达' }}</div>
-            <div>业务数据指令：{{ workflowFlags.enableBusinessCommands ? '可达' : '不可达' }}</div>
-            <div>LLM 重排：{{ workflowFlags.enableRerank ? '可达' : '不可达' }}</div>
-          </div>
-          <div v-for="error in validationErrors" :key="error" class="ai-workflow-editor__error">{{ error }}</div>
         </template>
 
         <div v-else class="ai-workflow-editor__empty-panel">
-          点击画布中的节点后，可查看说明、编辑连线或从画布移除可选节点。
-          <br />
-          新建时请先从节点库加入回答生成节点，并把它与输入清洗入口连接起来。
+          点击画布中的节点后，可查看说明、跳过或从画布移除可选节点。
         </div>
       </div>
     </div>
@@ -791,7 +699,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .ai-workflow-editor { width: 100%; }
-.ai-workflow-editor__intro, .ai-workflow-editor__panel-description, .ai-workflow-editor__locked, .ai-workflow-editor__condition-tip, .ai-workflow-editor__muted {
+.ai-workflow-editor__intro, .ai-workflow-editor__panel-description, .ai-workflow-editor__locked {
   color: #909399;
   font-size: 12px;
   line-height: 1.6;
@@ -800,7 +708,7 @@ onBeforeUnmount(() => {
 .ai-workflow-editor__palette :deep(.el-button) { flex: 0 0 auto; }
 .ai-workflow-editor__palette :deep(.el-button.is-added) { border-color: #a0cfff; background: #ecf5ff; color: #409eff; }
 .ai-workflow-editor__palette-label { flex: 0 0 auto; white-space: nowrap; }
-.ai-workflow-editor__palette-label, .ai-workflow-editor__connection-title { color: #303133; font-size: 13px; font-weight: 600; }
+.ai-workflow-editor__palette-label { color: #303133; font-size: 13px; font-weight: 600; }
 .ai-workflow-editor__layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; margin-top: 12px; }
 .ai-workflow-editor__canvas-area { min-width: 0; }
 .ai-workflow-editor__canvas-toolbar { display: flex; align-items: center; gap: 8px; min-height: 30px; margin-bottom: 6px; color: #303133; font-size: 13px; font-weight: 600; }
@@ -833,13 +741,5 @@ onBeforeUnmount(() => {
 .ai-workflow-editor__panel-title { margin-bottom: 8px; color: #303133; font-size: 14px; font-weight: 600; }
 .ai-workflow-editor__panel :deep(.el-switch) { margin-top: 14px; }
 .ai-workflow-editor__delete-node { display: block; margin-top: 12px; }
-.ai-workflow-editor__connection-title { margin-top: 18px; padding-top: 12px; border-top: 1px solid #ebeef5; }
-.ai-workflow-editor__condition-tip { margin-top: 6px; }
-.ai-workflow-editor__edge-list { display: grid; gap: 7px; margin-top: 10px; }
-.ai-workflow-editor__edge-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto; align-items: center; gap: 5px; color: #606266; font-size: 12px; }
-.ai-workflow-editor__edge-row > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ai-workflow-editor__edge-condition { width: 82px; }
-.ai-workflow-editor__summary { margin-top: 16px; padding-top: 12px; border-top: 1px solid #ebeef5; color: #606266; font-size: 12px; line-height: 1.9; }
-.ai-workflow-editor__error { margin-top: 8px; color: #f56c6c; font-size: 12px; line-height: 1.5; }
 @media (max-width: 860px) { .ai-workflow-editor__layout { grid-template-columns: 1fr; } .ai-workflow-editor__panel { width: 100%; } .ai-workflow-editor__canvas-toolbar { flex-wrap: wrap; } .ai-workflow-editor__canvas-actions { margin-left: 0; } }
 </style>
