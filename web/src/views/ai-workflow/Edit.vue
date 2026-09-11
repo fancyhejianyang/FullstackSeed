@@ -54,6 +54,13 @@ const fields: FormField[] = [
     span: 2,
   },
   {
+    prop: 'workflowDefinition',
+    label: '流程编排',
+    slot: true,
+    span: 2,
+    hint: '新建流程只保留输入清洗入口。按节点库加入节点，从右侧或底部蓝点拖到目标节点建立流向；保存前必须连通回答节点。',
+  },
+  {
     prop: 'aiInstruction',
     label: 'AI 执行说明',
     type: 'textarea',
@@ -61,13 +68,6 @@ const fields: FormField[] = [
     span: 2,
     placeholder: '说明回答边界、资料使用规则、业务术语和资料不足时的处理方式。',
     hint: '此纯文本会随本次实际执行结果一并提供给回答模型；画布控制“是否执行”，说明文本约束“如何理解和回答”。',
-  },
-  {
-    prop: 'workflowDefinition',
-    label: '流程编排',
-    slot: true,
-    span: 2,
-    hint: '新建流程只保留输入清洗入口。按节点库加入节点，从右侧或底部蓝点拖到目标节点建立流向；保存前必须连通回答节点。',
   },
   {
     prop: 'isEnabled',

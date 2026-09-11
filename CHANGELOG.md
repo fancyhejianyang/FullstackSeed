@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-09-11 调整 AI 工作流编辑顺序
+- 新增：无。
+- 修改：
+  - `web/src/views/ai-workflow/Edit.vue`（将“流程编排”调整至“AI 执行说明”之前，便于先完成面向人的流程设计，再补充面向模型的文字约束）。
+  - `CHANGELOG.md`（记录本次调整）。
+- 删除：无。
+- 说明：仅调整管理端字段展示顺序，不修改工作流字段、接口或实际执行逻辑。
+
 ### 2026-09-11 拆分 AI 工作流与知识库检索配置
 - 新增：
   - `server/src/ai-workflows/`、`web/src/views/ai-workflow/`、`web/src/api/aiWorkflow.ts`（独立 AI 工作流 CRUD、画布编辑与 AI 执行说明文本）。
