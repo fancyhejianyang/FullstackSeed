@@ -125,10 +125,11 @@
 
 | Prop | 类型 | 默认 | 说明 |
 | --- | --- | --- | --- |
-| `fields` | `FormField[]` | 必填 | 字段配置：`prop/label/type/placeholder/options/hint/rows/slot`；`hint` 显示在输入控件下方，支持 `ref/computed`，用于随当前配置值变化的语义说明 |
+| `fields` | `FormField[]` | 必填 | 字段配置：`prop/label/type/placeholder/options/hint/rows/span/slot`；`hint` 显示在输入控件下方，支持 `ref/computed`，用于随当前配置值变化的语义说明；两列表单可用 `span: 2` 跨整行 |
 | `rules` | `FormRules` | — | Element Plus 校验规则 |
 | `labelWidth` | `string` | `'80px'` | 标签宽度 |
 | `inline` | `boolean` | `false` | 是否行内布局（搜索栏用） |
+| `columns` | `1 \| 2` | `1` | 表单栅格列数；设为 `2` 时字段默认各占半行，`span: 2` 的字段占满整行 |
 
 - v-model：绑定表单数据对象（`Record<string,any>`）
 - Emits：`@enter`（回车触发，用于搜索栏）

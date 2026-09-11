@@ -40,6 +40,8 @@ export interface FormField {
   /** 字段下方的辅助说明；支持传入 ref/computed，适合显示随当前值变化的语义提示 */
   hint?: string | Ref<string | undefined>;
   rows?: number;
+  /** 两列表单中占用的列数；未填写时占一列 */
+  span?: 1 | 2;
   // 是否使用具名插槽 #field-[prop] 自定义渲染
   slot?: boolean;
 }
@@ -56,11 +58,13 @@ const props = withDefaults(
     labelWidth?: string;
     labelPosition?: 'left' | 'right' | 'top';
     inline?: boolean;
+    columns?: 1 | 2;
   }>(),
   {
     labelWidth: '80px',
     labelPosition: 'right',
     inline: false,
+    columns: 1,
   },
 );
 
@@ -155,12 +159,14 @@ defineExpose({ validate, resetFields });
     :label-width="props.labelWidth"
     :label-position="props.labelPosition"
     :inline="props.inline"
+    :class="{ 'form--two-columns': props.columns === 2 }"
   >
     <el-form-item
       v-for="field in resolvedFields"
       :key="field.prop"
       :label="field.label"
       :prop="field.prop"
+      :class="{ 'form__item--span-full': props.columns === 2 && field.span === 2 }"
     >
       <!-- 具名插槽兜底：#field-[prop] -->
       <slot v-if="field.slot" :name="`field-${field.prop}`" :model="model" />
@@ -223,5 +229,33 @@ defineExpose({ validate, resetFields });
   color: #909399;
   font-size: 12px;
   line-height: 1.5;
+}
+
+.form--two-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 24px;
+}
+
+.form--two-columns :deep(.el-form-item) {
+  min-width: 0;
+}
+
+.form--two-columns :deep(.el-form-item__content) {
+  min-width: 0;
+}
+
+.form--two-columns .form__item--span-full {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 760px) {
+  .form--two-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .form--two-columns .form__item--span-full {
+    grid-column: auto;
+  }
 }
 </style>

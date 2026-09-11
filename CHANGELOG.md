@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-09-11 优化 AI 工作流配置表单布局
+- 新增：无。
+- 修改：
+  - `web/src/components/Form.vue`（支持可选的两列表单栅格与字段跨整行配置，默认单列行为不变）
+  - `web/src/views/knowledge-retrieval-config/Edit.vue`（恢复标签在左、控件在右；名称、流程编排、知识库范围、描述占整行，检索参数按两列排列）
+  - `AGENTS-COMPONENTS.md`（补充 `Form.columns` 与 `FormField.span` 契约）
+  - `CHANGELOG.md`（记录本次调整）
+- 删除：无。
+- 说明：仅调整管理端表单排版和响应式显示，不修改 AI 工作流字段、接口或执行逻辑。
+
 ### 2026-09-11 改为可拖拽连线的空白 AI 工作流编排
 - 新增：无。
 - 修改：

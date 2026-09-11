@@ -123,12 +123,14 @@ const fields = computed<FormField[]>(() => {
       label: '工作流名称',
       type: 'input',
       placeholder: '如 通用知识库客服、商品业务客服',
+      span: 2,
       hint: '工作流决定一次提问会经过哪些处理环节；可同时用于通用知识库客服或业务客服。',
     },
     {
       prop: 'workflowDefinition',
       label: '流程编排',
       slot: true,
+      span: 2,
       hint: '新建流程仅从输入清洗入口开始；从节点库加入步骤，并从节点右侧蓝点拖至目标节点建立流向。',
     },
     {
@@ -142,11 +144,6 @@ const fields = computed<FormField[]>(() => {
           : form.retrievalMode === 'fullText'
             ? '当前仅全文检索：更看重用户原词、编号和专有名词。'
             : '当前仅向量检索：更擅长匹配同义表达，但对精确编号较弱。',
-    },
-    {
-      prop: 'knowledgeScopeKeys',
-      label: '知识库范围',
-      slot: true,
     },
     {
       prop: 'topK',
@@ -234,6 +231,15 @@ const fields = computed<FormField[]>(() => {
     });
   }
 
+  if (workflowFlags.value.enableKnowledgeRetrieval) {
+    items.push({
+      prop: 'knowledgeScopeKeys',
+      label: '知识库范围',
+      slot: true,
+      span: 2,
+    });
+  }
+
   const visibleItems = workflowFlags.value.enableKnowledgeRetrieval
     ? items
     : items.filter((item) =>
@@ -258,7 +264,7 @@ const fields = computed<FormField[]>(() => {
       component: 'Switch',
       componentProps: { activeText: '启用', inactiveText: '停用' },
     },
-    { prop: 'description', label: '描述', type: 'textarea', rows: 3 },
+    { prop: 'description', label: '描述', type: 'textarea', rows: 3, span: 2 },
   ];
 });
 
@@ -522,7 +528,8 @@ async function handleSubmit() {
         v-model="form"
         :fields="fields"
         :rules="rules"
-        label-position="top"
+        label-width="118px"
+        :columns="2"
       >
         <template #field-workflowDefinition>
           <AiWorkflowEditor v-model="form.workflowDefinition" />
