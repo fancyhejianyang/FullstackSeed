@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, type ComponentPublicInstance } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, type ComponentPublicInstance } from 'vue';
 import type {
   AiWorkflowDefinition,
   AiWorkflowEdgeCondition,
@@ -24,7 +24,7 @@ const model = defineModel<AiWorkflowDefinition>({ required: true });
 
 const NODE_WIDTH = 160;
 const NODE_HEIGHT = 60;
-const CANVAS_WIDTH = 650;
+const CANVAS_MIN_WIDTH = 650;
 const CANVAS_HEIGHT = 960;
 const CANVAS_VIEWPORT_HEIGHT = 620;
 const MIN_CANVAS_ZOOM = 0.4;
@@ -39,10 +39,12 @@ const canvasRef = ref<HTMLElement>();
 const canvasViewportRef = ref<HTMLElement>();
 const canvasZoom = ref(1);
 const canvasPan = ref({ x: 0, y: 0 });
+const canvasWidth = ref(CANVAS_MIN_WIDTH);
 const nodeSizes = ref<Record<string, Pick<NodeFrame, 'width' | 'height'>>>({});
 const observedNodeElements = new Map<string, HTMLElement>();
 const nodeElementIds = new WeakMap<HTMLElement, string>();
 let nodeResizeObserver: ResizeObserver | undefined;
+let canvasViewportResizeObserver: ResizeObserver | undefined;
 const dragState = ref<{
   id: string;
   startX: number;
@@ -67,7 +69,7 @@ const connectionDrag = ref<{
 
 const workflow = computed(() => normalizeAiWorkflowDefinition(model.value));
 const canvasStyle = computed(() => ({
-  width: `${CANVAS_WIDTH}px`,
+  width: `${canvasWidth.value}px`,
   height: `${CANVAS_HEIGHT}px`,
   transform: `translate3d(${canvasPan.value.x}px, ${canvasPan.value.y}px, 0) scale(${canvasZoom.value})`,
   transformOrigin: 'top left',
@@ -399,13 +401,13 @@ function fitCanvasView() {
   const padding = 24;
   const zoom = clampCanvasZoom(
     Math.min(
-      (viewport.clientWidth - padding) / CANVAS_WIDTH,
+      (viewport.clientWidth - padding) / canvasWidth.value,
       (viewport.clientHeight - padding) / CANVAS_HEIGHT,
     ),
   );
   canvasZoom.value = zoom;
   canvasPan.value = {
-    x: Math.max(12, (viewport.clientWidth - CANVAS_WIDTH * zoom) / 2),
+    x: Math.max(12, (viewport.clientWidth - canvasWidth.value * zoom) / 2),
     y: Math.max(12, (viewport.clientHeight - CANVAS_HEIGHT * zoom) / 2),
   };
 }
@@ -460,7 +462,7 @@ function handlePointerMove(event: PointerEvent) {
     if (!node) return;
     const frame = getNodeFrame(node);
     node.position = {
-      x: Math.min(CANVAS_WIDTH - frame.width - 20, Math.max(20, state.originX + (event.clientX - state.startX) / canvasZoom.value)),
+      x: Math.min(canvasWidth.value - frame.width - 20, Math.max(20, state.originX + (event.clientX - state.startX) / canvasZoom.value)),
       y: Math.min(CANVAS_HEIGHT - frame.height - 20, Math.max(20, state.originY + (event.clientY - state.startY) / canvasZoom.value)),
     };
   });
@@ -475,7 +477,7 @@ function getCanvasPoint(event: PointerEvent) {
   const bounds = canvasRef.value?.getBoundingClientRect();
   if (!bounds) return null;
   return {
-    x: Math.min(CANVAS_WIDTH, Math.max(0, (event.clientX - bounds.left) / canvasZoom.value)),
+    x: Math.min(canvasWidth.value, Math.max(0, (event.clientX - bounds.left) / canvasZoom.value)),
     y: Math.min(CANVAS_HEIGHT, Math.max(0, (event.clientY - bounds.top) / canvasZoom.value)),
   };
 }
@@ -527,11 +529,25 @@ function finishConnection(event: PointerEvent, target: AiWorkflowNodeDefinition)
   event.stopPropagation();
 }
 
+function syncCanvasWidth() {
+  const viewportWidth = canvasViewportRef.value?.clientWidth ?? 0;
+  if (viewportWidth) canvasWidth.value = Math.max(CANVAS_MIN_WIDTH, viewportWidth);
+}
+
+onMounted(() => {
+  const viewport = canvasViewportRef.value;
+  if (!viewport) return;
+  syncCanvasWidth();
+  canvasViewportResizeObserver = new ResizeObserver(syncCanvasWidth);
+  canvasViewportResizeObserver.observe(viewport);
+});
+
 onBeforeUnmount(() => {
   stopDrag();
   stopConnection();
   stopCanvasPan();
   nodeResizeObserver?.disconnect();
+  canvasViewportResizeObserver?.disconnect();
 });
 </script>
 
@@ -582,7 +598,7 @@ onBeforeUnmount(() => {
             @click.self="clearSelection"
             @pointerdown.self="startCanvasPan"
           >
-            <svg class="ai-workflow-editor__edges" :viewBox="`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`" aria-label="工作流连线">
+            <svg class="ai-workflow-editor__edges" :viewBox="`0 0 ${canvasWidth} ${CANVAS_HEIGHT}`" aria-label="工作流连线">
               <defs>
                 <marker id="workflow-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                   <path d="M 0 0 L 10 5 L 0 10 z" fill="#a0cfff" />
@@ -739,13 +755,13 @@ onBeforeUnmount(() => {
 .ai-workflow-editor__palette :deep(.el-button.is-added) { border-color: #a0cfff; background: #ecf5ff; color: #409eff; }
 .ai-workflow-editor__palette-label { flex: 0 0 auto; white-space: nowrap; }
 .ai-workflow-editor__palette-label, .ai-workflow-editor__connection-title { color: #303133; font-size: 13px; font-weight: 600; }
-.ai-workflow-editor__layout { display: grid; grid-template-columns: 650px minmax(270px, 320px); justify-content: start; gap: 14px; margin-top: 12px; }
-.ai-workflow-editor__canvas-area { width: 650px; max-width: 100%; }
+.ai-workflow-editor__layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; margin-top: 12px; }
+.ai-workflow-editor__canvas-area { min-width: 0; }
 .ai-workflow-editor__canvas-toolbar { display: flex; align-items: center; gap: 8px; min-height: 30px; margin-bottom: 6px; color: #303133; font-size: 13px; font-weight: 600; }
 .ai-workflow-editor__canvas-hint { color: #909399; font-size: 12px; font-weight: 400; }
 .ai-workflow-editor__canvas-actions { display: flex; align-items: center; gap: 4px; margin-left: auto; color: #606266; font-size: 12px; font-weight: 400; white-space: nowrap; }
 .ai-workflow-editor__canvas-actions :deep(.el-button) { margin: 0; }
-.ai-workflow-editor__canvas-viewport { width: 650px; max-width: 100%; overflow: hidden; border: 1px solid #d9ecff; border-radius: 8px; background: #f8fbff; touch-action: none; }
+.ai-workflow-editor__canvas-viewport { width: 100%; overflow: hidden; border: 1px solid #d9ecff; border-radius: 8px; background: #f8fbff; touch-action: none; }
 .ai-workflow-editor__canvas { position: relative; min-width: 650px; margin: 0; background-image: radial-gradient(#d9ecff 1px, transparent 1px); background-size: 16px 16px; cursor: grab; will-change: transform; }
 .ai-workflow-editor__canvas.is-panning { cursor: grabbing; }
 .ai-workflow-editor__edges { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
@@ -768,7 +784,7 @@ onBeforeUnmount(() => {
 .workflow-node__connector--right { top: 50%; right: -6px; transform: translateY(-50%); }
 .workflow-node__connector--bottom { bottom: -6px; left: 50%; transform: translateX(-50%); }
 .workflow-node__connector--output:hover { background: #79bbff; box-shadow: 0 0 0 3px rgba(64, 158, 255, .18); }
-.ai-workflow-editor__panel { min-width: 0; padding: 14px; border: 1px solid #ebeef5; border-radius: 8px; background: #fff; }
+.ai-workflow-editor__panel { box-sizing: border-box; width: 320px; min-width: 0; padding: 14px; border: 1px solid #ebeef5; border-radius: 8px; background: #fff; }
 .ai-workflow-editor__empty-panel { display: flex; min-height: 140px; align-items: center; color: #909399; font-size: 13px; line-height: 1.7; }
 .ai-workflow-editor__panel-title { margin-bottom: 8px; color: #303133; font-size: 14px; font-weight: 600; }
 .ai-workflow-editor__panel :deep(.el-switch) { margin-top: 14px; }
@@ -781,5 +797,5 @@ onBeforeUnmount(() => {
 .ai-workflow-editor__edge-condition { width: 82px; }
 .ai-workflow-editor__summary { margin-top: 16px; padding-top: 12px; border-top: 1px solid #ebeef5; color: #606266; font-size: 12px; line-height: 1.9; }
 .ai-workflow-editor__error { margin-top: 8px; color: #f56c6c; font-size: 12px; line-height: 1.5; }
-@media (max-width: 860px) { .ai-workflow-editor__layout { grid-template-columns: 1fr; } .ai-workflow-editor__canvas-toolbar { flex-wrap: wrap; } .ai-workflow-editor__canvas-actions { margin-left: 0; } }
+@media (max-width: 860px) { .ai-workflow-editor__layout { grid-template-columns: 1fr; } .ai-workflow-editor__panel { width: 100%; } .ai-workflow-editor__canvas-toolbar { flex-wrap: wrap; } .ai-workflow-editor__canvas-actions { margin-left: 0; } }
 </style>
