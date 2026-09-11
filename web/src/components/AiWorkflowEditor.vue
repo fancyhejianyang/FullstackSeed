@@ -87,12 +87,9 @@ const selectedMeta = computed(() =>
 const selectedLocked = computed(
   () => selectedNode.value?.type === 'preflight',
 );
-const availableNodeTypes = computed(() => {
-  const existing = new Set(workflow.value.nodes.map((node) => node.type));
-  return AI_WORKFLOW_STEP_ORDER.filter(
-    (type) => !existing.has(type) && type !== 'preflight',
-  );
-});
+const availableNodeTypes = computed(() =>
+  AI_WORKFLOW_STEP_ORDER.filter((type) => type !== 'preflight'),
+);
 function getAvailableConditions(
   source: AiWorkflowNodeDefinition | undefined,
   target: AiWorkflowNodeDefinition | undefined,
@@ -227,16 +224,35 @@ function clearSelection() {
   connectionError.value = '';
 }
 
+function getNodeTypeCount(type: AiWorkflowStepType) {
+  return workflow.value.nodes.filter((node) => node.type === type).length;
+}
+
+function getNextNodeId(
+  type: AiWorkflowStepType,
+  nodes: AiWorkflowNodeDefinition[],
+) {
+  const prefix = `node-${type}`;
+  const ids = new Set(nodes.map((node) => node.id));
+  if (!ids.has(prefix)) return prefix;
+  let index = 2;
+  while (ids.has(`${prefix}-${index}`)) index += 1;
+  return `${prefix}-${index}`;
+}
+
 function addNode(type: AiWorkflowStepType) {
+  let id = '';
   updateWorkflow((next) => {
+    const count = next.nodes.filter((node) => node.type === type).length;
+    id = getNextNodeId(type, next.nodes);
     next.nodes.push({
-      id: `node-${type}`,
+      id,
       type,
       enabled: true,
-      position: getAiWorkflowNodeDefaultPosition(type),
+      position: getAiWorkflowNodeDefaultPosition(type, count),
     });
   });
-  selectNode(`node-${type}`);
+  selectNode(id);
 }
 
 function removeSelectedNode() {
@@ -525,16 +541,20 @@ onBeforeUnmount(() => {
       新建流程仅保留输入清洗入口。按需从节点库加入节点，并从节点右侧或底部蓝点拖到目标节点建立流向；可在画布空白处按住拖动，滚轮缩放查看完整流程。
     </div>
 
-    <div v-if="availableNodeTypes.length" class="ai-workflow-editor__palette">
+    <div class="ai-workflow-editor__palette">
       <span class="ai-workflow-editor__palette-label">节点库</span>
       <el-button
         v-for="type in availableNodeTypes"
         :key="type"
         size="small"
         plain
+        :class="{ 'is-added': getNodeTypeCount(type) > 0 }"
         @click="addNode(type)"
       >
         + {{ AI_WORKFLOW_STEP_META[type].title }}
+        <span v-if="getNodeTypeCount(type)" class="ai-workflow-editor__palette-count">
+          已添加 ×{{ getNodeTypeCount(type) }}
+        </span>
       </el-button>
     </div>
 
@@ -719,6 +739,8 @@ onBeforeUnmount(() => {
 }
 .ai-workflow-editor__palette { display: flex; width: 984px; max-width: 100%; flex-wrap: nowrap; align-items: center; gap: 8px; margin: 12px auto 0; overflow-x: auto; padding-bottom: 2px; }
 .ai-workflow-editor__palette :deep(.el-button) { flex: 0 0 auto; }
+.ai-workflow-editor__palette :deep(.el-button.is-added) { border-color: #a0cfff; background: #ecf5ff; color: #409eff; }
+.ai-workflow-editor__palette-count { margin-left: 4px; color: #79bbff; font-size: 11px; }
 .ai-workflow-editor__palette-label, .ai-workflow-editor__connection-title { color: #303133; font-size: 13px; font-weight: 600; }
 .ai-workflow-editor__layout { display: grid; grid-template-columns: 650px minmax(270px, 320px); justify-content: center; gap: 14px; margin-top: 12px; }
 .ai-workflow-editor__canvas-area { width: 650px; max-width: 100%; }

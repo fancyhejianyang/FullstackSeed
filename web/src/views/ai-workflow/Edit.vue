@@ -58,6 +58,7 @@ const fields: FormField[] = [
     label: '流程编排',
     slot: true,
     span: 2,
+    labelPosition: 'top',
     hint: '新建流程只保留输入清洗入口。按节点库加入节点，从右侧或底部蓝点拖到目标节点建立流向；保存前必须连通回答节点。',
   },
   {

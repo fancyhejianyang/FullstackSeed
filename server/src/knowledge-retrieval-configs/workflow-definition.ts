@@ -266,16 +266,26 @@ export function normalizeAiWorkflowDefinition(
 ): NormalizedAiWorkflowDefinition {
   const usesNodeGraph = Array.isArray(definition?.nodes);
   const nodesByType = new Map<AiWorkflowStepType, AiWorkflowNodeDefinition>();
+  const graphNodes: AiWorkflowNodeDefinition[] = [];
+  const graphNodeIds = new Set<string>();
+  const fixedTypes = new Set<AiWorkflowStepType>();
 
   if (usesNodeGraph) {
     definition?.nodes?.forEach((node) => {
-      if (!node || !isWorkflowStepType(node.type) || nodesByType.has(node.type))
+      if (!node || !isWorkflowStepType(node.type)) return;
+      const id =
+        typeof node.id === 'string' && node.id.trim()
+          ? node.id.trim()
+          : nodeId(node.type);
+      if (
+        graphNodeIds.has(id) ||
+        (FIXED_NODE_TYPES.has(node.type) && fixedTypes.has(node.type))
+      )
         return;
-      nodesByType.set(node.type, {
-        id:
-          typeof node.id === 'string' && node.id.trim()
-            ? node.id.trim()
-            : nodeId(node.type),
+      graphNodeIds.add(id);
+      if (FIXED_NODE_TYPES.has(node.type)) fixedTypes.add(node.type);
+      graphNodes.push({
+        id,
         type: node.type,
         enabled: FIXED_NODE_TYPES.has(node.type)
           ? true
@@ -299,20 +309,19 @@ export function normalizeAiWorkflowDefinition(
   }
 
   const nodes = usesNodeGraph
-    ? AI_WORKFLOW_STEP_ORDER.flatMap((type) => {
-        const node = nodesByType.get(type);
-        if (node) return [node];
-        return FIXED_NODE_TYPES.has(type)
-          ? [
+    ? [
+        ...(fixedTypes.has('preflight')
+          ? graphNodes.filter((node) => node.type === 'preflight')
+          : [
               {
-                id: nodeId(type),
-                type,
+                id: nodeId('preflight'),
+                type: 'preflight' as const,
                 enabled: true,
-                position: normalizePosition(type),
+                position: normalizePosition('preflight'),
               },
-            ]
-          : [];
-      })
+            ]),
+        ...graphNodes.filter((node) => node.type !== 'preflight'),
+      ]
     : createDefaultNodes(flags).map(
         (node) => nodesByType.get(node.type) ?? node,
       );
@@ -364,8 +373,12 @@ function isReachableOnPassThroughPath(
   targetType: AiWorkflowStepType,
 ) {
   const start = findNodeByType(definition, 'preflight');
-  const target = findNodeByType(definition, targetType);
-  if (!start || !target || !target.enabled) return false;
+  const targetIds = new Set(
+    definition.nodes
+      .filter((node) => node.type === targetType && node.enabled)
+      .map((node) => node.id),
+  );
+  if (!start || !targetIds.size) return false;
   const nodeById = new Map(definition.nodes.map((node) => [node.id, node]));
   const edgesBySource = new Map<string, AiWorkflowEdgeDefinition[]>();
   definition.edges.forEach((edge) => {
@@ -383,7 +396,7 @@ function isReachableOnPassThroughPath(
     for (const edge of edgesBySource.get(source) ?? []) {
       const node = nodeById.get(edge.target);
       if (!node) continue;
-      if (node.id === target.id && node.enabled) return true;
+      if (targetIds.has(node.id)) return true;
       // 被关闭节点作为透明节点继续向后走，保持删除/关闭节点后的安全旁路。
       queue.push(node.id);
     }
@@ -449,8 +462,8 @@ export function isAiWorkflowStepEnabled(
   fallback: boolean,
 ) {
   const normalized = normalizeAiWorkflowDefinition(definition);
-  const node = findNodeByType(normalized, type);
-  return node ? node.enabled !== false : fallback;
+  const nodes = normalized.nodes.filter((node) => node.type === type);
+  return nodes.length ? nodes.some((node) => node.enabled !== false) : fallback;
 }
 
 function hasCycle(definition: NormalizedAiWorkflowDefinition) {

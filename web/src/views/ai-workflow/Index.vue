@@ -107,6 +107,7 @@ function getFlowSummary(row: AiWorkflow) {
           class="ai-workflow-name-link"
           perm="AiWorkflow.read"
           link
+          :auto-type="false"
           :auto-icon="false"
           :confirm="false"
           @click="handleEdit(row)"
@@ -135,5 +136,16 @@ function getFlowSummary(row: AiWorkflow) {
 </template>
 
 <style scoped>
-.ai-workflow-name-link { font-weight: 600; }
+:deep(.ai-workflow-name-link) {
+  padding: 0;
+  color: #409eff;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+:deep(.ai-workflow-name-link:hover),
+:deep(.ai-workflow-name-link:focus-visible) {
+  color: #79bbff;
+  text-decoration: underline;
+}
 </style>

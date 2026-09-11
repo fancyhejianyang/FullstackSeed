@@ -255,11 +255,18 @@ export function normalizeAiWorkflowDefinition(
 ): Required<Pick<AiWorkflowDefinition, 'nodes' | 'edges'>> & { version: 2 } {
   const usesNodeGraph = Array.isArray(definition?.nodes);
   const nodesByType = new Map<AiWorkflowStepType, AiWorkflowNodeDefinition>();
+  const graphNodes: AiWorkflowNodeDefinition[] = [];
+  const graphNodeIds = new Set<string>();
+  const fixedTypes = new Set<AiWorkflowStepType>();
   if (usesNodeGraph) {
     definition?.nodes?.forEach((node) => {
-      if (!node || !isStepType(node.type) || nodesByType.has(node.type)) return;
-      nodesByType.set(node.type, {
-        id: typeof node.id === 'string' && node.id.trim() ? node.id.trim() : nodeId(node.type),
+      if (!node || !isStepType(node.type)) return;
+      const id = typeof node.id === 'string' && node.id.trim() ? node.id.trim() : nodeId(node.type);
+      if (graphNodeIds.has(id) || (FIXED_NODE_TYPES.has(node.type) && fixedTypes.has(node.type))) return;
+      graphNodeIds.add(id);
+      if (FIXED_NODE_TYPES.has(node.type)) fixedTypes.add(node.type);
+      graphNodes.push({
+        id,
         type: node.type,
         enabled: FIXED_NODE_TYPES.has(node.type) ? true : node.enabled !== false,
         position: normalizePosition(node.type, node.position),
@@ -277,13 +284,12 @@ export function normalizeAiWorkflowDefinition(
     });
   }
   const nodes = usesNodeGraph
-    ? AI_WORKFLOW_STEP_ORDER.flatMap((type) => {
-        const node = nodesByType.get(type);
-        if (node) return [node];
-        return FIXED_NODE_TYPES.has(type)
-          ? [{ id: nodeId(type), type, enabled: true, position: normalizePosition(type) }]
-          : [];
-      })
+    ? [
+        ...(fixedTypes.has('preflight')
+          ? graphNodes.filter((node) => node.type === 'preflight')
+          : [{ id: nodeId('preflight'), type: 'preflight' as const, enabled: true, position: normalizePosition('preflight') }]),
+        ...graphNodes.filter((node) => node.type !== 'preflight'),
+      ]
     : defaultNodes(fallback).map((node) => nodesByType.get(node.type) ?? node);
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const sourceEdges: AiWorkflowEdgeDefinition[] = usesNodeGraph && Array.isArray(definition?.edges)
@@ -330,16 +336,22 @@ export function createInitialAiWorkflowDefinition(): Required<
 }
 
 /** 节点首次加入画布时使用的推荐位置；用户仍可随时拖动。 */
-export function getAiWorkflowNodeDefaultPosition(type: AiWorkflowStepType) {
-  return normalizePosition(type);
+export function getAiWorkflowNodeDefaultPosition(
+  type: AiWorkflowStepType,
+  occurrence = 0,
+) {
+  const base = normalizePosition(type);
+  const offset = Math.max(0, occurrence) * 28;
+  return normalizePosition(type, { x: base.x + offset, y: base.y + offset });
 }
 
 export function isAiWorkflowStepEnabled(
   definition: AiWorkflowDefinition,
   type: AiWorkflowStepType,
 ) {
-  const node = normalizeAiWorkflowDefinition(definition).nodes.find((item) => item.type === type);
-  return node ? node.enabled !== false : false;
+  return normalizeAiWorkflowDefinition(definition).nodes.some(
+    (node) => node.type === type && node.enabled !== false,
+  );
 }
 
 function isReachable(
@@ -347,8 +359,12 @@ function isReachable(
   targetType: AiWorkflowStepType,
 ) {
   const start = definition.nodes.find((node) => node.type === 'preflight');
-  const target = definition.nodes.find((node) => node.type === targetType);
-  if (!start || !target || !target.enabled) return false;
+  const targetIds = new Set(
+    definition.nodes
+      .filter((node) => node.type === targetType && node.enabled)
+      .map((node) => node.id),
+  );
+  if (!start || !targetIds.size) return false;
   const byId = new Map(definition.nodes.map((node) => [node.id, node]));
   const edgesBySource = new Map<string, AiWorkflowEdgeDefinition[]>();
   definition.edges.forEach((edge) => {
@@ -366,7 +382,7 @@ function isReachable(
     for (const edge of edgesBySource.get(source) ?? []) {
       const node = byId.get(edge.target);
       if (!node) continue;
-      if (node.id === target.id && node.enabled) return true;
+      if (targetIds.has(node.id)) return true;
       queue.push(node.id);
     }
   }

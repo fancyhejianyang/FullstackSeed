@@ -125,7 +125,7 @@
 
 | Prop | 类型 | 默认 | 说明 |
 | --- | --- | --- | --- |
-| `fields` | `FormField[]` | 必填 | 字段配置：`prop/label/type/placeholder/options/hint/rows/span/slot`；`hint` 显示在输入控件下方，支持 `ref/computed`，用于随当前配置值变化的语义说明；两列表单可用 `span: 2` 跨整行 |
+| `fields` | `FormField[]` | 必填 | 字段配置：`prop/label/type/placeholder/options/hint/rows/span/labelPosition/slot`；`hint` 显示在输入控件下方，支持 `ref/computed`，用于随当前配置值变化的语义说明；两列表单可用 `span: 2` 跨整行，复杂字段可用 `labelPosition: 'top'` 单独让标签显示在控件上方 |
 | `rules` | `FormRules` | — | Element Plus 校验规则 |
 | `labelWidth` | `string` | `'80px'` | 标签宽度 |
 | `inline` | `boolean` | `false` | 是否行内布局（搜索栏用） |

@@ -217,4 +217,45 @@ describe('KnowledgeRetrievalConfigsService', () => {
       expect.objectContaining({ sourcePort: 'bottom', targetPort: 'top' }),
     );
   });
+
+  it('preserves multiple node instances of the same type and enables a reachable instance', () => {
+    const definition = normalizeAiWorkflowDefinition({
+      version: 2,
+      nodes: [
+        { id: 'node-preflight', type: 'preflight', enabled: true },
+        {
+          id: 'node-retrieval-disabled',
+          type: 'knowledgeRetrieval',
+          enabled: false,
+        },
+        {
+          id: 'node-retrieval-active',
+          type: 'knowledgeRetrieval',
+          enabled: true,
+        },
+        { id: 'node-answer', type: 'answer', enabled: true },
+      ],
+      edges: [
+        {
+          id: 'preflight-to-active-retrieval',
+          source: 'node-preflight',
+          target: 'node-retrieval-active',
+          condition: 'always',
+        },
+        {
+          id: 'active-retrieval-to-answer',
+          source: 'node-retrieval-active',
+          target: 'node-answer',
+          condition: 'always',
+        },
+      ],
+    });
+
+    expect(
+      definition.nodes.filter((node) => node.type === 'knowledgeRetrieval'),
+    ).toHaveLength(2);
+    expect(getAiWorkflowExecutionPlan(definition).enableKnowledgeRetrieval).toBe(
+      true,
+    );
+  });
 });

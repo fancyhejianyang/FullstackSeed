@@ -42,6 +42,8 @@ export interface FormField {
   rows?: number;
   /** 两列表单中占用的列数；未填写时占一列 */
   span?: 1 | 2;
+  /** 个别复杂字段可让标签显示在控件上方，其余字段保持表单默认布局 */
+  labelPosition?: 'top';
   // 是否使用具名插槽 #field-[prop] 自定义渲染
   slot?: boolean;
 }
@@ -166,7 +168,10 @@ defineExpose({ validate, resetFields });
       :key="field.prop"
       :label="field.label"
       :prop="field.prop"
-      :class="{ 'form__item--span-full': props.columns === 2 && field.span === 2 }"
+      :class="{
+        'form__item--span-full': props.columns === 2 && field.span === 2,
+        'form__item--label-top': field.labelPosition === 'top',
+      }"
     >
       <!-- 具名插槽兜底：#field-[prop] -->
       <slot v-if="field.slot" :name="`field-${field.prop}`" :model="model" />
@@ -247,6 +252,25 @@ defineExpose({ validate, resetFields });
 
 .form--two-columns .form__item--span-full {
   grid-column: 1 / -1;
+}
+
+.form__item--label-top {
+  display: block;
+}
+
+.form__item--label-top :deep(.el-form-item__label) {
+  display: flex;
+  width: auto !important;
+  height: auto;
+  padding: 0 0 8px;
+  line-height: 20px;
+  justify-content: flex-start;
+}
+
+.form__item--label-top :deep(.el-form-item__content) {
+  display: block;
+  width: 100%;
+  margin-left: 0 !important;
 }
 
 @media (max-width: 760px) {

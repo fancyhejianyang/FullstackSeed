@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-09-11 优化 AI 工作流表单与可重复节点
+- 新增：无。
+- 修改：
+  - `web/src/views/ai-workflow/Index.vue`（工作流名称点击入口采用品牌蓝的超链接样式）。
+  - `web/src/components/Form.vue`、`web/src/views/ai-workflow/Edit.vue`、`AGENTS-COMPONENTS.md`（`FormField` 支持单字段 `labelPosition: 'top'`，流程编排标签显示在画布上方，其余字段继续使用左右布局）。
+  - `web/src/components/AiWorkflowEditor.vue`、`web/src/utils/aiWorkflow.ts`（节点库始终保留可选节点；已加入节点显示次数和蓝色状态，重复加入时生成独立 ID 并错位放置）。
+  - `server/src/knowledge-retrieval-configs/workflow-definition.ts`、相关测试（前后端归一化保留唯一 ID 的同类型节点；步骤可用性按任一启用且可达实例判定）。
+  - `CHANGELOG.md`（记录本次调整）。
+- 删除：无。
+- 说明：输入清洗前置节点仍保持唯一。重复节点用于表达多个分支或备用路径；当前运行时仍按步骤类型执行一次，不会因此重复调用同一个业务处理阶段。
+
 ### 2026-09-11 优化 AI 工作流列表入口与画布视图
 - 新增：无。
 - 修改：
