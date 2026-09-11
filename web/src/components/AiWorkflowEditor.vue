@@ -24,7 +24,7 @@ const NODE_HEIGHT = 70;
 const CANVAS_WIDTH = 650;
 const CANVAS_HEIGHT = 960;
 
-const selectedNodeId = ref('node-standardQa');
+const selectedNodeId = ref<string | null>(null);
 const edgeTargetId = ref('');
 const edgeCondition = ref<AiWorkflowEdgeCondition>('unmatched');
 const connectionError = ref('');
@@ -41,7 +41,9 @@ const workflowFlags = computed(() => getAiWorkflowFlags(workflow.value));
 const workflowPlan = computed(() => getAiWorkflowExecutionPlan(workflow.value));
 const validationErrors = computed(() => getWorkflowValidationErrors(workflow.value));
 const selectedNode = computed(() =>
-  workflow.value.nodes.find((node) => node.id === selectedNodeId.value),
+  selectedNodeId.value
+    ? workflow.value.nodes.find((node) => node.id === selectedNodeId.value)
+    : undefined,
 );
 const selectedMeta = computed(() =>
   selectedNode.value ? AI_WORKFLOW_STEP_META[selectedNode.value.type] : null,
@@ -118,13 +120,20 @@ function selectNode(id: string) {
   edgeCondition.value = availableConditions.value[0] ?? 'always';
 }
 
+function clearSelection() {
+  selectedNodeId.value = null;
+  edgeTargetId.value = '';
+  edgeCondition.value = 'unmatched';
+  connectionError.value = '';
+}
+
 function addNode(type: AiWorkflowStepType) {
   updateWorkflow((next) => {
     next.nodes.push({
       id: `node-${type}`,
       type,
       enabled: true,
-      position: { x: 500, y: 500 },
+      position: { x: 230, y: 500 },
     });
   });
   selectNode(`node-${type}`);
@@ -137,7 +146,7 @@ function removeSelectedNode() {
     next.nodes = next.nodes.filter((item) => item.id !== node.id);
     next.edges = next.edges.filter((edge) => edge.source !== node.id && edge.target !== node.id);
   });
-  selectNode('node-preflight');
+  clearSelection();
 }
 
 function setSelectedEnabled(enabled: boolean) {
@@ -236,7 +245,7 @@ onBeforeUnmount(stopDrag);
       可拖拽节点、添加或删除业务节点，并配置安全分支连线。输入清洗与权限范围、回答审计始终保留；业务数据仍只可调用聊天应用已授权的只读指令。
     </div>
 
-    <div class="ai-workflow-editor__palette">
+    <div v-if="!selectedNode && availableNodeTypes.length" class="ai-workflow-editor__palette">
       <span class="ai-workflow-editor__palette-label">节点库</span>
       <el-button
         v-for="type in availableNodeTypes"
@@ -247,12 +256,15 @@ onBeforeUnmount(stopDrag);
       >
         + {{ AI_WORKFLOW_STEP_META[type].title }}
       </el-button>
-      <span v-if="!availableNodeTypes.length" class="ai-workflow-editor__muted">所有可用节点已在画布中</span>
     </div>
 
     <div class="ai-workflow-editor__layout">
       <div class="ai-workflow-editor__canvas-viewport">
-        <div class="ai-workflow-editor__canvas" :style="{ width: `${CANVAS_WIDTH}px`, height: `${CANVAS_HEIGHT}px` }">
+        <div
+          class="ai-workflow-editor__canvas"
+          :style="{ width: `${CANVAS_WIDTH}px`, height: `${CANVAS_HEIGHT}px` }"
+          @click.self="clearSelection"
+        >
           <svg class="ai-workflow-editor__edges" :viewBox="`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`" aria-label="工作流连线">
             <defs>
               <marker id="workflow-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -312,7 +324,7 @@ onBeforeUnmount(stopDrag);
             plain
             @click="removeSelectedNode"
           >
-            移除节点
+            从画布移除节点
           </el-button>
 
           <div class="ai-workflow-editor__connection-title">从此节点新增连线</div>
@@ -341,28 +353,33 @@ onBeforeUnmount(stopDrag);
             {{ AI_WORKFLOW_CONDITION_META[edgeCondition].description }}
           </div>
           <div v-if="connectionError" class="ai-workflow-editor__error">{{ connectionError }}</div>
+          <div class="ai-workflow-editor__connection-title">当前连线</div>
+          <div class="ai-workflow-editor__edge-list">
+            <div v-for="edge in workflow.edges" :key="edge.id" class="ai-workflow-editor__edge-row">
+              <span>{{ AI_WORKFLOW_STEP_META[workflow.nodes.find((node) => node.id === edge.source)?.type ?? 'preflight'].title }}</span>
+              <el-tag size="small" effect="light">{{ AI_WORKFLOW_CONDITION_META[edge.condition].label }}</el-tag>
+              <span>{{ AI_WORKFLOW_STEP_META[workflow.nodes.find((node) => node.id === edge.target)?.type ?? 'answer'].title }}</span>
+              <el-button size="small" link type="danger" @click="removeEdge(edge.id)">移除</el-button>
+            </div>
+            <div v-if="!workflow.edges.length" class="ai-workflow-editor__muted">暂无连线，请先建立可达路径。</div>
+          </div>
+
+          <div class="ai-workflow-editor__summary">
+            <div>原问题标准问答：{{ workflowPlan.enableOriginalStandardQa ? '可达' : '不可达' }}</div>
+            <div>口语校准：{{ workflowPlan.enableColloquial ? '可达' : '不可达' }}</div>
+            <div>校准后标准问答：{{ workflowPlan.enableCalibratedStandardQa ? '可达' : '不可达' }}</div>
+            <div>知识库检索：{{ workflowFlags.enableKnowledgeRetrieval ? '可达' : '不可达' }}</div>
+            <div>业务数据指令：{{ workflowFlags.enableBusinessCommands ? '可达' : '不可达' }}</div>
+            <div>LLM 重排：{{ workflowFlags.enableRerank ? '可达' : '不可达' }}</div>
+          </div>
+          <div v-for="error in validationErrors" :key="error" class="ai-workflow-editor__error">{{ error }}</div>
         </template>
 
-        <div class="ai-workflow-editor__connection-title">当前连线</div>
-        <div class="ai-workflow-editor__edge-list">
-          <div v-for="edge in workflow.edges" :key="edge.id" class="ai-workflow-editor__edge-row">
-            <span>{{ AI_WORKFLOW_STEP_META[workflow.nodes.find((node) => node.id === edge.source)?.type ?? 'preflight'].title }}</span>
-            <el-tag size="small" effect="light">{{ AI_WORKFLOW_CONDITION_META[edge.condition].label }}</el-tag>
-            <span>{{ AI_WORKFLOW_STEP_META[workflow.nodes.find((node) => node.id === edge.target)?.type ?? 'answer'].title }}</span>
-            <el-button size="small" link type="danger" @click="removeEdge(edge.id)">移除</el-button>
-          </div>
-          <div v-if="!workflow.edges.length" class="ai-workflow-editor__muted">暂无连线，请先建立可达路径。</div>
+        <div v-else class="ai-workflow-editor__empty-panel">
+          点击画布中的节点后，可查看说明、编辑连线或从画布移除可选节点。
+          <br />
+          如需添加缺失的节点，请先点击画布空白处打开节点库。
         </div>
-
-        <div class="ai-workflow-editor__summary">
-          <div>原问题标准问答：{{ workflowPlan.enableOriginalStandardQa ? '可达' : '不可达' }}</div>
-          <div>口语校准：{{ workflowPlan.enableColloquial ? '可达' : '不可达' }}</div>
-          <div>校准后标准问答：{{ workflowPlan.enableCalibratedStandardQa ? '可达' : '不可达' }}</div>
-          <div>知识库检索：{{ workflowFlags.enableKnowledgeRetrieval ? '可达' : '不可达' }}</div>
-          <div>业务数据指令：{{ workflowFlags.enableBusinessCommands ? '可达' : '不可达' }}</div>
-          <div>LLM 重排：{{ workflowFlags.enableRerank ? '可达' : '不可达' }}</div>
-        </div>
-        <div v-for="error in validationErrors" :key="error" class="ai-workflow-editor__error">{{ error }}</div>
       </div>
     </div>
   </div>
@@ -392,6 +409,7 @@ onBeforeUnmount(stopDrag);
 .workflow-node__title { font-size: 13px; font-weight: 600; }
 .workflow-node__state { margin-top: 3px; color: #909399; font-size: 11px; }
 .ai-workflow-editor__panel { min-width: 0; padding: 14px; border: 1px solid #ebeef5; border-radius: 8px; background: #fff; }
+.ai-workflow-editor__empty-panel { display: flex; min-height: 140px; align-items: center; color: #909399; font-size: 13px; line-height: 1.7; }
 .ai-workflow-editor__panel-title { margin-bottom: 8px; color: #303133; font-size: 14px; font-weight: 600; }
 .ai-workflow-editor__panel :deep(.el-switch) { margin-top: 14px; }
 .ai-workflow-editor__delete-node { display: block; margin-top: 12px; }
