@@ -1,0 +1,73 @@
+import type { KnowledgeColloquialTermMatch } from '../knowledge-colloquial-terms/knowledge-colloquial-terms.service';
+import type { KnowledgeRoutingRuleMatch } from '../knowledge-routing-rules/knowledge-routing-rules.service';
+import type { ProductSkuChatContext } from '../product-catalog/product-catalog.service';
+import type {
+  KnowledgeRetrievalConfigSnapshot,
+  KnowledgeRetrievalStatistics,
+  KnowledgeRoutedKnowledgeBase,
+} from './knowledge-ai-chat-retrieval.service';
+
+export interface KnowledgeAiQaTraceEntry {
+  id: number;
+  question: string;
+  retrievalConfigId: number | null;
+}
+
+export interface KnowledgeAiQaTraceStage {
+  executed: boolean;
+  question: string;
+  matched: boolean;
+  matchedEntries: KnowledgeAiQaTraceEntry[];
+  selectedEntryId: number | null;
+  skippedReason: string | null;
+}
+
+export interface KnowledgeAiColloquialTrace {
+  evaluated: boolean;
+  inputQuestion: string;
+  rewrittenQuestion: string;
+  matched: boolean;
+  matches: KnowledgeColloquialTermMatch[];
+  semanticConstraintApplied: boolean;
+  skippedReason: string | null;
+}
+
+export interface KnowledgeAiRoutingTrace {
+  executed: boolean;
+  matchedRules: KnowledgeRoutingRuleMatch[];
+  routedKnowledgeBases: KnowledgeRoutedKnowledgeBase[];
+  activeKnowledgeBaseId: number | null;
+  sessionContextReused: boolean;
+  inventoryQuery: boolean;
+  skippedReason: string | null;
+}
+
+export interface KnowledgeAiBusinessDataTrace {
+  authorized: boolean;
+  executed: boolean;
+  matched: boolean;
+  context: ProductSkuChatContext | null;
+  skippedReason: string | null;
+}
+
+export interface KnowledgeAiProcessingTrace {
+  version: 1;
+  retrievalConfig: KnowledgeRetrievalConfigSnapshot | null;
+  originalQa: KnowledgeAiQaTraceStage;
+  colloquial: KnowledgeAiColloquialTrace;
+  calibratedQa: KnowledgeAiQaTraceStage;
+  routing: KnowledgeAiRoutingTrace;
+  retrieval: {
+    executed: boolean;
+    hasReference: boolean;
+    statistics: KnowledgeRetrievalStatistics;
+    selectedHitCount: number;
+    skippedReason: string | null;
+  };
+  rerank: {
+    configured: boolean;
+    applied: boolean;
+    skippedReason: string | null;
+  };
+  businessData: KnowledgeAiBusinessDataTrace;
+}

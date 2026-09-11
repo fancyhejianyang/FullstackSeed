@@ -40,6 +40,120 @@ export interface KnowledgeReferenceImage {
   chunkId: number | null;
 }
 
+export interface KnowledgeRetrievalConfigSnapshot {
+  id: number;
+  name: string;
+  retrievalMode: 'fullText' | 'vector' | 'hybrid';
+  topK: number;
+  minScore: number;
+  rrfK: number;
+  textWeight: number;
+  vectorWeight: number;
+  enableRerank: boolean;
+  rerankAiFeatureConfigName: string | null;
+}
+
+export interface KnowledgeRetrievalStatistics {
+  textCandidateCount: number;
+  vectorCandidateCount: number;
+  fusedCandidateCount: number;
+  rerankInputCount: number;
+  passedMinScoreCount: number;
+  selectedCount: number;
+}
+
+export interface KnowledgeAiQaTraceEntry {
+  id: number;
+  question: string;
+  retrievalConfigId: number | null;
+}
+
+export interface KnowledgeAiQaTraceStage {
+  executed: boolean;
+  question: string;
+  matched: boolean;
+  matchedEntries: KnowledgeAiQaTraceEntry[];
+  selectedEntryId: number | null;
+  skippedReason: string | null;
+}
+
+export interface KnowledgeRoutingRuleMatch {
+  id: number;
+  term: string;
+  ruleType: 'generic' | 'alias' | 'exclusive';
+  matchMode: 'contains' | 'exact';
+  weight: number;
+  categoryIds: number[];
+  knowledgeBaseIds: number[];
+}
+
+export interface ProductSkuChatContext {
+  matchType: 'sku' | 'product';
+  product: {
+    id: number;
+    productCode: string;
+    name: string;
+    aliases: string[];
+    category: string;
+  };
+  sku: {
+    id: number;
+    skuCode: string;
+    name: string;
+    specifications: Record<string, unknown>;
+  } | null;
+  candidateSkus: Array<{
+    id: number;
+    skuCode: string;
+    name: string;
+    specifications: Record<string, unknown>;
+  }>;
+}
+
+export interface KnowledgeAiProcessingTrace {
+  version: 1;
+  retrievalConfig: KnowledgeRetrievalConfigSnapshot | null;
+  originalQa: KnowledgeAiQaTraceStage;
+  colloquial: {
+    evaluated: boolean;
+    inputQuestion: string;
+    rewrittenQuestion: string;
+    matched: boolean;
+    matches: KnowledgeColloquialTermMatch[];
+    semanticConstraintApplied: boolean;
+    skippedReason: string | null;
+  };
+  calibratedQa: KnowledgeAiQaTraceStage;
+  routing: {
+    executed: boolean;
+    matchedRules: KnowledgeRoutingRuleMatch[];
+    routedKnowledgeBases: Array<{ id: number; name: string }>;
+    activeKnowledgeBaseId: number | null;
+    sessionContextReused: boolean;
+    inventoryQuery: boolean;
+    skippedReason: string | null;
+  };
+  retrieval: {
+    executed: boolean;
+    hasReference: boolean;
+    statistics: KnowledgeRetrievalStatistics;
+    selectedHitCount: number;
+    skippedReason: string | null;
+  };
+  rerank: {
+    configured: boolean;
+    applied: boolean;
+    skippedReason: string | null;
+  };
+  businessData: {
+    authorized: boolean;
+    executed: boolean;
+    matched: boolean;
+    context: ProductSkuChatContext | null;
+    skippedReason: string | null;
+  };
+}
+
 export interface KnowledgeAiChatMessage {
   id: number;
   sessionId: number;
@@ -51,13 +165,17 @@ export interface KnowledgeAiChatMessage {
   answer: string | null;
   hitKnowledgeBaseNames: string | null;
   retrievalQuery: string | null;
+  retrievalConfigId: number | null;
+  processingTrace: KnowledgeAiProcessingTrace | null;
   hitKnowledgeBaseIds: number[] | null;
   hitChunkIds: number[] | null;
   retrievalHits: KnowledgeRetrievalHit[] | null;
+  routingRuleMatches: KnowledgeRoutingRuleMatch[] | null;
   rerankApplied: boolean;
   qaEntryId: number | null;
   colloquialTermMatches: KnowledgeColloquialTermMatch[] | null;
   qaCommandIds: string[] | null;
+  businessContext: ProductSkuChatContext | null;
   isSuccess: boolean;
   errorMessage: string | null;
   elapsedMilliseconds: number;

@@ -1,6 +1,7 @@
 import { Column, Entity } from 'typeorm';
 import { BaseEntity } from '../../common/entities/base.entity';
 import type { ProductSkuChatContext } from '../../product-catalog/product-catalog.service';
+import type { KnowledgeAiProcessingTrace } from '../knowledge-ai-chat-trace';
 
 @Entity('knowledge_ai_chat_messages')
 export class KnowledgeAiChatMessage extends BaseEntity {
@@ -30,6 +31,14 @@ export class KnowledgeAiChatMessage extends BaseEntity {
 
   @Column({ type: 'text', nullable: true })
   retrievalQuery: string | null;
+
+  /** 实际参与本轮问答的检索配置；标准问答直出时也会保留。 */
+  @Column({ type: 'int', nullable: true })
+  retrievalConfigId: number | null;
+
+  /** 可观测性快照：记录每一个问答处理阶段的实际结果。 */
+  @Column({ type: 'simple-json', nullable: true })
+  processingTrace: KnowledgeAiProcessingTrace | null;
 
   @Column({ type: 'simple-json', nullable: true })
   hitKnowledgeBaseIds: number[] | null;

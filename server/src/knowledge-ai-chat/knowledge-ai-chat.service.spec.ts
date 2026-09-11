@@ -1,7 +1,7 @@
 import { Repository } from 'typeorm';
 import { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-configs.service';
 import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
-import { KnowledgeAiChatRetrievalService } from './knowledge-ai-chat-retrieval.service';
+import { KnowledgeRetrievalConfig } from '../knowledge-retrieval-configs/entities/knowledge-retrieval-config.entity';
 import { KnowledgeAiChatMessage } from './entities/knowledge-ai-chat-message.entity';
 import { KnowledgeAiChatSession } from './entities/knowledge-ai-chat-session.entity';
 import { KnowledgeAiChatCommandService } from './knowledge-ai-chat-command.service';
@@ -29,9 +29,10 @@ describe('KnowledgeAiChatService', () => {
   const service = new KnowledgeAiChatService(
     {} as Repository<KnowledgeAiChatSession>,
     {} as Repository<KnowledgeAiChatMessage>,
+    {} as Repository<KnowledgeRetrievalConfig>,
     {} as AiFeatureConfigsService,
     {} as KnowledgeAiProvidersService,
-    {} as KnowledgeAiChatRetrievalService,
+    {} as KnowledgeAiChatCommandService,
   );
   const internals = service as unknown as KnowledgeAiChatServiceInternals;
 
@@ -90,6 +91,7 @@ describe('KnowledgeAiChatService', () => {
     const pipelineService = new KnowledgeAiChatService(
       {} as Repository<KnowledgeAiChatSession>,
       {} as Repository<KnowledgeAiChatMessage>,
+      {} as Repository<KnowledgeRetrievalConfig>,
       {} as AiFeatureConfigsService,
       {} as KnowledgeAiProvidersService,
       commandService,
@@ -111,6 +113,20 @@ describe('KnowledgeAiChatService', () => {
         answer: '重量为 12 kg。',
         rewrittenQuestion: '蓝虎机器人 Pro 的重量是多少？',
         commandIds: ['qa.search', 'colloquial.rewrite', 'qa.search'],
+        originalQa: expect.objectContaining({
+          executed: true,
+          matched: false,
+          question: '小蓝多重？',
+        }),
+        colloquial: expect.objectContaining({
+          evaluated: true,
+          rewrittenQuestion: '蓝虎机器人 Pro 的重量是多少？',
+        }),
+        calibratedQa: expect.objectContaining({
+          executed: true,
+          matched: true,
+          selectedEntryId: 7,
+        }),
       }),
     );
   });

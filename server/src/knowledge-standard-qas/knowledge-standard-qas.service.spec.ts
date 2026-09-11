@@ -61,6 +61,7 @@ describe('KnowledgeStandardQasService', () => {
     });
 
     expect(result?.entry).toBe(scopedQa);
+    expect(result?.matchedEntries.map((item) => item.id)).toEqual([3, 10]);
     expect(qaRepository.update).toHaveBeenCalledWith(
       scopedQa.id,
       expect.objectContaining({ hitCount: 3, lastHitAt: expect.any(Date) }),

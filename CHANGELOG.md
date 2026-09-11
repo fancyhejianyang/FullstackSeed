@@ -1,5 +1,18 @@
 # CHANGELOG
 
+### 2026-09-11 增强 AI 问答记录的分阶段检索轨迹
+- 新增：
+  - `README.md`（记录关联 H5 AI 客服项目路径 `D:\\AllProjects\\H5\\ai-customer-service`，明确前后端职责边界）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat-trace.ts`（问答处理轨迹的后端类型契约）
+  - `server/src/migrations/1788882400000-AddKnowledgeAiChatProcessingTrace.ts`（为问答消息新增实际检索配置 ID 与处理轨迹快照）
+- 修改：
+  - `server/src/knowledge-ai-chat/`、`server/src/knowledge-standard-qas/`（记录原问题与校准后两次标准问答的全部精确候选、口语校准结果、配置快照、路由范围、全文/向量/融合/阈值/重排数量和业务事实处理结果）
+  - `web/src/api/knowledgeAiChat.ts`、`web/src/views/knowledge-ai-record/Index.vue`（问答详情按八个阶段展示本轮实际处理轨迹；历史记录明确提示缺少轨迹，不伪造未命中结果）
+  - 对应单元测试（验证标准问答候选排序及校准后二次命中的轨迹字段）
+  - `CHANGELOG.md`（记录本次调整）
+- 删除：无。
+- 说明：轨迹是消息生成当刻的只读快照，不受以后编辑检索配置影响；对终端用户输出的“回答依据摘要”仍不会暴露内部配置或策略。迁移只新增字段，不修改既有问答记录。
+
 ### 2026-09-11 新增产品 SKU 业务事实查询与聊天应用指令授权
 - 新增：
   - `server/src/product-catalog/`（产品、SKU 的真实业务数据 CRUD；按产品简称、编码、SKU 编码和结构化规格受控匹配，并在 SKU 未唯一时只返回候选项）

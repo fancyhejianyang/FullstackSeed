@@ -96,7 +96,36 @@ export interface KnowledgeReferenceImage {
   chunkId: number | null;
 }
 
+export interface KnowledgeRoutedKnowledgeBase {
+  id: number;
+  name: string;
+}
+
+/** 实际执行时冻结的检索配置摘要，供问答记录审计而非再次读取当前配置。 */
+export interface KnowledgeRetrievalConfigSnapshot {
+  id: number;
+  name: string;
+  retrievalMode: 'fullText' | 'vector' | 'hybrid';
+  topK: number;
+  minScore: number;
+  rrfK: number;
+  textWeight: number;
+  vectorWeight: number;
+  enableRerank: boolean;
+  rerankAiFeatureConfigName: string | null;
+}
+
+export interface KnowledgeRetrievalStatistics {
+  textCandidateCount: number;
+  vectorCandidateCount: number;
+  fusedCandidateCount: number;
+  rerankInputCount: number;
+  passedMinScoreCount: number;
+  selectedCount: number;
+}
+
 export interface KnowledgeRetrievalResult {
+  config: KnowledgeRetrievalConfigSnapshot | null;
   query: string;
   queryRewritten: boolean;
   context: string;
@@ -104,11 +133,13 @@ export interface KnowledgeRetrievalResult {
   knowledgeBaseIds: number[];
   chunkIds: number[];
   routedKnowledgeBaseIds: number[];
+  routedKnowledgeBases: KnowledgeRoutedKnowledgeBase[];
   activeKnowledgeBaseId: number | null;
   inventoryQuery: boolean;
   sessionContextReused: boolean;
   rerankApplied: boolean;
   rerankTokenUsage: KnowledgeAiTokenUsage | null;
+  statistics: KnowledgeRetrievalStatistics;
   routingRuleMatches: KnowledgeRoutingRuleMatch[];
   hits: KnowledgeRetrievalHit[];
   referenceImages: KnowledgeReferenceImage[];
@@ -204,11 +235,14 @@ export class KnowledgeAiChatRetrievalService {
 
     const config =
       await this.retrievalConfigsService.findUsableConfig(configId);
+    const configSnapshot = this.toConfigSnapshot(config);
     const scopeBases = await this.resolveKnowledgeBases(
       config.knowledgeBaseIds ?? [],
       config.categoryIds ?? [],
     );
-    if (!scopeBases.length) return this.emptyResult(originalQuestion);
+    if (!scopeBases.length) {
+      return this.emptyResult(originalQuestion, { config: configSnapshot });
+    }
 
     const matchedRoutingRules = await this.findMatchedRoutingRules(
       config.id,
@@ -235,16 +269,20 @@ export class KnowledgeAiChatRetrievalService {
     const routedBases = scopeBases.filter((base) =>
       plan.routedKnowledgeBaseIds.includes(base.id),
     );
+    const routedKnowledgeBases = this.toRoutedKnowledgeBases(routedBases);
     if (plan.inventoryQuery) {
       return this.buildInventoryResult(originalQuestion, routedBases, {
+        config: configSnapshot,
         routingRuleMatches: plan.routingRuleMatches,
       });
     }
     const routedBaseIds = routedBases.map((base) => base.id);
     if (!routedBaseIds.length) {
       return this.emptyResult(plan.query, {
+        config: configSnapshot,
         queryRewritten: plan.queryRewritten,
         routingRuleMatches: plan.routingRuleMatches,
+        routedKnowledgeBases,
       });
     }
 
@@ -282,6 +320,14 @@ export class KnowledgeAiChatRetrievalService {
       .filter((candidate) => candidate.score >= minScore)
       .sort((a, b) => this.compareCandidates(a, b));
     const selected = this.selectContextCandidates(scored, topK, plan.query);
+    const statistics: KnowledgeRetrievalStatistics = {
+      textCandidateCount: textScored.length,
+      vectorCandidateCount: vectorScored.length,
+      fusedCandidateCount: fused.length,
+      rerankInputCount: reranked.candidates.length,
+      passedMinScoreCount: scored.length,
+      selectedCount: selected.length,
+    };
 
     if (!selected.length) {
       if (
@@ -306,12 +352,15 @@ export class KnowledgeAiChatRetrievalService {
         };
       }
       return this.emptyResult(plan.query, {
+        config: configSnapshot,
         queryRewritten: plan.queryRewritten,
         routedKnowledgeBaseIds: routedBaseIds,
+        routedKnowledgeBases,
         activeKnowledgeBaseId: null,
         sessionContextReused: plan.sessionContextReused,
         rerankApplied: reranked.applied,
         rerankTokenUsage: reranked.tokenUsage,
+        statistics,
         routingRuleMatches: plan.routingRuleMatches,
       });
     }
@@ -319,6 +368,7 @@ export class KnowledgeAiChatRetrievalService {
     const hits = selected.map((candidate) => this.toHit(candidate));
     const contextCandidates = await this.expandContextWithNeighbors(selected);
     return {
+      config: configSnapshot,
       query: plan.query,
       queryRewritten: plan.queryRewritten,
       context: this.formatReferenceContext(contextCandidates),
@@ -336,6 +386,7 @@ export class KnowledgeAiChatRetrievalService {
         ),
       ),
       routedKnowledgeBaseIds: routedBaseIds,
+      routedKnowledgeBases,
       activeKnowledgeBaseId:
         plan.activeKnowledgeBaseId &&
         selected.some(
@@ -348,9 +399,44 @@ export class KnowledgeAiChatRetrievalService {
       sessionContextReused: plan.sessionContextReused,
       rerankApplied: reranked.applied,
       rerankTokenUsage: reranked.tokenUsage,
+      statistics,
       routingRuleMatches: plan.routingRuleMatches,
       hits,
       referenceImages: this.extractReferenceImages(contextCandidates),
+    };
+  }
+
+  private toConfigSnapshot(
+    config: KnowledgeRetrievalConfig,
+  ): KnowledgeRetrievalConfigSnapshot {
+    return {
+      id: config.id,
+      name: config.name,
+      retrievalMode: config.retrievalMode || 'hybrid',
+      topK: Number(config.topK ?? 6),
+      minScore: Number(config.minScore ?? 0.35),
+      rrfK: Number(config.rrfK ?? 60),
+      textWeight: Number(config.textWeight ?? 0.8),
+      vectorWeight: Number(config.vectorWeight ?? 1),
+      enableRerank: Boolean(config.enableRerank),
+      rerankAiFeatureConfigName: config.rerankAiFeatureConfigName ?? null,
+    };
+  }
+
+  private toRoutedKnowledgeBases(
+    bases: KnowledgeBase[],
+  ): KnowledgeRoutedKnowledgeBase[] {
+    return bases.map((base) => ({ id: base.id, name: base.name }));
+  }
+
+  private emptyStatistics(): KnowledgeRetrievalStatistics {
+    return {
+      textCandidateCount: 0,
+      vectorCandidateCount: 0,
+      fusedCandidateCount: 0,
+      rerankInputCount: 0,
+      passedMinScoreCount: 0,
+      selectedCount: 0,
     };
   }
 
@@ -359,6 +445,7 @@ export class KnowledgeAiChatRetrievalService {
     overrides: Partial<KnowledgeRetrievalResult> = {},
   ): KnowledgeRetrievalResult {
     return {
+      config: null,
       query,
       queryRewritten: false,
       context: '',
@@ -366,11 +453,13 @@ export class KnowledgeAiChatRetrievalService {
       knowledgeBaseIds: [],
       chunkIds: [],
       routedKnowledgeBaseIds: [],
+      routedKnowledgeBases: [],
       activeKnowledgeBaseId: null,
       inventoryQuery: false,
       sessionContextReused: false,
       rerankApplied: false,
       rerankTokenUsage: null,
+      statistics: this.emptyStatistics(),
       routingRuleMatches: [],
       hits: [],
       referenceImages: [],
@@ -397,6 +486,7 @@ export class KnowledgeAiChatRetrievalService {
       .sort((a, b) => a.id - b.id);
     const names = inventoryBases.map((base) => base.name);
     return {
+      config: null,
       query: question,
       queryRewritten: false,
       context: [
@@ -411,11 +501,13 @@ export class KnowledgeAiChatRetrievalService {
       knowledgeBaseIds: inventoryBases.map((base) => base.id),
       chunkIds: [],
       routedKnowledgeBaseIds: inventoryBases.map((base) => base.id),
+      routedKnowledgeBases: this.toRoutedKnowledgeBases(inventoryBases),
       activeKnowledgeBaseId: null,
       inventoryQuery: true,
       sessionContextReused: false,
       rerankApplied: false,
       rerankTokenUsage: null,
+      statistics: this.emptyStatistics(),
       routingRuleMatches: [],
       hits: [],
       referenceImages: [],

@@ -20,6 +20,8 @@ import {
 
 export interface KnowledgeStandardQaMatch {
   entry: KnowledgeStandardQa;
+  /** 所有精确命中的候选；entry 是按专属范围与最新记录选出的最终答案。 */
+  matchedEntries: KnowledgeStandardQa[];
 }
 
 @Injectable()
@@ -140,7 +142,7 @@ export class KnowledgeStandardQasService {
       .getMany();
     if (!entries.length) return null;
 
-    const winner = entries
+    const matchedEntries = entries
       .filter((entry) => this.matchesQuestion(entry, normalizedQuestion))
       .sort((left, right) => {
         const leftIsScoped =
@@ -148,13 +150,14 @@ export class KnowledgeStandardQasService {
         const rightIsScoped =
           right.retrievalConfigId === params.retrievalConfigId ? 1 : 0;
         return rightIsScoped - leftIsScoped || right.id - left.id;
-      })[0];
+      });
+    const winner = matchedEntries[0];
     if (!winner) return null;
     await this.qaRepository.update(winner.id, {
       hitCount: winner.hitCount + 1,
       lastHitAt: now,
     });
-    return { entry: winner };
+    return { entry: winner, matchedEntries };
   }
 
   private matchesQuestion(
