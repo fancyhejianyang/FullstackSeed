@@ -19,8 +19,8 @@ import {
 
 const model = defineModel<AiWorkflowDefinition>({ required: true });
 
-const NODE_WIDTH = 190;
-const NODE_HEIGHT = 70;
+const NODE_WIDTH = 160;
+const NODE_HEIGHT = 60;
 const CANVAS_WIDTH = 650;
 const CANVAS_HEIGHT = 960;
 
@@ -133,7 +133,7 @@ function addNode(type: AiWorkflowStepType) {
       id: `node-${type}`,
       type,
       enabled: true,
-      position: { x: 230, y: 500 },
+      position: { x: 245, y: 500 },
     });
   });
   selectNode(`node-${type}`);
@@ -399,7 +399,7 @@ onBeforeUnmount(stopDrag);
 .ai-workflow-editor__canvas { position: relative; min-width: 650px; margin: 0 auto; background-image: radial-gradient(#d9ecff 1px, transparent 1px); background-size: 16px 16px; }
 .ai-workflow-editor__edges { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
 .ai-workflow-editor__edges text { font-size: 11px; font-weight: 600; paint-order: stroke; stroke: #f8fbff; stroke-width: 4px; }
-.workflow-node { position: absolute; display: flex; width: 190px; min-height: 70px; flex-direction: column; justify-content: center; padding: 8px 10px; border: 1px solid #a0cfff; border-radius: 7px; background: #fff; color: #303133; cursor: grab; font: inherit; text-align: center; transition: border-color .2s, box-shadow .2s, opacity .2s; user-select: none; }
+.workflow-node { position: absolute; display: flex; width: 160px; min-height: 60px; flex-direction: column; justify-content: center; padding: 6px 8px; border: 1px solid #a0cfff; border-radius: 7px; background: #fff; color: #303133; cursor: grab; font: inherit; text-align: center; transition: border-color .2s, box-shadow .2s, opacity .2s; user-select: none; }
 .workflow-node:active { cursor: grabbing; }
 .workflow-node:hover, .workflow-node.is-active { border-color: #409eff; box-shadow: 0 0 0 2px rgba(64, 158, 255, .16); }
 .workflow-node.is-disabled { opacity: .48; }

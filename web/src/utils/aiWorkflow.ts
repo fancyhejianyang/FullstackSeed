@@ -38,7 +38,7 @@ const PASS_THROUGH_CONDITIONS = new Set<AiWorkflowEdgeCondition>([
   'unmatched',
 ]);
 const WORKFLOW_CANVAS_WIDTH = 650;
-const WORKFLOW_NODE_WIDTH = 190;
+const WORKFLOW_NODE_WIDTH = 160;
 const WORKFLOW_CANVAS_PADDING = 20;
 
 export const AI_WORKFLOW_STEP_META: Record<
@@ -97,14 +97,14 @@ export const AI_WORKFLOW_CONDITION_META: Record<
 };
 
 const DEFAULT_NODE_POSITIONS: Record<AiWorkflowStepType, AiWorkflowNodePosition> = {
-  preflight: { x: 230, y: 30 },
-  standardQa: { x: 230, y: 155 },
-  colloquial: { x: 230, y: 285 },
-  calibratedStandardQa: { x: 230, y: 410 },
-  businessCommand: { x: 80, y: 555 },
-  knowledgeRetrieval: { x: 380, y: 555 },
-  rerank: { x: 380, y: 680 },
-  answer: { x: 230, y: 810 },
+  preflight: { x: 245, y: 30 },
+  standardQa: { x: 245, y: 155 },
+  colloquial: { x: 245, y: 285 },
+  calibratedStandardQa: { x: 245, y: 410 },
+  businessCommand: { x: 95, y: 555 },
+  knowledgeRetrieval: { x: 395, y: 555 },
+  rerank: { x: 395, y: 680 },
+  answer: { x: 245, y: 810 },
 };
 
 const LEGACY_DEFAULT_NODE_POSITIONS: Record<
@@ -119,6 +119,20 @@ const LEGACY_DEFAULT_NODE_POSITIONS: Record<
   knowledgeRetrieval: { x: 680, y: 555 },
   rerank: { x: 680, y: 680 },
   answer: { x: 430, y: 810 },
+};
+
+const COMPACT_DEFAULT_NODE_POSITIONS: Record<
+  AiWorkflowStepType,
+  AiWorkflowNodePosition
+> = {
+  preflight: { x: 230, y: 30 },
+  standardQa: { x: 230, y: 155 },
+  colloquial: { x: 230, y: 285 },
+  calibratedStandardQa: { x: 230, y: 410 },
+  businessCommand: { x: 80, y: 555 },
+  knowledgeRetrieval: { x: 380, y: 555 },
+  rerank: { x: 380, y: 680 },
+  answer: { x: 230, y: 810 },
 };
 
 function isStepType(value: unknown): value is AiWorkflowStepType {
@@ -139,9 +153,15 @@ function normalizePosition(
 ): AiWorkflowNodePosition {
   const fallback = DEFAULT_NODE_POSITIONS[type];
   const legacy = LEGACY_DEFAULT_NODE_POSITIONS[type];
+  const compact = COMPACT_DEFAULT_NODE_POSITIONS[type];
   const x = Number(position?.x);
   const y = Number(position?.y);
-  if (x === legacy.x && y === legacy.y) return fallback;
+  if (
+    (x === legacy.x && y === legacy.y) ||
+    (x === compact.x && y === compact.y)
+  ) {
+    return fallback;
+  }
   return {
     x: Number.isFinite(x)
       ? Math.min(
