@@ -516,7 +516,8 @@ async function handleSubmit() {
   <Dialog
     v-model="visible"
     :title="props.row ? '编辑 AI 工作流配置' : '新增 AI 工作流配置'"
-    width="860px"
+    width="min(1180px, calc(100vw - 32px))"
+    body-max-height="82vh"
     :confirm-loading="submitting"
     @confirm="handleSubmit"
   >

@@ -1,5 +1,12 @@
 # CHANGELOG
 
+### 2026-09-11 放大 AI 工作流配置编辑弹窗
+- 新增：无。
+- 修改：
+  - `web/src/views/knowledge-retrieval-config/Edit.vue`（弹窗最大宽度调整为 1180px，并在窄屏保留 16px 边距；内容区最大高度调整为 82vh，以便查看完整工作流画布）
+  - `CHANGELOG.md`（记录本次调整）
+- 删除：无。
+
 ### 2026-09-11 新增受约束的可视化 AI 工作流编排
 - 新增：
   - `server/src/knowledge-retrieval-configs/workflow-definition.ts`、`web/src/utils/aiWorkflow.ts`（工作流节点契约、旧开关兼容归一化及派生执行标志）
