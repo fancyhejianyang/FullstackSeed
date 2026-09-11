@@ -309,7 +309,7 @@ onBeforeUnmount(() => {
       新建流程仅保留输入清洗入口。按需从节点库加入节点，并从节点右侧蓝点拖到目标节点建立流向；服务端会校验循环、入口和回答出口。
     </div>
 
-    <div v-if="!selectedNode && availableNodeTypes.length" class="ai-workflow-editor__palette">
+    <div v-if="availableNodeTypes.length" class="ai-workflow-editor__palette">
       <span class="ai-workflow-editor__palette-label">节点库</span>
       <el-button
         v-for="type in availableNodeTypes"
@@ -376,8 +376,13 @@ onBeforeUnmount(() => {
             <span class="workflow-node__title">{{ AI_WORKFLOW_STEP_META[node.type].title }}</span>
             <span class="workflow-node__state">{{ node.enabled ? '启用' : '跳过' }}</span>
             <span
+              v-if="node.type !== 'preflight'"
+              class="workflow-node__connector workflow-node__connector--input"
+              aria-hidden="true"
+            />
+            <span
               v-if="node.type !== 'answer'"
-              class="workflow-node__connector"
+              class="workflow-node__connector workflow-node__connector--output"
               title="拖拽到目标节点以建立连线"
               @pointerdown.stop="startConnection($event, node)"
             />
@@ -464,7 +469,8 @@ onBeforeUnmount(() => {
   font-size: 12px;
   line-height: 1.6;
 }
-.ai-workflow-editor__palette { display: flex; width: 650px; max-width: 100%; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px auto 0; }
+.ai-workflow-editor__palette { display: flex; width: 984px; max-width: 100%; flex-wrap: nowrap; align-items: center; gap: 8px; margin: 12px auto 0; overflow-x: auto; padding-bottom: 2px; }
+.ai-workflow-editor__palette :deep(.el-button) { flex: 0 0 auto; }
 .ai-workflow-editor__palette-label, .ai-workflow-editor__connection-title { color: #303133; font-size: 13px; font-weight: 600; }
 .ai-workflow-editor__layout { display: grid; grid-template-columns: 650px minmax(270px, 320px); justify-content: center; gap: 14px; margin-top: 12px; }
 .ai-workflow-editor__canvas-viewport { width: 650px; max-width: 100%; max-height: 760px; overflow: auto; border: 1px solid #d9ecff; border-radius: 8px; background: #f8fbff; }
@@ -481,8 +487,10 @@ onBeforeUnmount(() => {
 .workflow-node__drag { margin-bottom: 3px; color: #909399; font-size: 10px; }
 .workflow-node__title { font-size: 13px; font-weight: 600; }
 .workflow-node__state { margin-top: 3px; color: #909399; font-size: 11px; }
-.workflow-node__connector { position: absolute; top: 50%; right: -8px; width: 13px; height: 13px; border: 2px solid #fff; border-radius: 50%; background: #409eff; box-shadow: 0 0 0 1px #409eff; cursor: crosshair; transform: translateY(-50%); }
-.workflow-node__connector:hover { background: #79bbff; box-shadow: 0 0 0 3px rgba(64, 158, 255, .18); }
+.workflow-node__connector { position: absolute; top: 50%; box-sizing: border-box; width: 12px; height: 12px; border: 2px solid #409eff; border-radius: 50%; transform: translateY(-50%); }
+.workflow-node__connector--input { left: -6px; background: #fff; }
+.workflow-node__connector--output { right: -6px; border-color: #fff; background: #409eff; box-shadow: 0 0 0 1px #409eff; cursor: crosshair; }
+.workflow-node__connector--output:hover { background: #79bbff; box-shadow: 0 0 0 3px rgba(64, 158, 255, .18); }
 .ai-workflow-editor__panel { min-width: 0; padding: 14px; border: 1px solid #ebeef5; border-radius: 8px; background: #fff; }
 .ai-workflow-editor__empty-panel { display: flex; min-height: 140px; align-items: center; color: #909399; font-size: 13px; line-height: 1.7; }
 .ai-workflow-editor__panel-title { margin-bottom: 8px; color: #303133; font-size: 14px; font-weight: 600; }
