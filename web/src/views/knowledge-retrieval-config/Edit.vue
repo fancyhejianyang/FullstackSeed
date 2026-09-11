@@ -24,6 +24,7 @@ import {
   type AiFeatureConfig,
 } from '@/api/aiFeatureConfig';
 import {
+  createInitialAiWorkflowDefinition,
   getAiWorkflowFlags,
   getWorkflowValidationErrors,
   getWorkflowFallbackFlags,
@@ -76,13 +77,7 @@ const form = reactive<RetrievalForm>({
   textWeight: 0.8,
   vectorWeight: 1,
   sessionContextTimeoutMinutes: 15,
-  workflowDefinition: normalizeAiWorkflowDefinition(null, {
-    enableStandardQa: true,
-    enableColloquial: true,
-    enableKnowledgeRetrieval: true,
-    enableBusinessCommands: false,
-    enableRerank: true,
-  }),
+  workflowDefinition: createInitialAiWorkflowDefinition(),
   enableStandardQa: true,
   enableColloquial: true,
   enableKnowledgeRetrieval: true,
@@ -134,7 +129,7 @@ const fields = computed<FormField[]>(() => {
       prop: 'workflowDefinition',
       label: '流程编排',
       slot: true,
-      hint: '可拖拽节点、添加或移除业务节点并编辑条件连线；系统会校验权限前置、固定回答出口与安全可执行路径。',
+      hint: '新建流程仅从输入清洗入口开始；从节点库加入步骤，并从节点右侧蓝点拖至目标节点建立流向。',
     },
     {
       prop: 'retrievalMode',
@@ -343,13 +338,7 @@ function resetForm() {
   form.textWeight = 0.8;
   form.vectorWeight = 1;
   form.sessionContextTimeoutMinutes = 15;
-  form.workflowDefinition = normalizeAiWorkflowDefinition(null, {
-    enableStandardQa: true,
-    enableColloquial: true,
-    enableKnowledgeRetrieval: true,
-    enableBusinessCommands: false,
-    enableRerank: true,
-  });
+  form.workflowDefinition = createInitialAiWorkflowDefinition();
   syncLegacyWorkflowFlags();
   form.rerankAiFeatureConfigId = rerankConfigOptions.value[0]?.value ?? '';
   form.isEnabled = true;

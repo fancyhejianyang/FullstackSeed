@@ -32,7 +32,7 @@ export const AI_WORKFLOW_STEP_ORDER: AiWorkflowStepType[] = [
   'answer',
 ];
 
-const FIXED_NODE_TYPES = new Set<AiWorkflowStepType>(['preflight', 'answer']);
+const FIXED_NODE_TYPES = new Set<AiWorkflowStepType>(['preflight']);
 const PASS_THROUGH_CONDITIONS = new Set<AiWorkflowEdgeCondition>([
   'always',
   'unmatched',
@@ -175,6 +175,7 @@ function normalizePosition(
 
 function defaultEnabled(type: AiWorkflowStepType, fallback: Partial<AiWorkflowFlags>) {
   if (FIXED_NODE_TYPES.has(type)) return true;
+  if (type === 'answer') return true;
   if (type === 'standardQa' || type === 'calibratedStandardQa') {
     return fallback.enableStandardQa !== false;
   }
@@ -301,6 +302,29 @@ export function normalizeAiWorkflowDefinition(
     });
   });
   return { version: 2, nodes, edges };
+}
+
+/** 新建工作流从唯一的安全入口开始，其余节点由管理员在画布中按需加入。 */
+export function createInitialAiWorkflowDefinition(): Required<
+  Pick<AiWorkflowDefinition, 'nodes' | 'edges'>
+> & { version: 2 } {
+  return {
+    version: 2,
+    nodes: [
+      {
+        id: nodeId('preflight'),
+        type: 'preflight',
+        enabled: true,
+        position: normalizePosition('preflight'),
+      },
+    ],
+    edges: [],
+  };
+}
+
+/** 节点首次加入画布时使用的推荐位置；用户仍可随时拖动。 */
+export function getAiWorkflowNodeDefaultPosition(type: AiWorkflowStepType) {
+  return normalizePosition(type);
 }
 
 export function isAiWorkflowStepEnabled(

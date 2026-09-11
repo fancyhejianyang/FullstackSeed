@@ -129,4 +129,19 @@ describe('KnowledgeRetrievalConfigsService', () => {
       '工作流必须存在从输入清洗到回答生成的可达路径',
     );
   });
+
+  it('keeps a v2 draft limited to the input-cleaning entry node', () => {
+    const definition = normalizeAiWorkflowDefinition({
+      version: 2,
+      nodes: [{ id: 'node-preflight', type: 'preflight', enabled: true }],
+      edges: [],
+    });
+
+    expect(definition.nodes).toEqual([
+      expect.objectContaining({ id: 'node-preflight', type: 'preflight' }),
+    ]);
+    expect(validateAiWorkflowDefinition(definition)).toContain(
+      '工作流必须包含输入清洗与回答生成节点',
+    );
+  });
 });

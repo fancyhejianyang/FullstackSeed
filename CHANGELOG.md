@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-09-11 改为可拖拽连线的空白 AI 工作流编排
+- 新增：无。
+- 修改：
+  - `web/src/views/knowledge-retrieval-config/Edit.vue`、`web/src/utils/aiWorkflow.ts`（新增工作流仅初始化“输入清洗与权限范围”入口；从节点库按需加入节点并使用其推荐位置，已有配置继续按原定义加载）
+  - `web/src/components/AiWorkflowEditor.vue`（从节点右侧连接点拖拽到目标节点建立安全连线；可修改或移除既有连线，并允许删除回答节点以便重新编排）
+  - `server/src/knowledge-retrieval-configs/workflow-definition.ts`、`knowledge-retrieval-configs.service.spec.ts`（V2 草稿不再自动补回回答节点；保存时仍校验输入清洗、回答节点和完整可达路径）
+  - `CHANGELOG.md`（记录本次调整）
+- 删除：无。
+- 说明：保留输入清洗与权限范围作为不可删除的安全入口。节点和连线可按需组织，但仍禁止循环及不支持的执行顺序；未补全回答出口的草稿不能保存，不会重置已有工作流或知识库配置。
+
 ### 2026-09-11 缩小 AI 工作流节点框
 - 新增：无。
 - 修改：

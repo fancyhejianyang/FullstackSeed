@@ -84,7 +84,7 @@ export const AI_WORKFLOW_STEP_ORDER: AiWorkflowStepType[] = [
   'answer',
 ];
 
-const FIXED_NODE_TYPES = new Set<AiWorkflowStepType>(['preflight', 'answer']);
+const FIXED_NODE_TYPES = new Set<AiWorkflowStepType>(['preflight']);
 const PASS_THROUGH_CONDITIONS = new Set<AiWorkflowEdgeCondition>([
   'always',
   'unmatched',
@@ -141,6 +141,7 @@ function getLegacyEnabled(
   flags: AiWorkflowLegacyFlags,
 ) {
   if (FIXED_NODE_TYPES.has(type)) return true;
+  if (type === 'answer') return true;
   if (type === 'standardQa' || type === 'calibratedStandardQa') {
     return flags.enableStandardQa !== false;
   }
@@ -249,7 +250,7 @@ export function isSafeWorkflowEdge(
 
 /**
  * 将历史开关式流程和 v2 图编排统一成可安全执行的节点图。
- * v2 不会自动补回被管理员删除的业务节点；只强制保留前置与回答节点。
+ * v2 不会自动补回被管理员删除的节点；只强制保留输入清洗前置节点。
  */
 export function normalizeAiWorkflowDefinition(
   definition?: AiWorkflowDefinition | null,
