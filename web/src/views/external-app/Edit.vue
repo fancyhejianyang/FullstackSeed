@@ -70,11 +70,12 @@ const fields = computed<FormField[]>(() => [
   },
   {
     prop: 'retrievalConfigId',
-    label: '知识库检索配置',
+    label: 'AI 工作流配置',
     type: 'select',
-    placeholder: '不使用知识库检索',
+    placeholder: '不关联工作流',
+    hint: '工作流决定本应用是否执行标准问答、口语校准、知识库检索和业务数据指令；通用知识库客服与业务客服应分别关联不同工作流。',
     options: [
-      { label: '不使用知识库检索', value: '' },
+      { label: '不关联工作流', value: '' },
       ...retrievalConfigs.value.map((item) => ({
         label: `${item.name}（${getRetrievalModeText(item.retrievalMode)}）`,
         value: item.id,
@@ -88,7 +89,7 @@ const fields = computed<FormField[]>(() => [
     options: commandCatalog.value
       .filter((item) => item.chatCallable && !coreChatCommandKeys.has(item.commandKey))
       .map((item) => ({ label: `${item.name}（${item.commandKey}）`, value: item.commandKey })),
-    hint: '基础问答指令会自动保留；仅勾选产品/SKU等已审核的只读业务指令，避免通用客服读取业务数据。',
+    hint: '工作流决定是否执行知识库、口语校准和业务指令；这里仅勾选产品/SKU等已审核的只读业务指令，二者都启用才会实际调用。',
   },
   {
     prop: 'domain',
@@ -118,8 +119,7 @@ function resetForm() {
   form.appId = '';
   form.domain = '';
   form.aiFeatureConfigId = chatConfigs.value.length === 1 ? chatConfigs.value[0].id : null;
-  form.retrievalConfigId =
-    retrievalConfigs.value.length === 1 ? retrievalConfigs.value[0].id : null;
+  form.retrievalConfigId = null;
   form.commandKeys = [];
   form.isEnabled = true;
   form.description = '';

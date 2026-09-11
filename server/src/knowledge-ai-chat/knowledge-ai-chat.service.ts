@@ -63,9 +63,11 @@ interface KnowledgeRetrievalState {
   rerankTokenUsage: KnowledgeAiTokenUsage | null;
   statistics: KnowledgeRetrievalStatistics;
   semanticContext: string;
+  knowledgeRetrievalEnabled: boolean;
   businessContext: ProductSkuChatContext | null;
   businessDataAuthorized: boolean;
   businessDataExecuted: boolean;
+  businessDataSkippedReason: string | null;
   routingRuleMatches: KnowledgeRoutingRuleMatch[];
   hits: KnowledgeRetrievalHit[];
   referenceImages: KnowledgeReferenceImage[];
@@ -82,6 +84,18 @@ interface KnowledgeStandardQaState {
   originalQa: KnowledgeAiQaTraceStage;
   colloquial: KnowledgeAiColloquialTrace;
   calibratedQa: KnowledgeAiQaTraceStage;
+}
+
+interface KnowledgeAiWorkflowSteps {
+  enableStandardQa: boolean;
+  enableColloquial: boolean;
+  enableKnowledgeRetrieval: boolean;
+  enableBusinessCommands: boolean;
+}
+
+interface BusinessDataAuthorization {
+  authorized: boolean;
+  skippedReason: string | null;
 }
 
 type ThinkingEventKind = 'status' | 'summary';
@@ -155,22 +169,34 @@ export class KnowledgeAiChatService {
       : await this.createSession(dto, target);
     const history = await this.getSessionHistory(session.id);
     const retrievalConfigId = dto.retrievalConfigId ?? null;
-    const [standardQa, configuredTrace] = await Promise.all([
-      this.buildStandardQaState({
-        question: dto.question,
-        retrievalConfigId,
-      }),
-      this.resolveRetrievalConfigTrace(retrievalConfigId),
-    ]);
-    const businessDataAuthorized = true;
+    const configuredTrace = await this.resolveRetrievalConfigTrace(retrievalConfigId);
+    const workflow = this.resolveWorkflowSteps(configuredTrace);
+    const standardQa = await this.buildStandardQaState({
+      question: dto.question,
+      retrievalConfigId,
+      enableStandardQa: workflow.enableStandardQa,
+      enableColloquial: workflow.enableColloquial,
+    });
+    const businessDataAuthorization = this.resolveBusinessDataAuthorization(
+      configuredTrace,
+      workflow,
+    );
+    const businessDataAuthorized = businessDataAuthorization.authorized;
     const businessContext = standardQa.answer
       ? null
-      : await this.commandService.lookupProductSku(standardQa.rewrittenQuestion);
-    const retrieval = standardQa.answer
+      : businessDataAuthorized
+        ? await this.commandService.lookupProductSku(standardQa.rewrittenQuestion)
+        : null;
+    const retrieval = standardQa.answer || !workflow.enableKnowledgeRetrieval
       ? this.emptyRetrievalState(
           retrievalConfigId,
           configuredTrace,
+          standardQa.rewrittenQuestion,
+          standardQa.semanticContext,
+          businessContext,
           businessDataAuthorized,
+          workflow.enableKnowledgeRetrieval,
+          businessDataAuthorization.skippedReason,
         )
       : await this.buildRetrievalState(
           standardQa.rewrittenQuestion,
@@ -234,14 +260,15 @@ export class KnowledgeAiChatService {
     const retrievalConfigId =
       externalApp?.retrievalConfigId ?? dto.retrievalConfigId ?? null;
     const commandOptions = this.getCommandOptions(externalApp);
-    const [standardQa, configuredTrace] = await Promise.all([
-      this.buildStandardQaState({
-        question: dto.question,
-        retrievalConfigId,
-        commandOptions,
-      }),
-      this.resolveRetrievalConfigTrace(retrievalConfigId),
-    ]);
+    const configuredTrace = await this.resolveRetrievalConfigTrace(retrievalConfigId);
+    const workflow = this.resolveWorkflowSteps(configuredTrace);
+    const standardQa = await this.buildStandardQaState({
+      question: dto.question,
+      retrievalConfigId,
+      commandOptions,
+      enableStandardQa: workflow.enableStandardQa,
+      enableColloquial: workflow.enableColloquial,
+    });
     writer.writeEvent('standard-qa', {
       matched: Boolean(standardQa.answer),
       entryId: standardQa.entryId,
@@ -251,7 +278,12 @@ export class KnowledgeAiChatService {
       rewrittenQuestion: standardQa.rewrittenQuestion,
       matches: standardQa.colloquialTermMatches,
     });
-    const businessDataAuthorized = this.isProductSkuLookupAuthorized(commandOptions);
+    const businessDataAuthorization = this.resolveBusinessDataAuthorization(
+      configuredTrace,
+      workflow,
+      commandOptions,
+    );
+    const businessDataAuthorized = businessDataAuthorization.authorized;
     const businessContext =
       standardQa.answer || !businessDataAuthorized
         ? null
@@ -262,11 +294,16 @@ export class KnowledgeAiChatService {
     if (businessContext) {
       writer.writeEvent('business-context', { context: businessContext });
     }
-    const retrieval = standardQa.answer
+    const retrieval = standardQa.answer || !workflow.enableKnowledgeRetrieval
       ? this.emptyRetrievalState(
           retrievalConfigId,
           configuredTrace,
+          standardQa.rewrittenQuestion,
+          standardQa.semanticContext,
+          businessContext,
           businessDataAuthorized,
+          workflow.enableKnowledgeRetrieval,
+          businessDataAuthorization.skippedReason,
         )
       : await this.buildRetrievalState(
           standardQa.rewrittenQuestion,
@@ -528,9 +565,11 @@ export class KnowledgeAiChatService {
       rerankTokenUsage: result.rerankTokenUsage,
       statistics: result.statistics,
       semanticContext,
+      knowledgeRetrievalEnabled: true,
       businessContext,
       businessDataAuthorized,
       businessDataExecuted: businessDataAuthorized,
+      businessDataSkippedReason: null,
       routingRuleMatches: result.routingRuleMatches,
       hits: result.hits,
       referenceImages: result.referenceImages,
@@ -541,11 +580,21 @@ export class KnowledgeAiChatService {
     question: string;
     retrievalConfigId?: number | null;
     commandOptions?: KnowledgeAiChatCommandOptions;
+    enableStandardQa?: boolean;
+    enableColloquial?: boolean;
   }): Promise<KnowledgeStandardQaState> {
-    const directMatch = await this.commandService.searchStandardQa({
-      retrievalConfigId: params.retrievalConfigId,
-      question: params.question,
-    }, params.commandOptions);
+    const inputQuestion = params.question.trim();
+    const enableStandardQa = params.enableStandardQa !== false;
+    const enableColloquial = params.enableColloquial !== false;
+    const directMatch = enableStandardQa
+      ? await this.commandService.searchStandardQa(
+          {
+            retrievalConfigId: params.retrievalConfigId,
+            question: params.question,
+          },
+          params.commandOptions,
+        )
+      : null;
     if (directMatch) {
       const originalQa = this.buildQaTraceStage(
         params.question,
@@ -578,6 +627,45 @@ export class KnowledgeAiChatService {
         ),
       };
     }
+    const originalQa = this.buildQaTraceStage(
+      params.question,
+      enableStandardQa,
+      null,
+      enableStandardQa
+        ? null
+        : '当前 AI 工作流已关闭标准问答，未匹配原问题。',
+    );
+    if (!enableColloquial) {
+      return {
+        entryId: null,
+        question: null,
+        answer: null,
+        rewrittenQuestion: inputQuestion,
+        semanticContext: '',
+        colloquialTermMatches: [],
+        commandIds: enableStandardQa
+          ? [KNOWLEDGE_AI_CHAT_COMMANDS.searchStandardQa]
+          : [],
+        originalQa,
+        colloquial: {
+          evaluated: false,
+          inputQuestion,
+          rewrittenQuestion: inputQuestion,
+          matched: false,
+          matches: [],
+          semanticConstraintApplied: false,
+          skippedReason: '当前 AI 工作流已关闭口语化校准。',
+        },
+        calibratedQa: this.buildQaTraceStage(
+          inputQuestion,
+          false,
+          null,
+          enableStandardQa
+            ? '口语化校准已关闭，未再次匹配标准问答。'
+            : '当前 AI 工作流已关闭标准问答，未匹配校准后的问题。',
+        ),
+      };
+    }
     const rewrite = await this.commandService.rewriteColloquialQuestion({
       retrievalConfigId: params.retrievalConfigId,
       question: params.question,
@@ -585,7 +673,7 @@ export class KnowledgeAiChatService {
     const hasRewrittenQuestion =
       this.normalizeQuestion(rewrite.rewrittenQuestion) !==
       this.normalizeQuestion(params.question);
-    const rewrittenMatch = hasRewrittenQuestion
+    const rewrittenMatch = enableStandardQa && hasRewrittenQuestion
       ? await this.commandService.searchStandardQa({
           retrievalConfigId: params.retrievalConfigId,
           question: rewrite.rewrittenQuestion,
@@ -608,21 +696,25 @@ export class KnowledgeAiChatService {
       semanticContext: rewrite.semanticContext,
       colloquialTermMatches: rewrite.matches,
       commandIds: [
-        KNOWLEDGE_AI_CHAT_COMMANDS.searchStandardQa,
+        ...(enableStandardQa
+          ? [KNOWLEDGE_AI_CHAT_COMMANDS.searchStandardQa]
+          : []),
         KNOWLEDGE_AI_CHAT_COMMANDS.rewriteColloquialQuestion,
-        ...(hasRewrittenQuestion
+        ...(enableStandardQa && hasRewrittenQuestion
           ? [KNOWLEDGE_AI_CHAT_COMMANDS.searchStandardQa]
           : []),
       ],
-      originalQa: this.buildQaTraceStage(params.question, true, null),
+      originalQa,
       colloquial,
       calibratedQa: this.buildQaTraceStage(
         rewrite.rewrittenQuestion,
-        hasRewrittenQuestion,
+        enableStandardQa && hasRewrittenQuestion,
         rewrittenMatch,
-        hasRewrittenQuestion
-          ? null
-          : '口语化校准未改变问题，已使用原问题的标准问答查询结果。',
+        !enableStandardQa
+          ? '当前 AI 工作流已关闭标准问答，未匹配校准后的问题。'
+          : hasRewrittenQuestion
+            ? null
+            : '口语化校准未改变问题，已使用原问题的标准问答查询结果。',
       ),
     };
   }
@@ -662,12 +754,17 @@ export class KnowledgeAiChatService {
   private emptyRetrievalState(
     configId: number | null,
     config: KnowledgeRetrievalConfigSnapshot | null,
+    query: string,
+    semanticContext: string,
+    businessContext: ProductSkuChatContext | null,
     businessDataAuthorized: boolean,
+    knowledgeRetrievalEnabled: boolean,
+    businessDataSkippedReason: string | null,
   ): KnowledgeRetrievalState {
     return {
       configId,
       config,
-      query: '',
+      query: query.trim(),
       queryRewritten: false,
       context: '',
       knowledgeBaseNames: [],
@@ -681,10 +778,12 @@ export class KnowledgeAiChatService {
       rerankApplied: false,
       rerankTokenUsage: null,
       statistics: this.emptyRetrievalStatistics(),
-      semanticContext: '',
-      businessContext: null,
+      semanticContext,
+      knowledgeRetrievalEnabled,
+      businessContext,
       businessDataAuthorized,
-      businessDataExecuted: false,
+      businessDataExecuted: Boolean(businessContext),
+      businessDataSkippedReason,
       routingRuleMatches: [],
       hits: [],
       referenceImages: [],
@@ -811,12 +910,15 @@ export class KnowledgeAiChatService {
     const retrievalSkippedReason = endedByStandardQa
       ? '已命中标准问答并直接返回固定答案，未执行知识库检索。'
       : !retrieval.config
-        ? '当前会话未选择知识库检索配置，未执行资料召回。'
+        ? '当前会话未关联 AI 工作流，未执行知识库检索。'
+        : !retrieval.knowledgeRetrievalEnabled
+          ? '当前 AI 工作流已关闭知识库检索，未执行路由、召回和重排。'
         : null;
     const businessSkippedReason = endedByStandardQa
       ? '已命中标准问答，未查询业务数据。'
       : !retrieval.businessDataAuthorized
-        ? '当前聊天应用未授权产品/SKU 查询指令。'
+        ? (retrieval.businessDataSkippedReason ??
+          '当前聊天应用未授权产品/SKU 查询指令。')
         : retrieval.businessContext
           ? null
           : '未识别到可唯一定位的产品或 SKU 业务事实。';
@@ -827,7 +929,10 @@ export class KnowledgeAiChatService {
       colloquial: standardQa.colloquial,
       calibratedQa: standardQa.calibratedQa,
       routing: {
-        executed: !endedByStandardQa && Boolean(retrieval.config),
+        executed:
+          !endedByStandardQa &&
+          retrieval.knowledgeRetrievalEnabled &&
+          Boolean(retrieval.config),
         matchedRules: retrieval.routingRuleMatches,
         routedKnowledgeBases: retrieval.routedKnowledgeBases,
         activeKnowledgeBaseId: retrieval.activeKnowledgeBaseId,
@@ -836,21 +941,28 @@ export class KnowledgeAiChatService {
         skippedReason: retrievalSkippedReason,
       },
       retrieval: {
-        executed: !endedByStandardQa && Boolean(retrieval.config),
+        executed:
+          !endedByStandardQa &&
+          retrieval.knowledgeRetrievalEnabled &&
+          Boolean(retrieval.config),
         hasReference: Boolean(retrieval.context),
         statistics: retrieval.statistics,
         selectedHitCount: retrieval.hits.length,
         skippedReason: retrievalSkippedReason,
       },
       rerank: {
-        configured: Boolean(retrieval.config?.enableRerank),
+        configured:
+          retrieval.knowledgeRetrievalEnabled &&
+          Boolean(retrieval.config?.enableRerank),
         applied: retrieval.rerankApplied,
         skippedReason: endedByStandardQa
           ? '标准问答已直接返回，未进入重排。'
           : !retrieval.config
-            ? '未选择检索配置，未进入重排。'
+            ? '未关联 AI 工作流，未进入重排。'
+            : !retrieval.knowledgeRetrievalEnabled
+              ? '当前 AI 工作流已关闭知识库检索，未进入重排。'
             : !retrieval.config.enableRerank
-              ? '当前检索配置未启用重排。'
+              ? '当前 AI 工作流未启用重排。'
               : retrieval.rerankApplied
                 ? null
                 : retrieval.statistics.rerankInputCount === 0
@@ -884,6 +996,10 @@ export class KnowledgeAiChatService {
       rrfK: Number(config.rrfK ?? 60),
       textWeight: Number(config.textWeight ?? 0.8),
       vectorWeight: Number(config.vectorWeight ?? 1),
+      enableStandardQa: config.enableStandardQa !== false,
+      enableColloquial: config.enableColloquial !== false,
+      enableKnowledgeRetrieval: config.enableKnowledgeRetrieval !== false,
+      enableBusinessCommands: Boolean(config.enableBusinessCommands),
       enableRerank: Boolean(config.enableRerank),
       rerankAiFeatureConfigName: config.rerankAiFeatureConfigName ?? null,
     };
@@ -898,6 +1014,43 @@ export class KnowledgeAiChatService {
         KNOWLEDGE_AI_CHAT_COMMANDS.lookupProductSku,
       )
     );
+  }
+
+  private resolveWorkflowSteps(
+    config: KnowledgeRetrievalConfigSnapshot | null,
+  ): KnowledgeAiWorkflowSteps {
+    return {
+      enableStandardQa: config?.enableStandardQa !== false,
+      enableColloquial: config?.enableColloquial !== false,
+      enableKnowledgeRetrieval: config?.enableKnowledgeRetrieval === true,
+      enableBusinessCommands: config?.enableBusinessCommands === true,
+    };
+  }
+
+  private resolveBusinessDataAuthorization(
+    config: KnowledgeRetrievalConfigSnapshot | null,
+    workflow: KnowledgeAiWorkflowSteps,
+    commandOptions?: KnowledgeAiChatCommandOptions,
+  ): BusinessDataAuthorization {
+    if (!config) {
+      return {
+        authorized: false,
+        skippedReason: '当前会话未关联 AI 工作流，默认不调用业务数据指令。',
+      };
+    }
+    if (!workflow.enableBusinessCommands) {
+      return {
+        authorized: false,
+        skippedReason: '当前 AI 工作流已关闭业务数据指令。',
+      };
+    }
+    if (!this.isProductSkuLookupAuthorized(commandOptions)) {
+      return {
+        authorized: false,
+        skippedReason: '当前聊天应用未授权产品/SKU 查询指令。',
+      };
+    }
+    return { authorized: true, skippedReason: null };
   }
 
   private emptyRetrievalStatistics(): KnowledgeRetrievalStatistics {
@@ -1083,6 +1236,17 @@ export class KnowledgeAiChatService {
           `业务系统事实：\n${JSON.stringify(retrieval.businessContext, null, 2)}`,
         ]
       : [];
+    if (!retrieval?.knowledgeRetrievalEnabled) {
+      return [
+        retrieval?.config
+          ? '当前 AI 工作流未启用知识库检索。'
+          : '当前会话未关联 AI 工作流，未启用知识库检索。',
+        ...semanticInstructions,
+        ...businessInstructions,
+        '',
+        ...questionInstructions,
+      ].join('\n');
+    }
     if (!retrieval?.configId) {
       return [...questionInstructions, ...semanticInstructions, ...businessInstructions].join('\n');
     }

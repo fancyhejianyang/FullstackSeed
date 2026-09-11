@@ -27,7 +27,7 @@ const retrievalModeOptions = [
 ];
 
 const columns: TableColumn[] = [
-  { prop: 'name', label: '配置名称', minWidth: 180 },
+  { prop: 'name', label: '工作流名称', minWidth: 180 },
   { prop: 'retrievalMode', label: '检索模式', width: 120, slot: true },
   { prop: 'knowledgeBaseNames', label: '知识库范围', minWidth: 220, slot: true },
   { prop: 'topK', label: '召回上限', width: 100 },
@@ -55,7 +55,7 @@ const searchFields: FormField[] = [
       { label: '停用', value: false },
     ],
   },
-  { prop: 'keyword', label: '关键词', type: 'input', placeholder: '配置/知识库/描述' },
+  { prop: 'keyword', label: '关键词', type: 'input', placeholder: '工作流/知识库/描述' },
 ];
 
 const editVisible = ref(false);
@@ -97,7 +97,7 @@ function getScopeText(row: KnowledgeRetrievalConfig) {
 </script>
 
 <template>
-  <PageContainer title="知识库检索配置">
+  <PageContainer title="AI 工作流配置">
     <Table
       ref="tableRef"
       :columns="columns"
@@ -111,7 +111,7 @@ function getScopeText(row: KnowledgeRetrievalConfig) {
       @edit="handleEdit"
     >
       <template #toolbar>
-        <Button type="primary" icon="Plus" @click="openCreate">新增配置</Button>
+        <Button type="primary" icon="Plus" @click="openCreate">新增工作流</Button>
         <Button
           icon="Delete"
           type="danger"

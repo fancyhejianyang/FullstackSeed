@@ -16,6 +16,10 @@ export interface KnowledgeRetrievalConfig {
   textWeight: number;
   vectorWeight: number;
   sessionContextTimeoutMinutes: number;
+  enableStandardQa: boolean;
+  enableColloquial: boolean;
+  enableKnowledgeRetrieval: boolean;
+  enableBusinessCommands: boolean;
   enableRerank: boolean;
   rerankAiFeatureConfigId: number | null;
   rerankAiFeatureConfigName: string | null;
@@ -49,6 +53,10 @@ export interface KnowledgeRetrievalConfigForm {
   textWeight?: number | null;
   vectorWeight?: number | null;
   sessionContextTimeoutMinutes?: number | null;
+  enableStandardQa?: boolean;
+  enableColloquial?: boolean;
+  enableKnowledgeRetrieval?: boolean;
+  enableBusinessCommands?: boolean;
   enableRerank?: boolean;
   rerankAiFeatureConfigId?: number | null;
   isEnabled?: boolean;

@@ -38,6 +38,10 @@ type RetrievalForm = {
   textWeight: number | null;
   vectorWeight: number | null;
   sessionContextTimeoutMinutes: number | null;
+  enableStandardQa: boolean;
+  enableColloquial: boolean;
+  enableKnowledgeRetrieval: boolean;
+  enableBusinessCommands: boolean;
   enableRerank: boolean;
   rerankAiFeatureConfigId: number | '';
   isEnabled: boolean;
@@ -63,6 +67,10 @@ const form = reactive<RetrievalForm>({
   textWeight: 0.8,
   vectorWeight: 1,
   sessionContextTimeoutMinutes: 15,
+  enableStandardQa: true,
+  enableColloquial: true,
+  enableKnowledgeRetrieval: true,
+  enableBusinessCommands: false,
   enableRerank: true,
   rerankAiFeatureConfigId: '',
   isEnabled: true,
@@ -97,7 +105,49 @@ const rerankConfigOptions = computed(() =>
 
 const fields = computed<FormField[]>(() => {
   const items: FormField[] = [
-    { prop: 'name', label: '配置名称', type: 'input', placeholder: '如 默认客服检索策略' },
+    {
+      prop: 'name',
+      label: '工作流名称',
+      type: 'input',
+      placeholder: '如 通用知识库客服、商品业务客服',
+      hint: '工作流决定一次提问会经过哪些处理环节；可同时用于通用知识库客服或业务客服。',
+    },
+    {
+      prop: 'enableStandardQa',
+      label: '标准问答',
+      component: 'Switch',
+      componentProps: { activeText: '启用', inactiveText: '关闭' },
+      hint: form.enableStandardQa
+        ? '当前启用：先用人工审核的固定问答精确匹配；命中后直接返回答案，不调用模型。'
+        : '当前关闭：不会使用固定问答拦截，问题会继续进入后续已启用的环节。',
+    },
+    {
+      prop: 'enableColloquial',
+      label: '口语校准',
+      component: 'Switch',
+      componentProps: { activeText: '启用', inactiveText: '关闭' },
+      hint: form.enableColloquial
+        ? '当前启用：把“多重”等口语词转换为人工维护的标准表达和语义约束，再带入后续处理。'
+        : '当前关闭：保留用户原问题，不读取口语化词库。',
+    },
+    {
+      prop: 'enableKnowledgeRetrieval',
+      label: '知识库检索',
+      component: 'Switch',
+      componentProps: { activeText: '启用', inactiveText: '关闭' },
+      hint: form.enableKnowledgeRetrieval
+        ? '当前启用：执行路由、召回、阈值筛选与重排，并让模型只依据命中的知识库资料回答。'
+        : '当前关闭：不访问知识库，也不执行路由和重排；适合只通过业务指令读取实时数据的客服。',
+    },
+    {
+      prop: 'enableBusinessCommands',
+      label: '业务数据指令',
+      component: 'Switch',
+      componentProps: { activeText: '启用', inactiveText: '关闭' },
+      hint: form.enableBusinessCommands
+        ? '当前启用：允许调用应用已勾选的只读业务指令，例如产品/SKU 查询；工作流和聊天应用均启用才会实际调用。'
+        : '当前关闭：即使聊天应用勾选了业务指令，也不会调用业务接口。',
+    },
     {
       prop: 'retrievalMode',
       label: '检索模式',
@@ -199,7 +249,7 @@ const fields = computed<FormField[]>(() => {
     },
   ];
 
-  if (form.enableRerank) {
+  if (form.enableKnowledgeRetrieval && form.enableRerank) {
     items.push({
       prop: 'rerankAiFeatureConfigId',
       label: 'LLM 重排配置',
@@ -210,8 +260,25 @@ const fields = computed<FormField[]>(() => {
     });
   }
 
+  const visibleItems = form.enableKnowledgeRetrieval
+    ? items
+    : items.filter((item) =>
+        ![
+          'retrievalMode',
+          'knowledgeScopeKeys',
+          'topK',
+          'minScore',
+          'rrfK',
+          'textWeight',
+          'vectorWeight',
+          'sessionContextTimeoutMinutes',
+          'enableRerank',
+          'rerankAiFeatureConfigId',
+        ].includes(item.prop),
+      );
+
   return [
-    ...items,
+    ...visibleItems,
     {
       prop: 'isEnabled',
       label: '是否启用',
@@ -223,13 +290,17 @@ const fields = computed<FormField[]>(() => {
 });
 
 const rules = computed<FormRules>(() => ({
-  name: [{ required: true, message: '请输入配置名称', trigger: 'blur' }],
-  retrievalMode: [{ required: true, message: '请选择检索模式', trigger: 'change' }],
-  topK: [{ required: true, message: '请输入召回上限', trigger: 'blur' }],
-  sessionContextTimeoutMinutes: [
-    { required: true, message: '请输入上下文有效期', trigger: 'blur' },
-  ],
-  ...(form.enableRerank
+  name: [{ required: true, message: '请输入工作流名称', trigger: 'blur' }],
+  ...(form.enableKnowledgeRetrieval
+    ? {
+        retrievalMode: [{ required: true, message: '请选择检索模式', trigger: 'change' }],
+        topK: [{ required: true, message: '请输入召回上限', trigger: 'blur' }],
+        sessionContextTimeoutMinutes: [
+          { required: true, message: '请输入上下文有效期', trigger: 'blur' },
+        ],
+      }
+    : {}),
+  ...(form.enableKnowledgeRetrieval && form.enableRerank
     ? {
         rerankAiFeatureConfigId: [
           { required: true, message: '请选择重排 AI 配置', trigger: 'change' },
@@ -288,6 +359,10 @@ function resetForm() {
   form.textWeight = 0.8;
   form.vectorWeight = 1;
   form.sessionContextTimeoutMinutes = 15;
+  form.enableStandardQa = true;
+  form.enableColloquial = true;
+  form.enableKnowledgeRetrieval = true;
+  form.enableBusinessCommands = false;
   form.enableRerank = true;
   form.rerankAiFeatureConfigId = rerankConfigOptions.value[0]?.value ?? '';
   form.isEnabled = true;
@@ -314,6 +389,10 @@ function fillForm(data: KnowledgeRetrievalConfig) {
   form.sessionContextTimeoutMinutes = Number(
     data.sessionContextTimeoutMinutes ?? 15,
   );
+  form.enableStandardQa = data.enableStandardQa !== false;
+  form.enableColloquial = data.enableColloquial !== false;
+  form.enableKnowledgeRetrieval = data.enableKnowledgeRetrieval !== false;
+  form.enableBusinessCommands = Boolean(data.enableBusinessCommands);
   form.enableRerank = !!data.enableRerank;
   form.rerankAiFeatureConfigId = data.rerankAiFeatureConfigId ?? '';
   form.isEnabled = !!data.isEnabled;
@@ -333,6 +412,10 @@ function buildPayload(): KnowledgeRetrievalConfigForm {
     textWeight: form.textWeight,
     vectorWeight: form.vectorWeight,
     sessionContextTimeoutMinutes: form.sessionContextTimeoutMinutes,
+    enableStandardQa: form.enableStandardQa,
+    enableColloquial: form.enableColloquial,
+    enableKnowledgeRetrieval: form.enableKnowledgeRetrieval,
+    enableBusinessCommands: form.enableBusinessCommands,
     enableRerank: form.enableRerank,
     rerankAiFeatureConfigId: form.enableRerank
       ? Number(form.rerankAiFeatureConfigId)
@@ -410,7 +493,7 @@ function setScopeTreeCheckedKeys(keys: string[]) {
 
 async function handleSubmit() {
   await formRef.value?.validate();
-  if (form.enableRerank && !form.rerankAiFeatureConfigId) {
+  if (form.enableKnowledgeRetrieval && form.enableRerank && !form.rerankAiFeatureConfigId) {
     ElMessage.warning('请选择重排 AI 配置');
     return;
   }
@@ -434,7 +517,7 @@ async function handleSubmit() {
 <template>
   <Dialog
     v-model="visible"
-    :title="props.row ? '编辑知识库检索配置' : '新增知识库检索配置'"
+    :title="props.row ? '编辑 AI 工作流配置' : '新增 AI 工作流配置'"
     width="860px"
     :confirm-loading="submitting"
     @confirm="handleSubmit"
@@ -458,7 +541,7 @@ async function handleSubmit() {
           </div>
         </template>
       </Form>
-      <div class="knowledge-retrieval-edit__session-tip">
+      <div v-if="form.enableKnowledgeRetrieval" class="knowledge-retrieval-edit__session-tip">
         有效期内，未明确切换知识库的追问会优先使用上一轮命中知识库；超过有效期按新问题重新检索。填 0 则关闭知识库上下文复用。
       </div>
     </div>

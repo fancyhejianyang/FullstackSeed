@@ -49,6 +49,10 @@ export interface KnowledgeRetrievalConfigSnapshot {
   rrfK: number;
   textWeight: number;
   vectorWeight: number;
+  enableStandardQa: boolean;
+  enableColloquial: boolean;
+  enableKnowledgeRetrieval: boolean;
+  enableBusinessCommands: boolean;
   enableRerank: boolean;
   rerankAiFeatureConfigName: string | null;
 }

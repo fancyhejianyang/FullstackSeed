@@ -56,7 +56,7 @@ export class KnowledgeRetrievalConfigsService {
   async findOne(id: number) {
     const config = await this.configRepository.findOne({ where: { id } });
     if (!config) {
-      throw new NotFoundException('知识库检索配置不存在');
+      throw new NotFoundException('AI 工作流配置不存在');
     }
     return config;
   }
@@ -64,7 +64,7 @@ export class KnowledgeRetrievalConfigsService {
   async findUsableConfig(id: number) {
     const config = await this.findOne(id);
     if (!config.isEnabled) {
-      throw new BadRequestException('该知识库检索配置未启用');
+      throw new BadRequestException('该 AI 工作流未启用');
     }
     return config;
   }
@@ -97,7 +97,7 @@ export class KnowledgeRetrievalConfigsService {
       where: { id: In(uniqueIds) },
     });
     if (count !== uniqueIds.length) {
-      throw new NotFoundException('部分知识库检索配置不存在');
+      throw new NotFoundException('部分 AI 工作流配置不存在');
     }
     await this.configRepository.softDelete(uniqueIds);
     return { ids: uniqueIds };
@@ -155,6 +155,18 @@ export class KnowledgeRetrievalConfigsService {
       payload.sessionContextTimeoutMinutes =
         dto.sessionContextTimeoutMinutes ?? 15;
     }
+    if (dto.enableStandardQa !== undefined || isCreate) {
+      payload.enableStandardQa = dto.enableStandardQa ?? true;
+    }
+    if (dto.enableColloquial !== undefined || isCreate) {
+      payload.enableColloquial = dto.enableColloquial ?? true;
+    }
+    if (dto.enableKnowledgeRetrieval !== undefined || isCreate) {
+      payload.enableKnowledgeRetrieval = dto.enableKnowledgeRetrieval ?? true;
+    }
+    if (dto.enableBusinessCommands !== undefined || isCreate) {
+      payload.enableBusinessCommands = dto.enableBusinessCommands ?? false;
+    }
     if (dto.enableRerank !== undefined || isCreate) {
       payload.enableRerank = dto.enableRerank ?? true;
       if (!payload.enableRerank) {
@@ -184,7 +196,7 @@ export class KnowledgeRetrievalConfigsService {
   }
 
   private async ensureRerankOptions(config: Partial<KnowledgeRetrievalConfig>) {
-    if (!config.enableRerank) return;
+    if (!config.enableKnowledgeRetrieval || !config.enableRerank) return;
     const rerankConfig = config.rerankAiFeatureConfigId
       ? await this.aiFeatureConfigsService.findUsableRerankConfig(
           config.rerankAiFeatureConfigId,

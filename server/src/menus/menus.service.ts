@@ -216,7 +216,7 @@ const SEED_MENUS: SeedMenu[] = [
     parentPath: '/chat-management',
   },
   {
-    name: '知识库检索配置',
+    name: 'AI 工作流配置',
     path: '/chat-management/retrieval-configs',
     icon: '',
     sort: 35,

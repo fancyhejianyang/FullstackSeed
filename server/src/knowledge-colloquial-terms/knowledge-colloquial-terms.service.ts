@@ -318,14 +318,14 @@ export class KnowledgeColloquialTermsService {
       ...entry,
       retrievalConfigName: entry.retrievalConfigId
         ? (configNames.get(entry.retrievalConfigId) ??
-          `检索配置 #${entry.retrievalConfigId}`)
+          `AI 工作流 #${entry.retrievalConfigId}`)
         : '全局',
     }));
   }
 
   private async assertRetrievalConfig(id: number) {
     const config = await this.retrievalConfigRepository.findOne({ where: { id } });
-    if (!config) throw new BadRequestException('适用检索配置不存在');
+    if (!config) throw new BadRequestException('适用 AI 工作流不存在');
   }
 
   private async findEntity(id: number) {

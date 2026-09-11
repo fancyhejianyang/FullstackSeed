@@ -111,6 +111,10 @@ export interface KnowledgeRetrievalConfigSnapshot {
   rrfK: number;
   textWeight: number;
   vectorWeight: number;
+  enableStandardQa: boolean;
+  enableColloquial: boolean;
+  enableKnowledgeRetrieval: boolean;
+  enableBusinessCommands: boolean;
   enableRerank: boolean;
   rerankAiFeatureConfigName: string | null;
 }
@@ -236,6 +240,9 @@ export class KnowledgeAiChatRetrievalService {
     const config =
       await this.retrievalConfigsService.findUsableConfig(configId);
     const configSnapshot = this.toConfigSnapshot(config);
+    if (config.enableKnowledgeRetrieval === false) {
+      return this.emptyResult(originalQuestion, { config: configSnapshot });
+    }
     const scopeBases = await this.resolveKnowledgeBases(
       config.knowledgeBaseIds ?? [],
       config.categoryIds ?? [],
@@ -418,7 +425,12 @@ export class KnowledgeAiChatRetrievalService {
       rrfK: Number(config.rrfK ?? 60),
       textWeight: Number(config.textWeight ?? 0.8),
       vectorWeight: Number(config.vectorWeight ?? 1),
-      enableRerank: Boolean(config.enableRerank),
+      enableStandardQa: config.enableStandardQa !== false,
+      enableColloquial: config.enableColloquial !== false,
+      enableKnowledgeRetrieval: config.enableKnowledgeRetrieval !== false,
+      enableBusinessCommands: Boolean(config.enableBusinessCommands),
+      enableRerank:
+        config.enableKnowledgeRetrieval !== false && Boolean(config.enableRerank),
       rerankAiFeatureConfigName: config.rerankAiFeatureConfigName ?? null,
     };
   }

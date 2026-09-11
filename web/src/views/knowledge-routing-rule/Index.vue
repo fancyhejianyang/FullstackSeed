@@ -36,7 +36,7 @@ const columns: TableColumn[] = [
   { prop: 'ruleType', label: '规则类型', width: 120, slot: true },
   { prop: 'matchMode', label: '匹配方式', width: 110, slot: true },
   { prop: 'weight', label: '权重', width: 100 },
-  { prop: 'retrievalConfigName', label: '所属检索配置', minWidth: 160 },
+  { prop: 'retrievalConfigName', label: '所属 AI 工作流', minWidth: 160 },
   { prop: 'categoryNames', label: '目标分类', minWidth: 160, slot: true },
   { prop: 'knowledgeBaseNames', label: '目标知识库', minWidth: 180, slot: true },
   { prop: 'isEnabled', label: '状态', width: 90, slot: true },
@@ -52,7 +52,7 @@ const searchFields = computed<FormField[]>(() => [
   },
   {
     prop: 'retrievalConfigId',
-    label: '检索配置',
+    label: 'AI 工作流',
     type: 'select',
     options: [
       { label: '全部', value: '' },

@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-09-11 将知识库检索配置升级为 AI 工作流配置
+- 新增：
+  - `server/src/migrations/1788886000000-AddAiWorkflowSteps.ts`（为既有配置增加标准问答、口语校准、知识库检索、业务数据指令四个开关；仅把未自定义的旧系统菜单重命名为“AI 工作流配置”）
+- 修改：
+  - `server/src/knowledge-retrieval-configs/`、`web/src/views/knowledge-retrieval-config/`（管理端统一显示为“AI 工作流配置”；根据知识库检索开关动态显示或隐藏范围、召回、重排等字段，并提供每个开关的即时语义说明）
+  - `server/src/knowledge-ai-chat/`（工作流确定标准问答、口语校准、知识库路由/检索/重排和业务指令是否执行；业务数据调用额外要求聊天应用明确授权，关闭知识库时仍把校准问题、语义约束和获授权业务 JSON 传给回答模型）
+  - `web/src/views/external-app/`、标准问答、口语词库、路由规则和问答记录（关联关系统一使用“AI 工作流”表述；问答轨迹冻结并展示四个工作流开关和实际跳过原因）
+  - `CHANGELOG.md`（记录本次调整）
+- 删除：无。
+- 说明：保留原 API、数据表名和字段 `retrievalConfigId` 以兼容现有 H5 与存量数据。新工作流默认保留原有知识库链路；业务客服可关闭知识库检索、开启业务数据指令，并在聊天应用中单独授予只读指令。
+
 ### 2026-09-11 增强 AI 问答记录的分阶段检索轨迹
 - 新增：
   - `README.md`（记录关联 H5 AI 客服项目路径 `D:\\AllProjects\\H5\\ai-customer-service`，明确前后端职责边界）

@@ -24,7 +24,7 @@ const ruleTypeLabel = computed(() => {
       <div><span>规则类型</span>{{ ruleTypeLabel }}</div>
       <div><span>匹配方式</span>{{ row?.matchMode === 'exact' ? '精确匹配' : '包含匹配' }}</div>
       <div><span>路由权重</span>{{ row?.weight ?? '—' }}</div>
-      <div><span>所属检索配置</span>{{ row?.retrievalConfigName || '—' }}</div>
+      <div><span>所属 AI 工作流</span>{{ row?.retrievalConfigName || '—' }}</div>
       <div><span>目标分类</span>{{ row?.categoryNames || '未关联' }}</div>
       <div><span>目标知识库</span>{{ row?.knowledgeBaseNames || '未关联' }}</div>
       <div><span>启用状态</span>{{ row?.isEnabled ? '启用' : '停用' }}</div>

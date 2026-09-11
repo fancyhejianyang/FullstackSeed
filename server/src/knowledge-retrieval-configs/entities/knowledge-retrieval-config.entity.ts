@@ -41,6 +41,22 @@ export class KnowledgeRetrievalConfig extends BaseEntity {
   @Column({ type: 'int', default: 15 })
   sessionContextTimeoutMinutes: number;
 
+  /** 是否先用固定答案拦截已审核的标准问题。 */
+  @Column({ type: 'tinyint', default: true })
+  enableStandardQa: boolean;
+
+  /** 是否把口语表达校准为可检索、可理解的业务语义。 */
+  @Column({ type: 'tinyint', default: true })
+  enableColloquial: boolean;
+
+  /** 是否执行路由规则、候选召回与重排等知识库流程。 */
+  @Column({ type: 'tinyint', default: true })
+  enableKnowledgeRetrieval: boolean;
+
+  /** 是否允许工作流调用已授权的只读业务指令。 */
+  @Column({ type: 'tinyint', default: false })
+  enableBusinessCommands: boolean;
+
   @Column({ type: 'tinyint', default: true })
   enableRerank: boolean;
 

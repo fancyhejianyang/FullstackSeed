@@ -153,13 +153,13 @@ const fields = computed<FormField[]>(() => [
   },
   {
     prop: 'retrievalConfigId',
-    label: '所属检索配置',
+    label: '所属 AI 工作流',
     type: 'select',
     options: retrievalConfigOptions,
-    placeholder: '请选择检索配置',
+    placeholder: '请选择 AI 工作流',
     hint: selectedRetrievalConfig.value
-      ? `规则只会在“${selectedRetrievalConfig.value.name}”检索时生效，不会影响其他 AI 应用。`
-      : '请选择检索配置；路由规则必须绑定检索范围，避免跨知识库误生效。',
+      ? `规则只会在“${selectedRetrievalConfig.value.name}”工作流执行知识库检索时生效，不会影响其他 AI 应用。`
+      : '请选择 AI 工作流；路由规则必须绑定工作流范围，避免跨知识库误生效。',
   },
   {
     prop: 'categoryIds',
@@ -179,7 +179,7 @@ const fields = computed<FormField[]>(() => [
     placeholder: form.categoryIds.length ? '可选；仅能选择目标分类下的知识库' : '可选；用于精确限定路由范围',
     hint: form.knowledgeBaseIds.length
       ? `当前精确限定 ${form.knowledgeBaseIds.length} 个知识库。`
-      : '留空时按目标分类或检索配置范围处理；选择具体知识库可提高路由精度。',
+      : '留空时按目标分类或 AI 工作流范围处理；选择具体知识库可提高路由精度。',
   },
   {
     prop: 'isEnabled',
@@ -193,7 +193,7 @@ const fields = computed<FormField[]>(() => [
 const rules = computed<FormRules>(() => ({
   term: [{ required: true, message: '请输入路由词', trigger: 'blur' }],
   ruleType: [{ required: true, message: '请选择规则类型', trigger: 'change' }],
-  retrievalConfigId: [{ required: true, message: '请选择所属检索配置', trigger: 'change' }],
+  retrievalConfigId: [{ required: true, message: '请选择所属 AI 工作流', trigger: 'change' }],
   weight: [{ required: true, message: '请输入路由权重', trigger: 'blur' }],
 }));
 

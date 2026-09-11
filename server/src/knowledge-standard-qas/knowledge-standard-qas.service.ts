@@ -256,7 +256,7 @@ export class KnowledgeStandardQasService {
       ...entry,
       retrievalConfigName: entry.retrievalConfigId
         ? (configMap.get(entry.retrievalConfigId) ??
-          `检索配置 #${entry.retrievalConfigId}`)
+          `AI 工作流 #${entry.retrievalConfigId}`)
         : '全局',
     }));
   }
@@ -265,7 +265,7 @@ export class KnowledgeStandardQasService {
     const config = await this.retrievalConfigRepository.findOne({
       where: { id },
     });
-    if (!config) throw new BadRequestException('所属知识库检索配置不存在');
+    if (!config) throw new BadRequestException('所属 AI 工作流不存在');
   }
 
   private async findEntity(id: number) {

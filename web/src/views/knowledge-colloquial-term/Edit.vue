@@ -125,12 +125,12 @@ const fields = computed<FormField[]>(() => [
   },
   {
     prop: 'retrievalConfigId',
-    label: '适用检索配置',
+    label: '适用 AI 工作流',
     type: 'select',
     options: retrievalConfigOptions.value,
     hint: selectedRetrievalConfig.value
       ? `当前只在“${selectedRetrievalConfig.value.name}”检索时生效。`
-      : '当前全局生效：所有知识库检索配置都可使用该表达。',
+      : '当前全局生效：所有 AI 工作流都可使用该表达。',
   },
   {
     prop: 'excludePhrasesText',

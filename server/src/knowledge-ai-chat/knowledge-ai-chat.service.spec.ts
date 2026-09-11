@@ -11,6 +11,8 @@ interface KnowledgeAiChatServiceInternals {
   buildStandardQaState: (params: {
     question: string;
     retrievalConfigId?: number | null;
+    enableStandardQa?: boolean;
+    enableColloquial?: boolean;
   }) => Promise<{
     entryId: number | null;
     answer: string | null;
@@ -127,6 +129,51 @@ describe('KnowledgeAiChatService', () => {
           matched: true,
           selectedEntryId: 7,
         }),
+      }),
+    );
+  });
+
+  it('keeps colloquial calibration but skips both QA matches when the workflow disables standard QA', async () => {
+    const calls: string[] = [];
+    const commandService = {
+      rewriteColloquialQuestion: jest.fn().mockImplementation(async () => {
+        calls.push('rewrite');
+        return {
+          rewrittenQuestion: '蓝虎机器人 Pro 的重量是多少？',
+          semanticContext: '{"attribute":"weight"}',
+          matches: [{ id: 3, term: '多重', replacement: '重量' }],
+        };
+      }),
+      searchStandardQa: jest.fn().mockImplementation(async () => {
+        calls.push('standard-qa');
+        return null;
+      }),
+    } as unknown as KnowledgeAiChatCommandService;
+    const pipelineService = new KnowledgeAiChatService(
+      {} as Repository<KnowledgeAiChatSession>,
+      {} as Repository<KnowledgeAiChatMessage>,
+      {} as Repository<KnowledgeRetrievalConfig>,
+      {} as AiFeatureConfigsService,
+      {} as KnowledgeAiProvidersService,
+      commandService,
+    ) as unknown as KnowledgeAiChatServiceInternals;
+
+    const result = await pipelineService.buildStandardQaState({
+      question: '小蓝多重？',
+      retrievalConfigId: 2,
+      enableStandardQa: false,
+      enableColloquial: true,
+    });
+
+    expect(calls).toEqual(['rewrite']);
+    expect(result).toEqual(
+      expect.objectContaining({
+        answer: null,
+        rewrittenQuestion: '蓝虎机器人 Pro 的重量是多少？',
+        commandIds: ['colloquial.rewrite'],
+        originalQa: expect.objectContaining({ executed: false }),
+        colloquial: expect.objectContaining({ evaluated: true }),
+        calibratedQa: expect.objectContaining({ executed: false }),
       }),
     );
   });

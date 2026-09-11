@@ -77,13 +77,13 @@ const fields = computed<FormField[]>(() => [
   { prop: 'answer', label: '标准答案', type: 'textarea', rows: 8, placeholder: '支持 Markdown、链接和图片' },
   {
     prop: 'retrievalConfigId',
-    label: '适用检索配置',
+    label: '适用 AI 工作流',
     type: 'select',
     options: retrievalConfigOptions.value,
     placeholder: '不选则在所有应用中生效',
     hint: form.retrievalConfigId
-      ? '当前仅在所选检索配置的 AI 应用中参与标准问答匹配。'
-      : '当前为全局标准问答：所有启用的检索配置均可命中它。',
+      ? '当前仅在所选 AI 工作流的应用中参与标准问答匹配。'
+      : '当前为全局标准问答：所有启用的 AI 工作流均可命中它。',
   },
 ]);
 

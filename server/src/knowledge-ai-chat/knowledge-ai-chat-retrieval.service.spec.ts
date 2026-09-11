@@ -321,6 +321,44 @@ describe('KnowledgeAiChatRetrievalService', () => {
     expect(baseFind).toHaveBeenCalledTimes(2);
   });
 
+  it('skips all knowledge-base queries when the workflow closes knowledge retrieval', async () => {
+    const baseFind = jest.fn();
+    const disabledWorkflowService = new KnowledgeAiChatRetrievalService(
+      { find: baseFind } as unknown as Repository<KnowledgeBase>,
+      {} as Repository<KnowledgeBaseDocument>,
+      {} as Repository<KnowledgeBaseChunk>,
+      {
+        findUsableConfig: jest.fn().mockResolvedValue({
+          id: 5,
+          name: '商品业务客服',
+          retrievalMode: 'hybrid',
+          topK: 6,
+          minScore: 0.35,
+          rrfK: 60,
+          textWeight: 0.8,
+          vectorWeight: 1,
+          enableKnowledgeRetrieval: false,
+          enableRerank: true,
+        }),
+      } as unknown as KnowledgeRetrievalConfigsService,
+      {} as KnowledgeEmbeddingService,
+      {} as KnowledgeVectorService,
+      {} as AiFeatureConfigsService,
+      {} as KnowledgeAiProvidersService,
+    );
+
+    const result = await disabledWorkflowService.buildReferenceResult(
+      '小蓝多重？',
+      5,
+    );
+
+    expect(baseFind).not.toHaveBeenCalled();
+    expect(result.context).toBe('');
+    expect(result.config).toEqual(
+      expect.objectContaining({ enableKnowledgeRetrieval: false }),
+    );
+  });
+
   it('switches away from the active knowledge base for an explicit new topic', () => {
     const plan = internals.buildRetrievalPlan(
       '深圳大学的兵役政策是什么？',

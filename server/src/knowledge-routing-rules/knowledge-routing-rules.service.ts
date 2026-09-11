@@ -211,7 +211,7 @@ export class KnowledgeRoutingRulesService {
       const config = await this.retrievalConfigRepository.findOne({
         where: { id: dto.retrievalConfigId },
       });
-      if (!config) throw new BadRequestException('所属知识库检索配置不存在');
+      if (!config) throw new BadRequestException('所属 AI 工作流不存在');
       payload.retrievalConfigId = config.id;
     }
     if (dto.isEnabled !== undefined || isCreate) {
@@ -232,7 +232,7 @@ export class KnowledgeRoutingRulesService {
       where: { id: retrievalConfigId },
     });
     if (!retrievalConfig) {
-      throw new BadRequestException('所属知识库检索配置不存在');
+      throw new BadRequestException('所属 AI 工作流不存在');
     }
     const categories = mappingIds.categoryIds.length
       ? await this.categoryRepository.find({
@@ -268,7 +268,7 @@ export class KnowledgeRoutingRulesService {
       categories.some((category) => !selectedCategoryIds.has(category.id))
     ) {
       throw new BadRequestException(
-        '目标分类必须处于所属知识库检索配置的检索范围内',
+        '目标分类必须处于所属 AI 工作流的知识库范围内',
       );
     }
     if (
@@ -280,7 +280,7 @@ export class KnowledgeRoutingRulesService {
       )
     ) {
       throw new BadRequestException(
-        '目标知识库必须处于所属知识库检索配置的检索范围内',
+        '目标知识库必须处于所属 AI 工作流的知识库范围内',
       );
     }
     if (
@@ -370,7 +370,7 @@ export class KnowledgeRoutingRulesService {
         ...rule,
         retrievalConfigName:
           configMap.get(rule.retrievalConfigId)?.name ??
-          `检索配置 #${rule.retrievalConfigId}`,
+          `AI 工作流 #${rule.retrievalConfigId}`,
         categoryIds: selectedCategories.map((item) => item.id),
         categoryNames: selectedCategories.map((item) => item.name).join('、'),
         knowledgeBaseIds: selectedBases.map((item) => item.id),

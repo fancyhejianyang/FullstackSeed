@@ -216,7 +216,7 @@ async function handleView(row: KnowledgeAiChatSession) {
             <el-collapse accordion>
               <el-collapse-item name="config">
                 <template #title>
-                  <span>1. 检索配置与可查范围</span>
+                  <span>1. AI 工作流与可用范围</span>
                   <el-tag
                     class="ai-record__trace-title-tag"
                     :type="message.processingTrace.retrievalConfig ? 'primary' : 'info'"
@@ -228,7 +228,7 @@ async function handleView(row: KnowledgeAiChatSession) {
                 </template>
                 <template v-if="message.processingTrace.retrievalConfig">
                   <el-descriptions :column="2" border size="small">
-                    <el-descriptions-item label="配置">
+                    <el-descriptions-item label="工作流">
                       {{ message.processingTrace.retrievalConfig.name }} #{{ message.processingTrace.retrievalConfig.id }}
                     </el-descriptions-item>
                     <el-descriptions-item label="检索方式">
@@ -248,9 +248,21 @@ async function handleView(row: KnowledgeAiChatSession) {
                         ? (message.processingTrace.retrievalConfig.rerankAiFeatureConfigName || '已启用，未指定名称')
                         : '未启用' }}
                     </el-descriptions-item>
+                    <el-descriptions-item label="标准问答">
+                      {{ message.processingTrace.retrievalConfig.enableStandardQa ? '启用' : '关闭' }}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="口语校准">
+                      {{ message.processingTrace.retrievalConfig.enableColloquial ? '启用' : '关闭' }}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="知识库检索">
+                      {{ message.processingTrace.retrievalConfig.enableKnowledgeRetrieval ? '启用' : '关闭' }}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="业务数据指令">
+                      {{ message.processingTrace.retrievalConfig.enableBusinessCommands ? '启用' : '关闭' }}
+                    </el-descriptions-item>
                   </el-descriptions>
                 </template>
-                <span v-else class="ai-record__trace-muted">本轮未选择知识库检索配置，只会执行标准问答与获授权的业务查询。</span>
+                <span v-else class="ai-record__trace-muted">本轮未关联 AI 工作流；默认只执行标准问答和口语校准，不访问知识库或业务数据。</span>
               </el-collapse-item>
 
               <el-collapse-item name="original-qa">

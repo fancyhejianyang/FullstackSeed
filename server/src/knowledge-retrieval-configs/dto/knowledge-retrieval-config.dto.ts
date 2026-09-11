@@ -84,6 +84,22 @@ export class CreateKnowledgeRetrievalConfigDto {
 
   @IsBoolean()
   @IsOptional()
+  enableStandardQa?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  enableColloquial?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  enableKnowledgeRetrieval?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  enableBusinessCommands?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
   enableRerank?: boolean;
 
   @Type(() => Number)
