@@ -17,6 +17,7 @@ import { KnowledgeRetrievalConfig } from './entities/knowledge-retrieval-config.
 import {
   getAiWorkflowDerivedFlags,
   normalizeAiWorkflowDefinition,
+  validateAiWorkflowDefinition,
 } from './workflow-definition';
 
 @Injectable()
@@ -219,6 +220,10 @@ export class KnowledgeRetrievalConfigsService {
       enableBusinessCommands: target.enableBusinessCommands,
       enableRerank: target.enableRerank,
     });
+    const validationErrors = validateAiWorkflowDefinition(workflowDefinition);
+    if (validationErrors.length) {
+      throw new BadRequestException(validationErrors.join('；'));
+    }
     const flags = getAiWorkflowDerivedFlags(workflowDefinition);
     target.workflowDefinition = workflowDefinition;
     target.enableStandardQa = flags.enableStandardQa;

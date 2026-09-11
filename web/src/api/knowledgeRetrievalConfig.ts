@@ -12,15 +12,39 @@ export type AiWorkflowStepType =
   | 'rerank'
   | 'answer';
 
+export type AiWorkflowEdgeCondition = 'always' | 'matched' | 'unmatched';
+
 export interface AiWorkflowStepDefinition {
   id: AiWorkflowStepType;
   type: AiWorkflowStepType;
   enabled: boolean;
 }
 
+export interface AiWorkflowNodePosition {
+  x: number;
+  y: number;
+}
+
+export interface AiWorkflowNodeDefinition {
+  id: string;
+  type: AiWorkflowStepType;
+  enabled: boolean;
+  position?: AiWorkflowNodePosition;
+}
+
+export interface AiWorkflowEdgeDefinition {
+  id: string;
+  source: string;
+  target: string;
+  condition: AiWorkflowEdgeCondition;
+}
+
 export interface AiWorkflowDefinition {
-  version: 1;
-  steps: AiWorkflowStepDefinition[];
+  version: 1 | 2;
+  /** V1 历史字段；读取时会升级为 V2 节点图。 */
+  steps?: AiWorkflowStepDefinition[];
+  nodes?: AiWorkflowNodeDefinition[];
+  edges?: AiWorkflowEdgeDefinition[];
 }
 
 export interface KnowledgeRetrievalConfig {

@@ -28,7 +28,7 @@ import type { KnowledgeRoutingRuleMatch } from '../knowledge-routing-rules/knowl
 import { KnowledgeRetrievalConfig } from '../knowledge-retrieval-configs/entities/knowledge-retrieval-config.entity';
 import {
   getAiWorkflowDerivedFlags,
-  isAiWorkflowStepEnabled,
+  getAiWorkflowExecutionPlan,
   normalizeAiWorkflowDefinition,
 } from '../knowledge-retrieval-configs/workflow-definition';
 import { AI_CORE_CHAT_COMMAND_KEYS } from '../ai-command-definitions/ai-command-definitions.constants';
@@ -1036,33 +1036,16 @@ export class KnowledgeAiChatService {
   private resolveWorkflowSteps(
     config: KnowledgeRetrievalConfigSnapshot | null,
   ): KnowledgeAiWorkflowSteps {
-    const workflowDefinition = config?.workflowDefinition;
+    const plan = getAiWorkflowExecutionPlan(
+      config?.workflowDefinition,
+      config ?? {},
+    );
     return {
-      enableOriginalStandardQa: isAiWorkflowStepEnabled(
-        workflowDefinition,
-        'standardQa',
-        config?.enableStandardQa !== false,
-      ),
-      enableColloquial: isAiWorkflowStepEnabled(
-        workflowDefinition,
-        'colloquial',
-        config?.enableColloquial !== false,
-      ),
-      enableCalibratedStandardQa: isAiWorkflowStepEnabled(
-        workflowDefinition,
-        'calibratedStandardQa',
-        config?.enableStandardQa !== false,
-      ),
-      enableKnowledgeRetrieval: isAiWorkflowStepEnabled(
-        workflowDefinition,
-        'knowledgeRetrieval',
-        config?.enableKnowledgeRetrieval === true,
-      ),
-      enableBusinessCommands: isAiWorkflowStepEnabled(
-        workflowDefinition,
-        'businessCommand',
-        config?.enableBusinessCommands === true,
-      ),
+      enableOriginalStandardQa: plan.enableOriginalStandardQa,
+      enableColloquial: plan.enableColloquial,
+      enableCalibratedStandardQa: plan.enableCalibratedStandardQa,
+      enableKnowledgeRetrieval: plan.enableKnowledgeRetrieval,
+      enableBusinessCommands: plan.enableBusinessCommands,
     };
   }
 

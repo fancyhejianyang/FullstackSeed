@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-09-11 升级为可编辑 AI 工作流图
+- 新增：无。
+- 修改：
+  - `server/src/knowledge-retrieval-configs/workflow-definition.ts`、`knowledge-retrieval-configs.service.ts`（工作流定义升级为 V2 节点与条件连线；保存时校验安全节点、无环、入口到回答节点的可达路径，并自动兼容旧版步骤配置）
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat.service.ts`、工作流单元测试（根据已连通的未命中/始终继续路径派生标准问答、口语校准、业务指令、知识库检索和重排的实际执行范围）
+  - `web/src/components/AiWorkflowEditor.vue`、`web/src/utils/aiWorkflow.ts`、`web/src/api/knowledgeRetrievalConfig.ts`、`web/src/views/knowledge-retrieval-config/Edit.vue`（支持拖拽节点、增删可选节点、启停、添加或删除带条件的安全连线，并在提交前提示流程不可达）
+  - `CHANGELOG.md`（记录本次升级）
+- 删除：无。
+- 说明：本次没有改变知识库与工作流的绑定语义，也没有重置任何数据。工作流仍禁止脚本、SQL、任意 HTTP 和不安全连线；节点与连线保存在现有 `workflowDefinition` JSON 字段中，存量 V1 配置会自动转换为等价的 V2 默认图。
+
 ### 2026-09-11 放大 AI 工作流配置编辑弹窗
 - 新增：无。
 - 修改：

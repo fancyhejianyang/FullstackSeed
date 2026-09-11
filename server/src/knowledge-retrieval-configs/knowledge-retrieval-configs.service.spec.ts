@@ -6,7 +6,9 @@ import { KnowledgeRetrievalConfig } from './entities/knowledge-retrieval-config.
 import { KnowledgeRetrievalConfigsService } from './knowledge-retrieval-configs.service';
 import {
   getAiWorkflowDerivedFlags,
+  getAiWorkflowExecutionPlan,
   normalizeAiWorkflowDefinition,
+  validateAiWorkflowDefinition,
 } from './workflow-definition';
 
 describe('KnowledgeRetrievalConfigsService', () => {
@@ -54,12 +56,77 @@ describe('KnowledgeRetrievalConfigsService', () => {
       { enableRerank: true },
     );
 
-    expect(definition.steps).toHaveLength(8);
+    expect(definition.version).toBe(2);
+    expect(definition.nodes).toHaveLength(8);
+    expect(definition.edges.length).toBeGreaterThan(0);
     expect(getAiWorkflowDerivedFlags(definition)).toEqual(
       expect.objectContaining({
         enableKnowledgeRetrieval: false,
         enableRerank: false,
       }),
+    );
+  });
+
+  it('derives execution stages from editable non-match branches', () => {
+    const plan = getAiWorkflowExecutionPlan({
+      version: 2,
+      nodes: [
+        { id: 'node-preflight', type: 'preflight', enabled: true },
+        { id: 'node-standardQa', type: 'standardQa', enabled: true },
+        { id: 'node-answer', type: 'answer', enabled: true },
+      ],
+      edges: [
+        {
+          id: 'preflight-to-qa',
+          source: 'node-preflight',
+          target: 'node-standardQa',
+          condition: 'always',
+        },
+        {
+          id: 'qa-hit-answer',
+          source: 'node-standardQa',
+          target: 'node-answer',
+          condition: 'matched',
+        },
+        {
+          id: 'qa-miss-answer',
+          source: 'node-standardQa',
+          target: 'node-answer',
+          condition: 'unmatched',
+        },
+      ],
+    });
+
+    expect(plan).toEqual(
+      expect.objectContaining({
+        enableOriginalStandardQa: true,
+        enableColloquial: false,
+        enableKnowledgeRetrieval: false,
+        enableRerank: false,
+      }),
+    );
+  });
+
+  it('rejects a workflow graph without a reachable answer node', () => {
+    const definition = normalizeAiWorkflowDefinition({
+      version: 2,
+      nodes: [
+        { id: 'node-preflight', type: 'preflight', enabled: true },
+        { id: 'node-standardQa', type: 'standardQa', enabled: true },
+        { id: 'node-answer', type: 'answer', enabled: true },
+      ],
+      edges: [
+        {
+          id: 'preflight-to-qa',
+          source: 'node-preflight',
+          target: 'node-standardQa',
+          condition: 'always',
+        },
+      ],
+    });
+
+    expect(validateAiWorkflowDefinition(definition)).toContain(
+      '工作流必须存在从输入清洗到回答生成的可达路径',
     );
   });
 });

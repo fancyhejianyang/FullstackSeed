@@ -25,6 +25,7 @@ import {
 } from '@/api/aiFeatureConfig';
 import {
   getAiWorkflowFlags,
+  getWorkflowValidationErrors,
   getWorkflowFallbackFlags,
   normalizeAiWorkflowDefinition,
 } from '@/utils/aiWorkflow';
@@ -133,7 +134,7 @@ const fields = computed<FormField[]>(() => {
       prop: 'workflowDefinition',
       label: '流程编排',
       slot: true,
-      hint: '点击流程节点可查看语义并启停步骤；命中与未命中分支由系统固定校验，避免错误连线。',
+      hint: '可拖拽节点、添加或移除业务节点并编辑条件连线；系统会校验权限前置、固定回答出口与安全可执行路径。',
     },
     {
       prop: 'retrievalMode',
@@ -491,6 +492,11 @@ function setScopeTreeCheckedKeys(keys: string[]) {
 
 async function handleSubmit() {
   await formRef.value?.validate();
+  const workflowErrors = getWorkflowValidationErrors(form.workflowDefinition);
+  if (workflowErrors.length) {
+    ElMessage.warning(workflowErrors[0]);
+    return;
+  }
   if (workflowFlags.value.enableKnowledgeRetrieval && workflowFlags.value.enableRerank && !form.rerankAiFeatureConfigId) {
     ElMessage.warning('请选择重排 AI 配置');
     return;
