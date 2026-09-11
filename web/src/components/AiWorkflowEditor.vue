@@ -22,8 +22,8 @@ import {
 
 const model = defineModel<AiWorkflowDefinition>({ required: true });
 
-const NODE_WIDTH = 160;
-const NODE_HEIGHT = 60;
+const NODE_WIDTH = 140;
+const NODE_HEIGHT = 48;
 const CANVAS_MIN_WIDTH = 650;
 const CANVAS_HEIGHT = 960;
 const CANVAS_VIEWPORT_HEIGHT = 620;
@@ -641,9 +641,7 @@ onBeforeUnmount(() => {
               @pointerdown="startDrag($event, node)"
               @pointerup="finishConnection($event, node)"
             >
-              <span class="workflow-node__drag">⋮⋮ 拖拽</span>
               <span class="workflow-node__title">{{ AI_WORKFLOW_STEP_META[node.type].title }}</span>
-              <span class="workflow-node__state">{{ node.enabled ? '启用' : '跳过' }}</span>
               <span
                 v-if="node.type !== 'preflight'"
                 class="workflow-node__connector workflow-node__connector--input workflow-node__connector--top"
@@ -723,9 +721,9 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="ai-workflow-editor__summary">
-            <div>原问题标准问答：{{ workflowPlan.enableOriginalStandardQa ? '可达' : '不可达' }}</div>
+            <div>匹配标准问答：{{ workflowPlan.enableOriginalStandardQa ? '可达' : '不可达' }}</div>
             <div>口语校准：{{ workflowPlan.enableColloquial ? '可达' : '不可达' }}</div>
-            <div>校准后标准问答：{{ workflowPlan.enableCalibratedStandardQa ? '可达' : '不可达' }}</div>
+            <div>校准后匹配问答：{{ workflowPlan.enableCalibratedStandardQa ? '可达' : '不可达' }}</div>
             <div>知识库检索：{{ workflowFlags.enableKnowledgeRetrieval ? '可达' : '不可达' }}</div>
             <div>业务数据指令：{{ workflowFlags.enableBusinessCommands ? '可达' : '不可达' }}</div>
             <div>LLM 重排：{{ workflowFlags.enableRerank ? '可达' : '不可达' }}</div>
@@ -767,15 +765,13 @@ onBeforeUnmount(() => {
 .ai-workflow-editor__edges { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
 .ai-workflow-editor__edges text { font-size: 11px; font-weight: 600; paint-order: stroke; stroke: #f8fbff; stroke-width: 4px; }
 .ai-workflow-editor__edge-preview { stroke: #409eff; stroke-width: 2; stroke-dasharray: 5 4; }
-.workflow-node { position: absolute; display: flex; width: 160px; min-height: 60px; flex-direction: column; justify-content: center; padding: 6px 8px; border: 1px solid #a0cfff; border-radius: 7px; background: #fff; color: #303133; cursor: grab; font: inherit; text-align: center; transition: border-color .2s, box-shadow .2s, opacity .2s; user-select: none; }
+.workflow-node { position: absolute; display: flex; box-sizing: border-box; width: 140px; height: 48px; flex-direction: column; justify-content: center; padding: 6px 8px; border: 1px solid #a0cfff; border-radius: 7px; background: #fff; color: #303133; cursor: grab; font: inherit; text-align: center; transition: border-color .2s, box-shadow .2s, opacity .2s; user-select: none; }
 .workflow-node:active { cursor: grabbing; }
 .workflow-node:hover, .workflow-node.is-active { border-color: #409eff; box-shadow: 0 0 0 2px rgba(64, 158, 255, .16); }
 .workflow-node.is-disabled { opacity: .48; }
 .workflow-node.is-decision { border-color: #e6a23c; border-radius: 22px; }
 .workflow-node.is-terminal { border-color: #67c23a; }
-.workflow-node__drag { margin-bottom: 3px; color: #909399; font-size: 10px; }
 .workflow-node__title { font-size: 13px; font-weight: 600; }
-.workflow-node__state { margin-top: 3px; color: #909399; font-size: 11px; }
 .workflow-node__connector { position: absolute; box-sizing: border-box; width: 12px; height: 12px; border: 2px solid #409eff; border-radius: 50%; }
 .workflow-node__connector--input { background: #fff; pointer-events: none; }
 .workflow-node__connector--left { top: 50%; left: -6px; transform: translateY(-50%); }

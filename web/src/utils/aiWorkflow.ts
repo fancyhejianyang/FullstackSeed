@@ -39,7 +39,7 @@ const PASS_THROUGH_CONDITIONS = new Set<AiWorkflowEdgeCondition>([
   'unmatched',
 ]);
 const WORKFLOW_CANVAS_WIDTH = 650;
-const WORKFLOW_NODE_WIDTH = 160;
+const WORKFLOW_NODE_WIDTH = 140;
 const WORKFLOW_CANVAS_PADDING = 20;
 
 export const AI_WORKFLOW_STEP_META: Record<
@@ -47,12 +47,12 @@ export const AI_WORKFLOW_STEP_META: Record<
   { title: string; description: string; kind: 'fixed' | 'decision' | 'action' | 'terminal' }
 > = {
   preflight: {
-    title: '输入清洗与权限范围',
+    title: '原始输入',
     description: '确认会话、权限和可用范围；属于安全前置步骤，不能删除或关闭。',
     kind: 'fixed',
   },
   standardQa: {
-    title: '原问题标准问答',
+    title: '匹配标准问答',
     description: '命中后可直接进入回答；未命中可继续口语校准、业务数据或知识库检索。',
     kind: 'decision',
   },
@@ -62,7 +62,7 @@ export const AI_WORKFLOW_STEP_META: Record<
     kind: 'action',
   },
   calibratedStandardQa: {
-    title: '校准后标准问答',
+    title: '校准后匹配问答',
     description: '用校准后的问题再次精确匹配固定问答。',
     kind: 'decision',
   },
@@ -430,7 +430,7 @@ export function getWorkflowValidationErrors(
   fallback: Partial<AiWorkflowFlags> = {},
 ) {
   const normalized = normalizeAiWorkflowDefinition(definition, fallback);
-  return isReachable(normalized, 'answer') ? [] : ['请至少保留一条从“输入清洗与权限范围”到“回答生成与审计”的路径。'];
+  return isReachable(normalized, 'answer') ? [] : ['请至少保留一条从“原始输入”到“回答生成与审计”的路径。'];
 }
 
 export function getWorkflowFallbackFlags(config: KnowledgeRetrievalConfig) {
