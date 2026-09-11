@@ -261,7 +261,7 @@ defineExpose({ validate, resetFields });
 .form__item--label-top :deep(.el-form-item__label) {
   display: flex;
   height: auto;
-  padding: 0 0 8px;
+  padding: 0 12px 8px 0;
   line-height: 20px;
   justify-content: flex-end;
 }

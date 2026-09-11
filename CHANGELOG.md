@@ -1,5 +1,12 @@
 # CHANGELOG
 
+### 2026-09-11 调整顶部表单标签右侧间距
+- 新增：无。
+- 修改：
+  - `web/src/components/Form.vue`（顶部布局的 `el-form-item__label` 增加 `padding-right: 12px`，使流程编排标签与常规标签间距一致）。
+  - `CHANGELOG.md`（记录本次调整）。
+- 删除：无。
+
 ### 2026-09-11 对齐 AI 工作流流程编排标签
 - 新增：无。
 - 修改：
