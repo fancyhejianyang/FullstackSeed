@@ -24,6 +24,8 @@ const model = defineModel<AiWorkflowDefinition>({ required: true });
 
 const NODE_WIDTH = 140;
 const NODE_HEIGHT = 48;
+const NODE_GAP = 32;
+const CANVAS_PADDING = 20;
 const CANVAS_MIN_WIDTH = 650;
 const CANVAS_HEIGHT = 960;
 const CANVAS_VIEWPORT_HEIGHT = 500;
@@ -242,6 +244,50 @@ function getNextNodeId(
   return `${prefix}-${index}`;
 }
 
+function clampNodePosition(position: { x: number; y: number }) {
+  return {
+    x: Math.min(
+      canvasWidth.value - NODE_WIDTH - CANVAS_PADDING,
+      Math.max(CANVAS_PADDING, position.x),
+    ),
+    y: Math.min(
+      CANVAS_HEIGHT - NODE_HEIGHT - CANVAS_PADDING,
+      Math.max(CANVAS_PADDING, position.y),
+    ),
+  };
+}
+
+function isNodePositionAvailable(
+  position: { x: number; y: number },
+  nodes: AiWorkflowNodeDefinition[],
+) {
+  return nodes.every((node) => {
+    const frame = getNodeFrame(node);
+    return (
+      position.x + NODE_WIDTH + NODE_GAP <= frame.x ||
+      frame.x + frame.width + NODE_GAP <= position.x ||
+      position.y + NODE_HEIGHT + NODE_GAP <= frame.y ||
+      frame.y + frame.height + NODE_GAP <= position.y
+    );
+  });
+}
+
+function getPositionNearCurrentNode(nodes: AiWorkflowNodeDefinition[]) {
+  const currentNode = selectedNodeId.value
+    ? nodes.find((node) => node.id === selectedNodeId.value)
+    : nodes.length === 1
+      ? nodes[0]
+      : undefined;
+  if (!currentNode) return undefined;
+
+  const frame = getNodeFrame(currentNode);
+  const candidates = [
+    { x: frame.x, y: frame.y + frame.height + NODE_GAP },
+    { x: frame.x + frame.width + NODE_GAP, y: frame.y },
+  ].map(clampNodePosition);
+  return candidates.find((position) => isNodePositionAvailable(position, nodes));
+}
+
 function addNode(type: AiWorkflowStepType) {
   let id = '';
   updateWorkflow((next) => {
@@ -251,7 +297,9 @@ function addNode(type: AiWorkflowStepType) {
       id,
       type,
       enabled: true,
-      position: getAiWorkflowNodeDefaultPosition(type, count),
+      position:
+        getPositionNearCurrentNode(next.nodes) ??
+        getAiWorkflowNodeDefaultPosition(type, count),
     });
   });
   selectNode(id);
