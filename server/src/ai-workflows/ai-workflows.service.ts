@@ -48,7 +48,6 @@ export class AiWorkflowsService {
       ? [
           { ...baseWhere, name: Like(`%${keyword}%`) },
           { ...baseWhere, aiInstruction: Like(`%${keyword}%`) },
-          { ...baseWhere, description: Like(`%${keyword}%`) },
         ]
       : baseWhere;
     const [list, total] = await this.workflowRepository.findAndCount({
@@ -134,9 +133,6 @@ export class AiWorkflowsService {
       payload.aiInstruction = this.toNullableText(dto.aiInstruction);
     }
     if (dto.isEnabled !== undefined) payload.isEnabled = dto.isEnabled;
-    if (dto.description !== undefined) {
-      payload.description = this.toNullableText(dto.description);
-    }
     if (dto.workflowDefinition !== undefined) {
       const definition = normalizeAiWorkflowDefinition(
         dto.workflowDefinition,

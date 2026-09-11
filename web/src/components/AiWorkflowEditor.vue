@@ -224,8 +224,8 @@ function clearSelection() {
   connectionError.value = '';
 }
 
-function getNodeTypeCount(type: AiWorkflowStepType) {
-  return workflow.value.nodes.filter((node) => node.type === type).length;
+function hasAddedNode(type: AiWorkflowStepType) {
+  return workflow.value.nodes.some((node) => node.type === type);
 }
 
 function getNextNodeId(
@@ -548,13 +548,10 @@ onBeforeUnmount(() => {
         :key="type"
         size="small"
         plain
-        :class="{ 'is-added': getNodeTypeCount(type) > 0 }"
+        :class="{ 'is-added': hasAddedNode(type) }"
         @click="addNode(type)"
       >
         + {{ AI_WORKFLOW_STEP_META[type].title }}
-        <span v-if="getNodeTypeCount(type)" class="ai-workflow-editor__palette-count">
-          已添加 ×{{ getNodeTypeCount(type) }}
-        </span>
       </el-button>
     </div>
 
@@ -737,12 +734,12 @@ onBeforeUnmount(() => {
   font-size: 12px;
   line-height: 1.6;
 }
-.ai-workflow-editor__palette { display: flex; width: 984px; max-width: 100%; flex-wrap: nowrap; align-items: center; gap: 8px; margin: 12px auto 0; overflow-x: auto; padding-bottom: 2px; }
+.ai-workflow-editor__palette { display: flex; width: 100%; max-width: 100%; flex-wrap: nowrap; align-items: center; gap: 8px; margin-top: 12px; overflow-x: auto; padding-bottom: 2px; }
 .ai-workflow-editor__palette :deep(.el-button) { flex: 0 0 auto; }
 .ai-workflow-editor__palette :deep(.el-button.is-added) { border-color: #a0cfff; background: #ecf5ff; color: #409eff; }
-.ai-workflow-editor__palette-count { margin-left: 4px; color: #79bbff; font-size: 11px; }
+.ai-workflow-editor__palette-label { flex: 0 0 auto; white-space: nowrap; }
 .ai-workflow-editor__palette-label, .ai-workflow-editor__connection-title { color: #303133; font-size: 13px; font-weight: 600; }
-.ai-workflow-editor__layout { display: grid; grid-template-columns: 650px minmax(270px, 320px); justify-content: center; gap: 14px; margin-top: 12px; }
+.ai-workflow-editor__layout { display: grid; grid-template-columns: 650px minmax(270px, 320px); justify-content: start; gap: 14px; margin-top: 12px; }
 .ai-workflow-editor__canvas-area { width: 650px; max-width: 100%; }
 .ai-workflow-editor__canvas-toolbar { display: flex; align-items: center; gap: 8px; min-height: 30px; margin-bottom: 6px; color: #303133; font-size: 13px; font-weight: 600; }
 .ai-workflow-editor__canvas-hint { color: #909399; font-size: 12px; font-weight: 400; }

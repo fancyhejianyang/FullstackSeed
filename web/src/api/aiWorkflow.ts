@@ -9,7 +9,6 @@ export interface AiWorkflow {
   workflowDefinition: AiWorkflowDefinition | null;
   aiInstruction: string | null;
   isEnabled: boolean;
-  description: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -19,7 +18,6 @@ export interface AiWorkflowForm {
   workflowDefinition: AiWorkflowDefinition;
   aiInstruction: string;
   isEnabled?: boolean;
-  description?: string;
 }
 
 export interface QueryAiWorkflowParams {

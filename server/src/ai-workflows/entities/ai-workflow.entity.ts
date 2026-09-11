@@ -19,6 +19,9 @@ export class AiWorkflow extends BaseEntity {
   @Column({ type: 'tinyint', default: true })
   isEnabled: boolean;
 
+  /**
+   * 旧版历史字段：保留数据库列及既有内容，新的工作流管理界面和 DTO 不再读写它。
+   */
   @Column({ type: 'text', nullable: true })
   description: string | null;
 }

@@ -31,10 +31,6 @@ export class CreateAiWorkflowDto {
   @IsBoolean()
   @IsOptional()
   isEnabled?: boolean;
-
-  @IsString()
-  @IsOptional()
-  description?: string;
 }
 
 export class UpdateAiWorkflowDto extends PartialType(CreateAiWorkflowDto) {}

@@ -29,7 +29,6 @@ type WorkflowForm = {
   workflowDefinition: AiWorkflowDefinition;
   aiInstruction: string;
   isEnabled: boolean;
-  description: string;
 };
 
 const visible = defineModel<boolean>('visible', { required: true });
@@ -42,7 +41,6 @@ const form = reactive<WorkflowForm>({
   workflowDefinition: createInitialAiWorkflowDefinition(),
   aiInstruction: '',
   isEnabled: true,
-  description: '',
 });
 
 const fields: FormField[] = [
@@ -76,7 +74,6 @@ const fields: FormField[] = [
     component: 'Switch',
     componentProps: { activeText: '启用', inactiveText: '停用' },
   },
-  { prop: 'description', label: '备注', type: 'textarea', rows: 3, span: 2 },
 ];
 
 const rules: FormRules = {
@@ -105,7 +102,6 @@ function resetForm() {
   form.workflowDefinition = createInitialAiWorkflowDefinition();
   form.aiInstruction = '';
   form.isEnabled = true;
-  form.description = '';
 }
 
 function fillForm(data: AiWorkflow) {
@@ -113,7 +109,6 @@ function fillForm(data: AiWorkflow) {
   form.workflowDefinition = normalizeAiWorkflowDefinition(data.workflowDefinition);
   form.aiInstruction = data.aiInstruction ?? '';
   form.isEnabled = Boolean(data.isEnabled);
-  form.description = data.description ?? '';
 }
 
 function buildPayload(): AiWorkflowForm {
@@ -122,7 +117,6 @@ function buildPayload(): AiWorkflowForm {
     workflowDefinition: normalizeAiWorkflowDefinition(form.workflowDefinition),
     aiInstruction: form.aiInstruction.trim(),
     isEnabled: form.isEnabled,
-    description: form.description.trim(),
   };
 }
 

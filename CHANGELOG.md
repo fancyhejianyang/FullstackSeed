@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-09-11 精简 AI 工作流节点库与备注字段
+- 新增：无。
+- 修改：
+  - `web/src/components/AiWorkflowEditor.vue`（节点库仅以浅蓝底色标识已加入的节点类型，不再显示“已添加”及次数；节点库和画布区域改为左对齐，避免节点库标签被压缩为竖排）。
+  - `web/src/views/ai-workflow/Edit.vue`、`web/src/views/ai-workflow/Index.vue`、`web/src/api/aiWorkflow.ts`（移除工作流的备注表单字段、提交字段和相关检索提示）。
+  - `server/src/ai-workflows/dto/ai-workflow.dto.ts`、`server/src/ai-workflows/ai-workflows.service.ts`（移除备注字段的接口校验、写入和关键词检索）。
+  - `server/src/ai-workflows/entities/ai-workflow.entity.ts`（保留历史 `description` 数据列，但明确不再由工作流功能读写，避免更新部署时损失已有数据）。
+  - `CHANGELOG.md`（记录本次调整）。
+- 删除：无。
+- 说明：节点类型仍可重复加入画布，用于表达不同分支；已加入状态只是一种视觉提示，不会限制继续添加。
+
 ### 2026-09-11 优化 AI 工作流表单与可重复节点
 - 新增：无。
 - 修改：

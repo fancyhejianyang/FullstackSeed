@@ -39,7 +39,7 @@ const searchFields: FormField[] = [
       { label: '停用', value: false },
     ],
   },
-  { prop: 'keyword', label: '关键词', type: 'input', placeholder: '名称、AI 说明或描述' },
+  { prop: 'keyword', label: '关键词', type: 'input', placeholder: '名称或 AI 执行说明' },
 ];
 
 const editVisible = ref(false);
