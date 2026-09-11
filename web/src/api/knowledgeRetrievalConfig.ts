@@ -13,6 +13,7 @@ export type AiWorkflowStepType =
   | 'answer';
 
 export type AiWorkflowEdgeCondition = 'always' | 'matched' | 'unmatched';
+export type AiWorkflowNodePort = 'left' | 'right' | 'top' | 'bottom';
 
 export interface AiWorkflowStepDefinition {
   id: AiWorkflowStepType;
@@ -37,6 +38,8 @@ export interface AiWorkflowEdgeDefinition {
   source: string;
   target: string;
   condition: AiWorkflowEdgeCondition;
+  sourcePort?: AiWorkflowNodePort;
+  targetPort?: AiWorkflowNodePort;
 }
 
 export interface AiWorkflowDefinition {

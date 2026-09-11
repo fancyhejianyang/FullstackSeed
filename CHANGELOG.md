@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-09-11 修正 AI 工作流端点定位并支持向下连线
+- 新增：无。
+- 修改：
+  - `web/src/components/AiWorkflowEditor.vue`（按节点实际渲染尺寸计算端点和拖拽边界；新增顶部输入、底部输出圆点，可建立下→上的纵向连线）
+  - `web/src/api/knowledgeRetrievalConfig.ts`、`web/src/utils/aiWorkflow.ts`、`server/src/knowledge-retrieval-configs/workflow-definition.ts`（工作流连线 JSON 可选保存起止端点方向，旧连线按节点相对位置兼容推断）
+  - `server/src/knowledge-retrieval-configs/knowledge-retrieval-configs.service.spec.ts`（验证画布端点方向在归一化后保留）
+  - `web/src/views/knowledge-retrieval-config/Edit.vue`、`CHANGELOG.md`（更新交互说明和变更快照）
+- 删除：无。
+- 说明：端点方向仅控制画布连线展示，不会改变既有工作流的节点安全校验、执行顺序或业务处理结果。
+
 ### 2026-09-11 优化 AI 工作流节点库与连接端点
 - 新增：无。
 - 修改：

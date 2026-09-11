@@ -144,4 +144,28 @@ describe('KnowledgeRetrievalConfigsService', () => {
       '工作流必须包含输入清洗与回答生成节点',
     );
   });
+
+  it('preserves optional edge ports used by the workflow canvas', () => {
+    const definition = normalizeAiWorkflowDefinition({
+      version: 2,
+      nodes: [
+        { id: 'node-preflight', type: 'preflight', enabled: true },
+        { id: 'node-standardQa', type: 'standardQa', enabled: true },
+      ],
+      edges: [
+        {
+          id: 'preflight-to-qa',
+          source: 'node-preflight',
+          target: 'node-standardQa',
+          condition: 'always',
+          sourcePort: 'bottom',
+          targetPort: 'top',
+        },
+      ],
+    });
+
+    expect(definition.edges[0]).toEqual(
+      expect.objectContaining({ sourcePort: 'bottom', targetPort: 'top' }),
+    );
+  });
 });

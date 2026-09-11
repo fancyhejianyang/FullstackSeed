@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue';
+import { computed, onBeforeUnmount, ref, type ComponentPublicInstance } from 'vue';
 import type {
   AiWorkflowDefinition,
   AiWorkflowEdgeCondition,
+  AiWorkflowEdgeDefinition,
   AiWorkflowNodeDefinition,
+  AiWorkflowNodePort,
   AiWorkflowStepType,
 } from '@/api/knowledgeRetrievalConfig';
 import {
@@ -24,10 +26,17 @@ const NODE_WIDTH = 160;
 const NODE_HEIGHT = 60;
 const CANVAS_WIDTH = 650;
 const CANVAS_HEIGHT = 960;
+type SourcePort = Extract<AiWorkflowNodePort, 'right' | 'bottom'>;
+type TargetPort = Extract<AiWorkflowNodePort, 'left' | 'top'>;
+type NodeFrame = { x: number; y: number; width: number; height: number };
 
 const selectedNodeId = ref<string | null>(null);
 const connectionError = ref('');
 const canvasRef = ref<HTMLElement>();
+const nodeSizes = ref<Record<string, Pick<NodeFrame, 'width' | 'height'>>>({});
+const observedNodeElements = new Map<string, HTMLElement>();
+const nodeElementIds = new WeakMap<HTMLElement, string>();
+let nodeResizeObserver: ResizeObserver | undefined;
 const dragState = ref<{
   id: string;
   startX: number;
@@ -37,6 +46,7 @@ const dragState = ref<{
 } | null>(null);
 const connectionDrag = ref<{
   sourceId: string;
+  sourcePort: SourcePort;
   x1: number;
   y1: number;
   x2: number;
@@ -73,29 +83,114 @@ function getAvailableConditions(
     (condition) => isSafeWorkflowEdge(source.type, target.type, condition),
   );
 }
+
+function getNodeFrame(node: AiWorkflowNodeDefinition): NodeFrame {
+  const size = nodeSizes.value[node.id];
+  return {
+    x: node.position?.x ?? 20,
+    y: node.position?.y ?? 20,
+    width: size?.width ?? NODE_WIDTH,
+    height: size?.height ?? NODE_HEIGHT,
+  };
+}
+
+function getPortPoint(frame: NodeFrame, port: AiWorkflowNodePort) {
+  if (port === 'left') return { x: frame.x, y: frame.y + frame.height / 2 };
+  if (port === 'right') return { x: frame.x + frame.width, y: frame.y + frame.height / 2 };
+  if (port === 'top') return { x: frame.x + frame.width / 2, y: frame.y };
+  return { x: frame.x + frame.width / 2, y: frame.y + frame.height };
+}
+
+function getDefaultEdgePorts(source: NodeFrame, target: NodeFrame) {
+  const sourceCenter = getPortPoint(source, 'bottom');
+  const targetCenter = getPortPoint(target, 'top');
+  const isVerticalDown =
+    targetCenter.y > sourceCenter.y &&
+    Math.abs(targetCenter.y - sourceCenter.y) >= Math.abs(targetCenter.x - sourceCenter.x);
+  return isVerticalDown
+    ? { sourcePort: 'bottom' as const, targetPort: 'top' as const }
+    : { sourcePort: 'right' as const, targetPort: 'left' as const };
+}
+
+function getEdgePorts(
+  edge: AiWorkflowEdgeDefinition,
+  source: NodeFrame,
+  target: NodeFrame,
+) {
+  const fallback = getDefaultEdgePorts(source, target);
+  return {
+    sourcePort: edge.sourcePort ?? fallback.sourcePort,
+    targetPort: edge.targetPort ?? fallback.targetPort,
+  };
+}
+
 const edgeLayouts = computed(() => {
   const nodes = new Map(workflow.value.nodes.map((node) => [node.id, node]));
   return workflow.value.edges.flatMap((edge) => {
     const source = nodes.get(edge.source);
     const target = nodes.get(edge.target);
-    if (!source?.position || !target?.position) return [];
-    const x1 = source.position.x + NODE_WIDTH;
-    const y1 = source.position.y + NODE_HEIGHT / 2;
-    const x2 = target.position.x;
-    const y2 = target.position.y + NODE_HEIGHT / 2;
+    if (!source || !target) return [];
+    const sourceFrame = getNodeFrame(source);
+    const targetFrame = getNodeFrame(target);
+    const ports = getEdgePorts(edge, sourceFrame, targetFrame);
+    const start = getPortPoint(sourceFrame, ports.sourcePort);
+    const end = getPortPoint(targetFrame, ports.targetPort);
     return [
       {
         ...edge,
-        x1,
-        y1,
-        x2,
-        y2,
-        labelX: (x1 + x2) / 2,
-        labelY: (y1 + y2) / 2 - 5,
+        x1: start.x,
+        y1: start.y,
+        x2: end.x,
+        y2: end.y,
+        labelX: (start.x + end.x) / 2,
+        labelY: (start.y + end.y) / 2 - 5,
       },
     ];
   });
 });
+
+function syncNodeSize(nodeId: string, element: HTMLElement) {
+  const next = {
+    width: element.offsetWidth || NODE_WIDTH,
+    height: element.offsetHeight || NODE_HEIGHT,
+  };
+  const current = nodeSizes.value[nodeId];
+  if (current?.width === next.width && current.height === next.height) return;
+  nodeSizes.value = { ...nodeSizes.value, [nodeId]: next };
+}
+
+function getNodeResizeObserver() {
+  if (!nodeResizeObserver) {
+    nodeResizeObserver = new ResizeObserver((entries) => {
+      entries.forEach((entry) => {
+        const element = entry.target as HTMLElement;
+        const nodeId = nodeElementIds.get(element);
+        if (nodeId) syncNodeSize(nodeId, element);
+      });
+    });
+  }
+  return nodeResizeObserver;
+}
+
+function setNodeElement(
+  nodeId: string,
+  element: Element | ComponentPublicInstance | null,
+) {
+  const previous = observedNodeElements.get(nodeId);
+  if (previous && previous !== element) getNodeResizeObserver().unobserve(previous);
+  if (!(element instanceof HTMLElement)) {
+    observedNodeElements.delete(nodeId);
+    if (nodeSizes.value[nodeId]) {
+      const { [nodeId]: _removed, ...rest } = nodeSizes.value;
+      nodeSizes.value = rest;
+    }
+    return;
+  }
+  observedNodeElements.set(nodeId, element);
+  nodeElementIds.set(element, nodeId);
+  getNodeResizeObserver().observe(element);
+  syncNodeSize(nodeId, element);
+}
 
 function updateWorkflow(mutator: (next: ReturnType<typeof normalizeAiWorkflowDefinition>) => void) {
   const next = normalizeAiWorkflowDefinition(model.value);
@@ -144,7 +239,11 @@ function setSelectedEnabled(enabled: boolean) {
   });
 }
 
-function connectNodes(source: AiWorkflowNodeDefinition, target: AiWorkflowNodeDefinition) {
+function connectNodes(
+  source: AiWorkflowNodeDefinition,
+  target: AiWorkflowNodeDefinition,
+  ports?: { sourcePort: SourcePort; targetPort: TargetPort },
+) {
   const condition = getAvailableConditions(source, target)[0];
   if (!condition) {
     connectionError.value = '这两个节点不能直接连线，请选择符合处理顺序的目标节点。';
@@ -164,6 +263,7 @@ function connectNodes(source: AiWorkflowNodeDefinition, target: AiWorkflowNodeDe
       source: source.id,
       target: target.id,
       condition,
+      ...ports,
     });
   });
   connectionError.value = '';
@@ -244,9 +344,10 @@ function handlePointerMove(event: PointerEvent) {
   updateWorkflow((next) => {
     const node = next.nodes.find((item) => item.id === state.id);
     if (!node) return;
+    const frame = getNodeFrame(node);
     node.position = {
-      x: Math.min(CANVAS_WIDTH - NODE_WIDTH - 20, Math.max(20, state.originX + event.clientX - state.startX)),
-      y: Math.min(CANVAS_HEIGHT - NODE_HEIGHT - 20, Math.max(20, state.originY + event.clientY - state.startY)),
+      x: Math.min(CANVAS_WIDTH - frame.width - 20, Math.max(20, state.originX + event.clientX - state.startX)),
+      y: Math.min(CANVAS_HEIGHT - frame.height - 20, Math.max(20, state.originY + event.clientY - state.startY)),
     };
   });
 }
@@ -265,13 +366,23 @@ function getCanvasPoint(event: PointerEvent) {
   };
 }
 
-function startConnection(event: PointerEvent, node: AiWorkflowNodeDefinition) {
+function startConnection(
+  event: PointerEvent,
+  node: AiWorkflowNodeDefinition,
+  sourcePort: SourcePort,
+) {
   if (event.button !== 0 || !node.position || node.type === 'answer') return;
   event.preventDefault();
   selectNode(node.id);
-  const x = node.position.x + NODE_WIDTH;
-  const y = node.position.y + NODE_HEIGHT / 2;
-  connectionDrag.value = { sourceId: node.id, x1: x, y1: y, x2: x, y2: y };
+  const point = getPortPoint(getNodeFrame(node), sourcePort);
+  connectionDrag.value = {
+    sourceId: node.id,
+    sourcePort,
+    x1: point.x,
+    y1: point.y,
+    x2: point.x,
+    y2: point.y,
+  };
   window.addEventListener('pointermove', handleConnectionMove);
   window.addEventListener('pointerup', stopConnection, { once: true });
 }
@@ -292,7 +403,12 @@ function finishConnection(event: PointerEvent, target: AiWorkflowNodeDefinition)
   const drag = connectionDrag.value;
   if (!drag || drag.sourceId === target.id) return;
   const source = workflow.value.nodes.find((node) => node.id === drag.sourceId);
-  if (source) connectNodes(source, target);
+  if (source) {
+    connectNodes(source, target, {
+      sourcePort: drag.sourcePort,
+      targetPort: drag.sourcePort === 'bottom' ? 'top' : 'left',
+    });
+  }
   stopConnection();
   event.stopPropagation();
 }
@@ -300,13 +416,14 @@ function finishConnection(event: PointerEvent, target: AiWorkflowNodeDefinition)
 onBeforeUnmount(() => {
   stopDrag();
   stopConnection();
+  nodeResizeObserver?.disconnect();
 });
 </script>
 
 <template>
   <div class="ai-workflow-editor">
     <div class="ai-workflow-editor__intro">
-      新建流程仅保留输入清洗入口。按需从节点库加入节点，并从节点右侧蓝点拖到目标节点建立流向；服务端会校验循环、入口和回答出口。
+      新建流程仅保留输入清洗入口。按需从节点库加入节点，并从节点右侧或底部蓝点拖到目标节点建立流向；服务端会校验循环、入口和回答出口。
     </div>
 
     <div v-if="availableNodeTypes.length" class="ai-workflow-editor__palette">
@@ -364,6 +481,7 @@ onBeforeUnmount(() => {
           <button
             v-for="node in workflow.nodes"
             :key="node.id"
+            :ref="(element) => setNodeElement(node.id, element)"
             class="workflow-node"
             :class="getNodeClass(node)"
             :style="{ left: `${node.position?.x ?? 20}px`, top: `${node.position?.y ?? 20}px` }"
@@ -377,14 +495,25 @@ onBeforeUnmount(() => {
             <span class="workflow-node__state">{{ node.enabled ? '启用' : '跳过' }}</span>
             <span
               v-if="node.type !== 'preflight'"
-              class="workflow-node__connector workflow-node__connector--input"
+              class="workflow-node__connector workflow-node__connector--input workflow-node__connector--top"
+              aria-hidden="true"
+            />
+            <span
+              v-if="node.type !== 'preflight'"
+              class="workflow-node__connector workflow-node__connector--input workflow-node__connector--left"
               aria-hidden="true"
             />
             <span
               v-if="node.type !== 'answer'"
-              class="workflow-node__connector workflow-node__connector--output"
-              title="拖拽到目标节点以建立连线"
-              @pointerdown.stop="startConnection($event, node)"
+              class="workflow-node__connector workflow-node__connector--output workflow-node__connector--right"
+              title="从右侧拖到目标节点以建立连线"
+              @pointerdown.stop="startConnection($event, node, 'right')"
+            />
+            <span
+              v-if="node.type !== 'answer'"
+              class="workflow-node__connector workflow-node__connector--output workflow-node__connector--bottom"
+              title="从底部拖到目标节点以建立向下连线"
+              @pointerdown.stop="startConnection($event, node, 'bottom')"
             />
           </button>
         </div>
@@ -415,7 +544,7 @@ onBeforeUnmount(() => {
 
           <div class="ai-workflow-editor__connection-title">拖拽建立连线</div>
           <div class="ai-workflow-editor__condition-tip">
-            按住节点右侧蓝点并拖到目标节点。标准问答节点默认创建“未命中”分支，可在下方修改为“命中”。
+            从右侧蓝点拖出横向连线，或从底部蓝点拖到下方节点建立纵向连线。标准问答节点默认创建“未命中”分支，可在下方修改为“命中”。
           </div>
           <div v-if="connectionError" class="ai-workflow-editor__error">{{ connectionError }}</div>
           <div class="ai-workflow-editor__connection-title">当前连线</div>
@@ -487,9 +616,13 @@ onBeforeUnmount(() => {
 .workflow-node__drag { margin-bottom: 3px; color: #909399; font-size: 10px; }
 .workflow-node__title { font-size: 13px; font-weight: 600; }
 .workflow-node__state { margin-top: 3px; color: #909399; font-size: 11px; }
-.workflow-node__connector { position: absolute; top: 50%; box-sizing: border-box; width: 12px; height: 12px; border: 2px solid #409eff; border-radius: 50%; transform: translateY(-50%); }
-.workflow-node__connector--input { left: -6px; background: #fff; }
-.workflow-node__connector--output { right: -6px; border-color: #fff; background: #409eff; box-shadow: 0 0 0 1px #409eff; cursor: crosshair; }
+.workflow-node__connector { position: absolute; box-sizing: border-box; width: 12px; height: 12px; border: 2px solid #409eff; border-radius: 50%; }
+.workflow-node__connector--input { background: #fff; pointer-events: none; }
+.workflow-node__connector--left { top: 50%; left: -6px; transform: translateY(-50%); }
+.workflow-node__connector--top { top: -6px; left: 50%; transform: translateX(-50%); }
+.workflow-node__connector--output { border-color: #fff; background: #409eff; box-shadow: 0 0 0 1px #409eff; cursor: crosshair; }
+.workflow-node__connector--right { top: 50%; right: -6px; transform: translateY(-50%); }
+.workflow-node__connector--bottom { bottom: -6px; left: 50%; transform: translateX(-50%); }
 .workflow-node__connector--output:hover { background: #79bbff; box-shadow: 0 0 0 3px rgba(64, 158, 255, .18); }
 .ai-workflow-editor__panel { min-width: 0; padding: 14px; border: 1px solid #ebeef5; border-radius: 8px; background: #fff; }
 .ai-workflow-editor__empty-panel { display: flex; min-height: 140px; align-items: center; color: #909399; font-size: 13px; line-height: 1.7; }

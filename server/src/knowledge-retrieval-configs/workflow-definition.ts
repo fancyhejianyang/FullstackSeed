@@ -9,6 +9,7 @@ export type AiWorkflowStepType =
   | 'answer';
 
 export type AiWorkflowEdgeCondition = 'always' | 'matched' | 'unmatched';
+export type AiWorkflowNodePort = 'left' | 'right' | 'top' | 'bottom';
 
 export interface AiWorkflowStepDefinition {
   id: AiWorkflowStepType;
@@ -33,6 +34,9 @@ export interface AiWorkflowEdgeDefinition {
   source: string;
   target: string;
   condition: AiWorkflowEdgeCondition;
+  /** 仅用于画布展示与编辑，不参与后端执行分支。 */
+  sourcePort?: AiWorkflowNodePort;
+  targetPort?: AiWorkflowNodePort;
 }
 
 /**
@@ -113,6 +117,10 @@ function isWorkflowStepType(value: unknown): value is AiWorkflowStepType {
 
 function isEdgeCondition(value: unknown): value is AiWorkflowEdgeCondition {
   return value === 'always' || value === 'matched' || value === 'unmatched';
+}
+
+function isWorkflowNodePort(value: unknown): value is AiWorkflowNodePort {
+  return value === 'left' || value === 'right' || value === 'top' || value === 'bottom';
 }
 
 function nodeId(type: AiWorkflowStepType) {
@@ -310,7 +318,7 @@ export function normalizeAiWorkflowDefinition(
       );
 
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
-  const sourceEdges =
+  const sourceEdges: AiWorkflowEdgeDefinition[] =
     usesNodeGraph && Array.isArray(definition?.edges)
       ? definition.edges
       : createDefaultEdges(nodes);
@@ -332,6 +340,12 @@ export function normalizeAiWorkflowDefinition(
       source: source.id,
       target: target.id,
       condition: edge.condition,
+      ...(isWorkflowNodePort(edge.sourcePort)
+        ? { sourcePort: edge.sourcePort }
+        : {}),
+      ...(isWorkflowNodePort(edge.targetPort)
+        ? { targetPort: edge.targetPort }
+        : {}),
     });
   });
 

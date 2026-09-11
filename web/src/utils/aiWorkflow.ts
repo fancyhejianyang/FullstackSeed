@@ -3,6 +3,7 @@ import type {
   AiWorkflowEdgeCondition,
   AiWorkflowEdgeDefinition,
   AiWorkflowNodeDefinition,
+  AiWorkflowNodePort,
   AiWorkflowNodePosition,
   AiWorkflowStepType,
   KnowledgeRetrievalConfig,
@@ -143,6 +144,10 @@ function isCondition(value: unknown): value is AiWorkflowEdgeCondition {
   return value === 'always' || value === 'matched' || value === 'unmatched';
 }
 
+function isNodePort(value: unknown): value is AiWorkflowNodePort {
+  return value === 'left' || value === 'right' || value === 'top' || value === 'bottom';
+}
+
 function nodeId(type: AiWorkflowStepType) {
   return `node-${type}`;
 }
@@ -281,7 +286,7 @@ export function normalizeAiWorkflowDefinition(
       })
     : defaultNodes(fallback).map((node) => nodesByType.get(node.type) ?? node);
   const byId = new Map(nodes.map((node) => [node.id, node]));
-  const sourceEdges = usesNodeGraph && Array.isArray(definition?.edges)
+  const sourceEdges: AiWorkflowEdgeDefinition[] = usesNodeGraph && Array.isArray(definition?.edges)
     ? definition.edges
     : defaultEdges(nodes);
   const seen = new Set<string>();
@@ -299,6 +304,8 @@ export function normalizeAiWorkflowDefinition(
       source: source.id,
       target: target.id,
       condition: edge.condition,
+      ...(isNodePort(edge.sourcePort) ? { sourcePort: edge.sourcePort } : {}),
+      ...(isNodePort(edge.targetPort) ? { targetPort: edge.targetPort } : {}),
     });
   });
   return { version: 2, nodes, edges };

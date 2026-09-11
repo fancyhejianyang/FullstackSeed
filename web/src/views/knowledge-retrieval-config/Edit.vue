@@ -131,7 +131,7 @@ const fields = computed<FormField[]>(() => {
       label: '流程编排',
       slot: true,
       span: 2,
-      hint: '新建流程仅从输入清洗入口开始；从节点库加入步骤，并从节点右侧蓝点拖至目标节点建立流向。',
+      hint: '新建流程仅从输入清洗入口开始；从节点库加入步骤，并从节点右侧或底部蓝点拖至目标节点建立流向。',
     },
     {
       prop: 'retrievalMode',
