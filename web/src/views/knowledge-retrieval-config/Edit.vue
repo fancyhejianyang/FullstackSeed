@@ -528,7 +528,13 @@ async function handleSubmit() {
     @confirm="handleSubmit"
   >
     <div v-loading="loading">
-      <Form ref="formRef" v-model="form" :fields="fields" :rules="rules" label-width="120px">
+      <Form
+        ref="formRef"
+        v-model="form"
+        :fields="fields"
+        :rules="rules"
+        label-position="top"
+      >
         <template #field-workflowDefinition>
           <AiWorkflowEditor v-model="form.workflowDefinition" />
         </template>

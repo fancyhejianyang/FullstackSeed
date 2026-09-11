@@ -54,10 +54,12 @@ const props = withDefaults(
     fields: FormField[];
     rules?: FormRules;
     labelWidth?: string;
+    labelPosition?: 'left' | 'right' | 'top';
     inline?: boolean;
   }>(),
   {
     labelWidth: '80px',
+    labelPosition: 'right',
     inline: false,
   },
 );
@@ -151,6 +153,7 @@ defineExpose({ validate, resetFields });
     :model="model"
     :rules="props.rules"
     :label-width="props.labelWidth"
+    :label-position="props.labelPosition"
     :inline="props.inline"
   >
     <el-form-item

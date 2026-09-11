@@ -21,7 +21,7 @@ const model = defineModel<AiWorkflowDefinition>({ required: true });
 
 const NODE_WIDTH = 190;
 const NODE_HEIGHT = 70;
-const CANVAS_WIDTH = 1200;
+const CANVAS_WIDTH = 650;
 const CANVAS_HEIGHT = 960;
 
 const selectedNodeId = ref('node-standardQa');
@@ -375,11 +375,11 @@ onBeforeUnmount(stopDrag);
   font-size: 12px;
   line-height: 1.6;
 }
-.ai-workflow-editor__palette { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.ai-workflow-editor__palette { display: flex; width: 650px; max-width: 100%; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px auto 0; }
 .ai-workflow-editor__palette-label, .ai-workflow-editor__connection-title { color: #303133; font-size: 13px; font-weight: 600; }
-.ai-workflow-editor__layout { display: grid; grid-template-columns: minmax(620px, 1.75fr) minmax(270px, 0.8fr); gap: 14px; margin-top: 12px; }
-.ai-workflow-editor__canvas-viewport { max-height: 760px; overflow: auto; border: 1px solid #d9ecff; border-radius: 8px; background: #f8fbff; }
-.ai-workflow-editor__canvas { position: relative; min-width: 720px; background-image: radial-gradient(#d9ecff 1px, transparent 1px); background-size: 16px 16px; }
+.ai-workflow-editor__layout { display: grid; grid-template-columns: 650px minmax(270px, 320px); justify-content: center; gap: 14px; margin-top: 12px; }
+.ai-workflow-editor__canvas-viewport { width: 650px; max-width: 100%; max-height: 760px; overflow: auto; border: 1px solid #d9ecff; border-radius: 8px; background: #f8fbff; }
+.ai-workflow-editor__canvas { position: relative; min-width: 650px; margin: 0 auto; background-image: radial-gradient(#d9ecff 1px, transparent 1px); background-size: 16px 16px; }
 .ai-workflow-editor__edges { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
 .ai-workflow-editor__edges text { font-size: 11px; font-weight: 600; paint-order: stroke; stroke: #f8fbff; stroke-width: 4px; }
 .workflow-node { position: absolute; display: flex; width: 190px; min-height: 70px; flex-direction: column; justify-content: center; padding: 8px 10px; border: 1px solid #a0cfff; border-radius: 7px; background: #fff; color: #303133; cursor: grab; font: inherit; text-align: center; transition: border-color .2s, box-shadow .2s, opacity .2s; user-select: none; }

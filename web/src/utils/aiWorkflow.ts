@@ -37,6 +37,9 @@ const PASS_THROUGH_CONDITIONS = new Set<AiWorkflowEdgeCondition>([
   'always',
   'unmatched',
 ]);
+const WORKFLOW_CANVAS_WIDTH = 650;
+const WORKFLOW_NODE_WIDTH = 190;
+const WORKFLOW_CANVAS_PADDING = 20;
 
 export const AI_WORKFLOW_STEP_META: Record<
   AiWorkflowStepType,
@@ -94,6 +97,20 @@ export const AI_WORKFLOW_CONDITION_META: Record<
 };
 
 const DEFAULT_NODE_POSITIONS: Record<AiWorkflowStepType, AiWorkflowNodePosition> = {
+  preflight: { x: 230, y: 30 },
+  standardQa: { x: 230, y: 155 },
+  colloquial: { x: 230, y: 285 },
+  calibratedStandardQa: { x: 230, y: 410 },
+  businessCommand: { x: 80, y: 555 },
+  knowledgeRetrieval: { x: 380, y: 555 },
+  rerank: { x: 380, y: 680 },
+  answer: { x: 230, y: 810 },
+};
+
+const LEGACY_DEFAULT_NODE_POSITIONS: Record<
+  AiWorkflowStepType,
+  AiWorkflowNodePosition
+> = {
   preflight: { x: 430, y: 30 },
   standardQa: { x: 430, y: 155 },
   colloquial: { x: 430, y: 285 },
@@ -121,10 +138,17 @@ function normalizePosition(
   position?: AiWorkflowNodePosition,
 ): AiWorkflowNodePosition {
   const fallback = DEFAULT_NODE_POSITIONS[type];
+  const legacy = LEGACY_DEFAULT_NODE_POSITIONS[type];
   const x = Number(position?.x);
   const y = Number(position?.y);
+  if (x === legacy.x && y === legacy.y) return fallback;
   return {
-    x: Number.isFinite(x) ? Math.min(1160, Math.max(20, Math.round(x))) : fallback.x,
+    x: Number.isFinite(x)
+      ? Math.min(
+          WORKFLOW_CANVAS_WIDTH - WORKFLOW_NODE_WIDTH - WORKFLOW_CANVAS_PADDING,
+          Math.max(WORKFLOW_CANVAS_PADDING, Math.round(x)),
+        )
+      : fallback.x,
     y: Number.isFinite(y) ? Math.min(920, Math.max(20, Math.round(y))) : fallback.y,
   };
 }

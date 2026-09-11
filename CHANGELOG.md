@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-09-11 调整 AI 工作流编辑布局
+- 新增：无。
+- 修改：
+  - `web/src/components/Form.vue`（增加可选的表单标签位置配置，默认保持右侧标签以兼容既有页面）
+  - `web/src/views/knowledge-retrieval-config/Edit.vue`（AI 工作流配置表单改为标签在上、控件在下）
+  - `web/src/components/AiWorkflowEditor.vue`、`web/src/utils/aiWorkflow.ts`（工作流节点库和画布固定为 650px，整体居中；节点默认坐标及显示范围同步适配画布宽度，旧默认坐标会自动居中迁移）
+  - `CHANGELOG.md`（记录本次调整）
+- 删除：无。
+- 说明：仅调整管理端布局与画布坐标边界，不改变工作流节点、条件连线或知识库绑定语义。
+
 ### 2026-09-11 升级为可编辑 AI 工作流图
 - 新增：无。
 - 修改：
