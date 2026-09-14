@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-09-14 统一 MinerU 引擎菜单名称
+- 新增：
+  - `server/src/migrations/1788904000000-RenameMineruEngineMenu.ts`（仅将历史默认的“MinerU 解析配置”菜单升级为“MinerU 引擎配置”，不重置数据库，也不覆盖管理员自行改名的菜单）。
+- 修改：
+  - `server/src/menus/menus.service.ts`（新部署时写入“MinerU 引擎配置”菜单种子）。
+  - `server/src/log-records/log-api-scanner.ts`（操作日志模块名称同步为“MinerU 引擎配置”）。
+- 删除：无。
+- 说明：侧边栏、页面标题与操作日志现在使用同一名称；“AI 功能配置”继续承载文档解析、OCR、聊天与 LLM 重排等模型能力配置。
+
 ### 2026-09-14 拆分 MinerU 引擎与文档解析职责
 - 新增：无。
 - 修改：

@@ -306,7 +306,7 @@ const SEED_MENUS: SeedMenu[] = [
     parentPath: '/system-config',
   },
   {
-    name: 'MinerU 解析配置',
+    name: 'MinerU 引擎配置',
     path: '/system-config/mineru',
     icon: 'DocumentChecked',
     sort: 90,

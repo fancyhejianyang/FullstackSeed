@@ -170,7 +170,7 @@ const ROUTE_FALLBACK_META_MAP: Record<
   '/menus': { moduleId: 'menu', moduleName: '菜单管理', isSystem: true },
   '/mineru-configs': {
     moduleId: 'mineru-configs',
-    moduleName: 'MinerU 解析配置',
+    moduleName: 'MinerU 引擎配置',
     isSystem: true,
   },
   '/module-models': {
