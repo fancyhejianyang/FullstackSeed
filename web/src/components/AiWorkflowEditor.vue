@@ -266,17 +266,97 @@ function isNodePositionAvailable(
 function getPositionNearCurrentNode(nodes: AiWorkflowNodeDefinition[]) {
   const currentNode = selectedNodeId.value
     ? nodes.find((node) => node.id === selectedNodeId.value)
-    : nodes.length === 1
-      ? nodes[0]
-      : undefined;
+    : nodes[nodes.length - 1];
   if (!currentNode) return undefined;
 
   const frame = getNodeFrame(currentNode);
-  const candidates = [
-    { x: frame.x, y: frame.y + frame.height + NODE_GAP },
-    { x: frame.x + frame.width + NODE_GAP, y: frame.y },
-  ].map(clampNodePosition);
+  const candidates = getNearbyCandidates(
+    { x: frame.x, y: frame.y },
+    [
+      [0, 1],
+      [1, 0],
+      [-1, 0],
+      [0, -1],
+      [1, 1],
+      [-1, 1],
+      [1, -1],
+      [-1, -1],
+    ],
+  );
   return candidates.find((position) => isNodePositionAvailable(position, nodes));
+}
+
+function getNearbyCandidates(
+  anchor: { x: number; y: number },
+  offsets: Array<[number, number]>,
+) {
+  return offsets.map(([column, row]) =>
+    clampNodePosition({
+      x: anchor.x + column * (NODE_WIDTH + NODE_GAP),
+      y: anchor.y + row * (NODE_HEIGHT + NODE_GAP),
+    }),
+  );
+}
+
+function getPositionInVisibleCanvas(nodes: AiWorkflowNodeDefinition[]) {
+  const viewport = canvasViewportRef.value;
+  if (!viewport) return undefined;
+  const anchor = clampNodePosition({
+    x: (viewport.clientWidth / 2 - canvasPan.value.x) / canvasZoom.value - NODE_WIDTH / 2,
+    y: (viewport.clientHeight / 2 - canvasPan.value.y) / canvasZoom.value - NODE_HEIGHT / 2,
+  });
+  const candidates = getNearbyCandidates(
+    anchor,
+    [
+      [0, 0],
+      [0, 1],
+      [1, 0],
+      [-1, 0],
+      [0, -1],
+      [1, 1],
+      [-1, 1],
+      [1, -1],
+      [-1, -1],
+      [0, 2],
+      [2, 0],
+      [-2, 0],
+      [0, -2],
+    ],
+  );
+  return candidates.find((position) => isNodePositionAvailable(position, nodes));
+}
+
+function getNewNodePosition(
+  type: AiWorkflowStepType,
+  occurrence: number,
+  nodes: AiWorkflowNodeDefinition[],
+) {
+  return (
+    getPositionNearCurrentNode(nodes) ??
+    getPositionInVisibleCanvas(nodes) ??
+    getAiWorkflowNodeDefaultPosition(type, occurrence)
+  );
+}
+
+function focusNodeIfOutsideViewport(id: string) {
+  const viewport = canvasViewportRef.value;
+  const node = workflow.value.nodes.find((item) => item.id === id);
+  if (!viewport || !node) return;
+  const frame = getNodeFrame(node);
+  const centerX = canvasPan.value.x + (frame.x + frame.width / 2) * canvasZoom.value;
+  const centerY = canvasPan.value.y + (frame.y + frame.height / 2) * canvasZoom.value;
+  const padding = 32;
+  if (
+    centerX >= padding &&
+    centerX <= viewport.clientWidth - padding &&
+    centerY >= padding &&
+    centerY <= viewport.clientHeight - padding
+  ) return;
+
+  canvasPan.value = {
+    x: viewport.clientWidth / 2 - (frame.x + frame.width / 2) * canvasZoom.value,
+    y: viewport.clientHeight / 2 - (frame.y + frame.height / 2) * canvasZoom.value,
+  };
 }
 
 function addNode(type: AiWorkflowStepType) {
@@ -288,12 +368,11 @@ function addNode(type: AiWorkflowStepType) {
       id,
       type,
       enabled: true,
-      position:
-        getPositionNearCurrentNode(next.nodes) ??
-        getAiWorkflowNodeDefaultPosition(type, count),
+      position: getNewNodePosition(type, count, next.nodes),
     });
   });
   selectNode(id);
+  focusNodeIfOutsideViewport(id);
 }
 
 function removeSelectedNode() {
