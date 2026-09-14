@@ -74,6 +74,8 @@ export interface KnowledgeBaseChunk {
   documentId: number;
   chunkIndex: number;
   title: string;
+  sectionPath: string | null;
+  blockType: string;
   content: string;
   coreContent: string | null;
   manualStartOffset: number | null;
@@ -98,6 +100,8 @@ export interface KnowledgeBaseIndex {
   chunkId: number;
   chunkIndex: number;
   title: string;
+  sectionPath: string | null;
+  blockType: string;
   vectorId: string | null;
   vectorStatus: string;
   vectorError: string | null;
@@ -113,8 +117,7 @@ export interface KnowledgeBaseMineruTaskPayload {
   fileName?: string;
 }
 
-export interface KnowledgeBaseMineruParsePayload
-  extends KnowledgeBaseMineruTaskPayload {
+export interface KnowledgeBaseMineruParsePayload extends KnowledgeBaseMineruTaskPayload {
   waitForResult?: boolean;
 }
 
@@ -274,7 +277,10 @@ export function createKnowledgeBase(data: Partial<KnowledgeBaseForm>) {
   return request.post<unknown, KnowledgeBase>('/knowledge-bases', data);
 }
 
-export function updateKnowledgeBase(id: number, data: Partial<KnowledgeBaseForm>) {
+export function updateKnowledgeBase(
+  id: number,
+  data: Partial<KnowledgeBaseForm>,
+) {
   const nid = assertId(id, 'id');
   return request.patch<unknown, KnowledgeBase>(`/knowledge-bases/${nid}`, data);
 }
@@ -289,9 +295,12 @@ export function batchDeleteKnowledgeBases(ids: Array<string | number>) {
   const validIds = ids
     .map((item) => assertId(item, 'id'))
     .filter((value) => value > 0);
-  return request.post<unknown, { ids: number[] }>('/knowledge-bases/batch-delete', {
-    ids: validIds,
-  });
+  return request.post<unknown, { ids: number[] }>(
+    '/knowledge-bases/batch-delete',
+    {
+      ids: validIds,
+    },
+  );
 }
 
 export function parseKnowledgeBase(
@@ -349,7 +358,9 @@ export function createKnowledgeBaseCategory(
 export function getNextKnowledgeBaseCategoryCode(parentId?: number) {
   return request.get<unknown, { code: string }>(
     '/knowledge-bases/categories/next-code',
-    { params: { parentId: parentId ?? undefined } },
+    {
+      params: { parentId: parentId ?? undefined },
+    },
   );
 }
 
@@ -468,8 +479,13 @@ export function getKnowledgeBaseIndexes(params: QueryKnowledgeBaseChunkParams) {
   );
 }
 
-export function createKnowledgeBaseChunk(data: Partial<KnowledgeBaseChunkForm>) {
-  return request.post<unknown, KnowledgeBaseChunk>('/knowledge-bases/chunks', data);
+export function createKnowledgeBaseChunk(
+  data: Partial<KnowledgeBaseChunkForm>,
+) {
+  return request.post<unknown, KnowledgeBaseChunk>(
+    '/knowledge-bases/chunks',
+    data,
+  );
 }
 
 export function replaceKnowledgeBaseDocumentChunks(
@@ -496,5 +512,7 @@ export function updateKnowledgeBaseChunk(
 
 export function deleteKnowledgeBaseChunk(id: number) {
   const nid = assertId(id, 'id');
-  return request.delete<unknown, { id: number }>(`/knowledge-bases/chunks/${nid}`);
+  return request.delete<unknown, { id: number }>(
+    `/knowledge-bases/chunks/${nid}`,
+  );
 }

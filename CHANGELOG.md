@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-09-14 统一知识库结构化 Markdown 解析与分片
+- 新增：
+  - `server/src/migrations/1788900400000-AddKnowledgeBaseChunkStructure.ts`（为知识库分片增加章节路径与内容块类型列，不修改或重置既有知识库数据）。
+- 修改：
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`、`server/src/knowledge-bases/entities/knowledge-base-chunk.entity.ts`（所有解析路径统一保存 Markdown；自动分片识别标题、段落、列表、表格，写入章节路径、内容块类型及包含结构上下文的向量文本）。
+  - `server/src/knowledge-bases/knowledge-bases.service.spec.ts`（增加 Markdown 约束、标题路径、表格分片和非 Markdown 输出归一化测试）。
+  - `web/src/api/knowledgeBase.ts`、`web/src/views/knowledge-base/View.vue`（前后端对齐章节路径、内容块类型并在分片/索引详情中展示）。
+  - `web/src/views/knowledge-base/Index.vue`、`web/src/views/knowledge-base/Documents.vue`（解析入口统一为结构化解析；自动分片文案明确为 Markdown 结构化分片）。
+  - `web/src/views/ai-feature-config/Edit.vue`（文档解析和 OCR 配置固定使用 Markdown 返回格式，并说明系统追加的结构化解析约束）。
+- 删除：无。
+- 说明：已存在的文档不会被迁移自动改写；需要重新执行“结构化解析 → 自动结构化分片 → 索引”后才会补齐新的章节结构和向量上下文。
+
 ### 2026-09-14 移除知识库旧匹配辅助字段
 - 新增：
   - `server/src/migrations/1788896800000-RemoveKnowledgeBaseMatchingFields.ts`（删除知识库及知识库文档的命中关键字、口语化说法、匹配优先级列，并将现有向量索引标记为待重新建立）。

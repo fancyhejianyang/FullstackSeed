@@ -59,7 +59,8 @@ const MANUAL_GRID_HEADER_HEIGHT = 0;
 const MANUAL_GRID_LINE_WIDTH = 0;
 const MANUAL_GRID_MAX_COLUMNS = 48;
 const MANUAL_STAGE_PADDING = 6;
-const MANUAL_TEXT_FONT = '14px "Microsoft YaHei", "PingFang SC", Arial, sans-serif';
+const MANUAL_TEXT_FONT =
+  '14px "Microsoft YaHei", "PingFang SC", Arial, sans-serif';
 const MANUAL_WRAP_MAX_WIDTH = MANUAL_GRID_MAX_COLUMNS * MANUAL_GRID_CELL_WIDTH;
 const DEFAULT_MANUAL_CONTEXT_OVERLAP = 120;
 const visible = defineModel<boolean>('visible', { required: true });
@@ -124,7 +125,9 @@ const manualGridRowCount = computed(() =>
 );
 const manualGridColumnCount = computed(() => MANUAL_GRID_MAX_COLUMNS);
 const manualStartLabel = computed(() =>
-  manualSelectionStart.value ? getCoordinateLabel(manualSelectionStart.value) : '-',
+  manualSelectionStart.value
+    ? getCoordinateLabel(manualSelectionStart.value)
+    : '-',
 );
 const manualEndLabel = computed(() =>
   manualSelectionEnd.value ? getCoordinateLabel(manualSelectionEnd.value) : '-',
@@ -143,7 +146,7 @@ function getContentTypeLabel(value?: KnowledgeBase['contentType']) {
     file: '文件',
     mixed: '混合',
   };
-  return value ? map[value] ?? value : '-';
+  return value ? (map[value] ?? value) : '-';
 }
 
 function getStatusLabel(status?: string) {
@@ -153,7 +156,7 @@ function getStatusLabel(status?: string) {
     success: '成功',
     failed: '失败',
   };
-  return status ? map[status] ?? status : '-';
+  return status ? (map[status] ?? status) : '-';
 }
 
 function getVectorStatusLabel(value?: string | null) {
@@ -165,6 +168,17 @@ function getVectorStatusLabel(value?: string | null) {
     skipped: '未变化',
   };
   return map[value || 'pending'] || value || '-';
+}
+
+function getChunkBlockTypeLabel(value?: string | null) {
+  const map: Record<string, string> = {
+    paragraph: '段落',
+    list: '列表',
+    table: '表格',
+    mixed: '混合',
+    manual: '手动',
+  };
+  return map[value || 'paragraph'] || value || '-';
 }
 
 function getVectorStatusType(value?: string | null) {
@@ -301,7 +315,10 @@ function buildExistingManualChunks(list: KnowledgeBaseChunk[]) {
             Math.max(contextBeforeLength, content.length - contextAfterLength),
           )
         : content;
-    const coreContent = (item.coreContent || fallbackCoreContent).replace(/\r\n/g, '\n');
+    const coreContent = (item.coreContent || fallbackCoreContent).replace(
+      /\r\n/g,
+      '\n',
+    );
     const range =
       item.manualStartOffset !== null && item.manualEndOffset !== null
         ? {
@@ -440,14 +457,14 @@ function getCoordinateByOffset(offset: number): GridCoordinate {
   const rowOffset = rows[row]?.startOffset ?? 0;
   return {
     row,
-    column: Math.min(Math.max(0, offset - rowOffset), Math.max(0, line.length - 1)),
+    column: Math.min(
+      Math.max(0, offset - rowOffset),
+      Math.max(0, line.length - 1),
+    ),
   };
 }
 
-function normalizeCoordinateRange(
-  start: GridCoordinate,
-  end: GridCoordinate,
-) {
+function normalizeCoordinateRange(start: GridCoordinate, end: GridCoordinate) {
   return getCoordinateOffset(start) <= getCoordinateOffset(end)
     ? { start, end }
     : { start: end, end: start };
@@ -466,13 +483,13 @@ function getManualCanvasCoordinate(event: MouseEvent) {
   const x = (event.clientX - rect.left) * scaleX - MANUAL_STAGE_PADDING;
   const y = (event.clientY - rect.top) * scaleY - MANUAL_STAGE_PADDING;
   if (x < MANUAL_GRID_LINE_WIDTH || y < MANUAL_GRID_HEADER_HEIGHT) return null;
-  const row = Math.floor((y - MANUAL_GRID_HEADER_HEIGHT) / MANUAL_GRID_CELL_HEIGHT);
-  const line = manualSourceLines.value[row] ?? '';
-  const column = getManualColumnByMeasuredX(
-    line,
-    x - MANUAL_GRID_LINE_WIDTH,
+  const row = Math.floor(
+    (y - MANUAL_GRID_HEADER_HEIGHT) / MANUAL_GRID_CELL_HEIGHT,
   );
-  if (column < 0 || row < 0 || row >= manualSourceLines.value.length) return null;
+  const line = manualSourceLines.value[row] ?? '';
+  const column = getManualColumnByMeasuredX(line, x - MANUAL_GRID_LINE_WIDTH);
+  if (column < 0 || row < 0 || row >= manualSourceLines.value.length)
+    return null;
   if (column >= line.length) return null;
   return { row, column };
 }
@@ -527,7 +544,9 @@ function waitManualCanvasFrame() {
 function isManualOffsetSelected(offset: number) {
   if (!manualSelectionStart.value) return false;
   const start = getCoordinateOffset(manualSelectionStart.value);
-  const end = getCoordinateOffset(manualSelectionEnd.value ?? manualSelectionStart.value);
+  const end = getCoordinateOffset(
+    manualSelectionEnd.value ?? manualSelectionStart.value,
+  );
   return offset >= start && offset <= end;
 }
 
@@ -648,7 +667,9 @@ async function createManualChunkFromSelection() {
     ElMessage.warning('请选择分片起止坐标');
     return;
   }
-  if (isManualRangeLocked(manualSelectionStart.value, manualSelectionEnd.value)) {
+  if (
+    isManualRangeLocked(manualSelectionStart.value, manualSelectionEnd.value)
+  ) {
     ElMessage.warning('当前坐标范围已被其它分片占用');
     return;
   }
@@ -856,7 +877,8 @@ async function drawManualGrid() {
   if (!manualEditorVisible.value) return;
 
   const columnCount = manualGridColumnCount.value;
-  let contentWidth = MANUAL_GRID_LINE_WIDTH + columnCount * MANUAL_GRID_CELL_WIDTH;
+  let contentWidth =
+    MANUAL_GRID_LINE_WIDTH + columnCount * MANUAL_GRID_CELL_WIDTH;
   for (const line of manualSourceLines.value) {
     contentWidth = Math.max(contentWidth, measureManualTextWidth(line));
   }
@@ -889,7 +911,13 @@ async function drawManualGrid() {
       row * MANUAL_GRID_CELL_HEIGHT;
     const line = manualSourceLines.value[row] ?? '';
     // state 层只绘制与该行相交的锁定段 + 当前选区片段，跳过无关行
-    drawManualPixiStateRangesForRow(pixi.stateLayer, row, line, y, linePrefixWidth[row] ?? []);
+    drawManualPixiStateRangesForRow(
+      pixi.stateLayer,
+      row,
+      line,
+      y,
+      linePrefixWidth[row] ?? [],
+    );
     addManualPixiLine(
       row,
       line,
@@ -929,7 +957,10 @@ function drawManualPixiStateRangesForRow(
   );
   const selectedRange =
     manualSelectionStart.value && manualSelectionEnd.value
-      ? normalizeCoordinateRange(manualSelectionStart.value, manualSelectionEnd.value)
+      ? normalizeCoordinateRange(
+          manualSelectionStart.value,
+          manualSelectionEnd.value,
+        )
       : null;
   const selectedOffsets = selectedRange
     ? {
@@ -938,14 +969,20 @@ function drawManualPixiStateRangesForRow(
       }
     : null;
 
-  const rects: Array<{ start: number; end: number; color: number; alpha: number }> = [];
+  const rects: Array<{
+    start: number;
+    end: number;
+    color: number;
+    alpha: number;
+  }> = [];
   for (const item of lockedRanges) {
     const start = Math.max(item.start, rowStartOffset) - rowStartOffset;
     const end = Math.min(item.end, rowEndOffset) - rowStartOffset;
     rects.push({ start, end, color: 0xf4f4f5, alpha: 0.86 });
   }
   if (selectedOffsets) {
-    const start = Math.max(selectedOffsets.start, rowStartOffset) - rowStartOffset;
+    const start =
+      Math.max(selectedOffsets.start, rowStartOffset) - rowStartOffset;
     const end = Math.min(selectedOffsets.end, rowEndOffset) - rowStartOffset;
     if (start <= end) {
       rects.push({ start, end, color: 0xcfe7ff, alpha: 1 });
@@ -958,13 +995,14 @@ function drawManualPixiStateRangesForRow(
       MANUAL_STAGE_PADDING +
       MANUAL_GRID_LINE_WIDTH +
       (linePrefixWidth[rect.start] ?? 0);
-    const width = Math.max(6, measureManualTextWidth(text.slice(rect.start, rect.end + 1)));
-    layer
-      .rect(x, y + 2, width, MANUAL_GRID_CELL_HEIGHT - 4)
-      .fill({
-        color: rect.color,
-        alpha: rect.alpha,
-      });
+    const width = Math.max(
+      6,
+      measureManualTextWidth(text.slice(rect.start, rect.end + 1)),
+    );
+    layer.rect(x, y + 2, width, MANUAL_GRID_CELL_HEIGHT - 4).fill({
+      color: rect.color,
+      alpha: rect.alpha,
+    });
   }
 }
 
@@ -1028,7 +1066,12 @@ function getManualTextColor(coord: GridCoordinate) {
   return 0x303133;
 }
 
-function addManualPixiTextSegment(text: string, x: number, y: number, color: number) {
+function addManualPixiTextSegment(
+  text: string,
+  x: number,
+  y: number,
+  color: number,
+) {
   if (!manualPixiState || !text) return;
   const node = new Text({
     text,
@@ -1146,7 +1189,12 @@ watch(visible, async (value) => {
 });
 
 watch(
-  [manualSourceContent, manualSelectionStart, manualSelectionEnd, manualEditorVisible],
+  [
+    manualSourceContent,
+    manualSelectionStart,
+    manualSelectionEnd,
+    manualEditorVisible,
+  ],
   () => {
     if (!manualEditorVisible.value) return;
     // 拖拽过程中只更新选区 ref，不触发重绘；渲染在 mouseup 一次性完成
@@ -1234,10 +1282,7 @@ onBeforeUnmount(() => {
         >
           {{ parsedContent }}
         </div>
-        <el-empty
-          v-else-if="!manualEditorVisible"
-          description="暂无解析正文"
-        />
+        <el-empty v-else-if="!manualEditorVisible" description="暂无解析正文" />
 
         <div v-if="safeFileUrl" class="knowledge-base-view__file">
           <span>原文件：</span>
@@ -1289,9 +1334,16 @@ onBeforeUnmount(() => {
                   @mouseup="handleManualCanvasMouseUp"
                   @mouseleave="handleManualCanvasMouseUp"
                 />
-                <div v-if="!manualCanvasReady" class="knowledge-base-view__grid-mask">
-                  <div class="knowledge-base-view__grid-mask-title">原文画布准备中</div>
-                  <div class="knowledge-base-view__grid-mask-text">稍等片刻后即可拖拽选择分片区域</div>
+                <div
+                  v-if="!manualCanvasReady"
+                  class="knowledge-base-view__grid-mask"
+                >
+                  <div class="knowledge-base-view__grid-mask-title">
+                    原文画布准备中
+                  </div>
+                  <div class="knowledge-base-view__grid-mask-text">
+                    稍等片刻后即可拖拽选择分片区域
+                  </div>
                 </div>
               </div>
             </div>
@@ -1299,14 +1351,21 @@ onBeforeUnmount(() => {
             <div class="knowledge-base-view__manual-result">
               <div class="knowledge-base-view__manual-result-head">
                 <div>
-                  <div class="knowledge-base-view__manual-subtitle">分好的片段</div>
+                  <div class="knowledge-base-view__manual-subtitle">
+                    分好的片段
+                  </div>
                   <div class="knowledge-base-view__manual-count">
-                    共 {{ manualChunks.length }} / {{ manualMaxChunks }} 个分片，上下文重叠 {{ manualContextOverlap }} 字符
+                    共 {{ manualChunks.length }} /
+                    {{ manualMaxChunks }} 个分片，上下文重叠
+                    {{ manualContextOverlap }} 字符
                   </div>
                 </div>
               </div>
 
-              <div v-if="manualChunks.length" class="knowledge-base-view__manual-list">
+              <div
+                v-if="manualChunks.length"
+                class="knowledge-base-view__manual-list"
+              >
                 <div
                   v-for="(item, index) in manualChunks"
                   :key="index"
@@ -1333,7 +1392,9 @@ onBeforeUnmount(() => {
                       删除
                     </Button>
                   </div>
-                  <pre class="knowledge-base-view__manual-preview">{{ item.content }}</pre>
+                  <pre class="knowledge-base-view__manual-preview">{{
+                    item.content
+                  }}</pre>
                 </div>
               </div>
               <el-empty v-else description="暂无手动分片" />
@@ -1350,7 +1411,12 @@ onBeforeUnmount(() => {
             placeholder="搜索标题/内容"
             @keyup.enter="handleChunkSearch"
           />
-          <Button type="primary" icon="Search" :confirm="false" @click="handleChunkSearch">
+          <Button
+            type="primary"
+            icon="Search"
+            :confirm="false"
+            @click="handleChunkSearch"
+          >
             查询
           </Button>
           <Button
@@ -1367,6 +1433,18 @@ onBeforeUnmount(() => {
         <el-table v-loading="chunkLoading" :data="chunks" border stripe>
           <el-table-column prop="chunkIndex" label="序号" width="90" />
           <el-table-column prop="title" label="标题" min-width="180" />
+          <el-table-column prop="sectionPath" label="章节路径" min-width="200">
+            <template #default="{ row }">
+              {{ row.sectionPath || '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="blockType" label="内容块" width="100">
+            <template #default="{ row }">
+              <el-tag type="info">{{
+                getChunkBlockTypeLabel(row.blockType)
+              }}</el-tag>
+            </template>
+          </el-table-column>
           <el-table-column prop="content" label="内容" min-width="420">
             <template #default="{ row }">
               <div class="knowledge-base-view__chunk-content">
@@ -1424,7 +1502,12 @@ onBeforeUnmount(() => {
             placeholder="搜索标题/索引文本"
             @keyup.enter="handleIndexSearch"
           />
-          <Button type="primary" icon="Search" :confirm="false" @click="handleIndexSearch">
+          <Button
+            type="primary"
+            icon="Search"
+            :confirm="false"
+            @click="handleIndexSearch"
+          >
             查询
           </Button>
           <Button
@@ -1441,9 +1524,23 @@ onBeforeUnmount(() => {
         <el-table v-loading="indexLoading" :data="indexes" border stripe>
           <el-table-column prop="chunkIndex" label="序号" width="90" />
           <el-table-column prop="title" label="标题" min-width="180" />
+          <el-table-column prop="sectionPath" label="章节路径" min-width="200">
+            <template #default="{ row }">
+              {{ row.sectionPath || '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="blockType" label="内容块" width="100">
+            <template #default="{ row }">
+              <el-tag type="info">{{
+                getChunkBlockTypeLabel(row.blockType)
+              }}</el-tag>
+            </template>
+          </el-table-column>
           <el-table-column prop="indexText" label="索引文本" min-width="520">
             <template #default="{ row }">
-              <pre class="knowledge-base-view__index-text">{{ row.indexText || '-' }}</pre>
+              <pre class="knowledge-base-view__index-text">{{
+                row.indexText || '-'
+              }}</pre>
             </template>
           </el-table-column>
           <el-table-column prop="vectorStatus" label="索引状态" width="120">
@@ -1464,13 +1561,22 @@ onBeforeUnmount(() => {
           </el-table-column>
           <el-table-column prop="vectorId" label="Vector ID" min-width="260">
             <template #default="{ row }">
-              <span class="knowledge-base-view__mono">{{ row.vectorId || '-' }}</span>
+              <span class="knowledge-base-view__mono">{{
+                row.vectorId || '-'
+              }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="indexedContentHash" label="Hash" min-width="220">
+          <el-table-column
+            prop="indexedContentHash"
+            label="Hash"
+            min-width="220"
+          >
             <template #default="{ row }">
               <el-tooltip
-                v-if="row.indexedContentHash && row.indexedContentHash !== row.currentContentHash"
+                v-if="
+                  row.indexedContentHash &&
+                  row.indexedContentHash !== row.currentContentHash
+                "
                 content="当前索引文本与已写入 Hash 不一致，需要重新索引"
                 placement="top"
               >

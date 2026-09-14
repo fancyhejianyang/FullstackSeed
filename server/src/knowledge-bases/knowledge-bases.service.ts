@@ -78,6 +78,36 @@ const KNOWLEDGE_CHUNK_VECTOR_STATUS = {
 type KnowledgeParseMode =
   (typeof KNOWLEDGE_PARSE_MODE)[keyof typeof KNOWLEDGE_PARSE_MODE];
 
+type KnowledgeChunkBlockType =
+  | 'paragraph'
+  | 'list'
+  | 'table'
+  | 'mixed'
+  | 'manual';
+
+interface MarkdownStructureBlock {
+  sectionPath: string[];
+  blockType: Exclude<KnowledgeChunkBlockType, 'manual'>;
+  content: string;
+}
+
+interface StructuredKnowledgeChunk {
+  title: string;
+  sectionPath: string | null;
+  blockType: KnowledgeChunkBlockType;
+  content: string;
+  coreContent: string;
+}
+
+const STRUCTURED_DOCUMENT_PARSE_INSTRUCTIONS = [
+  '你是企业知识库文档结构化解析助手。输出必须是可直接用于知识库分片的 Markdown 正文。',
+  '只保留原文中能够被事实依据支持的内容，不得补充、猜测或编造。',
+  '必须使用 #、##、### 表示清晰的标题层级；标题应简洁准确，正文紧跟所属标题。',
+  '保留完整的列表、表格、问答、数值、单位、条件、例外和链接；不要把表格改写为无结构长段落。',
+  '原文没有标题时，可根据原文明确主题补充必要标题；无法可靠判断时仅保留一个文档总标题。',
+  '不要输出 JSON、HTML、XML、解释、前言、总结说明或 ```markdown 代码围栏。',
+].join('\n');
+
 @Injectable()
 export class KnowledgeBasesService implements OnModuleInit {
   constructor(
@@ -148,7 +178,9 @@ export class KnowledgeBasesService implements OnModuleInit {
     );
     if (!config) return null;
     if (!config.mineruConfigId) {
-      throw new BadRequestException('AI 模型解析启用了 MinerU，但缺少 MinerU 配置');
+      throw new BadRequestException(
+        'AI 模型解析启用了 MinerU，但缺少 MinerU 配置',
+      );
     }
     return config;
   }
@@ -369,8 +401,7 @@ export class KnowledgeBasesService implements OnModuleInit {
   async createBase(dto: CreateKnowledgeBaseDto) {
     await this.assertRequiredCategory(dto.categoryId);
     const contentType = dto.contentType ?? 'text';
-    const textFileUrl =
-      contentType === 'text' ? dto.fileUrl?.trim() || '' : '';
+    const textFileUrl = contentType === 'text' ? dto.fileUrl?.trim() || '' : '';
     const contentText = textFileUrl
       ? await this.readTextSource(textFileUrl, dto.fileName)
       : dto.contentText?.trim() || null;
@@ -384,7 +415,7 @@ export class KnowledgeBasesService implements OnModuleInit {
         fileName:
           contentType === 'text'
             ? textFileUrl
-              ? dto.fileName?.trim() ?? ''
+              ? (dto.fileName?.trim() ?? '')
               : ''
             : (dto.fileName?.trim() ?? ''),
         fileUrl:
@@ -618,7 +649,7 @@ export class KnowledgeBasesService implements OnModuleInit {
       processStage: 'chunking',
       chunkStatus: 'processing',
       indexStatus: 'pending',
-      lastProcessMessage: 'MinerU 分片任务已提交，等待执行',
+      lastProcessMessage: '自动结构化分片任务已提交，等待执行',
     });
     return this.taskQueueService.add(
       'knowledge-base.chunk',
@@ -636,7 +667,7 @@ export class KnowledgeBasesService implements OnModuleInit {
       processStage: 'chunking',
       chunkStatus: 'processing',
       indexStatus: 'pending',
-      lastProcessMessage: '正在执行 MinerU 分片',
+      lastProcessMessage: '正在执行自动结构化分片',
     });
     try {
       const chunkConfig = await this.chunkConfigsService.findDefaultConfig();
@@ -651,12 +682,12 @@ export class KnowledgeBasesService implements OnModuleInit {
         processStage: 'chunked',
         chunkStatus: 'success',
         indexStatus: 'pending',
-        lastProcessMessage: `MinerU 分片完成，共 ${chunkCount} 个分片`,
+        lastProcessMessage: `自动结构化分片完成，共 ${chunkCount} 个分片`,
       });
       await this.recordKnowledgeProcessLog(base, {
         action: 'chunk',
         isSuccess: true,
-        message: `MinerU 分片完成，共 ${chunkCount} 个分片`,
+        message: `自动结构化分片完成，共 ${chunkCount} 个分片`,
         data: {
           documentId: document.id,
           chunkCount,
@@ -1259,7 +1290,7 @@ export class KnowledgeBasesService implements OnModuleInit {
       fileUrl: dto.fileUrl,
       fileName: document.sourceName,
     });
-    document.content = this.normalizeParsedContent(content);
+    document.content = this.normalizeKnowledgeMarkdown(content, document.title);
     document.status = 'parsed';
     document.sourceType = KNOWLEDGE_PARSE_MODE.manual;
     const saved = await this.documentRepository.save(document);
@@ -1326,20 +1357,19 @@ export class KnowledgeBasesService implements OnModuleInit {
       id: config.providerId!,
       model: config.model!,
       temperature: config.temperature,
-      systemPrompt:
-        config.systemPrompt ||
-        '你是文档解析助手。请将输入内容整理为适合知识库保存的正文。',
+      systemPrompt: this.buildDocumentParseSystemPrompt(config.systemPrompt),
       question: this.buildDocumentParseQuestion({
         content: sourceContent,
         fileName,
         contentType,
-        responseFormat: config.responseFormat,
       }),
     });
     if (!result.isSuccess) {
-      throw new BadRequestException(result.errorMessage || '文档解析模型调用失败');
+      throw new BadRequestException(
+        result.errorMessage || '文档解析模型调用失败',
+      );
     }
-    const content = this.normalizeParsedContent(result.answer);
+    const content = this.normalizeKnowledgeMarkdown(result.answer, fileName);
     if (!content) {
       throw new BadRequestException('文档解析模型结果缺少解析正文');
     }
@@ -1382,16 +1412,18 @@ export class KnowledgeBasesService implements OnModuleInit {
       throw new BadRequestException('AI 模型解析需要提供文件 URL');
     }
     const fileName = dto.fileName?.trim() || document.sourceName;
-    const contentType = this.resolveOcrContentType(document.sourceType, fileName);
+    const contentType = this.resolveOcrContentType(
+      document.sourceType,
+      fileName,
+    );
     const file = await this.storedFilesService.read(fileUrl, fileName);
-    const imageDataUrls = await this.documentOcrService.buildVisionOcrImageDataUrls(
-      {
+    const imageDataUrls =
+      await this.documentOcrService.buildVisionOcrImageDataUrls({
         contentType,
         fileUrl,
         fileName,
         file,
-      },
-    );
+      });
     const target = await this.providersService.resolveVisionTarget({
       id: ocrConfig.providerId!,
       model: ocrConfig.model!,
@@ -1411,16 +1443,16 @@ export class KnowledgeBasesService implements OnModuleInit {
     const result = await this.providersService.callVisionOcr({
       target,
       imageDataUrls,
-      systemPrompt: ocrConfig.systemPrompt,
+      systemPrompt: this.buildDocumentParseSystemPrompt(ocrConfig.systemPrompt),
       temperature: ocrConfig.temperature,
-      responseFormat: ocrConfig.responseFormat,
+      responseFormat: 'markdown',
     });
     if (!result.isSuccess) {
       throw new BadRequestException(
         result.errorMessage || '视觉模型 OCR 调用失败',
       );
     }
-    const content = this.normalizeParsedContent(result.answer);
+    const content = this.normalizeKnowledgeMarkdown(result.answer, fileName);
     if (!content) {
       throw new BadRequestException('视觉模型 OCR 结果缺少解析正文');
     }
@@ -1638,6 +1670,8 @@ export class KnowledgeBasesService implements OnModuleInit {
           chunkId: chunk.id,
           chunkIndex: chunk.chunkIndex,
           title: chunk.title || document?.title || base.name,
+          sectionPath: chunk.sectionPath,
+          blockType: chunk.blockType,
           vectorId: chunk.vectorId,
           vectorStatus: chunk.vectorStatus,
           vectorError: chunk.vectorError,
@@ -1668,6 +1702,8 @@ export class KnowledgeBasesService implements OnModuleInit {
         documentId: document.id,
         chunkIndex: dto.chunkIndex ?? nextOrder,
         title: dto.title?.trim() ?? '',
+        sectionPath: null,
+        blockType: 'manual',
         content: dto.content.trim(),
         coreContent: dto.coreContent?.trim() || null,
         manualStartOffset: dto.manualStartOffset ?? null,
@@ -1712,6 +1748,8 @@ export class KnowledgeBasesService implements OnModuleInit {
             documentId: document.id,
             chunkIndex: index,
             title: chunk.title || `${document.title} #${index + 1}`,
+            sectionPath: null,
+            blockType: 'manual',
             content: chunk.content,
             coreContent: chunk.coreContent,
             manualStartOffset: chunk.manualStartOffset,
@@ -1909,6 +1947,8 @@ export class KnowledgeBasesService implements OnModuleInit {
       `标题：${chunk.title || document?.title || base.name}`,
       `知识库：${base.name}`,
       document?.sourceName ? `来源：${document.sourceName}` : '',
+      chunk.sectionPath ? `章节路径：${chunk.sectionPath}` : '',
+      chunk.blockType ? `内容块：${chunk.blockType}` : '',
       '正文：',
       chunk.content,
     ]
@@ -1934,6 +1974,8 @@ export class KnowledgeBasesService implements OnModuleInit {
       contentType: base.contentType,
       fileName: base.fileName || '',
       fileUrl: base.fileUrl || '',
+      sectionPath: chunk.sectionPath || '',
+      blockType: chunk.blockType || 'paragraph',
       manualStartOffset: chunk.manualStartOffset ?? -1,
       manualEndOffset: chunk.manualEndOffset ?? -1,
     };
@@ -2031,12 +2073,8 @@ export class KnowledgeBasesService implements OnModuleInit {
     return this.baseRepository.save(base);
   }
 
-  private resolveParseMode(mode?: string | null): KnowledgeParseMode {
-    return mode === KNOWLEDGE_PARSE_MODE.ai ||
-      mode === KNOWLEDGE_PARSE_MODE.ocr ||
-      mode === KNOWLEDGE_PARSE_MODE.mineru
-      ? KNOWLEDGE_PARSE_MODE.ai
-      : KNOWLEDGE_PARSE_MODE.manual;
+  private resolveParseMode(_mode?: string | null): KnowledgeParseMode {
+    return KNOWLEDGE_PARSE_MODE.ai;
   }
 
   private getParseModeLabel(mode: KnowledgeParseMode) {
@@ -2044,7 +2082,9 @@ export class KnowledgeBasesService implements OnModuleInit {
   }
 
   private getParseLogAction(mode: KnowledgeParseMode) {
-    return mode === KNOWLEDGE_PARSE_MODE.manual ? 'manualParse' : 'aiModelParse';
+    return mode === KNOWLEDGE_PARSE_MODE.manual
+      ? 'manualParse'
+      : 'aiModelParse';
   }
 
   private async recordKnowledgeProcessLog(
@@ -2227,8 +2267,12 @@ export class KnowledgeBasesService implements OnModuleInit {
       .filter((id) => id !== base.id);
     if (siblingIds.length) {
       await this.deleteVectorsByCondition({ knowledgeBaseId: In(siblingIds) });
-      await this.chunkRepository.softDelete({ knowledgeBaseId: In(siblingIds) });
-      await this.documentRepository.softDelete({ knowledgeBaseId: In(siblingIds) });
+      await this.chunkRepository.softDelete({
+        knowledgeBaseId: In(siblingIds),
+      });
+      await this.documentRepository.softDelete({
+        knowledgeBaseId: In(siblingIds),
+      });
       await this.baseRepository.softDelete(siblingIds);
     }
     base.sourceGroupId = groupId;
@@ -2252,7 +2296,10 @@ export class KnowledgeBasesService implements OnModuleInit {
       base.contentText,
     );
     if (contentType === 'pdf' || contentType === 'image') {
-      return this.parseBaseWithVisionOcr(base, await this.resolveOcrFeatureConfig());
+      return this.parseBaseWithVisionOcr(
+        base,
+        await this.resolveOcrFeatureConfig(),
+      );
     }
     return this.parseBaseWithDocumentModel(
       base,
@@ -2272,15 +2319,17 @@ export class KnowledgeBasesService implements OnModuleInit {
       base.contentType,
       base.fileName || base.fileUrl,
     );
-    const file = await this.storedFilesService.read(base.fileUrl, base.fileName);
-    const imageDataUrls = await this.documentOcrService.buildVisionOcrImageDataUrls(
-      {
+    const file = await this.storedFilesService.read(
+      base.fileUrl,
+      base.fileName,
+    );
+    const imageDataUrls =
+      await this.documentOcrService.buildVisionOcrImageDataUrls({
         contentType,
         fileUrl: base.fileUrl,
         fileName: base.fileName,
         file,
-      },
-    );
+      });
     const target = await this.providersService.resolveVisionTarget({
       id: ocrConfig.providerId!,
       model: ocrConfig.model!,
@@ -2300,16 +2349,16 @@ export class KnowledgeBasesService implements OnModuleInit {
     const result = await this.providersService.callVisionOcr({
       target,
       imageDataUrls,
-      systemPrompt: ocrConfig.systemPrompt,
+      systemPrompt: this.buildDocumentParseSystemPrompt(ocrConfig.systemPrompt),
       temperature: ocrConfig.temperature,
-      responseFormat: ocrConfig.responseFormat,
+      responseFormat: 'markdown',
     });
     if (!result.isSuccess) {
       throw new BadRequestException(
         result.errorMessage || '视觉模型 OCR 调用失败',
       );
     }
-    const content = result.answer.trim();
+    const content = this.normalizeKnowledgeMarkdown(result.answer, base.name);
     if (!content) {
       throw new BadRequestException('视觉模型 OCR 结果缺少解析正文');
     }
@@ -2341,25 +2390,25 @@ export class KnowledgeBasesService implements OnModuleInit {
     );
     const results: string[] = [];
     let elapsedMilliseconds = 0;
-    let providerResult: Awaited<ReturnType<KnowledgeAiProvidersService['callChat']>> | undefined;
+    let providerResult:
+      | Awaited<ReturnType<KnowledgeAiProvidersService['callChat']>>
+      | undefined;
     for (const part of parts) {
       const result = await this.providersService.callChat({
         id: config.providerId!,
         model: config.model!,
         temperature: config.temperature,
-        systemPrompt:
-          config.systemPrompt ||
-          '你是文档解析助手。请将输入内容整理为适合知识库保存的正文。',
+        systemPrompt: this.buildDocumentParseSystemPrompt(config.systemPrompt),
         question: this.buildDocumentParseQuestion({
           content: part.content,
           fileName: base.fileName || base.name,
           contentType,
-          responseFormat: config.responseFormat,
         }),
       });
       if (!result.isSuccess) {
         throw new BadRequestException(
-          result.errorMessage || `文档解析模型调用失败（第 ${part.index + 1} 段）`,
+          result.errorMessage ||
+            `文档解析模型调用失败（第 ${part.index + 1} 段）`,
         );
       }
       const parsedPart = result.answer.trim();
@@ -2388,7 +2437,7 @@ export class KnowledgeBasesService implements OnModuleInit {
       partCount: parts.length,
       elapsedMilliseconds,
     });
-    return content;
+    return this.normalizeKnowledgeMarkdown(content, base.name);
   }
 
   private async parseBaseWithThirdParty(
@@ -2686,7 +2735,8 @@ export class KnowledgeBasesService implements OnModuleInit {
 
     // 兼容历史 TXT：上传预拆分时已产生正文，但旧数据没有同步文档子记录。
     const source =
-      base ?? (await this.baseRepository.findOne({ where: { id: knowledgeBaseId } }));
+      base ??
+      (await this.baseRepository.findOne({ where: { id: knowledgeBaseId } }));
     if (source?.contentType === 'text' && source.contentText?.trim()) {
       return this.saveBaseDocument(
         source,
@@ -2702,7 +2752,10 @@ export class KnowledgeBasesService implements OnModuleInit {
     content: string,
     parseMode: KnowledgeParseMode,
   ) {
-    const normalizedContent = this.normalizeParsedContent(content);
+    const normalizedContent = this.normalizeKnowledgeMarkdown(
+      content,
+      base.name,
+    );
     if (!normalizedContent) {
       throw new BadRequestException(
         `${this.getParseModeLabel(parseMode)}结果缺少解析正文`,
@@ -2743,6 +2796,7 @@ export class KnowledgeBasesService implements OnModuleInit {
       document.content ?? '',
       chunkConfig,
       this.resolveChunkDeadline(chunkConfig),
+      document.title,
     );
     if (!chunks.length) return 0;
     await this.chunkRepository.save(
@@ -2752,9 +2806,12 @@ export class KnowledgeBasesService implements OnModuleInit {
           categoryId: document.categoryId,
           documentId: document.id,
           chunkIndex: index,
-          title: `${document.title} #${index + 1}`,
-          content: chunk,
-          tokenCount: chunk.length,
+          title: this.buildStructuredChunkTitle(chunk.title, index + 1),
+          sectionPath: chunk.sectionPath,
+          blockType: chunk.blockType,
+          content: chunk.content,
+          coreContent: chunk.coreContent,
+          tokenCount: chunk.content.length,
           sort: index,
           vectorStatus: KNOWLEDGE_CHUNK_VECTOR_STATUS.pending,
           vectorError: null,
@@ -2770,7 +2827,7 @@ export class KnowledgeBasesService implements OnModuleInit {
     fileName?: string,
     raw?: unknown,
   ) {
-    const content = this.normalizeParsedContent(markdown);
+    const content = this.normalizeKnowledgeMarkdown(markdown, document.title);
     if (!content) {
       throw new BadRequestException(this.buildMineruEmptyContentMessage(raw));
     }
@@ -2819,11 +2876,13 @@ export class KnowledgeBasesService implements OnModuleInit {
   ) {
     if (contentType === 'text') {
       const content = document.content?.trim();
-      if (!content) throw new BadRequestException('文本内容为空，无法进行文档解析');
+      if (!content)
+        throw new BadRequestException('文本内容为空，无法进行文档解析');
       return content;
     }
     const fileUrl = dto.fileUrl?.trim();
-    if (!fileUrl) throw new BadRequestException('Word 文档解析需要提供文件 URL');
+    if (!fileUrl)
+      throw new BadRequestException('Word 文档解析需要提供文件 URL');
     return this.documentParsersService.parse({
       contentType,
       fileUrl,
@@ -2840,7 +2899,8 @@ export class KnowledgeBasesService implements OnModuleInit {
       if (!content) throw new BadRequestException('文本知识库缺少文本内容');
       return content;
     }
-    if (!base.fileUrl) throw new BadRequestException('Word 文档解析需要提供文件 URL');
+    if (!base.fileUrl)
+      throw new BadRequestException('Word 文档解析需要提供文件 URL');
     return this.documentParsersService.parse({
       contentType,
       fileUrl: base.fileUrl,
@@ -2852,20 +2912,14 @@ export class KnowledgeBasesService implements OnModuleInit {
     content: string;
     fileName?: string | null;
     contentType: 'text' | 'word';
-    responseFormat?: string | null;
   }) {
-    const formatMap: Record<string, string> = {
-      text: '纯文本',
-      markdown: 'Markdown',
-      json: 'JSON',
-    };
     return [
       `文件名称：${params.fileName || '-'}`,
       `文件类型：${params.contentType === 'word' ? 'Word' : '文本'}`,
-      `返回格式：${formatMap[params.responseFormat || 'text'] || '纯文本'}`,
-      '请整理以下文档正文，保留可用于知识库检索和回答的有效内容。',
+      '目标输出格式：Markdown。',
+      '请按标题层级、段落、列表和表格整理以下文档正文，保留可用于知识库检索和回答的有效内容。',
       '如果内容中包含“（链接：URL）”，必须保留在对应语句后面，不要移除链接。',
-      '只返回整理后的正文，不要输出解释。',
+      '只返回 Markdown 正文，不要输出解释、JSON 或代码围栏。',
       '',
       params.content,
     ]
@@ -2883,7 +2937,7 @@ export class KnowledgeBasesService implements OnModuleInit {
     if (name.endsWith('.pdf')) return 'pdf';
     if (/\.(png|jpe?g|webp|bmp)$/.test(name)) return 'image';
     throw new BadRequestException(
-      '视觉模型 OCR 仅支持图片或 PDF，请在 OCR 配置中切换 MinerU，或选择手动解析',
+      '视觉模型 OCR 仅支持图片或 PDF，请切换至 MinerU 解析引擎或配置兼容的视觉模型',
     );
   }
 
@@ -2900,15 +2954,175 @@ export class KnowledgeBasesService implements OnModuleInit {
     content: string,
     config: KnowledgeChunkConfig,
     deadline: number,
-  ): string[] {
-    const text = this.normalizeParsedContent(content);
+    documentTitle: string,
+  ): StructuredKnowledgeChunk[] {
+    const text = this.normalizeKnowledgeMarkdown(content, documentTitle);
     if (!text) return [];
     const chunkSize = config.chunkSize || 1200;
     const overlap = Math.min(config.chunkOverlap || 0, chunkSize - 1);
-    if (config.separator === 'paragraph') {
-      return this.splitByParagraph(text, chunkSize, overlap, deadline);
+    const blocks = this.extractMarkdownStructureBlocks(text, deadline);
+    if (!blocks.length) return [];
+
+    const chunks: StructuredKnowledgeChunk[] = [];
+    let current: MarkdownStructureBlock | null = null;
+    const flushCurrent = () => {
+      if (!current?.content.trim()) return;
+      const pieces = this.splitStructuredBlock(
+        current,
+        chunkSize,
+        overlap,
+        deadline,
+      );
+      const sectionPath = current.sectionPath.join(' > ').slice(0, 500) || null;
+      const title =
+        sectionPath && sectionPath !== documentTitle
+          ? `${documentTitle} · ${sectionPath}`
+          : documentTitle;
+      pieces.forEach((coreContent, index) => {
+        const previous = chunks[chunks.length - 1];
+        const shouldCarryOverlap =
+          overlap > 0 &&
+          index === 0 &&
+          previous?.sectionPath === sectionPath &&
+          previous.coreContent.length > 0;
+        const overlapContent = shouldCarryOverlap
+          ? `${previous.coreContent.slice(-overlap)}\n`
+          : '';
+        const heading =
+          config.preserveHeading && sectionPath
+            ? `### ${current!.sectionPath[current!.sectionPath.length - 1]}\n\n`
+            : '';
+        chunks.push({
+          title,
+          sectionPath,
+          blockType: current!.blockType,
+          content: `${heading}${overlapContent}${coreContent}`.trim(),
+          coreContent,
+        });
+      });
+      current = null;
+    };
+
+    for (const block of blocks) {
+      this.assertChunkDeadline(deadline);
+      if (!current) {
+        current = { ...block };
+        continue;
+      }
+      const sameSection =
+        current.sectionPath.join(' > ') === block.sectionPath.join(' > ');
+      const mergedContent: string = `${current.content}\n\n${block.content}`;
+      const mergedBlockType: MarkdownStructureBlock['blockType'] =
+        current.blockType === block.blockType
+          ? current.blockType
+          : ('mixed' as const);
+      const canMerge =
+        sameSection &&
+        current.blockType !== 'table' &&
+        block.blockType !== 'table' &&
+        mergedContent.length <= chunkSize;
+      if (canMerge) {
+        current = {
+          sectionPath: current.sectionPath,
+          blockType: mergedBlockType,
+          content: mergedContent,
+        };
+        continue;
+      }
+      flushCurrent();
+      current = { ...block };
     }
-    return this.splitByLength(text, chunkSize, overlap, deadline);
+    flushCurrent();
+    return chunks.filter((chunk) => chunk.content.trim());
+  }
+
+  private extractMarkdownStructureBlocks(content: string, deadline: number) {
+    const blocks: MarkdownStructureBlock[] = [];
+    const headings: string[] = [];
+    let currentLines: string[] = [];
+    let currentBlockType: MarkdownStructureBlock['blockType'] = 'paragraph';
+    const flush = () => {
+      const blockContent = currentLines.join('\n').trim();
+      if (blockContent) {
+        blocks.push({
+          sectionPath: headings.filter(Boolean),
+          blockType: currentBlockType,
+          content: blockContent,
+        });
+      }
+      currentLines = [];
+      currentBlockType = 'paragraph';
+    };
+
+    for (const line of content.split('\n')) {
+      this.assertChunkDeadline(deadline);
+      const heading = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
+      if (heading) {
+        flush();
+        const level = heading[1].length;
+        headings.length = level - 1;
+        headings[level - 1] = heading[2].trim();
+        continue;
+      }
+      if (!line.trim()) {
+        flush();
+        continue;
+      }
+      const lineBlockType = this.resolveMarkdownLineBlockType(line);
+      if (currentLines.length && lineBlockType !== currentBlockType) {
+        flush();
+      }
+      currentBlockType = lineBlockType;
+      currentLines.push(line);
+    }
+    flush();
+    return blocks;
+  }
+
+  private resolveMarkdownLineBlockType(
+    line: string,
+  ): MarkdownStructureBlock['blockType'] {
+    if (/^\s*\|.*\|\s*$/.test(line)) return 'table';
+    if (/^\s*(?:[-*+] |\d+[.)] )/.test(line)) return 'list';
+    return 'paragraph';
+  }
+
+  private splitStructuredBlock(
+    block: MarkdownStructureBlock,
+    chunkSize: number,
+    overlap: number,
+    deadline: number,
+  ) {
+    if (block.content.length <= chunkSize) return [block.content];
+    if (block.blockType === 'paragraph') {
+      return this.splitByParagraph(block.content, chunkSize, overlap, deadline);
+    }
+    return this.splitByLength(block.content, chunkSize, overlap, deadline);
+  }
+
+  private buildStructuredChunkTitle(title: string, index: number) {
+    const suffix = ` #${index}`;
+    return `${title.slice(0, 200 - suffix.length)}${suffix}`;
+  }
+
+  private buildDocumentParseSystemPrompt(customPrompt?: string | null) {
+    return [customPrompt?.trim(), STRUCTURED_DOCUMENT_PARSE_INSTRUCTIONS]
+      .filter(Boolean)
+      .join('\n\n');
+  }
+
+  private normalizeKnowledgeMarkdown(
+    content: string,
+    documentTitle?: string | null,
+  ) {
+    const normalized = this.normalizeParsedContent(content)
+      .replace(/^```(?:markdown|md)?\s*\n?/i, '')
+      .replace(/\n?```\s*$/, '')
+      .trim();
+    if (!normalized) return '';
+    if (/^#{1,6}\s+/m.test(normalized)) return normalized;
+    const title = documentTitle?.replace(/\s+/g, ' ').trim() || '知识库文档';
+    return `# ${title}\n\n${normalized}`;
   }
 
   private normalizeParsedContent(content: string) {

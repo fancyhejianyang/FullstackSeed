@@ -16,10 +16,7 @@ import {
   validateKnowledgeAiProviderModel,
   type KnowledgeAiProvider,
 } from '@/api/knowledgeAiProvider';
-import {
-  getMineruConfigs,
-  type MineruConfig,
-} from '@/api/mineruConfig';
+import { getMineruConfigs, type MineruConfig } from '@/api/mineruConfig';
 
 const props = defineProps<{
   row?: AiFeatureConfig | null;
@@ -84,10 +81,15 @@ const selectedProvider = computed(() =>
   providers.value.find((item) => item.id === Number(form.providerId)),
 );
 
-const isParseFeature = computed(() => ['ocr', 'documentParse'].includes(form.featureType));
-const isMineruParseFeature = computed(() => isParseFeature.value && !!form.useMineru);
+const isParseFeature = computed(() =>
+  ['ocr', 'documentParse'].includes(form.featureType),
+);
+const isMineruParseFeature = computed(
+  () => isParseFeature.value && !!form.useMineru,
+);
 const isChatFeature = computed(() => form.featureType === 'chat');
 const isRerankFeature = computed(() => form.featureType === 'rerank');
+const isStructuredParseFeature = computed(() => isParseFeature.value);
 const usesTemperature = computed(
   () => !isMineruParseFeature.value && !isRerankFeature.value,
 );
@@ -95,7 +97,9 @@ const usesPromptSettings = computed(
   () => !isMineruParseFeature.value && !isRerankFeature.value,
 );
 
-const modelOptions = computed(() => getModelOptions(selectedProvider.value, form.featureType));
+const modelOptions = computed(() =>
+  getModelOptions(selectedProvider.value, form.featureType),
+);
 
 const modelPlaceholder = computed(() => {
   if (form.featureType === 'ocr') return '请选择视觉模型';
@@ -105,7 +109,12 @@ const modelPlaceholder = computed(() => {
 
 const fields = computed<FormField[]>(() => {
   const baseFields: FormField[] = [
-    { prop: 'name', label: '配置名称', type: 'input', placeholder: '如 聊天默认配置' },
+    {
+      prop: 'name',
+      label: '配置名称',
+      type: 'input',
+      placeholder: '如 聊天默认配置',
+    },
     {
       prop: 'featureType',
       label: '功能类型',
@@ -214,9 +223,16 @@ const fields = computed<FormField[]>(() => {
         label: '提示词',
         type: 'textarea',
         rows: 5,
-        placeholder: '该功能默认系统提示词，可被测试请求临时覆盖',
+        placeholder: isStructuredParseFeature.value
+          ? '可补充业务术语、标题规则或保留项；系统会固定追加 Markdown 结构化输出要求'
+          : '该功能默认系统提示词，可被测试请求临时覆盖',
         hint: (() => {
           const prompt = form.systemPrompt?.trim() ?? '';
+          if (isStructuredParseFeature.value) {
+            return prompt
+              ? `当前已填写 ${prompt.length} 个字符；系统会在其后固定追加 Markdown、标题层级、列表与表格保留规则。`
+              : '系统会固定要求 Markdown 输出；此处仅补充业务术语、标题规则或必须保留的内容。';
+          }
           return prompt
             ? `当前已填写 ${prompt.length} 个字符；业务规则、口吻和禁止项请直接写在此提示词中。`
             : '未填写时将使用系统默认提示词；业务规则、口吻和禁止项请直接写在此处。';
@@ -226,13 +242,19 @@ const fields = computed<FormField[]>(() => {
         prop: 'responseFormat',
         label: '返回格式',
         type: 'select',
-        options: [
-          { label: '文本', value: 'text' },
-          { label: 'JSON', value: 'json' },
-          { label: 'Markdown', value: 'markdown' },
-        ],
-        hint:
-          form.responseFormat === 'json'
+        options: isStructuredParseFeature.value
+          ? [{ label: 'Markdown（固定）', value: 'markdown' }]
+          : [
+              { label: '文本', value: 'text' },
+              { label: 'JSON', value: 'json' },
+              { label: 'Markdown', value: 'markdown' },
+            ],
+        componentProps: isStructuredParseFeature.value
+          ? { disabled: true }
+          : undefined,
+        hint: isStructuredParseFeature.value
+          ? '文档解析固定输出 Markdown，以保留标题、列表、表格等结构并支持章节分片。'
+          : form.responseFormat === 'json'
             ? '当前要求 JSON：适合被程序解析，提示词中应明确字段结构并避免附加说明。'
             : form.responseFormat === 'markdown'
               ? '当前要求 Markdown：适合保留标题、列表、表格等富文本结构。'
@@ -255,18 +277,26 @@ const fields = computed<FormField[]>(() => {
 
 const rules = computed<FormRules>(() => ({
   name: [{ required: true, message: '请输入配置名称', trigger: 'blur' }],
-  featureType: [{ required: true, message: '请选择功能类型', trigger: 'change' }],
+  featureType: [
+    { required: true, message: '请选择功能类型', trigger: 'change' },
+  ],
   ...(isMineruParseFeature.value
     ? {
-        mineruConfigId: [{ required: true, message: '请选择 MinerU 配置', trigger: 'change' }],
+        mineruConfigId: [
+          { required: true, message: '请选择 MinerU 配置', trigger: 'change' },
+        ],
       }
     : {
-        providerId: [{ required: true, message: '请选择大模型账号', trigger: 'change' }],
+        providerId: [
+          { required: true, message: '请选择大模型账号', trigger: 'change' },
+        ],
         model: [{ required: true, message: '请选择模型', trigger: 'change' }],
       }),
   ...(usesTemperature.value
     ? {
-        temperature: [{ required: true, message: '请输入温度', trigger: 'blur' }],
+        temperature: [
+          { required: true, message: '请输入温度', trigger: 'blur' },
+        ],
       }
     : {}),
 }));
@@ -291,7 +321,12 @@ watch(visible, async (value) => {
 });
 
 watch(
-  () => [form.featureType, form.providerId, form.useMineru, providers.value.length],
+  () => [
+    form.featureType,
+    form.providerId,
+    form.useMineru,
+    providers.value.length,
+  ],
   () => {
     modelValidationSequence += 1;
     validatingModel.value = false;
@@ -308,6 +343,9 @@ watch(
       form.temperature = 0;
       form.responseFormat = 'json';
     }
+    if (isStructuredParseFeature.value) {
+      form.responseFormat = 'markdown';
+    }
     if (isMineruParseFeature.value) {
       form.providerId = '';
       form.model = '';
@@ -315,14 +353,18 @@ watch(
     }
     form.mineruConfigId = '';
     const options = modelOptions.value;
-    if (selectedProvider.value && !options.some((item) => item.value === form.model)) {
+    if (
+      selectedProvider.value &&
+      !options.some((item) => item.value === form.model)
+    ) {
       form.model = '';
     }
   },
 );
 
 watch(
-  () => [form.model, form.providerId, form.featureType, form.useMineru] as const,
+  () =>
+    [form.model, form.providerId, form.featureType, form.useMineru] as const,
   () => {
     if (
       !formReadyForModelValidation.value ||
@@ -388,10 +430,16 @@ function buildPayload(): AiFeatureConfigForm {
     enableThinking: isChatFeature.value && !!form.enableThinking,
     thinkingParameters: resolveThinkingParameters(),
     useMineru: !!form.useMineru,
-    mineruConfigId: isMineruParseFeature.value ? Number(form.mineruConfigId) : null,
+    mineruConfigId: isMineruParseFeature.value
+      ? Number(form.mineruConfigId)
+      : null,
     systemPrompt: isRerankFeature.value ? '' : form.systemPrompt?.trim(),
     temperature: isRerankFeature.value ? 0 : Number(form.temperature),
-    responseFormat: isRerankFeature.value ? 'json' : form.responseFormat,
+    responseFormat: isRerankFeature.value
+      ? 'json'
+      : isStructuredParseFeature.value
+        ? 'markdown'
+        : form.responseFormat,
     isEnabled: form.isEnabled,
     description: form.description?.trim(),
   };
@@ -406,7 +454,9 @@ function resolveThinkingParameters() {
   try {
     const parsed: unknown = JSON.parse(text);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new Error('Think 参数必须是 JSON 对象，例如 {"enable_thinking":true}');
+      throw new Error(
+        'Think 参数必须是 JSON 对象，例如 {"enable_thinking":true}',
+      );
     }
     return parsed as Record<string, unknown>;
   } catch (error) {
@@ -423,7 +473,9 @@ async function handleSubmit() {
   try {
     payload = buildPayload();
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : 'Think 参数配置不正确');
+    ElMessage.error(
+      error instanceof Error ? error.message : 'Think 参数配置不正确',
+    );
     return;
   }
   submitting.value = true;
@@ -442,7 +494,10 @@ async function handleSubmit() {
   }
 }
 
-function getModelText(provider: KnowledgeAiProvider | undefined, featureType: AiFeatureType) {
+function getModelText(
+  provider: KnowledgeAiProvider | undefined,
+  featureType: AiFeatureType,
+) {
   if (!provider) return '';
   if (
     featureType === 'chat' ||
@@ -478,7 +533,8 @@ async function validateSelectedModel() {
       modelValidationHint.value = `“${model}”已通过当前账号可用性校验。`;
       return;
     }
-    modelValidationHint.value = result.errorMessage || `“${model}”暂时无法校验。`;
+    modelValidationHint.value =
+      result.errorMessage || `“${model}”暂时无法校验。`;
     if (result.removed) {
       form.model = '';
       ElMessage.warning(
@@ -498,7 +554,10 @@ async function validateSelectedModel() {
   }
 }
 
-function getModelOptions(provider: KnowledgeAiProvider | undefined, featureType: AiFeatureType) {
+function getModelOptions(
+  provider: KnowledgeAiProvider | undefined,
+  featureType: AiFeatureType,
+) {
   const seen = new Set<string>();
   return parseModelText(getModelText(provider, featureType))
     .filter((item) => {
@@ -507,7 +566,8 @@ function getModelOptions(provider: KnowledgeAiProvider | undefined, featureType:
       return true;
     })
     .map((item) => ({
-      label: item.name === item.code ? item.code : `${item.name} (${item.code})`,
+      label:
+        item.name === item.code ? item.code : `${item.name} (${item.code})`,
       value: item.code,
     }));
 }
@@ -546,9 +606,17 @@ function joinModelTexts(...values: Array<string | null | undefined>) {
     @confirm="handleSubmit"
   >
     <div v-loading="loading">
-      <Form ref="formRef" v-model="form" :fields="fields" :rules="rules" label-width="110px" />
+      <Form
+        ref="formRef"
+        v-model="form"
+        :fields="fields"
+        :rules="rules"
+        label-width="110px"
+      />
       <div v-if="isRerankFeature" class="ai-feature-config-edit__rerank-tip">
-        LLM 重排固定以温度 0 和 JSON 评分格式执行，系统会把“用户问题 + 初步召回片段”交给所选模型重新排序；聊天提示词、Think 和返回格式均不适用于此类型。
+        LLM 重排固定以温度 0 和 JSON 评分格式执行，系统会把“用户问题 +
+        初步召回片段”交给所选模型重新排序；聊天提示词、Think
+        和返回格式均不适用于此类型。
       </div>
     </div>
   </Dialog>

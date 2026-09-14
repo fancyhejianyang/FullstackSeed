@@ -21,6 +21,12 @@ export class KnowledgeBaseChunk extends BaseEntity {
   @Column({ length: 200, default: '' })
   title: string;
 
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  sectionPath: string | null;
+
+  @Column({ type: 'varchar', length: 30, default: 'paragraph' })
+  blockType: string;
+
   @Column({ type: 'longtext' })
   content: string;
 

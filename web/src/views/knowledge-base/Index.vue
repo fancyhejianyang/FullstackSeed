@@ -140,7 +140,10 @@ function fetchKnowledgeBases(params: Record<string, unknown>) {
 function flattenCategories(
   nodes: KnowledgeBaseCategoryTreeNode[],
 ): KnowledgeBaseCategoryTreeNode[] {
-  return nodes.flatMap((node) => [node, ...flattenCategories(node.children ?? [])]);
+  return nodes.flatMap((node) => [
+    node,
+    ...flattenCategories(node.children ?? []),
+  ]);
 }
 
 function buildCategoryFilterOptions(
@@ -218,7 +221,7 @@ function getStageLabel(stage?: string) {
     indexed: '已索引',
     failed: '处理失败',
   };
-  return stage ? map[stage] ?? stage : '-';
+  return stage ? (map[stage] ?? stage) : '-';
 }
 
 function getStageType(stage?: string) {
@@ -255,10 +258,7 @@ async function runProcess(
   let parseMode: KnowledgeBaseParseMode | undefined;
   let chunkMode: KnowledgeBaseChunkMode | undefined;
   if (action === 'parse') {
-    const chosen = await chooseParseMode();
-    // 用户取消或关闭弹窗时终止流程
-    if (!chosen) return;
-    parseMode = chosen;
+    parseMode = 'ai';
   }
   if (action === 'chunk') {
     const chosen = await chooseChunkMode();
@@ -290,11 +290,11 @@ async function runProcess(
   }
   const actionMap = {
     parse: {
-      label: parseMode === 'ai' ? 'AI 模型解析' : '手动解析',
+      label: '结构化解析',
       request: (id: number) => parseKnowledgeBase(id, { parseMode }),
     },
     chunk: {
-      label: 'MinerU 分片',
+      label: '自动结构化分片',
       request: (id: number) =>
         chunkKnowledgeBase(id, { chunkMode: chunkMode ?? 'mineru' }),
     },
@@ -316,34 +316,16 @@ async function runProcess(
 async function chooseChunkMode(): Promise<KnowledgeBaseChunkMode | null> {
   try {
     await ElMessageBox.confirm(
-      '请选择本次分片方式。手动分片会打开详情页进行拖拽选择；MinerU 分片会读取自动分片配置处理已解析正文。',
+      '请选择本次分片方式。手动分片会打开详情页进行拖拽选择；自动结构化分片会按 Markdown 标题、段落、列表和表格处理已解析正文。',
       '选择分片模式',
       {
-        confirmButtonText: 'MinerU 分片',
+        confirmButtonText: '自动结构化分片',
         cancelButtonText: '手动分片',
         distinguishCancelAndClose: true,
         type: 'info',
       },
     );
     return 'mineru';
-  } catch (action) {
-    return action === 'cancel' ? 'manual' : null;
-  }
-}
-
-async function chooseParseMode(): Promise<KnowledgeBaseParseMode | null> {
-  try {
-    await ElMessageBox.confirm(
-      '请选择本次解析方式。手动解析优先走系统内置逻辑；AI 模型解析会按文件类型读取 OCR 或文档解析配置，启用 MinerU 时优先交给 MinerU 解析。',
-      '选择解析模式',
-      {
-        confirmButtonText: 'AI 模型解析',
-        cancelButtonText: '手动解析',
-        distinguishCancelAndClose: true,
-        type: 'info',
-      },
-    );
-    return 'ai';
   } catch (action) {
     return action === 'cancel' ? 'manual' : null;
   }
@@ -450,7 +432,12 @@ onMounted(fetchCategories);
         <Button link type="primary" :confirm="false" @click="handleEdit(row)">
           编辑
         </Button>
-        <Button link perm="KnowledgeBase.delete" icon="" @click="handleDelete(row)">
+        <Button
+          link
+          perm="KnowledgeBase.delete"
+          icon=""
+          @click="handleDelete(row)"
+        >
           删除
         </Button>
         <Button
@@ -463,7 +450,7 @@ onMounted(fetchCategories);
           :loading="isProcessing(row, 'parse')"
           @click="runProcess(row, 'parse')"
         >
-          解析
+          结构化解析
         </Button>
         <Button
           link
@@ -493,7 +480,10 @@ onMounted(fetchCategories);
     <Edit
       v-model:visible="editVisible"
       :row="editingRow"
-      @success="tableRef?.refresh(); fetchCategories()"
+      @success="
+        tableRef?.refresh();
+        fetchCategories();
+      "
     />
 
     <View

@@ -12,7 +12,6 @@ import {
   parseKnowledgeBaseDocument,
   type KnowledgeBase,
   type KnowledgeBaseDocument,
-  type KnowledgeBaseParseMode,
 } from '@/api/knowledgeBase';
 
 const tableRef = ref<{ refresh: () => Promise<void> }>();
@@ -47,7 +46,12 @@ const searchFields = computed<FormField[]>(() => [
     options: baseOptions.value,
     placeholder: '请选择知识库',
   },
-  { prop: 'keyword', label: '关键词', type: 'input', placeholder: '标题/来源/内容' },
+  {
+    prop: 'keyword',
+    label: '关键词',
+    type: 'input',
+    placeholder: '标题/来源/内容',
+  },
 ]);
 
 function fetchDocuments(params: Record<string, unknown>) {
@@ -60,7 +64,7 @@ async function fetchBases() {
 }
 
 function getBaseName(id?: number) {
-  return id ? baseNameMap.value.get(id) ?? `#${id}` : '-';
+  return id ? (baseNameMap.value.get(id) ?? `#${id}`) : '-';
 }
 
 function getSourceTypeLabel(value?: string) {
@@ -72,7 +76,7 @@ function getSourceTypeLabel(value?: string) {
     image: '图片',
     mineru: 'MinerU',
   };
-  return value ? map[value] ?? value : '-';
+  return value ? (map[value] ?? value) : '-';
 }
 
 function getStatusLabel(value?: string) {
@@ -83,7 +87,7 @@ function getStatusLabel(value?: string) {
     processing: '处理中',
     failed: '失败',
   };
-  return value ? map[value] ?? value : '-';
+  return value ? (map[value] ?? value) : '-';
 }
 
 function getStatusType(value?: string) {
@@ -97,29 +101,11 @@ function isParsing(row: KnowledgeBaseDocument) {
   return parsingKey.value === String(row.id);
 }
 
-async function chooseParseMode(): Promise<KnowledgeBaseParseMode | null> {
-  try {
-    await ElMessageBox.confirm(
-      '请选择本次文档解析方式。手动解析会调用系统内置解析器；MinerU 解析会调用第三方配置。',
-      '选择解析模式',
-      {
-        confirmButtonText: 'MinerU 解析',
-        cancelButtonText: '手动解析',
-        distinguishCancelAndClose: true,
-        type: 'info',
-      },
-    );
-    return 'mineru';
-  } catch (action) {
-    return action === 'cancel' ? 'manual' : null;
-  }
-}
-
-async function promptMineruFileUrl(row: KnowledgeBaseDocument) {
+async function promptDocumentFileUrl(row: KnowledgeBaseDocument) {
   try {
     const { value } = await ElMessageBox.prompt(
-      '请输入需要 MinerU 解析的文件完整 URL',
-      'MinerU 文件地址',
+      '请输入需要结构化解析的文件完整 URL。系统将按配置使用 MinerU、视觉模型或文档解析模型，并统一生成 Markdown。',
+      '文件地址',
       {
         inputValue: isUrl(row.sourceName) ? row.sourceName : '',
         inputPlaceholder: 'https://example.com/file.pdf',
@@ -146,24 +132,20 @@ function isUrl(value?: string) {
 }
 
 async function handleParse(row: KnowledgeBaseDocument) {
-  const parseMode = await chooseParseMode();
-  if (!parseMode) return;
   let fileUrl = '';
-  if (parseMode === 'mineru') {
-    fileUrl = await promptMineruFileUrl(row);
+  if (row.sourceType !== 'text' && !row.content?.trim()) {
+    fileUrl = await promptDocumentFileUrl(row);
     if (!fileUrl) return;
   }
   parsingKey.value = String(row.id);
   try {
     await parseKnowledgeBaseDocument(row.id, {
-      parseMode,
+      parseMode: 'ai',
       fileUrl: fileUrl || undefined,
       fileName: row.sourceName || row.title,
       waitForResult: true,
     });
-    ElMessage.success(
-      `${parseMode === 'mineru' ? 'MinerU' : '手动'}解析任务已提交`,
-    );
+    ElMessage.success('结构化解析任务已提交');
     await tableRef.value?.refresh();
   } finally {
     parsingKey.value = '';
@@ -223,7 +205,7 @@ onMounted(fetchBases);
           :loading="isParsing(row)"
           @click="handleParse(row)"
         >
-          解析
+          结构化解析
         </Button>
       </template>
     </Table>
