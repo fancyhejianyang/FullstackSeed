@@ -20,9 +20,6 @@ export interface KnowledgeBase {
   name: string;
   code: string;
   description: string | null;
-  hitKeywords: string | null;
-  colloquialDescription: string | null;
-  matchPriority: number;
   contentType: 'text' | 'pdf' | 'word' | 'image';
   contentText: string | null;
   fileName: string;
@@ -46,9 +43,6 @@ export interface KnowledgeBaseCategory {
   name: string;
   code: string;
   description: string | null;
-  hitKeywords: string | null;
-  colloquialDescription: string | null;
-  matchPriority: number;
   sort: number;
   createdAt: string;
   updatedAt: string;
@@ -68,10 +62,6 @@ export interface KnowledgeBaseDocument {
   content: string | null;
   status: string;
   description: string | null;
-  // AI 检索辅助字段（与后端实体对齐）
-  hitKeywords: string | null;
-  colloquialDescription: string | null;
-  matchPriority: number;
   sort: number;
   createdAt: string;
   updatedAt: string;
@@ -212,9 +202,6 @@ export type KnowledgeBaseForm = Pick<
   | 'categoryId'
   | 'name'
   | 'description'
-  | 'hitKeywords'
-  | 'colloquialDescription'
-  | 'matchPriority'
   | 'contentType'
   | 'contentText'
   | 'fileName'
@@ -237,9 +224,6 @@ export type KnowledgeBaseDocumentForm = Pick<
   | 'content'
   | 'status'
   | 'description'
-  | 'hitKeywords'
-  | 'colloquialDescription'
-  | 'matchPriority'
 >;
 
 export type KnowledgeBaseChunkForm = Pick<

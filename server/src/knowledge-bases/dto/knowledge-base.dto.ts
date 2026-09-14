@@ -27,20 +27,6 @@ export class CreateKnowledgeBaseDto {
   @IsOptional()
   description?: string;
 
-  @IsString()
-  @IsOptional()
-  hitKeywords?: string;
-
-  @IsString()
-  @IsOptional()
-  colloquialDescription?: string;
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @IsOptional()
-  matchPriority?: number;
-
   @IsIn(['text', 'pdf', 'word', 'image'])
   @IsOptional()
   contentType?: 'text' | 'pdf' | 'word' | 'image';
@@ -224,19 +210,6 @@ export class CreateKnowledgeBaseDocumentDto {
   @IsOptional()
   description?: string;
 
-  @IsString()
-  @IsOptional()
-  hitKeywords?: string;
-
-  @IsString()
-  @IsOptional()
-  colloquialDescription?: string;
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @IsOptional()
-  matchPriority?: number;
 }
 
 export class UpdateKnowledgeBaseDocumentDto extends PartialType(

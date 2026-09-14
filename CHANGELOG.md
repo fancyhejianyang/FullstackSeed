@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-09-14 移除知识库旧匹配辅助字段
+- 新增：
+  - `server/src/migrations/1788896800000-RemoveKnowledgeBaseMatchingFields.ts`（删除知识库及知识库文档的命中关键字、口语化说法、匹配优先级列，并将现有向量索引标记为待重新建立）。
+- 修改：
+  - `server/src/knowledge-bases/entities/knowledge-base.entity.ts`、`server/src/knowledge-bases/entities/knowledge-base-document.entity.ts`、`server/src/knowledge-bases/dto/knowledge-base.dto.ts`、`server/src/knowledge-bases/knowledge-bases.service.ts`（删除字段定义、入参、持久化、查询、分片和向量元数据逻辑）。
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat-retrieval.service.ts`、`server/src/knowledge-ai-chat/knowledge-ai-chat-retrieval.service.spec.ts`（检索不再按这些旧字段召回、加权或排序；待重新建立的旧向量不参与向量检索）。
+  - `web/src/api/knowledgeBase.ts`、`web/src/views/knowledge-base/Edit.vue`、`web/src/views/knowledge-base/Index.vue`、`web/src/views/knowledge-base/Documents.vue`、`web/src/views/knowledge-base/View.vue`（删除知识库及文档相关字段的类型、表单、列表列和详情展示）。
+- 删除：无。
+- 说明：独立口语词库与知识库路由规则权重继续保留；迁移后需要重新建立各知识库索引，旧字段的历史值不会保留或兼容。
+
 ### 2026-09-14 优化 AI 工作流新增节点的可见性
 - 新增：无。
 - 修改：

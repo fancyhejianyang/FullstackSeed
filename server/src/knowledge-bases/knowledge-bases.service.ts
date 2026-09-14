@@ -323,9 +323,7 @@ export class KnowledgeBasesService implements OnModuleInit {
         new Brackets((scope) => {
           scope
             .where('base.name LIKE :keyword', { keyword })
-            .orWhere('base.description LIKE :keyword')
-            .orWhere('base.hitKeywords LIKE :keyword')
-            .orWhere('base.colloquialDescription LIKE :keyword');
+            .orWhere('base.description LIKE :keyword');
         }),
       );
     }
@@ -381,9 +379,6 @@ export class KnowledgeBasesService implements OnModuleInit {
         categoryId: dto.categoryId,
         name: dto.name.trim(),
         description: dto.description?.trim() || null,
-        hitKeywords: dto.hitKeywords?.trim() || null,
-        colloquialDescription: dto.colloquialDescription?.trim() || null,
-        matchPriority: dto.matchPriority ?? 1,
         contentType,
         contentText: contentType === 'text' ? contentText : null,
         fileName:
@@ -427,11 +422,7 @@ export class KnowledgeBasesService implements OnModuleInit {
       dto.contentText !== undefined ||
       dto.fileName !== undefined ||
       dto.fileUrl !== undefined;
-    const retrievalMetadataChanged =
-      dto.name !== undefined ||
-      dto.hitKeywords !== undefined ||
-      dto.colloquialDescription !== undefined ||
-      dto.matchPriority !== undefined;
+    const retrievalMetadataChanged = dto.name !== undefined;
     if (dto.categoryId !== undefined) {
       await this.assertRequiredCategory(dto.categoryId);
       base.categoryId = dto.categoryId;
@@ -439,15 +430,6 @@ export class KnowledgeBasesService implements OnModuleInit {
     if (dto.name !== undefined) base.name = dto.name.trim();
     if (dto.description !== undefined) {
       base.description = dto.description.trim() || null;
-    }
-    if (dto.hitKeywords !== undefined) {
-      base.hitKeywords = dto.hitKeywords.trim() || null;
-    }
-    if (dto.colloquialDescription !== undefined) {
-      base.colloquialDescription = dto.colloquialDescription.trim() || null;
-    }
-    if (dto.matchPriority !== undefined) {
-      base.matchPriority = dto.matchPriority;
     }
     if (dto.contentType !== undefined) base.contentType = dto.contentType;
     if (dto.contentText !== undefined) {
@@ -1006,7 +988,7 @@ export class KnowledgeBasesService implements OnModuleInit {
     }
     if (query.keyword?.trim()) {
       qb.andWhere(
-        '(document.title LIKE :keyword OR document.sourceName LIKE :keyword OR document.content LIKE :keyword OR document.hitKeywords LIKE :keyword OR document.colloquialDescription LIKE :keyword)',
+        '(document.title LIKE :keyword OR document.sourceName LIKE :keyword OR document.content LIKE :keyword)',
         { keyword: `%${query.keyword.trim()}%` },
       );
     }
@@ -1034,9 +1016,6 @@ export class KnowledgeBasesService implements OnModuleInit {
         content: dto.content?.trim() || null,
         status: dto.status?.trim() || 'draft',
         description: dto.description?.trim() || null,
-        hitKeywords: dto.hitKeywords?.trim() || null,
-        colloquialDescription: dto.colloquialDescription?.trim() || null,
-        matchPriority: dto.matchPriority ?? 1,
       }),
     );
   }
@@ -1546,10 +1525,7 @@ export class KnowledgeBasesService implements OnModuleInit {
     const retrievalMetadataChanged =
       dto.title !== undefined ||
       dto.content !== undefined ||
-      dto.sourceName !== undefined ||
-      dto.hitKeywords !== undefined ||
-      dto.colloquialDescription !== undefined ||
-      dto.matchPriority !== undefined;
+      dto.sourceName !== undefined;
     const knowledgeBaseId = dto.knowledgeBaseId ?? document.knowledgeBaseId;
     const base = await this.findBase(knowledgeBaseId);
     const categoryId =
@@ -1575,15 +1551,6 @@ export class KnowledgeBasesService implements OnModuleInit {
       document.status = dto.status.trim() || 'draft';
     if (dto.description !== undefined) {
       document.description = dto.description.trim() || null;
-    }
-    if (dto.hitKeywords !== undefined) {
-      document.hitKeywords = dto.hitKeywords.trim() || null;
-    }
-    if (dto.colloquialDescription !== undefined) {
-      document.colloquialDescription = dto.colloquialDescription.trim() || null;
-    }
-    if (dto.matchPriority !== undefined) {
-      document.matchPriority = dto.matchPriority;
     }
     const saved = await this.documentRepository.save(document);
     await this.chunkRepository.update(
@@ -1938,17 +1905,10 @@ export class KnowledgeBasesService implements OnModuleInit {
     document: KnowledgeBaseDocument | undefined,
     chunk: KnowledgeBaseChunk,
   ) {
-    const hitKeywords = document?.hitKeywords || base.hitKeywords || '';
-    const colloquialDescription =
-      document?.colloquialDescription || base.colloquialDescription || '';
-    // 检索辅助信息只用于提升召回，不作为 AI 回答指令。
     return [
       `标题：${chunk.title || document?.title || base.name}`,
       `知识库：${base.name}`,
       document?.sourceName ? `来源：${document.sourceName}` : '',
-      hitKeywords ? `检索关键字：${hitKeywords}` : '',
-      colloquialDescription ? `常见问法/说法：${colloquialDescription}` : '',
-      `匹配优先级：${document?.matchPriority ?? base.matchPriority ?? 1}`,
       '正文：',
       chunk.content,
     ]
@@ -1974,10 +1934,6 @@ export class KnowledgeBasesService implements OnModuleInit {
       contentType: base.contentType,
       fileName: base.fileName || '',
       fileUrl: base.fileUrl || '',
-      hitKeywords: document?.hitKeywords || base.hitKeywords || '',
-      colloquialDescription:
-        document?.colloquialDescription || base.colloquialDescription || '',
-            matchPriority: document?.matchPriority ?? base.matchPriority ?? 1,
       manualStartOffset: chunk.manualStartOffset ?? -1,
       manualEndOffset: chunk.manualEndOffset ?? -1,
     };
@@ -2230,9 +2186,6 @@ export class KnowledgeBasesService implements OnModuleInit {
         name: originalName,
         code: base.code,
         description: base.description,
-        hitKeywords: base.hitKeywords,
-        colloquialDescription: base.colloquialDescription,
-        matchPriority: base.matchPriority,
         contentType: base.contentType,
         fileName: base.fileName,
         fileUrl: base.fileUrl,
@@ -2543,9 +2496,6 @@ export class KnowledgeBasesService implements OnModuleInit {
     document.sourceName = fileName || base.fileName || base.name;
     document.status = 'processing';
     document.description = `AI 模型解析任务已创建，任务ID：${taskId}`;
-    document.hitKeywords = base.hitKeywords;
-    document.colloquialDescription = base.colloquialDescription;
-    document.matchPriority = base.matchPriority;
     return this.documentRepository.save(document);
   }
 
@@ -2778,9 +2728,6 @@ export class KnowledgeBasesService implements OnModuleInit {
     document.content = normalizedContent;
     document.status = 'parsed';
     document.description = `${this.getParseModeLabel(parseMode)}完成，等待分片`;
-    document.hitKeywords = base.hitKeywords;
-    document.colloquialDescription = base.colloquialDescription;
-    document.matchPriority = base.matchPriority;
     const saved = await this.documentRepository.save(document);
     base.contentText = normalizedContent;
     return saved;
@@ -2831,16 +2778,6 @@ export class KnowledgeBasesService implements OnModuleInit {
     document.status = 'parsed';
     document.sourceType = KNOWLEDGE_PARSE_MODE.ai;
     if (fileName) document.sourceName = fileName;
-    if (!document.hitKeywords || !document.colloquialDescription) {
-      const base = await this.baseRepository.findOne({
-        where: { id: document.knowledgeBaseId },
-      });
-      document.hitKeywords = document.hitKeywords || base?.hitKeywords || null;
-      document.colloquialDescription =
-        document.colloquialDescription || base?.colloquialDescription || null;
-      document.matchPriority =
-        document.matchPriority || base?.matchPriority || 1;
-    }
     let saved = await this.documentRepository.save(document);
     await this.syncBaseParsedContent(saved, content);
     await this.resetDocumentChunks(saved.id);

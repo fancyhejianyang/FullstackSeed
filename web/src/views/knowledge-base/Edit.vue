@@ -30,9 +30,6 @@ const textSourceMode = ref<'input' | 'upload'>('input');
 const form = reactive({
   categoryId: '' as string | number,
   name: '',
-  hitKeywords: '',
-  colloquialDescription: '',
-  matchPriority: 1,
   contentType: 'text' as KnowledgeBase['contentType'],
   contentText: '',
   contentFile: '',
@@ -59,30 +56,6 @@ const baseFields = computed<FormField[]>(() => [
     placeholder: '请选择所属分类',
   },
   { prop: 'name', label: '名称', type: 'input' },
-  {
-    prop: 'hitKeywords',
-    label: '命中关键字',
-    type: 'textarea',
-    rows: 3,
-    placeholder: '多个关键字可用逗号、空格或换行分隔',
-  },
-  {
-    prop: 'colloquialDescription',
-    label: '口语化说法',
-    type: 'textarea',
-    rows: 3,
-    placeholder: '仅用于检索匹配，如用户可能会说的问法、简称、别名',
-  },
-  {
-    prop: 'matchPriority',
-    label: '匹配优先级',
-    component: 'InputNumber',
-    componentProps: { mode: 'integer', min: 1, max: 9999 },
-    hint:
-      Number(form.matchPriority) <= 10
-        ? `当前 ${form.matchPriority}：仅做轻微优先级调整，主要仍由内容相关度决定。`
-        : `当前 ${form.matchPriority}：该知识库在同等相关度下会更靠前；数值过高可能压制其他知识库。`,
-  },
   {
     prop: 'isEnabled',
     label: '状态',
@@ -197,9 +170,6 @@ function resetForm() {
   Object.assign(form, {
     categoryId: '',
     name: '',
-    hitKeywords: '',
-    colloquialDescription: '',
-    matchPriority: 1,
     contentType: 'text',
     contentText: '',
     contentFile: '',
@@ -215,9 +185,6 @@ function fillForm(row: KnowledgeBase) {
   Object.assign(form, {
     categoryId: row.categoryId ?? '',
     name: row.name ?? '',
-    hitKeywords: row.hitKeywords ?? '',
-    colloquialDescription: row.colloquialDescription ?? '',
-    matchPriority: row.matchPriority ?? 1,
     contentType: row.contentType ?? 'text',
     contentText: row.contentText ?? '',
     contentFile: '',
@@ -288,9 +255,6 @@ async function handleSubmit() {
     const payload = {
       categoryId: Number(form.categoryId),
       name: form.name,
-      hitKeywords: form.hitKeywords,
-      colloquialDescription: form.colloquialDescription,
-      matchPriority: Number(form.matchPriority || 1),
       contentType: form.contentType,
       contentText:
         form.contentType === 'text' && textSourceMode.value === 'input'

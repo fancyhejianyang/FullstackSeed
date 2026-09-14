@@ -33,8 +33,6 @@ const columns: TableColumn[] = [
   { prop: 'knowledgeBaseId', label: '知识库', minWidth: 160, slot: true },
   { prop: 'sourceType', label: '来源', width: 110, slot: true },
   { prop: 'sourceName', label: '来源名称', minWidth: 180 },
-  { prop: 'hitKeywords', label: '命中关键字', minWidth: 180, slot: true },
-  { prop: 'matchPriority', label: '匹配优先级', width: 110 },
   { prop: 'status', label: '状态', width: 100, slot: true },
   { prop: 'description', label: '处理结果', minWidth: 220, slot: true },
   { prop: 'content', label: '正文', minWidth: 260, slot: true },
@@ -198,12 +196,6 @@ onMounted(fetchBases);
         <el-tag :type="getStatusType(row.status)">
           {{ getStatusLabel(row.status) }}
         </el-tag>
-      </template>
-
-      <template #column-hitKeywords="{ row }">
-        <div class="knowledge-documents__result">
-          {{ row.hitKeywords || '-' }}
-        </div>
       </template>
 
       <template #column-description="{ row }">

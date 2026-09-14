@@ -33,9 +33,6 @@ interface RetrievalCandidate {
   knowledgeBaseId: number;
   knowledgeBaseName: string;
   sourceName: string;
-  hitKeywords: string;
-  colloquialDescription: string;
-  matchPriority: number;
 }
 
 interface ScoredRetrievalCandidate extends RetrievalCandidate {
@@ -710,8 +707,6 @@ export class KnowledgeAiChatRetrievalService {
       .map<KnowledgeBaseRoute>((base) => {
         const name = this.normalizeText(base.name);
         const code = this.normalizeText(base.code || '');
-        const keywords = this.normalizeText(base.hitKeywords || '');
-        const colloquial = this.normalizeText(base.colloquialDescription || '');
         const description = this.normalizeText(base.description || '');
         const aliases = this.buildKnowledgeBaseAliases(base);
         const matchedAliasLength = Math.max(
@@ -738,8 +733,6 @@ export class KnowledgeAiChatRetrievalService {
           const fieldScore = Math.max(
             name.includes(normalizedTerm) ? 0.7 : 0,
             code.includes(normalizedTerm) ? 0.9 : 0,
-            keywords.includes(normalizedTerm) ? 0.75 : 0,
-            colloquial.includes(normalizedTerm) ? 0.45 : 0,
             description.includes(normalizedTerm) ? 0.2 : 0,
           );
           score += fieldScore * distinctiveness * lengthWeight * ruleTermWeight;
@@ -921,8 +914,6 @@ export class KnowledgeAiChatRetrievalService {
     return [
       base.name,
       base.code,
-      base.hitKeywords,
-      base.colloquialDescription,
       base.description,
     ]
       .filter(Boolean)
@@ -946,9 +937,6 @@ export class KnowledgeAiChatRetrievalService {
         'base.name',
         'base.code',
         'base.description',
-        'base.hitKeywords',
-        'base.colloquialDescription',
-        'base.matchPriority',
         'base.updatedAt',
       ])
       .where('base.isEnabled = :enabled', { enabled: true });
@@ -993,7 +981,7 @@ export class KnowledgeAiChatRetrievalService {
     const [documents, chunks, bases] = await Promise.all([
       this.documentRepository.find({
         where: { knowledgeBaseId: In(baseIds) },
-        order: { matchPriority: 'DESC', id: 'ASC' },
+        order: { id: 'ASC' },
         take: 1000,
       }),
       this.chunkRepository.find({
@@ -1003,7 +991,7 @@ export class KnowledgeAiChatRetrievalService {
       }),
       this.knowledgeBaseRepository.find({
         where: { id: In(baseIds) },
-        order: { matchPriority: 'DESC', id: 'ASC' },
+        order: { id: 'ASC' },
       }),
     ]);
     const documentMap = new Map(documents.map((item) => [item.id, item]));
@@ -1024,13 +1012,6 @@ export class KnowledgeAiChatRetrievalService {
             knowledgeBaseId: chunk.knowledgeBaseId,
             knowledgeBaseName: base?.name || '',
             sourceName: document?.sourceName || base?.name || '',
-            hitKeywords: document?.hitKeywords || base?.hitKeywords || '',
-            colloquialDescription:
-              document?.colloquialDescription ||
-              base?.colloquialDescription ||
-              '',
-            matchPriority:
-              document?.matchPriority ?? base?.matchPriority ?? chunk.sort ?? 1,
           });
         })
         .filter((item): item is RetrievalCandidate => Boolean(item));
@@ -1049,10 +1030,6 @@ export class KnowledgeAiChatRetrievalService {
           knowledgeBaseId: document.knowledgeBaseId,
           knowledgeBaseName: base?.name || '',
           sourceName: document.sourceName,
-          hitKeywords: document.hitKeywords || base?.hitKeywords || '',
-          colloquialDescription:
-            document.colloquialDescription || base?.colloquialDescription || '',
-          matchPriority: document.matchPriority,
         });
       })
       .filter((item): item is RetrievalCandidate => Boolean(item));
@@ -1068,9 +1045,6 @@ export class KnowledgeAiChatRetrievalService {
           knowledgeBaseId: base.id,
           knowledgeBaseName: base.name,
           sourceName: base.name,
-          hitKeywords: base.hitKeywords || '',
-          colloquialDescription: base.colloquialDescription || '',
-          matchPriority: base.matchPriority,
         }),
       )
       .filter((item): item is RetrievalCandidate => Boolean(item));
@@ -1099,7 +1073,9 @@ export class KnowledgeAiChatRetrievalService {
         ),
       );
       const chunks = chunkIds.length
-        ? await this.chunkRepository.find({ where: { id: In(chunkIds) } })
+        ? await this.chunkRepository.find({
+            where: { id: In(chunkIds), vectorStatus: 'success' },
+          })
         : [];
       const chunkMap = new Map(chunks.map((item) => [item.id, item]));
       const baseMap = new Map(bases.map((item) => [item.id, item.name]));
@@ -1125,11 +1101,6 @@ export class KnowledgeAiChatRetrievalService {
               baseMap.get(knowledgeBaseId) ||
               '',
             sourceName: this.metadataToString(metadata.sourceName),
-            hitKeywords: this.metadataToString(metadata.hitKeywords),
-            colloquialDescription: this.metadataToString(
-              metadata.colloquialDescription,
-            ),
-            matchPriority: Number(metadata.matchPriority || 1),
           });
           return candidate
             ? { ...candidate, score: this.clamp(Number(item.score || 0)) }
@@ -1179,10 +1150,6 @@ export class KnowledgeAiChatRetrievalService {
         } else {
           current.vectorScore = Math.max(current.vectorScore, candidate.score);
         }
-        current.matchPriority = Math.max(
-          current.matchPriority,
-          candidate.matchPriority,
-        );
         map.set(candidate.key, current);
       });
     };
@@ -1190,15 +1157,7 @@ export class KnowledgeAiChatRetrievalService {
     addCandidates(textCandidates, 'text', activeTextWeight);
     addCandidates(vectorCandidates, 'vector', activeVectorWeight);
 
-    return Array.from(map.values())
-      .map((candidate) => ({
-        ...candidate,
-        score: this.clamp(
-          candidate.score +
-            Math.min(0.08, Math.max(0, candidate.matchPriority - 1) * 0.02),
-        ),
-      }))
-      .sort((a, b) => this.compareCandidates(a, b));
+    return Array.from(map.values()).sort((a, b) => this.compareCandidates(a, b));
   }
 
   private async rerankCandidates(
@@ -1446,8 +1405,6 @@ export class KnowledgeAiChatRetrievalService {
     const content = this.normalizeText(candidate.content);
     const baseName = this.normalizeText(candidate.knowledgeBaseName);
     const sourceName = this.normalizeText(candidate.sourceName);
-    const keywords = this.normalizeText(candidate.hitKeywords);
-    const colloquial = this.normalizeText(candidate.colloquialDescription);
     const normalizedQuestion = this.normalizeText(question);
     const terms = this.buildSearchTerms(question);
     if (!terms.length) return 0;
@@ -1463,8 +1420,6 @@ export class KnowledgeAiChatRetrievalService {
         baseName.includes(normalizedTerm) ? 1 : 0,
         sourceName.includes(normalizedTerm) ? 0.9 : 0,
         title.includes(normalizedTerm) ? 0.85 : 0,
-        keywords.includes(normalizedTerm) ? 1 : 0,
-        colloquial.includes(normalizedTerm) ? 0.8 : 0,
         content.includes(normalizedTerm) ? 0.6 : 0,
       );
       totalImportance += importance;
@@ -1541,8 +1496,6 @@ export class KnowledgeAiChatRetrievalService {
       [
         candidate.knowledgeBaseName,
         candidate.sourceName,
-        candidate.hitKeywords,
-        candidate.colloquialDescription,
       ].join(' '),
     );
     for (const anchor of entityAnchors) {
@@ -1653,7 +1606,6 @@ export class KnowledgeAiChatRetrievalService {
     a: Pick<
       RetrievalCandidate & { score: number },
       | 'score'
-      | 'matchPriority'
       | 'knowledgeBaseId'
       | 'documentId'
       | 'chunkIndex'
@@ -1663,7 +1615,6 @@ export class KnowledgeAiChatRetrievalService {
     b: Pick<
       RetrievalCandidate & { score: number },
       | 'score'
-      | 'matchPriority'
       | 'knowledgeBaseId'
       | 'documentId'
       | 'chunkIndex'
@@ -1673,7 +1624,6 @@ export class KnowledgeAiChatRetrievalService {
   ) {
     return (
       b.score - a.score ||
-      b.matchPriority - a.matchPriority ||
       a.knowledgeBaseId - b.knowledgeBaseId ||
       (a.documentId ?? Number.MAX_SAFE_INTEGER) -
         (b.documentId ?? Number.MAX_SAFE_INTEGER) ||

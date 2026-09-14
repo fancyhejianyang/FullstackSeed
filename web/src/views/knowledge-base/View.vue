@@ -1188,15 +1188,6 @@ onBeforeUnmount(() => {
               {{ rowData?.isEnabled ? '启用' : '停用' }}
             </el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="命中关键字">
-            {{ rowData?.hitKeywords || '-' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="口语化说法">
-            {{ rowData?.colloquialDescription || '-' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="匹配优先级">
-            {{ rowData?.matchPriority ?? 1 }}
-          </el-descriptions-item>
           <el-descriptions-item label="内容类型">
             {{ getContentTypeLabel(rowData?.contentType) }}
           </el-descriptions-item>

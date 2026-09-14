@@ -24,9 +24,6 @@ interface Candidate {
   knowledgeBaseId: number;
   knowledgeBaseName: string;
   sourceName: string;
-  hitKeywords: string;
-  colloquialDescription: string;
-  matchPriority: number;
   score: number;
 }
 
@@ -185,8 +182,6 @@ describe('KnowledgeAiChatRetrievalService', () => {
       [
         buildBase(1, '中国科学院大学'),
         buildBase(2, '深圳大学', {
-          hitKeywords: '师资、团队',
-          colloquialDescription: '教师团队',
           description: '学校师资团队介绍',
         }),
       ],
@@ -235,20 +230,14 @@ describe('KnowledgeAiChatRetrievalService', () => {
       name: '历史学校手册',
       code: '',
       description: '',
-      hitKeywords: '',
-      colloquialDescription: '',
       contentText: '',
-      matchPriority: 1,
     } as KnowledgeBase;
     const targetBase = {
       id: 2,
       name: '目标学校手册',
       code: '',
       description: '',
-      hitKeywords: '',
-      colloquialDescription: '',
       contentText: '',
-      matchPriority: 1,
     } as KnowledgeBase;
     const baseFind = jest
       .fn()
@@ -264,9 +253,6 @@ describe('KnowledgeAiChatRetrievalService', () => {
           title: '目标问题',
           content: '目标问题的正确答案',
           sourceName: '目标学校手册',
-          hitKeywords: '目标问题',
-          colloquialDescription: '',
-          matchPriority: 1,
         } as KnowledgeBaseDocument,
       ]);
     const scopeQueryBuilder = {
@@ -483,9 +469,7 @@ describe('KnowledgeAiChatRetrievalService', () => {
     const plan = internals.buildRetrievalPlan(
       '深圳大学入学材料有哪些？',
       [
-        buildBase(10, '吉林长春理工大学入学手册', {
-          hitKeywords: '长春理工大学入学',
-        }),
+        buildBase(10, '吉林长春理工大学入学手册'),
         buildBase(11, '南京审计大学入学手册'),
         buildBase(12, '深圳大学学生入学手册'),
       ],
@@ -615,16 +599,17 @@ describe('KnowledgeAiChatRetrievalService', () => {
     ]);
   });
 
-  it('removes conversational filler and scores keyword matches above noise', () => {
+  it('removes conversational filler and scores matching content above noise', () => {
     const terms = internals.buildSearchTerms('该校的兵役相关描述是什么？');
-    const relevant = buildCandidate(0);
+    const relevant = {
+      ...buildCandidate(0),
+      content: '兵役政策与相关办理说明',
+    };
     const irrelevant = {
       ...buildCandidate(0),
       title: '校园活动',
       content: '校园活动安排',
-      hitKeywords: '',
     };
-    relevant.hitKeywords = '兵役';
 
     expect(terms).toContain('兵役');
     expect(terms).not.toContain('相关');
@@ -760,8 +745,6 @@ function buildBase(
   name: string,
   metadata: {
     categoryId?: number;
-    hitKeywords?: string;
-    colloquialDescription?: string;
     description?: string;
   } = {},
 ) {
@@ -771,8 +754,6 @@ function buildBase(
     name,
     code: '',
     description: metadata.description ?? '',
-    hitKeywords: metadata.hitKeywords ?? '',
-    colloquialDescription: metadata.colloquialDescription ?? '',
   } as unknown as KnowledgeBase;
 }
 
@@ -787,9 +768,6 @@ function buildCandidate(score: number): Candidate {
     knowledgeBaseId: 1,
     knowledgeBaseName: '中国科学院大学',
     sourceName: '学生手册',
-    hitKeywords: '',
-    colloquialDescription: '',
-    matchPriority: 1,
     score,
   };
 }

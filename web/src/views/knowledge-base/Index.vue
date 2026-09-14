@@ -37,8 +37,6 @@ const columns: TableColumn[] = [
   { prop: 'name', label: '名称', minWidth: 180 },
   { prop: 'lastProcessMessage', label: '处理结果', width: 250, slot: true },
   { prop: 'categoryId', label: '所属分类', minWidth: 140, slot: true },
-  { prop: 'hitKeywords', label: '命中关键字', minWidth: 180, slot: true },
-  { prop: 'matchPriority', label: '匹配优先级', width: 110 },
   { prop: 'contentType', label: '内容类型', width: 110, slot: true },
   { prop: 'processStage', label: '处理阶段', width: 120, slot: true },
   { prop: 'fileName', label: '文件', width: 250, slot: true },
@@ -400,12 +398,6 @@ onMounted(fetchCategories);
 
       <template #column-contentType="{ row }">
         <el-tag type="info">{{ getContentTypeLabel(row.contentType) }}</el-tag>
-      </template>
-
-      <template #column-hitKeywords="{ row }">
-        <div class="knowledge-base-index__process-result">
-          {{ row.hitKeywords || '-' }}
-        </div>
       </template>
 
       <template #column-processStage="{ row }">
