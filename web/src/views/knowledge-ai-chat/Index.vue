@@ -21,7 +21,6 @@ const chatConfigs = ref<AiFeatureConfig[]>([]);
 
 const form = reactive({
   aiFeatureConfigId: '',
-  systemPrompt: '',
   question: '请用一句话说明当前模型已经可以正常响应。',
 });
 
@@ -38,13 +37,6 @@ const fields = computed<FormField[]>(() => [
         value: item.id,
       })),
     ],
-  },
-  {
-    prop: 'systemPrompt',
-    label: '临时提示',
-    type: 'textarea',
-    rows: 4,
-    placeholder: '留空则使用所选 AI 聊天配置中的提示词',
   },
   {
     prop: 'question',
@@ -67,7 +59,6 @@ async function handleAsk() {
       aiFeatureConfigId: form.aiFeatureConfigId
         ? Number(form.aiFeatureConfigId)
         : undefined,
-      systemPrompt: form.systemPrompt || undefined,
       sessionId: sessionId.value,
     });
     sessionId.value = result.session.id;
