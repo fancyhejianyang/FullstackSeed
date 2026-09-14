@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-09-14 更名文档上传拆分规则菜单
+- 新增：
+  - `server/src/migrations/1788907600000-RenameDocumentUploadSplitRuleMenu.ts`（将历史默认菜单“文档解析规则”升级为“文档上传拆分规则”，不重置数据，也不覆盖管理员已改名的菜单）。
+- 修改：
+  - `server/src/menus/menus.service.ts`（新部署写入“文档上传拆分规则”菜单名称）。
+  - `web/src/router/index.ts`、`web/src/views/document-parse-rule/Index.vue`（同步浏览器路由与页面标题）。
+- 删除：无。
+- 说明：该模块负责 TXT/MD、PDF、Word 在送入解析模型前的文件上传预拆分；文档内容解析模型与提示词仍在“AI 功能配置”的“文档解析”类型中管理。
+
 ### 2026-09-14 允许多个 AI 功能配置同时启用
 - 新增：无。
 - 修改：

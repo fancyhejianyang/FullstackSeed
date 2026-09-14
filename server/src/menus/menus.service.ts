@@ -324,7 +324,7 @@ const SEED_MENUS: SeedMenu[] = [
     parentPath: '/system-config',
   },
   {
-    name: '文档解析规则',
+    name: '文档上传拆分规则',
     path: '/system-config/document-parse',
     icon: '',
     sort: 110,

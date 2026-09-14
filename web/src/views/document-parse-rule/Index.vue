@@ -135,7 +135,7 @@ onMounted(loadConfig);
 </script>
 
 <template>
-  <PageContainer title="文档解析规则">
+  <PageContainer title="文档上传拆分规则">
     <div class="document-parse-rule" v-loading="loading">
       <div class="document-parse-rule__header">
         <div>
