@@ -14,6 +14,7 @@ import {
 } from '@/api/aiWorkflow';
 import {
   createInitialAiWorkflowDefinition,
+  generateAiWorkflowInstruction,
   getWorkflowValidationErrors,
   normalizeAiWorkflowDefinition,
 } from '@/utils/aiWorkflow';
@@ -62,11 +63,10 @@ const fields: FormField[] = [
   {
     prop: 'aiInstruction',
     label: 'AI 执行说明',
-    type: 'textarea',
-    rows: 6,
+    slot: true,
     span: 2,
     placeholder: '说明回答边界、资料使用规则、业务术语和资料不足时的处理方式。',
-    hint: '此纯文本会随本次实际执行结果一并提供给回答模型；画布控制“是否执行”，说明文本约束“如何理解和回答”。',
+    hint: '可依据画布生成 Markdown 说明后人工微调；画布控制“是否执行”，说明文本约束“如何理解和回答”。',
   },
   {
     prop: 'isEnabled',
@@ -120,6 +120,11 @@ function buildPayload(): AiWorkflowForm {
   };
 }
 
+function generateInstructionFromWorkflow() {
+  form.aiInstruction = generateAiWorkflowInstruction(form.workflowDefinition);
+  ElMessage.success('已根据画布生成 AI 执行说明，可继续人工微调');
+}
+
 async function handleSubmit() {
   await formRef.value?.validate();
   const errors = getWorkflowValidationErrors(form.workflowDefinition);
@@ -165,7 +170,30 @@ async function handleSubmit() {
         <template #field-workflowDefinition>
           <AiWorkflowEditor v-model="form.workflowDefinition" />
         </template>
+        <template #field-aiInstruction>
+          <div class="ai-workflow-instruction">
+            <div class="ai-workflow-instruction__actions">
+              <el-button size="small" plain type="primary" @click="generateInstructionFromWorkflow">
+                根据画布生成 AI 执行说明
+              </el-button>
+              <span>生成内容会覆盖当前说明，请在生成后继续人工微调。</span>
+            </div>
+            <el-input
+              v-model="form.aiInstruction"
+              type="textarea"
+              :rows="12"
+              placeholder="说明回答边界、资料使用规则、业务术语和资料不足时的处理方式。"
+            />
+          </div>
+        </template>
       </Form>
     </div>
   </Dialog>
 </template>
+
+<style scoped>
+.ai-workflow-instruction { width: 100%; }
+.ai-workflow-instruction__actions { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; color: #909399; font-size: 12px; line-height: 1.5; }
+.ai-workflow-instruction__actions :deep(.el-button) { flex: 0 0 auto; margin: 0; }
+@media (max-width: 760px) { .ai-workflow-instruction__actions { align-items: flex-start; flex-direction: column; gap: 4px; } }
+</style>

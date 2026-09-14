@@ -433,6 +433,136 @@ export function getWorkflowValidationErrors(
   return isReachable(normalized, 'answer') ? [] : ['请至少保留一条从“原始输入”到“回答生成与审计”的路径。'];
 }
 
+/**
+ * 将画布中的节点和分支编译为可由回答模型阅读、也便于管理员继续补充的 Markdown 执行说明。
+ * 图仍是运行时的结构化来源；此文本只描述处理目标、输入输出与各分支语义。
+ */
+export function generateAiWorkflowInstruction(
+  definition?: AiWorkflowDefinition | null,
+  fallback: Partial<AiWorkflowFlags> = {},
+) {
+  const normalized = normalizeAiWorkflowDefinition(definition, fallback);
+  const nodesById = new Map(normalized.nodes.map((node) => [node.id, node]));
+  const reachable = new Set<string>();
+  const queue = normalized.nodes
+    .filter((node) => node.type === 'preflight' && node.enabled)
+    .map((node) => node.id);
+
+  while (queue.length) {
+    const nodeId = queue.shift()!;
+    if (reachable.has(nodeId)) continue;
+    reachable.add(nodeId);
+    normalized.edges.forEach((edge) => {
+      if (edge.source !== nodeId) return;
+      const target = nodesById.get(edge.target);
+      if (target?.enabled) queue.push(target.id);
+    });
+  }
+
+  const sourceOrder = new Map(normalized.nodes.map((node, index) => [node.id, index]));
+  const nodes = normalized.nodes
+    .filter((node) => node.enabled && reachable.has(node.id))
+    .sort((left, right) => {
+      const typeDiff = AI_WORKFLOW_STEP_ORDER.indexOf(left.type) - AI_WORKFLOW_STEP_ORDER.indexOf(right.type);
+      return typeDiff || (sourceOrder.get(left.id)! - sourceOrder.get(right.id)!);
+    });
+  const stepNumberById = new Map(nodes.map((node, index) => [node.id, index + 1]));
+  const activeEdgesBySource = new Map<string, AiWorkflowEdgeDefinition[]>();
+  normalized.edges.forEach((edge) => {
+    if (!stepNumberById.has(edge.source) || !stepNumberById.has(edge.target)) return;
+    const rows = activeEdgesBySource.get(edge.source) ?? [];
+    rows.push(edge);
+    activeEdgesBySource.set(edge.source, rows);
+  });
+
+  const baseLines = [
+    '# AI 执行工作流',
+    '',
+    '## 目标',
+    '分析用户提问，按已配置的节点和分支获取可靠依据，最后输出清晰、准确的答案并记录执行轨迹。',
+    '',
+    '## 全局约束',
+    '- 原始提问记为 `userQuestion`；经过输入清洗后记为 `cleanQuestion`；发生口语化校准后记为 `normalizedQuestion`。',
+    '- 后续步骤优先使用当前最新的问题表达：已校准时使用 `normalizedQuestion`，否则使用 `cleanQuestion`。',
+    '- 标准问答命中时，按其固定答案返回，不得再以模型改写或虚构内容。',
+    '- 检索、重排得到的是候选资料而非最终答案；回答只能依据命中的固定答案、获准业务数据或可信资料生成。',
+    '- 每一步都记录输入、命中情况、所用数据源、分支去向和最终结果，供审计追溯。',
+  ];
+
+  if (!stepNumberById.has(nodes.find((node) => node.type === 'answer')?.id ?? '')) {
+    baseLines.push('', '> 注意：当前画布尚未连通“回答生成与审计”节点，保存前请补全从“原始输入”到回答节点的路径。');
+  }
+
+  const lines = [...baseLines];
+  nodes.forEach((node, index) => {
+    const title = AI_WORKFLOW_STEP_META[node.type].title;
+    const duplicateSuffix = nodes.filter((item) => item.type === node.type).length > 1
+      ? `（分支 ${nodes.filter((item, itemIndex) => item.type === node.type && itemIndex <= index).length}）`
+      : '';
+    lines.push('', `## 步骤 ${index + 1}：${title}${duplicateSuffix}`);
+    lines.push(...getAiWorkflowInstructionStepLines(node.type));
+
+    const edges = activeEdgesBySource.get(node.id) ?? [];
+    if (edges.length) {
+      lines.push('分支与去向：');
+      edges.forEach((edge) => {
+        const target = nodesById.get(edge.target)!;
+        lines.push(`- ${AI_WORKFLOW_CONDITION_META[edge.condition].label}：进入步骤 ${stepNumberById.get(target.id)}“${AI_WORKFLOW_STEP_META[target.type].title}”。`);
+      });
+    } else if (node.type !== 'answer') {
+      lines.push('分支与去向：当前步骤未配置可达的后续连线。');
+    }
+  });
+
+  return lines.join('\n');
+}
+
+function getAiWorkflowInstructionStepLines(type: AiWorkflowStepType) {
+  const linesByType: Record<AiWorkflowStepType, string[]> = {
+    preflight: [
+      '输入：用户原始提问 `userQuestion`。',
+      '动作：进行输入清洗、会话识别、权限校验和可用范围确认。',
+      '输出：`cleanQuestion`、会话上下文和获准访问的数据范围。',
+    ],
+    standardQa: [
+      '输入：当前问题表达。',
+      '动作：调用 `qs.search` 精确搜索标准问答库。',
+      '输出：命中的标准问答标识及固定答案；未命中时记录空结果。',
+    ],
+    colloquial: [
+      '输入：当前问题表达。',
+      '动作：匹配人工维护的口语化词库，将口语词替换为标准表达，并附加对应的语义约束。',
+      '输出：`normalizedQuestion`、命中的口语词及其语义约束；未命中时沿用当前问题表达。',
+    ],
+    calibratedStandardQa: [
+      '输入：`normalizedQuestion` 或未发生校准时的当前问题表达。',
+      '动作：再次调用 `qs.search` 精确搜索标准问答库。',
+      '输出：命中的标准问答标识及固定答案；未命中时记录空结果。',
+    ],
+    businessCommand: [
+      '输入：当前问题表达、会话上下文和已授权的业务指令。',
+      '动作：仅调用聊天应用已授权的只读业务接口，并按最新接口参数校验与读取数据。',
+      '输出：可供回答引用的结构化业务数据、调用结果或无法查询的原因。',
+    ],
+    knowledgeRetrieval: [
+      '输入：当前问题表达、用户权限和可用知识库范围。',
+      '动作：匹配知识库路由规则，读取检索策略，并执行关键词/全文与向量混合检索、阈值筛选和资料汇总。',
+      '输出：路由结果、候选资料片段、来源和相关性信息。',
+    ],
+    rerank: [
+      '输入：当前问题表达和候选资料片段。',
+      '动作：使用配置的 LLM 重排能力重新评估候选资料相关性，保留满足阈值的最佳资料。',
+      '输出：按相关性排序的资料上下文；该结果只能作为回答依据，不能直接视为最终答案。',
+    ],
+    answer: [
+      '输入：标准问答固定答案，或可信检索资料、已授权业务数据、口语语义约束及会话上下文。',
+      '动作：仅依据已获准且可信的内容生成回答；资料不足时澄清问题、说明暂无依据或按规则转人工。',
+      '输出：用户可见答案、可展示引用来源和完整审计日志。',
+    ],
+  };
+  return linesByType[type];
+}
+
 export function getWorkflowFallbackFlags(config: KnowledgeRetrievalConfig) {
   return {
     enableStandardQa: config.enableStandardQa,
