@@ -222,12 +222,19 @@ async function handleSubmit() {
 <template>
   <Dialog
     v-model="visible"
-    :title="props.row ? '编辑 MinerU 配置' : '新增 MinerU 配置'"
+    :title="props.row ? '编辑 MinerU 引擎配置' : '新增 MinerU 引擎配置'"
     width="820px"
     :confirm-loading="submitting"
     @confirm="handleSubmit"
   >
     <div v-loading="loading">
+      <el-alert
+        title="此处仅配置 MinerU 的服务账号和解析参数；图片/PDF 是否使用该引擎，请在“AI 功能配置 → OCR”中选择。文档解析模型提示词不在此处配置。"
+        type="info"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 16px"
+      />
       <Form
         ref="formRef"
         v-model="form"

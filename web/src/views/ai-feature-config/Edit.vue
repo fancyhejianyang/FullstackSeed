@@ -84,17 +84,18 @@ const selectedProvider = computed(() =>
 const isParseFeature = computed(() =>
   ['ocr', 'documentParse'].includes(form.featureType),
 );
-const isMineruParseFeature = computed(
-  () => isParseFeature.value && !!form.useMineru,
+const isOcrFeature = computed(() => form.featureType === 'ocr');
+const isMineruOcrFeature = computed(
+  () => isOcrFeature.value && !!form.useMineru,
 );
 const isChatFeature = computed(() => form.featureType === 'chat');
 const isRerankFeature = computed(() => form.featureType === 'rerank');
 const isStructuredParseFeature = computed(() => isParseFeature.value);
 const usesTemperature = computed(
-  () => !isMineruParseFeature.value && !isRerankFeature.value,
+  () => !isMineruOcrFeature.value && !isRerankFeature.value,
 );
 const usesPromptSettings = computed(
-  () => !isMineruParseFeature.value && !isRerankFeature.value,
+  () => !isMineruOcrFeature.value && !isRerankFeature.value,
 );
 
 const modelOptions = computed(() =>
@@ -126,37 +127,37 @@ const fields = computed<FormField[]>(() => {
           : form.featureType === 'rerank'
             ? '当前为 LLM 重排：模型只给召回的知识片段评分和排序，不参与最终回答。'
             : form.featureType === 'ocr'
-              ? '当前为 OCR：用于从图片或扫描件识别文字。'
-              : '当前为文档解析：用于将文件转换为可切分、可索引的结构化文本。',
+              ? '当前为 OCR：仅处理图片或 PDF，可使用视觉模型或 MinerU 引擎。'
+              : '当前为文档解析：仅处理文本/TXT/Word，由大模型按提示词整理为结构化 Markdown。',
     },
   ];
 
-  if (isParseFeature.value) {
+  if (isOcrFeature.value) {
     baseFields.push({
       prop: 'useMineru',
-      label: form.featureType === 'ocr' ? 'OCR 引擎' : '解析引擎',
+      label: 'OCR 引擎',
       component: 'Switch',
       componentProps: {
-        activeText: 'MinerU',
-        inactiveText: form.featureType === 'ocr' ? '视觉模型' : 'AI 模型',
+        activeText: 'MinerU 引擎',
+        inactiveText: '视觉模型',
       },
       hint: form.useMineru
-        ? '当前使用 MinerU：由所选 MinerU 配置异步解析文档，不需要再选择大模型账号。'
-        : '当前使用模型解析：由大模型账号直接处理，需要选择与该功能兼容的模型。',
+        ? '当前使用 MinerU：读取下方的 MinerU 引擎账号与参数，不使用视觉模型提示词。'
+        : '当前使用视觉模型：适合图片/PDF 识别，可通过提示词约束 Markdown 结构。',
     });
   }
 
-  if (isMineruParseFeature.value) {
+  if (isMineruOcrFeature.value) {
     baseFields.push({
       prop: 'mineruConfigId',
-      label: 'MinerU 配置',
+      label: 'MinerU 引擎配置',
       type: 'select',
       options: mineruConfigOptions,
-      placeholder: '请选择 MinerU 配置',
+      placeholder: '请选择 MinerU 引擎配置',
     });
   }
 
-  if (!isMineruParseFeature.value) {
+  if (!isMineruOcrFeature.value) {
     baseFields.push(
       {
         prop: 'providerId',
@@ -280,10 +281,10 @@ const rules = computed<FormRules>(() => ({
   featureType: [
     { required: true, message: '请选择功能类型', trigger: 'change' },
   ],
-  ...(isMineruParseFeature.value
+  ...(isMineruOcrFeature.value
     ? {
         mineruConfigId: [
-          { required: true, message: '请选择 MinerU 配置', trigger: 'change' },
+          { required: true, message: '请选择 MinerU 引擎配置', trigger: 'change' },
         ],
       }
     : {
@@ -331,8 +332,9 @@ watch(
     modelValidationSequence += 1;
     validatingModel.value = false;
     modelValidationHint.value = '';
-    if (!isParseFeature.value) {
+    if (!isOcrFeature.value) {
       form.useMineru = false;
+      form.mineruConfigId = '';
     }
     if (!isChatFeature.value) {
       form.enableThinking = false;
@@ -346,7 +348,7 @@ watch(
     if (isStructuredParseFeature.value) {
       form.responseFormat = 'markdown';
     }
-    if (isMineruParseFeature.value) {
+    if (isMineruOcrFeature.value) {
       form.providerId = '';
       form.model = '';
       return;
@@ -368,7 +370,7 @@ watch(
   () => {
     if (
       !formReadyForModelValidation.value ||
-      isMineruParseFeature.value ||
+      isMineruOcrFeature.value ||
       !form.providerId ||
       !form.model
     ) {
@@ -425,12 +427,12 @@ function buildPayload(): AiFeatureConfigForm {
   return {
     name: form.name.trim(),
     featureType: form.featureType,
-    providerId: isMineruParseFeature.value ? null : Number(form.providerId),
-    model: isMineruParseFeature.value ? '' : form.model?.trim(),
+    providerId: isMineruOcrFeature.value ? null : Number(form.providerId),
+    model: isMineruOcrFeature.value ? '' : form.model?.trim(),
     enableThinking: isChatFeature.value && !!form.enableThinking,
     thinkingParameters: resolveThinkingParameters(),
-    useMineru: !!form.useMineru,
-    mineruConfigId: isMineruParseFeature.value
+    useMineru: isMineruOcrFeature.value,
+    mineruConfigId: isMineruOcrFeature.value
       ? Number(form.mineruConfigId)
       : null,
     systemPrompt: isRerankFeature.value ? '' : form.systemPrompt?.trim(),

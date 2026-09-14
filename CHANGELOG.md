@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-09-14 拆分 MinerU 引擎与文档解析职责
+- 新增：无。
+- 修改：
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`（按文件类型定向路由：文本/TXT/Word 只使用文档解析模型，图片/PDF 只使用 OCR；仅 OCR 可调用 MinerU，移除跨功能配置查找 MinerU 的逻辑）。
+  - `web/src/views/ai-feature-config/Edit.vue`（文档解析不再显示 MinerU 引擎选项，固定使用大模型及提示词；OCR 单独提供“视觉模型 / MinerU 引擎”选择）。
+  - `web/src/views/mineru-config/Index.vue`、`web/src/views/mineru-config/Edit.vue`、`web/src/router/index.ts`（更名为“MinerU 引擎配置”，并明确这里仅维护服务账号与解析参数，不配置文档解析提示词）。
+- 删除：无。
+- 说明：历史“文档解析”配置若曾启用 MinerU，需在编辑页改为选择大模型账号和模型后保存；图片/PDF 的 MinerU 使用请在 OCR 功能配置中设置。
+
 ### 2026-09-14 统一知识库结构化 Markdown 解析与分片
 - 新增：
   - `server/src/migrations/1788900400000-AddKnowledgeBaseChunkStructure.ts`（为知识库分片增加章节路径与内容块类型列，不修改或重置既有知识库数据）。

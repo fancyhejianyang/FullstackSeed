@@ -159,28 +159,13 @@ export class KnowledgeBasesService implements OnModuleInit {
     if (!config) {
       throw new BadRequestException('请先配置并启用文档解析功能配置');
     }
-    if (config.useMineru && !config.mineruConfigId) {
-      throw new BadRequestException('文档解析功能配置缺少 MinerU 配置');
-    }
-    if (!config.useMineru && (!config.providerId || !config.model?.trim())) {
-      throw new BadRequestException('文档解析功能配置缺少大模型账号或模型');
-    }
-    return config;
-  }
-
-  private async resolveEnabledMineruParseConfig(): Promise<AiFeatureConfig | null> {
-    const [documentParseConfig, ocrConfig] = await Promise.all([
-      this.aiFeatureConfigsService.findEnabledByFeature('documentParse'),
-      this.aiFeatureConfigsService.findEnabledByFeature('ocr'),
-    ]);
-    const config = [documentParseConfig, ocrConfig].find(
-      (item) => item?.useMineru,
-    );
-    if (!config) return null;
-    if (!config.mineruConfigId) {
+    if (config.useMineru) {
       throw new BadRequestException(
-        'AI 模型解析启用了 MinerU，但缺少 MinerU 配置',
+        '文档解析功能配置仅支持 AI 模型；请在 OCR 功能配置中选择 MinerU 引擎处理图片或 PDF',
       );
+    }
+    if (!config.providerId || !config.model?.trim()) {
+      throw new BadRequestException('文档解析功能配置缺少大模型账号或模型');
     }
     return config;
   }
@@ -1316,10 +1301,6 @@ export class KnowledgeBasesService implements OnModuleInit {
     document: KnowledgeBaseDocument,
     dto: ParseKnowledgeBaseDocumentDto,
   ) {
-    const mineruConfig = await this.resolveEnabledMineruParseConfig();
-    if (mineruConfig && dto.fileUrl?.trim()) {
-      return this.executeDocumentThirdPartyParse(document, dto, mineruConfig);
-    }
     const fileName = dto.fileName?.trim() || document.sourceName;
     const contentType = this.resolveAiModelParseContentType(
       document.sourceType,
@@ -1327,10 +1308,14 @@ export class KnowledgeBasesService implements OnModuleInit {
       document.content,
     );
     if (contentType === 'pdf' || contentType === 'image') {
+      const ocrConfig = await this.resolveOcrFeatureConfig();
+      if (ocrConfig.useMineru) {
+        return this.executeDocumentThirdPartyParse(document, dto, ocrConfig);
+      }
       return this.executeDocumentVisionOcrParse(
         document,
         dto,
-        await this.resolveOcrFeatureConfig(),
+        ocrConfig,
       );
     }
     return this.executeDocumentTextModelParse(
@@ -2286,20 +2271,17 @@ export class KnowledgeBasesService implements OnModuleInit {
   }
 
   private async parseBaseWithAiModelConfig(base: KnowledgeBase) {
-    const mineruConfig = await this.resolveEnabledMineruParseConfig();
-    if (mineruConfig && base.fileUrl && base.contentType !== 'text') {
-      return this.parseBaseWithThirdParty(base, mineruConfig);
-    }
     const contentType = this.resolveAiModelParseContentType(
       base.contentType,
       base.fileName || base.fileUrl,
       base.contentText,
     );
     if (contentType === 'pdf' || contentType === 'image') {
-      return this.parseBaseWithVisionOcr(
-        base,
-        await this.resolveOcrFeatureConfig(),
-      );
+      const ocrConfig = await this.resolveOcrFeatureConfig();
+      if (ocrConfig.useMineru) {
+        return this.parseBaseWithThirdParty(base, ocrConfig);
+      }
+      return this.parseBaseWithVisionOcr(base, ocrConfig);
     }
     return this.parseBaseWithDocumentModel(
       base,

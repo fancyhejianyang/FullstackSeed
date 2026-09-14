@@ -73,7 +73,7 @@ async function batchDeleteRequest(payload: { ids: Array<string | number> }) {
 </script>
 
 <template>
-  <PageContainer title="MinerU 解析配置">
+  <PageContainer title="MinerU 引擎配置">
     <Table
       ref="tableRef"
       :columns="columns"

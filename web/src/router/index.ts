@@ -234,7 +234,7 @@ const routes: RouteRecordRaw[] = [
         path: 'system-config/mineru',
         name: 'system-config-mineru',
         component: () => import('@/views/mineru-config/Index.vue'),
-        meta: { title: 'MinerU 解析配置', permission: 'Menu.read' },
+        meta: { title: 'MinerU 引擎配置', permission: 'Menu.read' },
       },
       {
         path: 'system-config/vector',
