@@ -77,4 +77,27 @@ describe('AiFeatureConfigsService', () => {
       responseFormat: 'json',
     });
   });
+
+  it('keeps other enabled configurations when resolving the default by feature type', async () => {
+    const newestConfig = { id: 9, name: '业务客服' } as AiFeatureConfig;
+    const repository = {
+      find: jest.fn().mockResolvedValue([newestConfig]),
+      update: jest.fn(),
+    } as unknown as Repository<AiFeatureConfig>;
+    const multipleEnabledService = new AiFeatureConfigsService(
+      repository,
+      {} as KnowledgeAiProvidersService,
+      {} as MineruConfigsService,
+    );
+
+    await expect(
+      multipleEnabledService.findEnabledByFeature('chat'),
+    ).resolves.toBe(newestConfig);
+    expect(repository.find).toHaveBeenCalledWith({
+      where: { featureType: 'chat', isEnabled: true },
+      order: { id: 'DESC' },
+      take: 1,
+    });
+    expect(repository.update).not.toHaveBeenCalled();
+  });
 });
