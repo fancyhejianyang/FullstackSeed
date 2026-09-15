@@ -150,6 +150,8 @@
 
 ## Select / SelectMultiple
 
+- `Select` 单选组件默认在选择/清空后触发所属表单项的 `change` 校验，在输入框失焦时触发 `blur` 校验；校验等待父表单更新完成，遵循字段规则的 `trigger`。可通过 `validateEvent=false` 关闭自动校验，提交校验仍由 Form 执行。
+
 **契约**：下拉组件不内置接口查询，只接收 `options: { value: string; text: string }[]`。业务字段建议使用稳定编码，不建议直接用数字 ID；组件会把传入值统一按字符串处理。
 
 ### 共同能力

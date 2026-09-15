@@ -18,6 +18,7 @@ import {
   ref,
   watch,
 } from 'vue';
+import { useFormItem } from 'element-plus';
 
 defineOptions({ inheritAttrs: false });
 
@@ -39,6 +40,7 @@ const props = withDefaults(
     itemHeight?: number;
     visibleCount?: number;
     notFoundText?: string;
+    validateEvent?: boolean;
   }>(),
   {
     options: () => [],
@@ -51,10 +53,19 @@ const props = withDefaults(
     itemHeight: 34,
     visibleCount: 8,
     notFoundText: '暂无匹配数据',
+    validateEvent: true,
   },
 );
 
 const model = defineModel<string | null>({ default: '' });
+const { formItem } = useFormItem();
+
+async function validateField(trigger: 'change' | 'blur') {
+  if (!props.validateEvent || !formItem) return;
+  // 等待父表单写回实际字段值（包括字符串 ID 转数字），再校验。
+  await nextTick();
+  await formItem.validate(trigger).catch(() => undefined);
+}
 const emit = defineEmits<{
   change: [value: string | null];
   clear: [];
@@ -204,6 +215,7 @@ function selectOption(option: SelectOption) {
   if (option.disabled) return;
   model.value = option.value;
   emit('change', option.value);
+  void validateField('change');
   close();
 }
 
@@ -212,6 +224,7 @@ function clearValue(event: MouseEvent) {
   model.value = '';
   emit('clear');
   emit('change', '');
+  void validateField('change');
   close();
 }
 
@@ -318,6 +331,7 @@ watch(opened, async (value) => {
         :disabled="props.disabled"
         :placeholder="selectedText ? '' : props.placeholder"
         @input="handleInput"
+        @blur="validateField('blur')"
         @focus="open"
         @keydown="handleKeydown"
       />

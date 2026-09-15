@@ -1,5 +1,12 @@
 # CHANGELOG
 
+### 2026-09-15 MinerU 引擎字段与单选校验提示修复
+- 新增文件：无。
+- 修改文件：`web/src/views/ai-feature-config/Edit.vue`（字段简化为“MinerU引擎”，必填规则按 change、blur 触发）；`web/src/components/Select.vue`（接入表单项校验，选择/清空后等待父级值更新再校验，失焦触发 blur）；`AGENTS-COMPONENTS.md`（补充单选自动校验契约）；`CHANGELOG.md`（快照）。
+- 删除文件：无。
+- 验证：前端 vue-tsc、git diff --check 通过；未构建、未启动服务。
+- 保留：用户已有 `web/components.d.ts` 改动不纳入提交。
+
 ### 2026-09-15 MinerU 识别后按提示词调用大模型整理
 - 新增文件：`server/src/knowledge-bases/mineru-refine.spec.ts`（提示词及模型传递、整理后入库、分段失败不写入、缺失模型与空输出测试）。
 - 修改文件：

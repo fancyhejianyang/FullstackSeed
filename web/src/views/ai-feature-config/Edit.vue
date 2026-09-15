@@ -151,10 +151,10 @@ const fields = computed<FormField[]>(() => {
   if (isMineruOcrFeature.value) {
     baseFields.push({
       prop: 'mineruConfigId',
-      label: 'MinerU 引擎配置',
+      label: 'MinerU引擎',
       type: 'select',
       options: mineruConfigOptions,
-      placeholder: '请选择 MinerU 引擎配置',
+      placeholder: '请选择 MinerU引擎',
     });
   }
 
@@ -284,7 +284,7 @@ const rules = computed<FormRules>(() => ({
   ],
   ...(isMineruOcrFeature.value ? {
         mineruConfigId: [
-          { required: true, message: '请选择 MinerU 引擎配置', trigger: 'change' },
+          { required: true, message: '请选择 MinerU引擎', trigger: ['change', 'blur'] },
         ],
       } : {}),
   ...{
