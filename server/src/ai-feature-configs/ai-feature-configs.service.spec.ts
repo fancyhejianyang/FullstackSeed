@@ -9,6 +9,16 @@ interface AiFeatureConfigInternals {
 }
 
 describe('AiFeatureConfigsService', () => {
+  it('keeps MinerU refinement settings and validates a text model', async () => {
+    const repository = { create: jest.fn((value) => value), save: jest.fn(async (value) => value) };
+    const providers = { findOne: jest.fn().mockResolvedValue({ id: 2, name: '整理账号' }), assertModelSupported: jest.fn() };
+    const mineru = { findOne: jest.fn().mockResolvedValue({ id: 3, name: 'MinerU' }) };
+    const configService = new AiFeatureConfigsService(repository as unknown as Repository<AiFeatureConfig>, providers as unknown as KnowledgeAiProvidersService, mineru as unknown as MineruConfigsService);
+    const config = await configService.create({ name: 'OCR', featureType: 'ocr', useMineru: true, mineruConfigId: 3, providerId: 2, model: 'text-model', systemPrompt: '保留表格', temperature: 0 });
+    expect(config).toMatchObject({ providerId: 2, model: 'text-model', systemPrompt: '保留表格', responseFormat: 'markdown', mineruConfigId: 3 });
+    expect(providers.assertModelSupported).toHaveBeenCalledWith({ id: 2, model: 'text-model', featureType: 'documentParse' });
+    await expect(configService.create({ name: 'OCR', featureType: 'ocr', useMineru: true, mineruConfigId: 3 })).rejects.toThrow('大模型账号');
+  });
   const service = new AiFeatureConfigsService(
     {} as Repository<AiFeatureConfig>,
     {} as KnowledgeAiProvidersService,

@@ -187,11 +187,7 @@ export class AiFeatureConfigsService {
     }
     if (dto.useMineru !== undefined || isCreate) {
       payload.useMineru = dto.useMineru ?? false;
-      if (payload.useMineru) {
-        payload.providerId = null;
-        payload.providerName = null;
-        payload.model = null;
-      } else {
+      if (!payload.useMineru) {
         payload.mineruConfigId = null;
         payload.mineruConfigName = null;
       }
@@ -206,6 +202,7 @@ export class AiFeatureConfigsService {
   }
 
   private normalizeFeatureSpecificSettings(config: Partial<AiFeatureConfig>) {
+    if (config.useMineru && config.featureType === 'ocr') config.responseFormat = 'markdown';
     if (config.featureType === 'rerank') {
       config.enableThinking = false;
       config.thinkingParameters = null;
@@ -250,7 +247,6 @@ export class AiFeatureConfigsService {
       if (!config.mineruConfigId) {
         throw new BadRequestException('请选择 MinerU 配置');
       }
-      return;
     }
     if (!config.providerId || !config.model?.trim()) {
       throw new BadRequestException('请选择大模型账号和模型');
@@ -258,7 +254,7 @@ export class AiFeatureConfigsService {
     await this.providersService.assertModelSupported({
       id: config.providerId,
       model: config.model,
-      featureType: config.featureType ?? 'chat',
+      featureType: config.useMineru ? 'documentParse' : config.featureType ?? 'chat',
     });
   }
 

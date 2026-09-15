@@ -92,17 +92,18 @@ const isChatFeature = computed(() => form.featureType === 'chat');
 const isRerankFeature = computed(() => form.featureType === 'rerank');
 const isStructuredParseFeature = computed(() => isParseFeature.value);
 const usesTemperature = computed(
-  () => !isMineruOcrFeature.value && !isRerankFeature.value,
+  () => !isRerankFeature.value,
 );
 const usesPromptSettings = computed(
-  () => !isMineruOcrFeature.value && !isRerankFeature.value,
+  () => !isRerankFeature.value,
 );
 
 const modelOptions = computed(() =>
-  getModelOptions(selectedProvider.value, form.featureType),
+  getModelOptions(selectedProvider.value, isMineruOcrFeature.value ? 'documentParse' : form.featureType),
 );
 
 const modelPlaceholder = computed(() => {
+  if (isMineruOcrFeature.value) return '请选择用于整理的文本模型';
   if (form.featureType === 'ocr') return '请选择视觉模型';
   if (form.featureType === 'rerank') return '请选择用于重排的通用文本模型';
   return '请选择模型';
@@ -142,7 +143,7 @@ const fields = computed<FormField[]>(() => {
         inactiveText: '视觉模型',
       },
       hint: form.useMineru
-        ? '当前使用 MinerU：读取下方的 MinerU 引擎账号与参数，不使用视觉模型提示词。'
+        ? '先由 MinerU 识别，再由下方大模型按提示词整理为 Markdown 后入库。'
         : '当前使用视觉模型：适合图片/PDF 识别，可通过提示词约束 Markdown 结构。',
     });
   }
@@ -157,17 +158,17 @@ const fields = computed<FormField[]>(() => {
     });
   }
 
-  if (!isMineruOcrFeature.value) {
+  {
     baseFields.push(
       {
         prop: 'providerId',
-        label: '大模型账号',
+        label: isMineruOcrFeature.value ? '整理模型账号' : '大模型账号',
         type: 'select',
         options: providerOptions,
       },
       {
         prop: 'model',
-        label: '模型',
+        label: isMineruOcrFeature.value ? '整理模型' : '模型',
         type: 'select',
         options: modelOptions,
         placeholder: modelPlaceholder.value,
@@ -221,7 +222,7 @@ const fields = computed<FormField[]>(() => {
     baseFields.push(
       {
         prop: 'systemPrompt',
-        label: '提示词',
+        label: isMineruOcrFeature.value ? '整理提示词' : '提示词',
         type: 'textarea',
         rows: 5,
         placeholder: isStructuredParseFeature.value
@@ -281,25 +282,23 @@ const rules = computed<FormRules>(() => ({
   featureType: [
     { required: true, message: '请选择功能类型', trigger: 'change' },
   ],
-  ...(isMineruOcrFeature.value
-    ? {
+  ...(isMineruOcrFeature.value ? {
         mineruConfigId: [
           { required: true, message: '请选择 MinerU 引擎配置', trigger: 'change' },
         ],
-      }
-    : {
+      } : {}),
+  ...{
         providerId: [
           { required: true, message: '请选择大模型账号', trigger: 'change' },
         ],
         model: [{ required: true, message: '请选择模型', trigger: 'change' }],
-      }),
+      },
   ...(usesTemperature.value
     ? {
         temperature: [
           { required: true, message: '请输入温度', trigger: 'blur' },
         ],
-      }
-    : {}),
+      } : {}),
 }));
 
 watch(visible, async (value) => {
@@ -349,8 +348,6 @@ watch(
       form.responseFormat = 'markdown';
     }
     if (isMineruOcrFeature.value) {
-      form.providerId = '';
-      form.model = '';
       return;
     }
     form.mineruConfigId = '';
@@ -370,7 +367,6 @@ watch(
   () => {
     if (
       !formReadyForModelValidation.value ||
-      isMineruOcrFeature.value ||
       !form.providerId ||
       !form.model
     ) {
@@ -427,8 +423,8 @@ function buildPayload(): AiFeatureConfigForm {
   return {
     name: form.name.trim(),
     featureType: form.featureType,
-    providerId: isMineruOcrFeature.value ? null : Number(form.providerId),
-    model: isMineruOcrFeature.value ? '' : form.model?.trim(),
+    providerId: Number(form.providerId),
+    model: form.model?.trim(),
     enableThinking: isChatFeature.value && !!form.enableThinking,
     thinkingParameters: resolveThinkingParameters(),
     useMineru: isMineruOcrFeature.value,
@@ -525,7 +521,7 @@ async function validateSelectedModel() {
     const result = await validateKnowledgeAiProviderModel({
       id: providerId,
       model,
-      featureType: form.featureType,
+      featureType: isMineruOcrFeature.value ? 'documentParse' : form.featureType,
     });
     if (requestSequence !== modelValidationSequence) return;
     providers.value = providers.value.map((item) =>

@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-09-15 MinerU 识别后按提示词调用大模型整理
+- 新增文件：`server/src/knowledge-bases/mineru-refine.spec.ts`（提示词及模型传递、整理后入库、分段失败不写入、缺失模型与空输出测试）。
+- 修改文件：
+  - `web/src/views/ai-feature-config/Edit.vue`：MinerU 模式展示整理模型账号、文本模型、温度、提示词和固定 Markdown 返回格式；切换引擎不再清空模型账号，保存保留整理配置。
+  - `server/src/ai-feature-configs/ai-feature-configs.service.ts`、`server/src/ai-feature-configs/ai-feature-configs.service.spec.ts`：保留并校验 MinerU 关联整理模型，以 documentParse 文本能力校验，固定输出 Markdown。
+  - `server/src/knowledge-bases/knowledge-bases.service.ts`：知识库解析、单文档解析、结果查询、任务恢复统一接入 MinerU 后的大模型整理；长内容按既有规则分段；记录整理开始、逐段执行、成功与失败；失败保留旧正文并标记失败，成功后才入库，完成接口返回整理后的 Markdown。
+  - `CHANGELOG.md`：修改快照。
+- 删除文件：无；复用 providerId、model、temperature、systemPrompt、responseFormat，无数据库结构变更。
+- 使用说明：原 MinerU 配置此前清空过账号和模型，需要重新编辑补齐整理模型后保存；整理额外消耗大模型调用时间及额度。提示词传给整理模型，不传给 MinerU。
+- 验证：前端 vue-tsc、后端生产源码类型检查、后端 build 与实体列检查、配置/整理流程及知识库回归共 14 项测试、git diff --check 通过。未启动服务或调用真实 MinerU/大模型。
+- 保留：用户原有 `web/components.d.ts` 改动未纳入提交。
+
 ### 2026-09-15 SKU 自动编号与内置、自定义参数
 - 新增文件：`server/src/product-catalog/product-sku-code.spec.ts`（编号预览、历史序号、编辑保号、切换产品、重复编码及聊天参数匹配测试）。
 - 修改文件：
