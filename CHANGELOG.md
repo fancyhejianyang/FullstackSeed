@@ -1,5 +1,22 @@
 # CHANGELOG
 
+### 2026-09-15 产品中文 Excel 模板与导入、SKU 参数录入优化
+- 新增文件：
+  - `server/src/product-catalog/product-excel.service.ts`：生成中文空白模板与填写说明；校验文件、表头、行数、字段长度、公式、重复产品；事务批量新增并生成内部产品编码。
+  - `server/src/product-catalog/product-excel.service.spec.ts`：模板往返、错误行不写入、重复、公式、表头、禁用状态及文件边界测试。
+  - `web/src/views/product-sku/specifications.ts`：通用、空气净化器及仪表参数预设，参数转换和重复名称校验，兼容未修改的历史对象、数组、数字和布尔值。
+- 修改文件：
+  - `server/package.json`、`server/package-lock.json`：增加 ExcelJS 运行时依赖。
+  - `server/src/product-catalog/product-catalog.controller.ts`、`server/src/product-catalog/product-catalog.module.ts`：注册产品模板下载及文件导入，分别复用 Product.read、Product.create 权限。
+  - `web/src/api/productCatalog.ts`、`web/src/views/product/Index.vue`：模板导出、Excel 文件选择、导入状态及逐行错误结果、成功刷新列表。
+  - `web/src/views/product-sku/Edit.vue`、`web/src/views/product-sku/Index.vue`：中文参数名称和值录入，可添加预设或自定义参数，移除默认样例值，列表直接展示参数。
+  - `CHANGELOG.md`：本次修改快照。
+- 删除文件：无。无数据库字段或迁移变更。
+- 导入约定：仅 .xlsx，最大 5 MB、1000 个产品；中文字段为产品名称、产品别名、产品分类、产品描述、是否启用；无编号列。只新增，同名同分类拒绝导入；留空状态默认启用；任一行错误时整份不写入。
+- 验证：前端 vue-tsc、后端生产源码 tsc、实体列检查、后端 build、产品模块 9 项单元测试、SKU 参数兼容与校验脚本、git diff --check 通过。未启动服务或进行浏览器联调。
+- 已有问题：后端包含所有测试文件的 tsc 检查被 `server/src/common/list-query-filters.spec.ts:68` 的 KnowledgeAiChatService 构造参数缺失阻断，与本次产品改动无关，未修改该文件。
+- 保留：用户原有 `web/components.d.ts` 未提交改动未纳入本次提交。
+
 ### 2026-09-15 标准问答库独立于工作流
 - 新增：无。
 - 修改：

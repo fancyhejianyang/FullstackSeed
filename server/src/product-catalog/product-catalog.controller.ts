@@ -8,7 +8,13 @@ import {
   Patch,
   Post,
   Query,
+  Res,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
+import { ProductExcelService } from './product-excel.service';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator';
 import {
@@ -27,7 +33,28 @@ import { ProductCatalogService } from './product-catalog.service';
 @ApiBearerAuth()
 @Controller()
 export class ProductCatalogController {
-  constructor(private readonly productCatalogService: ProductCatalogService) {}
+  constructor(
+    private readonly productCatalogService: ProductCatalogService,
+    private readonly productExcelService: ProductExcelService,
+  ) {}
+
+  @Get('products/template')
+  @RequirePermissions('Product.read')
+  @ApiOperation({ summary: '导出中文产品导入模板' })
+  async template(@Res() response: Response) {
+    const buffer = await this.productExcelService.createTemplate();
+    response.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    response.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent('产品导入模板.xlsx')}`);
+    response.send(buffer);
+  }
+
+  @Post('products/import')
+  @RequirePermissions('Product.create')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024, files: 1 } }))
+  @ApiOperation({ summary: '通过中文模板批量导入产品' })
+  importProducts(@UploadedFile() file?: { originalname: string; buffer: Buffer }) {
+    return this.productExcelService.importProducts(file);
+  }
 
   @Get('products')
   @RequirePermissions('Product.read')

@@ -2,6 +2,9 @@
 import { computed, reactive, ref, watch } from 'vue';
 import { ElMessage, type FormRules } from 'element-plus';
 import Dialog from '@/components/Dialog.vue';
+import Button from '@/components/Button.vue';
+import Input from '@/components/Input.vue';
+import { specificationPresets, specificationRows, buildSpecifications, type SpecificationRow } from './specifications';
 import Form, { type FormField } from '@/components/Form.vue';
 import {
   createProductSku,
@@ -24,20 +27,16 @@ const form = reactive({
   productId: '' as number | '',
   skuCode: '',
   name: '',
-  specificationsText: '{\n  "颜色": "蓝色",\n  "重量": { "value": 12, "unit": "kg" }\n}',
+
   isEnabled: true,
 });
 
-const parsedSpecifications = computed<Record<string, unknown> | null>(() => {
-  try {
-    const value: unknown = JSON.parse(form.specificationsText);
-    return value && typeof value === 'object' && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : null;
-  } catch {
-    return null;
+const parameters = ref<SpecificationRow[]>([]);
+function addPreset(name: string) {
+  for (const key of specificationPresets[name] ?? []) {
+    if (!parameters.value.some((row) => row.key.trim() === key)) parameters.value.push({ key, value: '' });
   }
-});
+}
 
 const fields = computed<FormField[]>(() => [
   {
@@ -56,13 +55,9 @@ const fields = computed<FormField[]>(() => [
     hint: '可选，但建议填写以便人工识别；最终参数以结构化规格为准。',
   },
   {
-    prop: 'specificationsText',
-    label: '结构化规格 JSON',
-    type: 'textarea',
-    rows: 9,
-    hint: parsedSpecifications.value
-      ? 'JSON 格式有效：业务客服可将这些字段作为受控事实读取。'
-      : '必须填写 JSON 对象，例如重量、颜色、容量、尺寸等可区分 SKU 的真实参数。',
+    prop: 'specifications',
+    label: '规格参数',
+    slot: true,
   },
   {
     prop: 'isEnabled',
@@ -75,7 +70,6 @@ const fields = computed<FormField[]>(() => [
 const rules: FormRules = {
   productId: [{ required: true, message: '请选择所属产品', trigger: 'change' }],
   skuCode: [{ required: true, message: '请输入 SKU 编码', trigger: 'blur' }],
-  specificationsText: [{ required: true, message: '请输入结构化规格 JSON', trigger: 'blur' }],
 };
 
 watch(visible, async (value) => {
@@ -94,7 +88,8 @@ function resetForm() {
   form.productId = productOptions.value.length === 1 ? productOptions.value[0].id : '';
   form.skuCode = '';
   form.name = '';
-  form.specificationsText = '{\n  "颜色": "蓝色",\n  "重量": { "value": 12, "unit": "kg" }\n}';
+  parameters.value = [];
+  addPreset('通用参数');
   form.isEnabled = true;
 }
 
@@ -102,26 +97,28 @@ function fillForm(data: ProductSku) {
   form.productId = data.productId;
   form.skuCode = data.skuCode;
   form.name = data.name ?? '';
-  form.specificationsText = JSON.stringify(data.specifications ?? {}, null, 2);
+  parameters.value = specificationRows(data.specifications ?? {});
   form.isEnabled = !!data.isEnabled;
 }
 
 function buildPayload(): ProductSkuForm | null {
-  if (!form.productId || !parsedSpecifications.value) return null;
+  if (!form.productId) return null;
   return {
     productId: Number(form.productId),
     skuCode: form.skuCode.trim(),
     name: form.name.trim(),
-    specifications: parsedSpecifications.value,
+    specifications: buildSpecifications(parameters.value),
     isEnabled: form.isEnabled,
   };
 }
 
 async function handleSubmit() {
   await formRef.value?.validate();
-  const payload = buildPayload();
+  let payload: ProductSkuForm | null;
+  try { payload = buildPayload(); }
+  catch (error) { ElMessage.warning((error as Error).message); return; }
   if (!payload) {
-    ElMessage.warning('结构化规格必须是合法 JSON 对象');
+    ElMessage.warning('请选择所属产品');
     return;
   }
   submitting.value = true;
@@ -143,6 +140,30 @@ async function handleSubmit() {
 
 <template>
   <Dialog v-model="visible" :title="props.row ? '编辑 SKU' : '新增 SKU'" width="820px" :confirm-loading="submitting" @confirm="handleSubmit">
-    <div v-loading="loading"><Form ref="formRef" v-model="form" :fields="fields" :rules="rules" label-width="120px" /></div>
+    <div v-loading="loading">
+      <Form ref="formRef" v-model="form" :fields="fields" :rules="rules" label-width="120px">
+        <template #field-specifications>
+          <div class="parameters">
+            <div class="parameters__actions">
+              <Button v-for="(_, name) in specificationPresets" :key="name" size="small" @click="addPreset(String(name))">添加{{ name }}</Button>
+              <Button size="small" icon="Plus" @click="parameters.push({ key: '', value: '' })">自定义参数</Button>
+            </div>
+            <p class="parameters__hint">填写真实参数及单位，例如 540 克、220 伏。空值不保存；添加预设不会覆盖已有参数。已有复杂参数保持原格式，修改后按文本保存。</p>
+            <div v-for="(parameter, index) in parameters" :key="index" class="parameters__row">
+              <Input v-model="parameter.key" placeholder="参数名称" aria-label="参数名称" />
+              <Input v-model="parameter.value" mode="textarea" :rows="2" placeholder="参数值（含单位）" aria-label="参数值" />
+              <Button size="small" icon="Delete" @click="parameters.splice(index, 1)">移除</Button>
+            </div>
+          </div>
+        </template>
+      </Form>
+    </div>
   </Dialog>
 </template>
+
+<style scoped>
+.parameters { width: 100%; }
+.parameters__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.parameters__hint { color: var(--el-text-color-secondary); font-size: 12px; line-height: 1.6; }
+.parameters__row { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(160px, 2fr) auto; align-items: start; gap: 8px; margin-bottom: 10px; }
+</style>

@@ -22,7 +22,7 @@ const columns: TableColumn[] = [
   { prop: 'skuCode', label: 'SKU 编码', width: 160 },
   { prop: 'productName', label: '所属产品', minWidth: 160 },
   { prop: 'name', label: 'SKU 名称 / 规格名', minWidth: 180 },
-  { prop: 'specifications', label: '结构化规格', minWidth: 260, slot: true },
+  { prop: 'specifications', label: '规格参数', minWidth: 260, slot: true },
   { prop: 'isEnabled', label: '状态', width: 90, slot: true },
   { prop: 'updatedAt', label: '更新时间', width: 180, slot: true },
 ];
@@ -64,7 +64,7 @@ function batchDeleteRequest(payload: { ids: Array<number | string> }) {
 }
 
 function formatSpecifications(value: Record<string, unknown>) {
-  return JSON.stringify(value ?? {});
+  return Object.entries(value ?? {}).map(([key, item]) => `${key}：${typeof item === 'string' ? item : JSON.stringify(item)}`).join('；') || '-';
 }
 </script>
 
@@ -88,7 +88,7 @@ function formatSpecifications(value: Record<string, unknown>) {
           批量删除
         </Button>
       </template>
-      <template #column-specifications="{ row }"><code>{{ formatSpecifications(row.specifications) }}</code></template>
+      <template #column-specifications="{ row }"><span>{{ formatSpecifications(row.specifications) }}</span></template>
       <template #column-isEnabled="{ row }">
         <el-tag :type="row.isEnabled ? 'success' : 'info'">{{ row.isEnabled ? '启用' : '停用' }}</el-tag>
       </template>

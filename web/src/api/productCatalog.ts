@@ -1,5 +1,20 @@
 import request from '@/utils/request';
 
+export interface ProductImportResult {
+  importedCount: number;
+  errors: Array<{ row: number; message: string }>;
+}
+
+export function downloadProductTemplate() {
+  return request.get<unknown, Blob>('/products/template', { responseType: 'blob' });
+}
+
+export function importProducts(file: File) {
+  const data = new FormData();
+  data.append('file', file);
+  return request.post<unknown, ProductImportResult>('/products/import', data, { timeout: 120000 });
+}
+
 export interface Product {
   id: number;
   productCode: string;

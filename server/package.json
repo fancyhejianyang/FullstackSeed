@@ -47,6 +47,7 @@
     "chromadb": "^3.5.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
+    "exceljs": "^4.4.0",
     "helmet": "^8.1.0",
     "joi": "^18.0.2",
     "jszip": "^3.10.1",
