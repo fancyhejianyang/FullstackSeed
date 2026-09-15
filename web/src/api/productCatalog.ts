@@ -78,10 +78,14 @@ export interface ProductForm {
 
 export interface ProductSkuForm {
   productId: number;
-  skuCode: string;
+  skuCode?: string;
   name?: string;
   specifications: Record<string, unknown>;
   isEnabled: boolean;
+}
+
+export function getNextSkuCode(productId: number) {
+  return request.get<unknown, { skuCode: string }>(`/products/${productId}/next-sku-code`);
 }
 
 export function getProducts(params: QueryProductParams) {

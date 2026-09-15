@@ -84,6 +84,13 @@ export class ProductCatalogController {
     return this.productCatalogService.findProduct(id);
   }
 
+  @Get('products/:id/next-sku-code')
+  @RequirePermissions('Product.read')
+  @ApiOperation({ summary: '预览产品的下一个 SKU 编码，保存时最终分配' })
+  nextSkuCode(@Param('id', ParseIntPipe) id: number) {
+    return this.productCatalogService.nextSkuCode(id);
+  }
+
   @Post('products')
   @RequirePermissions('Product.create')
   @ApiOperation({ summary: '创建产品' })

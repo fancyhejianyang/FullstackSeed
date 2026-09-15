@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-09-15 SKU 自动编号与内置、自定义参数
+- 新增文件：`server/src/product-catalog/product-sku-code.spec.ts`（编号预览、历史序号、编辑保号、切换产品、重复编码及聊天参数匹配测试）。
+- 修改文件：
+  - `server/src/product-catalog/dto/product-catalog.dto.ts`、`web/src/api/productCatalog.ts`：对齐可选 skuCode，新增编号预览接口类型。
+  - `server/src/product-catalog/product-catalog.controller.ts`、`server/src/product-catalog/product-catalog.service.ts`：预览“产品编号-001”格式；保存时事务锁定所属产品后分配序号，计入已删除的历史编号；同产品编辑保号，切换产品自动重新编号；聊天匹配读取 Label/Value 参数中的真实值。
+  - `web/src/views/product-sku/Edit.vue`：SKU 编码只读自动预览；内置品牌、型号、质量、尺寸、颜色，只填写值；其它参数由 Name、Label、Value 自定义维护。
+  - `web/src/views/product-sku/specifications.ts`、`web/src/views/product-sku/Index.vue`：按 Name 保存 Label/Value 对象，列表显示名称和值；兼容旧中文键、重量及复杂参数值，检查 Name 重复和内置字段占用。
+  - `CHANGELOG.md`：本次修改快照。
+- 删除文件：无；无数据库结构变更。
+- 验证：前后端生产源码类型检查、后端 build 与实体列检查、产品模块 15 项测试、SKU 参数往返与校验脚本、git diff --check 通过；未启动服务，未进行真实数据库并发或浏览器联调。
+- 保留：用户已有 `web/components.d.ts` 改动不纳入提交。
+
 ### 2026-09-15 修复产品列表末尾按钮间距
 - 新增文件：无。
 - 修改文件：`web/src/views/product/Index.vue`、`CHANGELOG.md`。

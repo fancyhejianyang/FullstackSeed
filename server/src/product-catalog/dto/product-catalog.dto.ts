@@ -78,7 +78,8 @@ export class CreateProductSkuDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
-  skuCode: string;
+  @IsOptional()
+  skuCode?: string;
 
   @IsString()
   @MaxLength(160)

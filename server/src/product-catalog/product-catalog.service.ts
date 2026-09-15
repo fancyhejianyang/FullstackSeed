@@ -174,36 +174,60 @@ export class ProductCatalogService {
     return { ...sku, productName: product.name, productCode: product.productCode };
   }
 
+  async nextSkuCode(productId: number) {
+    const product = await this.findProduct(productId);
+    return { skuCode: await this.allocateSkuCode(this.skuRepository, product.productCode) };
+  }
+
   async createSku(dto: CreateProductSkuDto) {
-    await this.findProduct(dto.productId);
-    const skuCode = dto.skuCode.trim();
-    await this.assertSkuCodeUnique(skuCode);
-    return this.skuRepository.save(
-      this.skuRepository.create({
-        productId: dto.productId,
-        skuCode,
-        name: dto.name?.trim() ?? '',
-        specifications: dto.specifications,
-        isEnabled: dto.isEnabled ?? true,
-      }),
-    );
+    return this.saveSku(dto);
   }
 
   async updateSku(id: number, dto: UpdateProductSkuDto) {
-    const sku = await this.findSkuEntity(id);
-    if (dto.productId !== undefined) {
-      await this.findProduct(dto.productId);
-      sku.productId = dto.productId;
-    }
-    if (dto.skuCode !== undefined) {
-      const skuCode = dto.skuCode.trim();
-      if (skuCode !== sku.skuCode) await this.assertSkuCodeUnique(skuCode);
+    return this.saveSku(dto, id);
+  }
+
+  private async saveSku(dto: UpdateProductSkuDto, id?: number) {
+    return this.skuRepository.manager.transaction(async (manager) => {
+      const repository = manager.getRepository(ProductSku);
+      const sku = id === undefined ? repository.create() : await repository.findOne({
+        where: { id }, lock: { mode: 'pessimistic_write' },
+      });
+      if (!sku) throw new NotFoundException('SKU 不存在');
+      const productId = dto.productId ?? sku.productId;
+      // Serialize allocation for the same product; include deleted codes below.
+      const product = await manager.getRepository(Product).findOne({
+        where: { id: productId }, lock: { mode: 'pessimistic_write' },
+      });
+      if (!product) throw new NotFoundException('产品不存在');
+      const productChanged = sku.productId !== productId;
+      const skuCode = dto.skuCode?.trim() || (id === undefined || productChanged
+        ? await this.allocateSkuCode(repository, product.productCode)
+        : sku.skuCode);
+      const duplicate = await repository.findOne({ where: { skuCode }, withDeleted: true });
+      if (duplicate && duplicate.id !== id) throw new ConflictException('SKU 编码已存在');
+      sku.productId = productId;
       sku.skuCode = skuCode;
+      if (dto.name !== undefined || id === undefined) sku.name = dto.name?.trim() ?? '';
+      if (dto.specifications !== undefined) sku.specifications = dto.specifications;
+      if (dto.isEnabled !== undefined || id === undefined) sku.isEnabled = dto.isEnabled ?? true;
+      return repository.save(sku);
+    });
+  }
+
+  private async allocateSkuCode(repository: Repository<ProductSku>, productCode: string) {
+    const prefix = `${productCode}-`;
+    const existing = await repository.find({
+      select: { skuCode: true }, where: { skuCode: Like(`${prefix}%`) }, withDeleted: true,
+    });
+    let maximum = 0;
+    for (const sku of existing) {
+      if (!sku.skuCode.startsWith(prefix)) continue;
+      const suffix = sku.skuCode.slice(prefix.length);
+      if (/^\d+$/.test(suffix)) maximum = Math.max(maximum, Number(suffix));
     }
-    if (dto.name !== undefined) sku.name = dto.name.trim();
-    if (dto.specifications !== undefined) sku.specifications = dto.specifications;
-    if (dto.isEnabled !== undefined) sku.isEnabled = dto.isEnabled;
-    return this.skuRepository.save(sku);
+    if (!Number.isSafeInteger(maximum + 1)) throw new ConflictException('SKU 序号超出范围');
+    return `${prefix}${String(maximum + 1).padStart(3, '0')}`;
   }
 
   async removeSku(id: number) {
@@ -275,11 +299,6 @@ export class ProductCatalogService {
     if (exists) throw new ConflictException('产品编码已存在');
   }
 
-  private async assertSkuCodeUnique(skuCode: string) {
-    const exists = await this.skuRepository.exists({ where: { skuCode } });
-    if (exists) throw new ConflictException('SKU 编码已存在');
-  }
-
   private async getProductMap(ids: number[]) {
     const uniqueIds = Array.from(new Set(ids));
     if (!uniqueIds.length) return new Map<number, Product>();
@@ -311,6 +330,9 @@ export class ProductCatalogService {
   private collectSpecificationTexts(value: Record<string, unknown>) {
     return Object.values(value).flatMap((item) => {
       if (item === null || item === undefined) return [];
+      if (typeof item === 'object' && 'label' in item && typeof item.label === 'string' && 'value' in item) {
+        return [typeof item.value === 'object' ? JSON.stringify(item.value) : String(item.value)];
+      }
       if (typeof item === 'object') return [JSON.stringify(item)];
       return [String(item)];
     });

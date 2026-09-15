@@ -4,11 +4,12 @@ import { ElMessage, type FormRules } from 'element-plus';
 import Dialog from '@/components/Dialog.vue';
 import Button from '@/components/Button.vue';
 import Input from '@/components/Input.vue';
-import { specificationPresets, specificationRows, buildSpecifications, type SpecificationRow } from './specifications';
+import { specificationRows, buildSpecifications, type SpecificationRow } from './specifications';
 import Form, { type FormField } from '@/components/Form.vue';
 import {
   createProductSku,
   getProductOptions,
+  getNextSkuCode,
   getProductSku,
   updateProductSku,
   type ProductOption,
@@ -23,6 +24,7 @@ const formRef = ref<InstanceType<typeof Form>>();
 const loading = ref(false);
 const submitting = ref(false);
 const productOptions = ref<ProductOption[]>([]);
+const loadedSku = ref<ProductSku | null>(null);
 const form = reactive({
   productId: '' as number | '',
   skuCode: '',
@@ -32,11 +34,27 @@ const form = reactive({
 });
 
 const parameters = ref<SpecificationRow[]>([]);
-function addPreset(name: string) {
-  for (const key of specificationPresets[name] ?? []) {
-    if (!parameters.value.some((row) => row.key.trim() === key)) parameters.value.push({ key, value: '' });
+const commonParameters = computed(() => parameters.value.filter((row) => row.builtin));
+const customParameters = computed(() => parameters.value.filter((row) => !row.builtin));
+let previewVersion = 0;
+async function refreshSkuCode(productId: number | '') {
+  const version = ++previewVersion;
+  if (!productId) { form.skuCode = ''; return; }
+  if (loadedSku.value && loadedSku.value.productId === productId) {
+    form.skuCode = loadedSku.value.skuCode;
+    return;
+  }
+  form.skuCode = '';
+  try {
+    const result = await getNextSkuCode(Number(productId));
+    if (version === previewVersion && visible.value) form.skuCode = result.skuCode;
+  } catch {
+    // The request layer displays the error; saving still allocates a code safely.
   }
 }
+watch(() => form.productId, (productId) => {
+  if (!loading.value && visible.value) void refreshSkuCode(productId);
+});
 
 const fields = computed<FormField[]>(() => [
   {
@@ -46,7 +64,7 @@ const fields = computed<FormField[]>(() => [
     options: productOptions.value.map((item) => ({ label: `${item.name}（${item.productCode}）`, value: item.id })),
     hint: '先创建产品，再为同一产品录入不同规格的 SKU。',
   },
-  { prop: 'skuCode', label: 'SKU 编码', type: 'input', placeholder: '如 BLUE-PRO-256-BLUE' },
+  { prop: 'skuCode', label: 'SKU 编码', type: 'input', componentProps: { readonly: true }, placeholder: '选择产品后自动生成', hint: '产品编号 + 序号，例如 PRODUCT-001。保存时分配最终编码。' },
   {
     prop: 'name',
     label: 'SKU 规格名',
@@ -69,31 +87,32 @@ const fields = computed<FormField[]>(() => [
 
 const rules: FormRules = {
   productId: [{ required: true, message: '请选择所属产品', trigger: 'change' }],
-  skuCode: [{ required: true, message: '请输入 SKU 编码', trigger: 'blur' }],
 };
 
 watch(visible, async (value) => {
-  if (!value) return;
+  if (!value) { ++previewVersion; return; }
   loading.value = true;
   try {
     productOptions.value = await getProductOptions();
     if (props.row?.id) fillForm(await getProductSku(props.row.id));
     else resetForm();
+    await refreshSkuCode(form.productId);
   } finally {
     loading.value = false;
   }
 });
 
 function resetForm() {
+  loadedSku.value = null;
   form.productId = productOptions.value.length === 1 ? productOptions.value[0].id : '';
   form.skuCode = '';
   form.name = '';
-  parameters.value = [];
-  addPreset('通用参数');
+  parameters.value = specificationRows({});
   form.isEnabled = true;
 }
 
 function fillForm(data: ProductSku) {
+  loadedSku.value = data;
   form.productId = data.productId;
   form.skuCode = data.skuCode;
   form.name = data.name ?? '';
@@ -105,7 +124,6 @@ function buildPayload(): ProductSkuForm | null {
   if (!form.productId) return null;
   return {
     productId: Number(form.productId),
-    skuCode: form.skuCode.trim(),
     name: form.name.trim(),
     specifications: buildSpecifications(parameters.value),
     isEnabled: form.isEnabled,
@@ -113,6 +131,7 @@ function buildPayload(): ProductSkuForm | null {
 }
 
 async function handleSubmit() {
+  if (loading.value || submitting.value) return;
   await formRef.value?.validate();
   let payload: ProductSkuForm | null;
   try { payload = buildPayload(); }
@@ -139,20 +158,28 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <Dialog v-model="visible" :title="props.row ? '编辑 SKU' : '新增 SKU'" width="820px" :confirm-loading="submitting" @confirm="handleSubmit">
+  <Dialog v-model="visible" :title="props.row ? '编辑 SKU' : '新增 SKU'" width="1000px" :confirm-loading="submitting" @confirm="handleSubmit">
     <div v-loading="loading">
       <Form ref="formRef" v-model="form" :fields="fields" :rules="rules" label-width="120px">
         <template #field-specifications>
           <div class="parameters">
-            <div class="parameters__actions">
-              <Button v-for="(_, name) in specificationPresets" :key="name" size="small" @click="addPreset(String(name))">添加{{ name }}</Button>
-              <Button size="small" icon="Plus" @click="parameters.push({ key: '', value: '' })">自定义参数</Button>
+            <h4>内置通用参数</h4>
+            <p class="parameters__hint">填写真实参数及单位，留空不保存。</p>
+            <div v-for="parameter in commonParameters" :key="parameter.name" class="parameters__common-row">
+              <span>{{ parameter.label }}</span>
+              <Input v-model="parameter.value" placeholder="参数值（含单位）" :aria-label="parameter.label" />
             </div>
-            <p class="parameters__hint">填写真实参数及单位，例如 540 克、220 伏。空值不保存；添加预设不会覆盖已有参数。已有复杂参数保持原格式，修改后按文本保存。</p>
-            <div v-for="(parameter, index) in parameters" :key="index" class="parameters__row">
-              <Input v-model="parameter.key" placeholder="参数名称" aria-label="参数名称" />
-              <Input v-model="parameter.value" mode="textarea" :rows="2" placeholder="参数值（含单位）" aria-label="参数值" />
-              <Button size="small" icon="Delete" @click="parameters.splice(index, 1)">移除</Button>
+            <h4>自定义参数</h4>
+            <div class="parameters__actions">
+              <Button size="small" icon="Plus" @click="parameters.push({ name: '', label: '', value: '' })">添加自定义参数</Button>
+            </div>
+            <p class="parameters__hint">Name 为字段名，Label 为显示名称，Value 为参数值。例如 ratedVoltage / 额定电压 / 220 伏。Name 不能重复或占用内置字段。</p>
+            <div v-if="customParameters.length" class="parameters__row"><span>Name</span><span>Label</span><span>Value</span><span /></div>
+            <div v-for="(parameter, index) in customParameters" :key="index" class="parameters__row">
+              <Input v-model="parameter.name" placeholder="字段名" aria-label="Name" />
+              <Input v-model="parameter.label" placeholder="显示名称" aria-label="Label" />
+              <Input v-model="parameter.value" mode="textarea" :rows="2" placeholder="参数值（含单位）" aria-label="Value" />
+              <Button size="small" icon="Delete" @click="parameters.splice(parameters.indexOf(parameter), 1)">移除</Button>
             </div>
           </div>
         </template>
@@ -165,5 +192,6 @@ async function handleSubmit() {
 .parameters { width: 100%; }
 .parameters__actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .parameters__hint { color: var(--el-text-color-secondary); font-size: 12px; line-height: 1.6; }
-.parameters__row { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(160px, 2fr) auto; align-items: start; gap: 8px; margin-bottom: 10px; }
+.parameters__common-row { display: grid; grid-template-columns: 70px 1fr; align-items: center; gap: 8px; margin-bottom: 10px; }
+.parameters__row { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(100px, 1fr) minmax(140px, 2fr) 64px; align-items: start; gap: 8px; margin-bottom: 10px; }
 </style>

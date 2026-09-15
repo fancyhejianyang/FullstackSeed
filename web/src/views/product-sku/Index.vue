@@ -13,6 +13,7 @@ import {
   type QueryProductSkuParams,
 } from '@/api/productCatalog';
 import Edit from './Edit.vue';
+import { formatSpecifications } from './specifications';
 
 const tableRef = ref<{ refresh: () => Promise<void>; runBatchDelete: () => Promise<void> }>();
 const editVisible = ref(false);
@@ -63,9 +64,6 @@ function batchDeleteRequest(payload: { ids: Array<number | string> }) {
   return batchDeleteProductSkus(payload.ids);
 }
 
-function formatSpecifications(value: Record<string, unknown>) {
-  return Object.entries(value ?? {}).map(([key, item]) => `${key}：${typeof item === 'string' ? item : JSON.stringify(item)}`).join('；') || '-';
-}
 </script>
 
 <template>

@@ -1,34 +1,62 @@
 export interface SpecificationRow {
-  key: string;
+  name: string;
+  label: string;
+  builtin?: boolean;
   value: string;
   originalText?: string;
   originalValue?: unknown;
 }
 
-export const specificationPresets: Record<string, string[]> = {
-  通用参数: ['品牌', '型号', '尺寸', '重量', '材质', '颜色', '包装清单', '产品用途'],
-  空气净化器: ['品牌', '型号', '颗粒物累计净化量等级', '气态污染物累计净化量等级', '高效滤网等级', '净化方式', '空气质量显示', '颗粒物洁净空气量', '气态洁净空气量', '最低档噪声', '电机类型', '额定功率', '额定电压', '包装清单'],
-  仪表参数: ['品牌', '型号', '尺寸', '重量', '材质', '温度范围', '额定压力', '过压保护', '测量范围', '精度', '过程连接', '产品用途'],
-};
+export const commonSpecifications = [
+  { name: 'brand', label: '品牌' },
+  { name: 'model', label: '型号' },
+  { name: 'dimensions', label: '尺寸' },
+  { name: 'weight', label: '质量' },
+  { name: 'color', label: '颜色' },
+];
 
 export function specificationRows(value: Record<string, unknown>): SpecificationRow[] {
-  return Object.entries(value).map(([key, originalValue]) => {
+  const rows: SpecificationRow[] = commonSpecifications.map((item) => ({ ...item, value: '', builtin: true }));
+  const filled = new Set<string>();
+  for (const [name, raw] of Object.entries(value)) {
+    const structured = raw !== null && typeof raw === 'object' && 'label' in raw && typeof raw.label === 'string' && 'value' in raw;
+    const label = structured ? raw.label as string : name;
+    const originalValue = structured ? raw.value : raw;
     const text = typeof originalValue === 'string' ? originalValue : JSON.stringify(originalValue);
-    return { key, value: text, originalText: text, originalValue };
-  });
+    const builtin = rows.find((item) => item.builtin && (item.name === name || item.label === name || (item.name === 'weight' && name === '重量')));
+    if (builtin && !filled.has(builtin.name)) {
+      Object.assign(builtin, { value: text, originalText: text, originalValue });
+      filled.add(builtin.name);
+    } else {
+      rows.push({ name, label, value: text, originalText: text, originalValue });
+    }
+  }
+  return rows;
 }
 
 export function buildSpecifications(rows: SpecificationRow[]): Record<string, unknown> {
   const entries: Array<[string, unknown]> = [];
   const keys = new Set<string>();
   for (const row of rows) {
-    const key = row.key.trim();
+    const key = row.name.trim();
+    const label = row.label.trim();
     const value = row.value.trim();
-    if (!value) continue;
-    if (!key) throw new Error('请为已填写的参数值填写参数名称');
-    if (keys.has(key)) throw new Error(`参数名称重复：${key}`);
-    keys.add(key);
-    entries.push([key, row.value === row.originalText ? row.originalValue : value]);
+    if (row.builtin && !value) continue;
+    if (!row.builtin && !key && !label && !value) continue;
+    if (!key || !label || !value) throw new Error('自定义参数的 Name、Label、Value 均需填写');
+    if (!row.builtin && commonSpecifications.some((item) => item.name.toLowerCase() === key.toLowerCase())) throw new Error(`Name 为内置参数保留：${key}`);
+    if (keys.has(key.toLowerCase())) throw new Error(`参数 Name 重复：${key}`);
+    keys.add(key.toLowerCase());
+    entries.push([key, { label, value: row.value === row.originalText ? row.originalValue : value }]);
   }
   return Object.fromEntries(entries);
+}
+
+export function formatSpecifications(specifications: Record<string, unknown>): string {
+  return Object.entries(specifications ?? {}).map(([name, raw]) => {
+    const structured = raw !== null && typeof raw === 'object' && 'label' in raw && typeof raw.label === 'string' && 'value' in raw;
+    const label = structured ? raw.label : name;
+    const value = structured ? raw.value : raw;
+    return `${label}：${typeof value === 'string' ? value : JSON.stringify(value)}`;
+  }).join('；') || '-';
 }
