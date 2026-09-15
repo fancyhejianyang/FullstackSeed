@@ -1,6 +1,5 @@
 import type { Repository } from 'typeorm';
 import { KnowledgeAiChatMessage } from '../knowledge-ai-chat/entities/knowledge-ai-chat-message.entity';
-import { KnowledgeRetrievalConfig } from '../knowledge-retrieval-configs/entities/knowledge-retrieval-config.entity';
 import { KnowledgeStandardQa } from './entities/knowledge-standard-qa.entity';
 import { KnowledgeStandardQasService } from './knowledge-standard-qas.service';
 
@@ -39,7 +38,6 @@ describe('KnowledgeStandardQasService', () => {
   };
   const service = new KnowledgeStandardQasService(
     qaRepository as unknown as Repository<KnowledgeStandardQa>,
-    {} as Repository<KnowledgeRetrievalConfig>,
     {} as Repository<KnowledgeAiChatMessage>,
   );
 
@@ -50,7 +48,7 @@ describe('KnowledgeStandardQasService', () => {
     queryBuilder.orderBy.mockReturnValue(queryBuilder);
   });
 
-  it('uses an exact alias match and gives the active retrieval configuration precedence', async () => {
+  it('matches the shared library without giving historical workflow scopes precedence', async () => {
     const globalQa = createQa(10, null, ['年假有几天']);
     const scopedQa = createQa(3, 7, ['年假有几天']);
     queryBuilder.getMany.mockResolvedValue([globalQa, scopedQa]);
@@ -60,10 +58,14 @@ describe('KnowledgeStandardQasService', () => {
       question: '年假，有几天？',
     });
 
-    expect(result?.entry).toBe(scopedQa);
-    expect(result?.matchedEntries.map((item) => item.id)).toEqual([3, 10]);
+    expect(result?.entry).toBe(globalQa);
+    expect(result?.matchedEntries.map((item) => item.id)).toEqual([10, 3]);
+    expect(queryBuilder.andWhere).toHaveBeenCalledTimes(2);
+    expect(queryBuilder.andWhere.mock.calls.every(([condition]) =>
+      typeof condition === 'string' && !condition.includes('retrievalConfigId'),
+    )).toBe(true);
     expect(qaRepository.update).toHaveBeenCalledWith(
-      scopedQa.id,
+      globalQa.id,
       expect.objectContaining({ hitCount: 3, lastHitAt: expect.any(Date) }),
     );
   });

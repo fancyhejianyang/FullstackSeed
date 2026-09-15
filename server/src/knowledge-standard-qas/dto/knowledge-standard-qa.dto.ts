@@ -1,5 +1,5 @@
 import { PartialType } from '@nestjs/swagger';
-import { Transform, Type } from 'class-transformer';
+import { Type } from 'class-transformer';
 import {
   IsArray,
   IsDateString,
@@ -29,11 +29,6 @@ export class CreateKnowledgeStandardQaDto {
   @IsString()
   answer: string;
 
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @IsOptional()
-  retrievalConfigId?: number | null;
 
   @IsIn(KNOWLEDGE_STANDARD_QA_STATUSES)
   @IsOptional()
@@ -83,11 +78,6 @@ export class QueryKnowledgeStandardQaDto {
   @IsOptional()
   keyword?: string;
 
-  @Transform(({ value }) => (value === '' || value == null ? undefined : Number(value)))
-  @IsInt()
-  @Min(1)
-  @IsOptional()
-  retrievalConfigId?: number;
 
   @IsIn(KNOWLEDGE_STANDARD_QA_STATUSES)
   @IsOptional()

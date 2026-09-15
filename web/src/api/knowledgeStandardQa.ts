@@ -7,8 +7,6 @@ export interface KnowledgeStandardQa {
   question: string;
   aliases: string[] | null;
   answer: string;
-  retrievalConfigId: number | null;
-  retrievalConfigName: string;
   status: KnowledgeStandardQaStatus;
   effectiveAt: string | null;
   expiresAt: string | null;
@@ -31,7 +29,6 @@ export interface QueryKnowledgeStandardQaParams {
   page?: number;
   pageSize?: number;
   keyword?: string;
-  retrievalConfigId?: number | '';
   status?: KnowledgeStandardQaStatus | '';
 }
 
@@ -39,7 +36,6 @@ export interface KnowledgeStandardQaForm {
   question: string;
   aliases?: string[];
   answer: string;
-  retrievalConfigId?: number | null;
   status?: KnowledgeStandardQaStatus;
   sourceChatMessageId?: number | null;
   sourceChunkIds?: number[];

@@ -1006,7 +1006,6 @@ export class KnowledgeAiChatService {
         (entry): KnowledgeAiQaTraceEntry => ({
           id: entry.id,
           question: entry.question,
-          retrievalConfigId: entry.retrievalConfigId ?? null,
         }),
       ),
       selectedEntryId: match?.entry.id ?? null,

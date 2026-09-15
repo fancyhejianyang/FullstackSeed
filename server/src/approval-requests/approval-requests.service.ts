@@ -143,7 +143,6 @@ export class ApprovalRequestsService {
       question: qa.question,
       answer: qa.answer,
       aliases: qa.aliases ?? [],
-      retrievalConfigId: qa.retrievalConfigId,
       effectiveAt: qa.effectiveAt,
       expiresAt: qa.expiresAt,
       sourceChatMessageId: qa.sourceChatMessageId,

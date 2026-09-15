@@ -10,7 +10,6 @@ import type {
 export interface KnowledgeAiQaTraceEntry {
   id: number;
   question: string;
-  retrievalConfigId: number | null;
 }
 
 export interface KnowledgeAiQaTraceStage {

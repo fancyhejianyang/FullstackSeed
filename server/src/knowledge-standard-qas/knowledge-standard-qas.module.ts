@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { KnowledgeAiChatMessage } from '../knowledge-ai-chat/entities/knowledge-ai-chat-message.entity';
-import { KnowledgeRetrievalConfig } from '../knowledge-retrieval-configs/entities/knowledge-retrieval-config.entity';
 import { KnowledgeStandardQasController } from './knowledge-standard-qas.controller';
 import { KnowledgeStandardQasService } from './knowledge-standard-qas.service';
 import { KnowledgeStandardQa } from './entities/knowledge-standard-qa.entity';
@@ -10,7 +9,6 @@ import { KnowledgeStandardQa } from './entities/knowledge-standard-qa.entity';
   imports: [
     TypeOrmModule.forFeature([
       KnowledgeStandardQa,
-      KnowledgeRetrievalConfig,
       KnowledgeAiChatMessage,
     ]),
   ],

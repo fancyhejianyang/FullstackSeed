@@ -4,9 +4,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, In, Like, Repository } from 'typeorm';
+import { In, Like, Repository } from 'typeorm';
 import { KnowledgeAiChatMessage } from '../knowledge-ai-chat/entities/knowledge-ai-chat-message.entity';
-import { KnowledgeRetrievalConfig } from '../knowledge-retrieval-configs/entities/knowledge-retrieval-config.entity';
 import {
   BatchDeleteKnowledgeStandardQaDto,
   CreateKnowledgeStandardQaDto,
@@ -20,7 +19,7 @@ import {
 
 export interface KnowledgeStandardQaMatch {
   entry: KnowledgeStandardQa;
-  /** 所有精确命中的候选；entry 是按专属范围与最新记录选出的最终答案。 */
+  /** 所有精确命中的候选；重复问题按最新记录选出最终答案。 */
   matchedEntries: KnowledgeStandardQa[];
 }
 
@@ -29,8 +28,6 @@ export class KnowledgeStandardQasService {
   constructor(
     @InjectRepository(KnowledgeStandardQa)
     private readonly qaRepository: Repository<KnowledgeStandardQa>,
-    @InjectRepository(KnowledgeRetrievalConfig)
-    private readonly retrievalConfigRepository: Repository<KnowledgeRetrievalConfig>,
     @InjectRepository(KnowledgeAiChatMessage)
     private readonly chatMessageRepository: Repository<KnowledgeAiChatMessage>,
   ) {}
@@ -40,9 +37,6 @@ export class KnowledgeStandardQasService {
     const pageSize = query.pageSize ?? 10;
     const where = {
       ...(query.status ? { status: query.status } : {}),
-      ...(query.retrievalConfigId
-        ? { retrievalConfigId: query.retrievalConfigId }
-        : {}),
     };
     const conditions = query.keyword?.trim()
       ? [
@@ -128,29 +122,13 @@ export class KnowledgeStandardQasService {
       .where('qa.status = :status', { status: 'published' })
       .andWhere('(qa.effectiveAt IS NULL OR qa.effectiveAt <= :now)', { now })
       .andWhere('(qa.expiresAt IS NULL OR qa.expiresAt >= :now)', { now })
-      .andWhere(
-        new Brackets((qb) => {
-          qb.where('qa.retrievalConfigId IS NULL');
-          if (params.retrievalConfigId) {
-            qb.orWhere('qa.retrievalConfigId = :retrievalConfigId', {
-              retrievalConfigId: params.retrievalConfigId,
-            });
-          }
-        }),
-      )
       .orderBy('qa.id', 'DESC')
       .getMany();
     if (!entries.length) return null;
 
     const matchedEntries = entries
       .filter((entry) => this.matchesQuestion(entry, normalizedQuestion))
-      .sort((left, right) => {
-        const leftIsScoped =
-          left.retrievalConfigId === params.retrievalConfigId ? 1 : 0;
-        const rightIsScoped =
-          right.retrievalConfigId === params.retrievalConfigId ? 1 : 0;
-        return rightIsScoped - leftIsScoped || right.id - left.id;
-      });
+      .sort((left, right) => right.id - left.id);
     const winner = matchedEntries[0];
     if (!winner) return null;
     await this.qaRepository.update(winner.id, {
@@ -187,11 +165,6 @@ export class KnowledgeStandardQasService {
     }
     if (dto.aliases !== undefined)
       payload.aliases = this.normalizeTexts(dto.aliases);
-    if (dto.retrievalConfigId !== undefined) {
-      const id = dto.retrievalConfigId ? Number(dto.retrievalConfigId) : null;
-      if (id) await this.assertRetrievalConfig(id);
-      payload.retrievalConfigId = id;
-    }
     if (dto.status !== undefined || isCreate) {
       if (dto.status === 'pending' || dto.status === 'published') {
         throw new BadRequestException('请通过审批流程提交或发布标准问答');
@@ -238,34 +211,7 @@ export class KnowledgeStandardQasService {
   }
 
   private async toViews(entries: KnowledgeStandardQa[]) {
-    if (!entries.length) return [];
-    const configIds = Array.from(
-      new Set(
-        entries
-          .map((item) => item.retrievalConfigId)
-          .filter((id): id is number => !!id),
-      ),
-    );
-    const configs = configIds.length
-      ? await this.retrievalConfigRepository.find({
-          where: { id: In(configIds) },
-        })
-      : [];
-    const configMap = new Map(configs.map((item) => [item.id, item.name]));
-    return entries.map((entry) => ({
-      ...entry,
-      retrievalConfigName: entry.retrievalConfigId
-        ? (configMap.get(entry.retrievalConfigId) ??
-          `AI 工作流 #${entry.retrievalConfigId}`)
-        : '全局',
-    }));
-  }
-
-  private async assertRetrievalConfig(id: number) {
-    const config = await this.retrievalConfigRepository.findOne({
-      where: { id },
-    });
-    if (!config) throw new BadRequestException('所属 AI 工作流不存在');
+    return entries.map(({ retrievalConfigId: _legacyScope, ...entry }) => entry);
   }
 
   private async findEntity(id: number) {

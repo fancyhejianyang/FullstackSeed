@@ -302,7 +302,7 @@ async function handleView(row: KnowledgeAiChatSession) {
                     effect="light"
                     size="small"
                   >
-                    #{{ entry.id }} {{ entry.question }}（{{ entry.retrievalConfigId ? `配置 #${entry.retrievalConfigId}` : '全局' }}）
+                    #{{ entry.id }} {{ entry.question }}
                   </el-tag>
                 </div>
                 <span v-if="message.processingTrace.originalQa.skippedReason" class="ai-record__trace-muted">{{ message.processingTrace.originalQa.skippedReason }}</span>
@@ -342,7 +342,7 @@ async function handleView(row: KnowledgeAiChatSession) {
                     effect="light"
                     size="small"
                   >
-                    #{{ entry.id }} {{ entry.question }}（{{ entry.retrievalConfigId ? `配置 #${entry.retrievalConfigId}` : '全局' }}）
+                    #{{ entry.id }} {{ entry.question }}
                   </el-tag>
                 </div>
                 <span v-if="message.processingTrace.calibratedQa.skippedReason" class="ai-record__trace-muted">{{ message.processingTrace.calibratedQa.skippedReason }}</span>

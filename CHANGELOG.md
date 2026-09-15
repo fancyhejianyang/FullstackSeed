@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-09-15 标准问答库独立于工作流
+- 新增：无。
+- 修改：
+  - `web/src/views/knowledge-standard-qa/Edit.vue`、`web/src/api/knowledgeStandardQa.ts`、`server/src/knowledge-standard-qas/dto/knowledge-standard-qa.dto.ts`（移除适用工作流、范围参数及配置列表请求）。
+  - `server/src/knowledge-standard-qas/knowledge-standard-qas.service.ts`、`server/src/knowledge-standard-qas/knowledge-standard-qas.module.ts`（移除检索配置依赖、范围过滤和范围优先级；统一匹配已发布且有效的标准问题及相似问法，重复命中按最新 ID 选择）。
+  - `server/src/knowledge-standard-qas/entities/knowledge-standard-qa.entity.ts`（历史范围列保留但不再读写或参与匹配）。
+  - `server/src/knowledge-standard-qas/knowledge-standard-qas.service.spec.ts`（将原范围优先级用例更新为共享库匹配回归用例）。
+  - `server/src/approval-requests/approval-requests.service.ts`、`server/src/knowledge-ai-chat/knowledge-ai-chat.service.ts`、`server/src/knowledge-ai-chat/knowledge-ai-chat-trace.ts`、`web/src/api/knowledgeAiChat.ts`、`web/src/views/knowledge-ai-record/Index.vue`（审批快照、问答命中快照及展示不再携带标准问答的工作流范围）。
+- 删除：无。
+- 说明：工作流节点继续控制是否查询标准问答库；以前绑定其它配置的条目同样参与查询，无需迁移数据。审批、发布状态、有效期和精确匹配规则保留。
+- 验证：仅做前端与后端生产源码类型检查、git diff --check；不构建、不启动服务，不运行单元测试。
+
 ### 2026-09-15 问答测试明确选择聊天配置与工作流
 - 新增：无。
 - 修改：

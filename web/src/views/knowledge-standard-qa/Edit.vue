@@ -10,10 +10,6 @@ import {
   type KnowledgeStandardQa,
   type KnowledgeStandardQaForm,
 } from '@/api/knowledgeStandardQa';
-import {
-  getKnowledgeRetrievalConfigs,
-  type KnowledgeRetrievalConfig,
-} from '@/api/knowledgeRetrievalConfig';
 
 export type KnowledgeStandardQaPrefill = {
   question: string;
@@ -32,13 +28,11 @@ const visible = defineModel<boolean>('visible', { required: true });
 const formRef = ref<InstanceType<typeof Form>>();
 const loading = ref(false);
 const submitting = ref(false);
-const retrievalConfigs = ref<KnowledgeRetrievalConfig[]>([]);
 
 type StandardQaEditForm = {
   question: string;
   aliasesText: string;
   answer: string;
-  retrievalConfigId: number | '';
   sourceChatMessageId: number | null;
   sourceChunkIds: number[];
 };
@@ -47,14 +41,9 @@ const form = reactive<StandardQaEditForm>({
   question: '',
   aliasesText: '',
   answer: '',
-  retrievalConfigId: '',
   sourceChatMessageId: null,
   sourceChunkIds: [],
 });
-
-const retrievalConfigOptions = computed(() => [
-  ...retrievalConfigs.value.map((item) => ({ label: item.name, value: item.id })),
-]);
 
 const fields = computed<FormField[]>(() => [
   {
@@ -74,16 +63,6 @@ const fields = computed<FormField[]>(() => [
     hint: '会忽略大小写、空格和标点；不会按关键词或语义进行模糊猜测。',
   },
   { prop: 'answer', label: '标准答案', type: 'textarea', rows: 8, placeholder: '支持 Markdown、链接和图片' },
-  {
-    prop: 'retrievalConfigId',
-    label: '适用 AI 工作流',
-    type: 'select',
-    options: retrievalConfigOptions.value,
-    placeholder: '不选则在所有应用中生效',
-    hint: form.retrievalConfigId
-      ? '当前仅在所选 AI 工作流的应用中参与标准问答匹配。'
-      : '未限制适用范围：所有启用的 AI 工作流均可命中本条问答。',
-  },
 ]);
 
 const rules = computed<FormRules>(() => ({
@@ -95,8 +74,6 @@ watch(visible, async (value) => {
   if (!value) return;
   loading.value = true;
   try {
-    const result = await getKnowledgeRetrievalConfigs({ page: 1, pageSize: 500 });
-    retrievalConfigs.value = result.list;
     if (props.row?.id) {
       fillForm(await getKnowledgeStandardQa(props.row.id));
     } else {
@@ -111,7 +88,6 @@ function resetForm(prefill?: KnowledgeStandardQaPrefill | null) {
   form.question = prefill?.question ?? '';
   form.aliasesText = '';
   form.answer = prefill?.answer ?? '';
-  form.retrievalConfigId = '';
   form.sourceChatMessageId = prefill?.sourceChatMessageId ?? null;
   form.sourceChunkIds = prefill?.sourceChunkIds ?? [];
 }
@@ -120,7 +96,6 @@ function fillForm(data: KnowledgeStandardQa) {
   form.question = data.question ?? '';
   form.aliasesText = (data.aliases ?? []).join('\n');
   form.answer = data.answer ?? '';
-  form.retrievalConfigId = data.retrievalConfigId ?? '';
   form.sourceChatMessageId = data.sourceChatMessageId ?? null;
   form.sourceChunkIds = data.sourceChunkIds ?? [];
 }
@@ -134,7 +109,6 @@ function buildPayload(): KnowledgeStandardQaForm {
     question: form.question.trim(),
     aliases: splitTexts(form.aliasesText, /\r?\n/),
     answer: form.answer.trim(),
-    retrievalConfigId: form.retrievalConfigId ? Number(form.retrievalConfigId) : null,
     sourceChatMessageId: form.sourceChatMessageId,
     sourceChunkIds: form.sourceChunkIds,
   };

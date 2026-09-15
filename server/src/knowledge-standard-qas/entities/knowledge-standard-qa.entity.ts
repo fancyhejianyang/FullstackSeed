@@ -23,7 +23,7 @@ export class KnowledgeStandardQa extends BaseEntity {
   answer: string;
 
   /**
-   * 为空时代表全局标准问答；填写后只在同一检索配置的聊天应用中生效。
+   * 历史范围字段，仅保留数据库列；标准问答统一共享，不再读写或参与匹配。
    */
   @Index()
   @Column({ type: 'int', nullable: true })
