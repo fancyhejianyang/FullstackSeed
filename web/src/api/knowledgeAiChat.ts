@@ -121,6 +121,19 @@ export interface ProductSkuChatContext {
 
 export interface KnowledgeAiProcessingTrace {
   version: 1;
+  execution?: {
+    status: 'running' | 'success' | 'failed';
+    startedAt: string;
+    finishedAt: string | null;
+    stages: Array<{
+      name: string;
+      status: 'running' | 'success' | 'failed';
+      startedAt: string;
+      finishedAt: string | null;
+      elapsedMilliseconds: number;
+      errorMessage: string | null;
+    }>;
+  };
   retrievalConfig: KnowledgeRetrievalConfigSnapshot | null;
   originalQa: KnowledgeAiQaTraceStage;
   colloquial: {
@@ -342,7 +355,9 @@ export interface AskKnowledgeAiStreamOptions {
 }
 
 export function askKnowledgeAi(data: AskKnowledgeAiPayload) {
-  return request.post<unknown, AskKnowledgeAiResult>('/knowledge-ai-chat/ask', data);
+  return request.post<unknown, AskKnowledgeAiResult>('/knowledge-ai-chat/ask', data, {
+    timeout: 300000,
+  });
 }
 
 export async function initKnowledgeAiSession(

@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Like, Repository } from 'typeorm';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-configs.service';
 import { AiFeatureConfig } from '../ai-feature-configs/entities/ai-feature-config.entity';
 import { ExternalApp } from '../external-apps/entities/external-app.entity';
@@ -117,6 +118,12 @@ const USER_VISIBLE_THINKING_FORBIDDEN_PATTERN =
 
 @Injectable()
 export class KnowledgeAiChatService {
+  private readonly activeTrace = new AsyncLocalStorage<{
+    messageId: number;
+    sessionId: number;
+    trace: KnowledgeAiProcessingTrace;
+  }>();
+
   constructor(
     @InjectRepository(KnowledgeAiChatSession)
     private readonly sessionRepository: Repository<KnowledgeAiChatSession>,
@@ -155,6 +162,178 @@ export class KnowledgeAiChatService {
     return { list, total };
   }
 
+  /** 每轮独立上下文，避免并发会话相互覆盖阶段。数据库记录先于耗时操作创建。 */
+  private async withProgress<T>(
+    dto: AskKnowledgeAiDto,
+    run: (dto: AskKnowledgeAiDto) => Promise<T>,
+  ): Promise<T> {
+    const session = dto.sessionId
+      ? await this.findSessionEntity(dto.sessionId)
+      : await this.createSession(dto, {
+          providerId: dto.providerId ?? 0,
+          providerName: '配置加载中',
+          model: dto.model ?? '待确定',
+        });
+    const pending = '尚未执行；请查看执行阶段记录。';
+    const qa = this.buildQaTraceStage(dto.question, false, null, pending);
+    const trace: KnowledgeAiProcessingTrace = {
+      version: 1,
+      execution: {
+        status: 'running',
+        startedAt: new Date().toISOString(),
+        finishedAt: null,
+        stages: [],
+      },
+      retrievalConfig: null,
+      originalQa: qa,
+      calibratedQa: { ...qa },
+      colloquial: {
+        evaluated: false,
+        inputQuestion: dto.question,
+        rewrittenQuestion: dto.question,
+        matched: false,
+        matches: [],
+        semanticConstraintApplied: false,
+        skippedReason: pending,
+      },
+      routing: {
+        executed: false,
+        matchedRules: [],
+        routedKnowledgeBases: [],
+        activeKnowledgeBaseId: null,
+        sessionContextReused: false,
+        inventoryQuery: false,
+        skippedReason: pending,
+      },
+      retrieval: {
+        executed: false,
+        hasReference: false,
+        statistics: this.emptyRetrievalStatistics(),
+        selectedHitCount: 0,
+        skippedReason: pending,
+      },
+      rerank: { configured: false, applied: false, skippedReason: pending },
+      businessData: {
+        authorized: false,
+        executed: false,
+        matched: false,
+        context: null,
+        skippedReason: pending,
+      },
+    };
+    const message = await this.messageRepository.save(
+      this.messageRepository.create({
+        sessionId: session.id,
+        providerId: session.providerId,
+        providerName: session.providerName,
+        model: session.model,
+        question: dto.question.trim(),
+        retrievalConfigId: dto.retrievalConfigId ?? null,
+        processingTrace: trace,
+        isSuccess: false,
+        errorMessage: null,
+        elapsedMilliseconds: 0,
+      }),
+    );
+    session.messageCount += 1;
+    session.lastQuestion = dto.question.trim();
+    session.lastAnswer = null;
+    session.isSuccess = false;
+    session.errorMessage = '处理中';
+    await this.sessionRepository.save(session);
+    return this.activeTrace.run(
+      { messageId: message.id, sessionId: session.id, trace },
+      async () => {
+        try {
+          await this.recordStage('加载聊天配置与工作流');
+          return await run({ ...dto, sessionId: session.id });
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : '问答处理失败';
+          this.finishStage('failed', errorMessage);
+          const elapsedMilliseconds =
+            Date.now() - Date.parse(trace.execution!.startedAt);
+          await this.messageRepository.save({
+            id: message.id,
+            processingTrace: trace,
+            isSuccess: false,
+            errorMessage,
+            elapsedMilliseconds,
+          });
+          await this.sessionRepository.update(session.id, {
+            isSuccess: false,
+            errorMessage,
+            elapsedMilliseconds,
+          });
+          throw error;
+        }
+      },
+    );
+  }
+
+  private finishStage(
+    status: 'success' | 'failed',
+    errorMessage: string | null = null,
+  ) {
+    const execution = this.activeTrace.getStore()?.trace.execution;
+    if (!execution) return;
+    const now = new Date().toISOString();
+    const stage = execution.stages.at(-1);
+    if (stage) {
+      stage.status = status;
+      stage.finishedAt = now;
+      stage.elapsedMilliseconds = Date.parse(now) - Date.parse(stage.startedAt);
+      stage.errorMessage = errorMessage;
+    }
+    execution.status = status;
+    execution.finishedAt = now;
+  }
+
+  private async recordStage(name: string) {
+    const active = this.activeTrace.getStore();
+    if (!active?.trace.execution) return;
+    this.finishStage('success');
+    const execution = active.trace.execution;
+    execution.status = 'running';
+    execution.finishedAt = null;
+    execution.stages.push({
+      name,
+      status: 'running',
+      startedAt: new Date().toISOString(),
+      finishedAt: null,
+      elapsedMilliseconds: 0,
+      errorMessage: null,
+    });
+    await this.messageRepository.save({
+      id: active.messageId,
+      processingTrace: active.trace,
+    });
+    await this.sessionRepository.update(active.sessionId, {
+      errorMessage: `处理中：${name}`,
+    });
+  }
+
+  private async recordCompletedRetrieval(
+    standardQa: KnowledgeStandardQaState,
+    retrieval: KnowledgeRetrievalState,
+  ) {
+    const active = this.activeTrace.getStore();
+    const completedTrace = this.buildProcessingTrace(standardQa, retrieval);
+    if (!active || !completedTrace) return;
+    Object.assign(active.trace, completedTrace);
+    await this.messageRepository.save({
+      id: active.messageId,
+      processingTrace: active.trace,
+      retrievalQuery: retrieval.query,
+      retrievalHits: retrieval.hits,
+      hitKnowledgeBaseIds: retrieval.knowledgeBaseIds,
+      hitChunkIds: retrieval.chunkIds,
+      hitKnowledgeBaseNames: this.serializeKnowledgeBaseNames(
+        retrieval.knowledgeBaseNames,
+      ),
+    });
+  }
+
   async findSession(id: number) {
     const session = await this.findSessionEntity(id);
     const messages = await this.messageRepository.find({
@@ -165,6 +344,10 @@ export class KnowledgeAiChatService {
   }
 
   async ask(dto: AskKnowledgeAiDto) {
+    return this.withProgress(dto, (trackedDto) => this.askInternal(trackedDto));
+  }
+
+  private async askInternal(dto: AskKnowledgeAiDto) {
     if (!dto.retrievalConfigId) {
       throw new BadRequestException('AI 问答测试必须选择检索策略');
     }
@@ -185,36 +368,56 @@ export class KnowledgeAiChatService {
       enableColloquial: workflow.enableColloquial,
       enableCalibratedStandardQa: workflow.enableCalibratedStandardQa,
     });
+    const activeQa = this.activeTrace.getStore();
+    if (activeQa) {
+      Object.assign(activeQa.trace, {
+        originalQa: standardQa.originalQa,
+        colloquial: standardQa.colloquial,
+        calibratedQa: standardQa.calibratedQa,
+      });
+      await this.messageRepository.save({
+        id: activeQa.messageId,
+        processingTrace: activeQa.trace,
+      });
+    }
     const businessDataAuthorization = this.resolveBusinessDataAuthorization(
       configuredTrace,
       workflow,
     );
     const businessDataAuthorized = businessDataAuthorization.authorized;
+    if (!standardQa.answer && businessDataAuthorized) {
+      await this.recordStage('业务数据查询');
+    }
     const businessContext = standardQa.answer
       ? null
       : businessDataAuthorized
-        ? await this.commandService.lookupProductSku(standardQa.rewrittenQuestion)
+        ? await this.commandService.lookupProductSku(
+            standardQa.rewrittenQuestion,
+          )
         : null;
-    const retrieval = standardQa.answer || !workflow.enableKnowledgeRetrieval
-      ? this.emptyRetrievalState(
-          retrievalConfigId,
-          configuredTrace,
-          standardQa.rewrittenQuestion,
-          standardQa.semanticContext,
-          businessContext,
-          businessDataAuthorized,
-          workflow.enableKnowledgeRetrieval,
-          businessDataAuthorization.skippedReason,
-        )
-      : await this.buildRetrievalState(
-          standardQa.rewrittenQuestion,
-          retrievalConfigId,
-          session,
-          history.length > 0,
-          standardQa.semanticContext,
-          businessContext,
-          businessDataAuthorized,
-        );
+    const retrieval =
+      standardQa.answer || !workflow.enableKnowledgeRetrieval
+        ? this.emptyRetrievalState(
+            retrievalConfigId,
+            configuredTrace,
+            standardQa.rewrittenQuestion,
+            standardQa.semanticContext,
+            businessContext,
+            businessDataAuthorized,
+            workflow.enableKnowledgeRetrieval,
+            businessDataAuthorization.skippedReason,
+          )
+        : await this.buildRetrievalState(
+            standardQa.rewrittenQuestion,
+            retrievalConfigId,
+            session,
+            history.length > 0,
+            standardQa.semanticContext,
+            businessContext,
+            businessDataAuthorized,
+          );
+    await this.recordCompletedRetrieval(standardQa, retrieval);
+    await this.recordStage(standardQa.answer ? '返回标准答案' : '模型生成回答');
     const result = standardQa.answer
       ? this.buildStandardQaAnswerResult(target, standardQa)
       : await this.providersService.callChat({
@@ -242,6 +445,16 @@ export class KnowledgeAiChatService {
   }
 
   async askStream(
+    dto: AskKnowledgeAiDto,
+    writer: KnowledgeAiChatStreamWriter,
+    externalApp?: ExternalApp,
+  ) {
+    return this.withProgress(dto, (trackedDto) =>
+      this.askStreamInternal(trackedDto, writer, externalApp),
+    );
+  }
+
+  private async askStreamInternal(
     dto: AskKnowledgeAiDto,
     writer: KnowledgeAiChatStreamWriter,
     externalApp?: ExternalApp,
@@ -287,12 +500,27 @@ export class KnowledgeAiChatService {
       rewrittenQuestion: standardQa.rewrittenQuestion,
       matches: standardQa.colloquialTermMatches,
     });
+    const activeQa = this.activeTrace.getStore();
+    if (activeQa) {
+      Object.assign(activeQa.trace, {
+        originalQa: standardQa.originalQa,
+        colloquial: standardQa.colloquial,
+        calibratedQa: standardQa.calibratedQa,
+      });
+      await this.messageRepository.save({
+        id: activeQa.messageId,
+        processingTrace: activeQa.trace,
+      });
+    }
     const businessDataAuthorization = this.resolveBusinessDataAuthorization(
       configuredTrace,
       workflow,
       commandOptions,
     );
     const businessDataAuthorized = businessDataAuthorization.authorized;
+    if (!standardQa.answer && businessDataAuthorized) {
+      await this.recordStage('业务数据查询');
+    }
     const businessContext =
       standardQa.answer || !businessDataAuthorized
         ? null
@@ -347,6 +575,8 @@ export class KnowledgeAiChatService {
         standardQa.answer ? '正在匹配已审核问答…' : '正在分析问题并生成回答…',
       );
     }
+    await this.recordCompletedRetrieval(standardQa, retrieval);
+    await this.recordStage(standardQa.answer ? '返回标准答案' : '模型生成回答');
     const result = standardQa.answer
       ? this.buildStandardQaAnswerResult(target, standardQa)
       : await this.providersService.callChatStream({
@@ -547,6 +777,7 @@ export class KnowledgeAiChatService {
     businessDataAuthorized = false,
     commandOptions?: KnowledgeAiChatCommandOptions,
   ): Promise<KnowledgeRetrievalState> {
+    await this.recordStage('知识库检索');
     const normalizedConfigId = configId ?? null;
     const result = await this.commandService.retrieveKnowledge(
       question,
@@ -557,6 +788,7 @@ export class KnowledgeAiChatService {
           session?.lastRetrievalQuery ?? session?.lastQuestion ?? undefined,
         preferredKnowledgeBaseId: session?.activeKnowledgeBaseId ?? undefined,
         lastRetrievalAt: session?.lastRetrievalAt ?? undefined,
+        onStage: (name) => this.recordStage(name),
       },
       commandOptions,
     );
@@ -602,6 +834,7 @@ export class KnowledgeAiChatService {
     const enableColloquial = params.enableColloquial !== false;
     const enableCalibratedStandardQa =
       params.enableCalibratedStandardQa !== false;
+    if (enableOriginalStandardQa) await this.recordStage('原问题标准问答匹配');
     const directMatch = enableOriginalStandardQa
       ? await this.commandService.searchStandardQa(
           {
@@ -682,19 +915,30 @@ export class KnowledgeAiChatService {
         ),
       };
     }
-    const rewrite = await this.commandService.rewriteColloquialQuestion({
-      retrievalConfigId: params.retrievalConfigId,
-      question: params.question,
-    }, params.commandOptions);
+    await this.recordStage('口语校准');
+    const rewrite = await this.commandService.rewriteColloquialQuestion(
+      {
+        retrievalConfigId: params.retrievalConfigId,
+        question: params.question,
+      },
+      params.commandOptions,
+    );
     const hasRewrittenQuestion =
       this.normalizeQuestion(rewrite.rewrittenQuestion) !==
       this.normalizeQuestion(params.question);
-    const rewrittenMatch = enableCalibratedStandardQa && hasRewrittenQuestion
-      ? await this.commandService.searchStandardQa({
-          retrievalConfigId: params.retrievalConfigId,
-          question: rewrite.rewrittenQuestion,
-      }, params.commandOptions)
-      : null;
+    if (enableCalibratedStandardQa && hasRewrittenQuestion) {
+      await this.recordStage('校准后标准问答匹配');
+    }
+    const rewrittenMatch =
+      enableCalibratedStandardQa && hasRewrittenQuestion
+        ? await this.commandService.searchStandardQa(
+            {
+              retrievalConfigId: params.retrievalConfigId,
+              question: rewrite.rewrittenQuestion,
+            },
+            params.commandOptions,
+          )
+        : null;
     const colloquial: KnowledgeAiColloquialTrace = {
       evaluated: true,
       inputQuestion: params.question.trim(),
@@ -757,11 +1001,13 @@ export class KnowledgeAiChatService {
       executed,
       question: question.trim(),
       matched: Boolean(match?.entry),
-      matchedEntries: entries.map((entry): KnowledgeAiQaTraceEntry => ({
-        id: entry.id,
-        question: entry.question,
-        retrievalConfigId: entry.retrievalConfigId ?? null,
-      })),
+      matchedEntries: entries.map(
+        (entry): KnowledgeAiQaTraceEntry => ({
+          id: entry.id,
+          question: entry.question,
+          retrievalConfigId: entry.retrievalConfigId ?? null,
+        }),
+      ),
       selectedEntryId: match?.entry.id ?? null,
       skippedReason,
     };
@@ -822,7 +1068,7 @@ export class KnowledgeAiChatService {
 
   private async getSessionHistory(sessionId: number) {
     const history = await this.messageRepository.find({
-      where: { sessionId },
+      where: { sessionId, isSuccess: true },
       order: { id: 'DESC' },
       take: 20,
     });
@@ -853,8 +1099,19 @@ export class KnowledgeAiChatService {
       retrieval?.rerankTokenUsage ?? null,
     );
     const processingTrace = this.buildProcessingTrace(standardQa, retrieval);
+    const active = this.activeTrace.getStore();
+    if (active) {
+      this.finishStage(
+        result.isSuccess ? 'success' : 'failed',
+        result.errorMessage,
+      );
+      if (processingTrace) processingTrace.execution = active.trace.execution;
+      result.elapsedMilliseconds =
+        Date.now() - Date.parse(active.trace.execution!.startedAt);
+    }
     const message = await this.messageRepository.save(
       this.messageRepository.create({
+        ...(active ? { id: active.messageId } : {}),
         sessionId: session.id,
         providerId: target.providerId,
         providerName: target.providerName,
@@ -891,7 +1148,7 @@ export class KnowledgeAiChatService {
     session.providerId = target.providerId;
     session.providerName = target.providerName;
     session.model = result.model;
-    session.messageCount += 1;
+    if (!active) session.messageCount += 1;
     session.lastQuestion = dto.question.trim();
     session.lastAnswer = result.answer || null;
     session.hitKnowledgeBaseNames = hitKnowledgeBaseNames;
@@ -1009,7 +1266,7 @@ export class KnowledgeAiChatService {
     const workflowFlags = getAiWorkflowDerivedFlags(
       workflowRuntime.workflowDefinition,
     );
-    return {
+    const snapshot: KnowledgeRetrievalConfigSnapshot = {
       id: config.id,
       name: config.name,
       retrievalMode: config.retrievalMode || 'hybrid',
@@ -1029,6 +1286,16 @@ export class KnowledgeAiChatService {
       enableRerank: workflowFlags.enableRerank,
       rerankAiFeatureConfigName: config.rerankAiFeatureConfigName ?? null,
     };
+    const active = this.activeTrace.getStore();
+    if (active) {
+      active.trace.retrievalConfig = snapshot;
+      await this.messageRepository.save({
+        id: active.messageId,
+        retrievalConfigId: configId,
+        processingTrace: active.trace,
+      });
+    }
+    return snapshot;
   }
 
   private isProductSkuLookupAuthorized(
@@ -1146,6 +1413,20 @@ export class KnowledgeAiChatService {
         ? (dto.model ?? config?.model ?? undefined)
         : (config?.model ?? undefined),
     });
+    const active = this.activeTrace.getStore();
+    if (active) {
+      await this.messageRepository.save({
+        id: active.messageId,
+        providerId: target.providerId,
+        providerName: target.providerName,
+        model: target.model,
+      });
+      await this.sessionRepository.update(active.sessionId, {
+        providerId: target.providerId,
+        providerName: target.providerName,
+        model: target.model,
+      });
+    }
     return { target, config };
   }
 
@@ -1194,12 +1475,17 @@ export class KnowledgeAiChatService {
     answer: string,
     retrieval: KnowledgeRetrievalState,
   ) {
+    await this.recordStage('回答依据摘要');
     const fallback = this.buildUserVisibleThinkingFallback(question, retrieval);
     const result = await this.providersService.callChat({
       id: target.providerId,
       model: target.model,
       systemPrompt: USER_VISIBLE_THINKING_SYSTEM_PROMPT,
-      question: this.buildUserVisibleThinkingQuestion(question, answer, retrieval),
+      question: this.buildUserVisibleThinkingQuestion(
+        question,
+        answer,
+        retrieval,
+      ),
     });
     const content = this.normalizeUserVisibleThinkingSummary(result.answer);
     return {
@@ -1283,7 +1569,11 @@ export class KnowledgeAiChatService {
       ].join('\n');
     }
     if (!retrieval?.configId) {
-      return [...questionInstructions, ...semanticInstructions, ...businessInstructions].join('\n');
+      return [
+        ...questionInstructions,
+        ...semanticInstructions,
+        ...businessInstructions,
+      ].join('\n');
     }
     if (!retrieval.context) {
       if (businessInstructions.length) {
@@ -1342,7 +1632,9 @@ export class KnowledgeAiChatService {
   ): KnowledgeAiChatCommandOptions | undefined {
     if (!externalApp) return undefined;
     return {
-      allowedCommandKeys: externalApp.commandKeys ?? [...AI_CORE_CHAT_COMMAND_KEYS],
+      allowedCommandKeys: externalApp.commandKeys ?? [
+        ...AI_CORE_CHAT_COMMAND_KEYS,
+      ],
     };
   }
 

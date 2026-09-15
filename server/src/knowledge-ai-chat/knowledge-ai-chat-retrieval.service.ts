@@ -70,6 +70,7 @@ interface RoutingRuleScope {
 }
 
 export interface KnowledgeRetrievalOptions {
+  onStage?: (name: string) => Promise<void>;
   hasHistory?: boolean;
   previousQuery?: string | null;
   preferredKnowledgeBaseId?: number | null;
@@ -262,6 +263,7 @@ export class KnowledgeAiChatRetrievalService {
       return this.emptyResult(originalQuestion, { config: configSnapshot });
     }
 
+    await options.onStage?.('知识库路由');
     const matchedRoutingRules = await this.findMatchedRoutingRules(
       config.id,
       originalQuestion,
@@ -312,6 +314,7 @@ export class KnowledgeAiChatRetrievalService {
     // topK × 5 往往不足以让正确片段进入重排池，因此提高下限和倍数。
     const candidateLimit = Math.min(120, Math.max(40, topK * 10));
 
+    await options.onStage?.('文本与向量召回');
     const [textScored, vectorScored] = await Promise.all([
       retrievalMode === 'vector'
         ? Promise.resolve([])
@@ -332,6 +335,7 @@ export class KnowledgeAiChatRetrievalService {
       ),
       plan.query,
     );
+    await options.onStage?.(workflowFlags.enableRerank ? '候选资料重排' : '候选资料筛选（重排关闭）');
     const reranked = await this.rerankCandidates(plan.query, fused, {
       ...config,
       enableRerank: workflowFlags.enableRerank,
@@ -362,6 +366,7 @@ export class KnowledgeAiChatRetrievalService {
           {
             hasHistory: false,
             allowSessionFallback: false,
+            onStage: options.onStage,
           },
         );
         return {

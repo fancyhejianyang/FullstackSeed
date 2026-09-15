@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-09-15 修复问答超时缺少执行阶段记录
+- 新增：无。
+- 修改：
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat.service.ts`（普通与流式问答先创建记录；按请求隔离执行上下文，逐阶段持久化进度，异常保留失败阶段，完成时更新同一消息；未完成和失败消息不进入模型历史上下文）。
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat-retrieval.service.ts`（路由、文本与向量召回、重排以及检索回退上报执行阶段）。
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat-trace.ts`、`web/src/api/knowledgeAiChat.ts`（在既有 processingTrace 中增加可选 execution 字段，兼容历史 JSON；测试问答请求超时单独调整为 300 秒）。
+  - `web/src/views/knowledge-ai-record/Index.vue`（列表展示处理中及当前阶段/错误，详情展示阶段状态、开始时间、耗时和错误，支持手动刷新；区分检索配置和关联工作流名称）。
+- 删除：无。
+- 说明：复用已有 JSON 列，无数据库迁移。浏览器超时后后端可能继续执行，可刷新问题记录查看最新阶段；进程意外终止时保留最后持久化的阶段，不将其伪报为已完成。历史缺失的轨迹无法回补。
+- 验证：仅进行前后端类型检查与 git diff --check，不启动服务、不构建、不调用模型。
+
 ### 2026-09-15 修复 AI 问答测试未接入检索策略
 - 新增：无。
 - 修改：

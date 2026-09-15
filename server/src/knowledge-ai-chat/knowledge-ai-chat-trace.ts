@@ -52,6 +52,7 @@ export interface KnowledgeAiBusinessDataTrace {
 
 export interface KnowledgeAiProcessingTrace {
   version: 1;
+  execution?: KnowledgeAiExecutionTrace;
   retrievalConfig: KnowledgeRetrievalConfigSnapshot | null;
   originalQa: KnowledgeAiQaTraceStage;
   colloquial: KnowledgeAiColloquialTrace;
@@ -70,4 +71,18 @@ export interface KnowledgeAiProcessingTrace {
     skippedReason: string | null;
   };
   businessData: KnowledgeAiBusinessDataTrace;
+}
+
+export interface KnowledgeAiExecutionTrace {
+  status: 'running' | 'success' | 'failed';
+  startedAt: string;
+  finishedAt: string | null;
+  stages: Array<{
+    name: string;
+    status: 'running' | 'success' | 'failed';
+    startedAt: string;
+    finishedAt: string | null;
+    elapsedMilliseconds: number;
+    errorMessage: string | null;
+  }>;
 }

@@ -35,6 +35,7 @@ const columns: TableColumn[] = [
   { prop: 'hitKnowledgeBaseNames', label: '命中知识库', minWidth: 180, slot: true },
   { prop: 'messageCount', label: '轮次', width: 90 },
   { prop: 'isSuccess', label: '状态', width: 90, slot: true },
+  { prop: 'errorMessage', label: '当前阶段 / 错误', minWidth: 220 },
   { prop: 'lastQuestion', label: '最近问题', minWidth: 220 },
   { prop: 'elapsedMilliseconds', label: '耗时', width: 110, slot: true },
   { prop: 'createdAt', label: '创建时间', width: 180, slot: true },
@@ -170,8 +171,8 @@ async function handleView(row: KnowledgeAiChatSession) {
       </template>
 
       <template #column-isSuccess="{ row }">
-        <el-tag :type="row.isSuccess ? 'success' : 'danger'">
-          {{ row.isSuccess ? '成功' : '失败' }}
+        <el-tag :type="row.errorMessage?.startsWith('处理中') ? 'info' : row.isSuccess ? 'success' : 'danger'">
+          {{ row.errorMessage?.startsWith('处理中') ? '处理中' : row.isSuccess ? '成功' : '失败' }}
         </el-tag>
       </template>
 
@@ -200,19 +201,36 @@ async function handleView(row: KnowledgeAiChatSession) {
 
     <Dialog v-model="detailVisible" title="问答详情" width="900px" :show-footer="false">
       <div v-loading="detailLoading">
+        <Button v-if="currentDetail" icon="Refresh" :disabled="detailLoading" @click="handleView(currentDetail)">
+          刷新执行记录
+        </Button>
         <el-empty v-if="!currentDetail?.messages.length" description="暂无问答内容" />
         <div
           v-for="message in currentDetail?.messages || []"
           :key="message.id"
           class="ai-record__message"
-          :class="{ 'is-error': !message.isSuccess }"
+          :class="{ 'is-error': !message.isSuccess && message.processingTrace?.execution?.status !== 'running' }"
         >
           <div class="ai-record__question">{{ message.question }}</div>
           <div class="ai-record__answer">
-            {{ message.answer || message.errorMessage || '-' }}
+            {{ message.answer || message.errorMessage || (message.processingTrace?.execution?.status === 'running' ? '正在处理，可刷新查看最新阶段。前端请求超时不代表后端已停止。' : '-') }}
           </div>
           <div v-if="message.processingTrace" class="ai-record__trace">
             <div class="ai-record__trace-title">本轮处理轨迹</div>
+            <div v-if="message.processingTrace.execution">
+              <p>
+                执行状态：{{ { running: '处理中', success: '已完成', failed: '失败' }[message.processingTrace.execution.status] }}
+                · 开始于 {{ formatDateTime(message.processingTrace.execution.startedAt) }}
+              </p>
+              <ol>
+                <li v-for="(stage, index) in message.processingTrace.execution.stages" :key="index">
+                  {{ stage.name }}：{{ { running: '执行中', success: '完成', failed: '失败' }[stage.status] }}
+                  · {{ formatDateTime(stage.startedAt) }}
+                  · {{ stage.status === 'running' ? '尚未结束' : `${stage.elapsedMilliseconds} ms` }}
+                  <p v-if="stage.errorMessage">{{ stage.errorMessage }}</p>
+                </li>
+              </ol>
+            </div>
             <el-collapse accordion>
               <el-collapse-item name="config">
                 <template #title>
@@ -228,8 +246,11 @@ async function handleView(row: KnowledgeAiChatSession) {
                 </template>
                 <template v-if="message.processingTrace.retrievalConfig">
                   <el-descriptions :column="2" border size="small">
-                    <el-descriptions-item label="工作流">
+                    <el-descriptions-item label="检索配置">
                       {{ message.processingTrace.retrievalConfig.name }} #{{ message.processingTrace.retrievalConfig.id }}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="关联工作流">
+                      {{ message.processingTrace.retrievalConfig.workflowName || '内置流程' }}
                     </el-descriptions-item>
                     <el-descriptions-item label="检索方式">
                       {{ getRetrievalModeText(message.processingTrace.retrievalConfig.retrievalMode) }}
@@ -262,7 +283,7 @@ async function handleView(row: KnowledgeAiChatSession) {
                     </el-descriptions-item>
                   </el-descriptions>
                 </template>
-                <span v-else class="ai-record__trace-muted">本轮未关联 AI 工作流；默认只执行标准问答和口语校准，不访问知识库或业务数据。</span>
+                <span v-else class="ai-record__trace-muted">{{ message.processingTrace.execution ? '尚未取得工作流配置快照，请查看上方执行阶段及错误。' : '本轮未关联 AI 工作流。' }}</span>
               </el-collapse-item>
 
               <el-collapse-item name="original-qa">
