@@ -110,6 +110,7 @@ function batchDeleteRequest(payload: { ids: Array<number | string> }) {
 
 <template>
   <PageContainer title="产品库">
+    <input ref="fileInput" type="file" accept=".xlsx" hidden @change="handleImport" />
     <Table
       ref="tableRef"
       perm-module="product"
@@ -126,7 +127,6 @@ function batchDeleteRequest(payload: { ids: Array<number | string> }) {
         <Button perm="Product.create" @click="openCreate">新增产品</Button>
         <Button perm="Product.read" icon="Download" :auto-type="false" :type="getPermissionActionColor('Product.export')" :loading="exporting" @click="exportTemplate">模板导出</Button>
         <Button perm="Product.create" icon="Upload" :auto-type="false" :type="getPermissionActionColor('Product.import')" :loading="importing" @click="fileInput?.click()">Excel 导入</Button>
-        <input ref="fileInput" type="file" accept=".xlsx" hidden @change="handleImport" />
         <Button perm="Product.batchDelete" :confirm="false" @click="tableRef?.runBatchDelete()">
           批量删除
         </Button>

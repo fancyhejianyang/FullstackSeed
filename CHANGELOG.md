@@ -1,5 +1,12 @@
 # CHANGELOG
 
+### 2026-09-15 修复产品列表末尾按钮间距
+- 新增文件：无。
+- 修改文件：`web/src/views/product/Index.vue`、`CHANGELOG.md`。
+- 删除文件：无。
+- 修复：将隐藏的 Excel 文件选择框移出工具栏，恢复“Excel 导入”和“批量删除”按钮之间的相邻按钮间距（12px），保持文件选择与导入逻辑不变。
+- 验证：前端 vue-tsc、git diff --check 通过；未构建、未启动服务。
+
 ### 2026-09-15 产品中文 Excel 模板与导入、SKU 参数录入优化
 - 新增文件：
   - `server/src/product-catalog/product-excel.service.ts`：生成中文空白模板与填写说明；校验文件、表头、行数、字段长度、公式、重复产品；事务批量新增并生成内部产品编码。
