@@ -234,6 +234,7 @@ export interface KnowledgeColloquialTermMatch {
 }
 
 export interface AskKnowledgeAiPayload {
+  workflowId?: number;
   providerId?: number;
   aiFeatureConfigId?: number;
   retrievalConfigId?: number;

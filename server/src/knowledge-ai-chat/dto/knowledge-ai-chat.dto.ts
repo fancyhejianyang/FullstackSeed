@@ -15,6 +15,12 @@ export class AskKnowledgeAiDto {
   @IsInt()
   @Min(1)
   @IsOptional()
+  workflowId?: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @IsOptional()
   providerId?: number;
 
   @Type(() => Number)

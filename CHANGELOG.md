@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-09-15 问答测试明确选择聊天配置与工作流
+- 新增：无。
+- 修改：
+  - `web/src/views/knowledge-ai-chat/Index.vue`（聊天配置只列出启用的聊天类型配置且必选；工作流下拉读取真实 AI 工作流并提交 workflowId；问题初始为空，切换配置重置会话）。
+  - `web/src/api/knowledgeAiChat.ts`、`server/src/knowledge-ai-chat/dto/knowledge-ai-chat.dto.ts`（对齐可选 workflowId，供后台测试入口使用，保留外部流式接口已有字段）。
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat.service.ts`（后台测试要求聊天配置与工作流，模型账号和模型均取所选聊天配置）。
+  - `server/src/knowledge-retrieval-configs/knowledge-retrieval-configs.service.ts`（根据真实 workflowId 解析唯一启用的关联检索配置；工作流停用、关联缺失或多条关联时明确报错，不任意选择）。
+  - `web/src/views/external-app/Index.vue`（缺少聊天配置时显示未配置）。
+  - `web/src/views/knowledge-standard-qa/Edit.vue`、`web/src/views/knowledge-colloquial-term/Edit.vue`（删除全局虚拟下拉项，仅列数据库配置；保留留空时共享适用范围的既有业务语义）。
+- 删除：无。
+- 验证：前端 vue-tsc、后端生产源码 tsc --noEmit、git diff --check 通过；未构建、未启动服务、未调用模型。无数据库结构变更。
+
 ### 2026-09-15 修复问答超时缺少执行阶段记录
 - 新增：无。
 - 修改：

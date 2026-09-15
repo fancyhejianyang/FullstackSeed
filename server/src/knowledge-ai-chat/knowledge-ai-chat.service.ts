@@ -348,12 +348,13 @@ export class KnowledgeAiChatService {
   }
 
   private async askInternal(dto: AskKnowledgeAiDto) {
-    if (!dto.retrievalConfigId) {
-      throw new BadRequestException('AI 问答测试必须选择检索策略');
+    if (!dto.aiFeatureConfigId || !dto.workflowId) {
+      throw new BadRequestException('AI 问答测试必须选择聊天配置和工作流');
     }
-    const retrievalConfigId = dto.retrievalConfigId;
+    const selectedRetrieval = await this.retrievalConfigsService.findUsableForWorkflow(dto.workflowId);
+    const retrievalConfigId = selectedRetrieval.id;
     const configuredTrace = await this.resolveRetrievalConfigTrace(retrievalConfigId);
-    const { target, config } = await this.resolveChatFeature(dto, {
+    const { target, config } = await this.resolveChatFeature({ aiFeatureConfigId: dto.aiFeatureConfigId }, {
       allowDtoConfig: true,
     });
     const session = dto.sessionId

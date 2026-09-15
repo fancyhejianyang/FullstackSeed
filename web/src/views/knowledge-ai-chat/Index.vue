@@ -12,21 +12,18 @@ import {
   getAiFeatureConfigs,
   type AiFeatureConfig,
 } from '@/api/aiFeatureConfig';
-import {
-  getKnowledgeRetrievalConfigs,
-  type KnowledgeRetrievalConfig,
-} from '@/api/knowledgeRetrievalConfig';
+import { getAiWorkflows, type AiWorkflow } from '@/api/aiWorkflow';
 
 const sending = ref(false);
 const sessionId = ref<number>();
 const lastMessage = ref<KnowledgeAiChatMessage>();
 const formRef = ref<InstanceType<typeof Form>>();
 const chatConfigs = ref<AiFeatureConfig[]>([]);
-const retrievalConfigs = ref<KnowledgeRetrievalConfig[]>([]);
+const workflows = ref<AiWorkflow[]>([]);
 
 const form = reactive({
   aiFeatureConfigId: '',
-  retrievalConfigId: '',
+  workflowId: '',
   question: '',
 });
 
@@ -36,33 +33,23 @@ const fields = computed<FormField[]>(() => [
     label: '聊天配置',
     type: 'select',
     componentProps: { disabled: sending.value },
-    placeholder: '不选则使用全局默认',
-    options: [
-      { label: '全局默认', value: '' },
-      ...chatConfigs.value.map((item) => ({
+    placeholder: '请选择已启用的聊天配置',
+    options: chatConfigs.value.map((item) => ({
         label: item.name,
         value: item.id,
       })),
-    ],
   },
   {
-    prop: 'retrievalConfigId',
-    label: '检索策略',
+    prop: 'workflowId',
+    label: '工作流',
     type: 'select',
     componentProps: { disabled: sending.value },
-    placeholder: '请选择已启用的检索策略',
-    options: retrievalConfigs.value.map((item) => ({
+    placeholder: '请选择已启用的工作流',
+    options: workflows.value.map((item) => ({
       label: item.name,
       value: item.id,
     })),
-    hint: (() => {
-      const selected = retrievalConfigs.value.find(
-        (item) => item.id === Number(form.retrievalConfigId),
-      );
-      return selected
-        ? `关联工作流：${selected.workflowName || '策略内置流程'}。本次问答按该策略执行。`
-        : '请选择与目标聊天应用一致的检索策略，使用其知识范围和工作流。';
-    })(),
+    hint: '按所选工作流执行，并使用其关联的检索配置。',
   },
   {
     prop: 'question',
@@ -74,7 +61,8 @@ const fields = computed<FormField[]>(() => [
 ]);
 
 const rules: FormRules = {
-  retrievalConfigId: [{ required: true, message: '请选择检索策略', trigger: 'change' }],
+  aiFeatureConfigId: [{ required: true, message: '请选择聊天配置', trigger: 'change' }],
+  workflowId: [{ required: true, message: '请选择工作流', trigger: 'change' }],
   question: [{ required: true, message: '请输入问题', trigger: 'blur' }],
 };
 
@@ -85,10 +73,8 @@ async function handleAsk() {
   try {
     const result = await askKnowledgeAi({
       question: form.question,
-      retrievalConfigId: Number(form.retrievalConfigId),
-      aiFeatureConfigId: form.aiFeatureConfigId
-        ? Number(form.aiFeatureConfigId)
-        : undefined,
+      workflowId: Number(form.workflowId),
+      aiFeatureConfigId: Number(form.aiFeatureConfigId),
       sessionId: sessionId.value,
     });
     sessionId.value = result.session.id;
@@ -113,26 +99,27 @@ async function fetchChatConfigs() {
     page: 1,
     pageSize: 200,
     featureType: 'chat',
+    isEnabled: true,
   });
   chatConfigs.value = result.list.filter((item) => item.isEnabled);
 }
 
 watch(
-  () => [form.aiFeatureConfigId, form.retrievalConfigId],
+  () => [form.aiFeatureConfigId, form.workflowId],
   startNewSession,
 );
 
-async function fetchRetrievalConfigs() {
-  const result = await getKnowledgeRetrievalConfigs({
+async function fetchWorkflows() {
+  const result = await getAiWorkflows({
     page: 1,
     pageSize: 200,
     isEnabled: true,
   });
-  retrievalConfigs.value = result.list.filter((item) => item.isEnabled);
+  workflows.value = result.list.filter((item) => item.isEnabled);
 }
 
 onMounted(async () => {
-  await Promise.allSettled([fetchChatConfigs(), fetchRetrievalConfigs()]);
+  await Promise.allSettled([fetchChatConfigs(), fetchWorkflows()]);
 });
 </script>
 

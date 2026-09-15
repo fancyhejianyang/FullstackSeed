@@ -81,6 +81,21 @@ export class KnowledgeRetrievalConfigsService {
     return config;
   }
 
+  async findUsableForWorkflow(workflowId: number) {
+    await this.aiWorkflowsService.findUsable(workflowId);
+    const configs = await this.configRepository.find({
+      where: { workflowId, isEnabled: true },
+      take: 2,
+    });
+    if (!configs.length) {
+      throw new BadRequestException('该工作流尚未关联启用的检索配置，请先完成关联');
+    }
+    if (configs.length > 1) {
+      throw new BadRequestException('该工作流关联了多个启用的检索配置，无法确定测试范围，请先保留唯一的启用关联');
+    }
+    return this.findUsableConfig(configs[0].id);
+  }
+
   async create(dto: CreateKnowledgeRetrievalConfigDto) {
     const entity = this.configRepository.create(
       await this.toEntityPayload(dto, true),

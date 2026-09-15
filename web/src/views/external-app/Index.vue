@@ -122,7 +122,7 @@ function splitDomains(domain: string | null) {
       </template>
 
       <template #column-aiFeatureConfigName="{ row }">
-        {{ row.aiFeatureConfigName || '全局默认' }}
+        {{ row.aiFeatureConfigName || '未配置' }}
       </template>
 
       <template #column-retrievalConfigName="{ row }">

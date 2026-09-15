@@ -53,7 +53,6 @@ const form = reactive<StandardQaEditForm>({
 });
 
 const retrievalConfigOptions = computed(() => [
-  { label: '全局标准问答', value: '' },
   ...retrievalConfigs.value.map((item) => ({ label: item.name, value: item.id })),
 ]);
 
@@ -83,7 +82,7 @@ const fields = computed<FormField[]>(() => [
     placeholder: '不选则在所有应用中生效',
     hint: form.retrievalConfigId
       ? '当前仅在所选 AI 工作流的应用中参与标准问答匹配。'
-      : '当前为全局标准问答：所有启用的 AI 工作流均可命中它。',
+      : '未限制适用范围：所有启用的 AI 工作流均可命中本条问答。',
   },
 ]);
 

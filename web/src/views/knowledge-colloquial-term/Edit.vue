@@ -53,7 +53,6 @@ const selectedRetrievalConfig = computed(() =>
 );
 
 const retrievalConfigOptions = computed(() => [
-  { label: '全局生效', value: '' },
   ...retrievalConfigs.value.map((item) => ({ label: item.name, value: item.id })),
 ]);
 
@@ -130,7 +129,7 @@ const fields = computed<FormField[]>(() => [
     options: retrievalConfigOptions.value,
     hint: selectedRetrievalConfig.value
       ? `当前只在“${selectedRetrievalConfig.value.name}”检索时生效。`
-      : '当前全局生效：所有 AI 工作流都可使用该表达。',
+      : '未限制适用范围：所有 AI 工作流都可使用该表达。',
   },
   {
     prop: 'excludePhrasesText',
