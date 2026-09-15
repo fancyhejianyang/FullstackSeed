@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, type FormRules } from 'element-plus';
 import PageContainer from '@/components/PageContainer.vue';
 import Button from '@/components/Button.vue';
@@ -12,16 +12,22 @@ import {
   getAiFeatureConfigs,
   type AiFeatureConfig,
 } from '@/api/aiFeatureConfig';
+import {
+  getKnowledgeRetrievalConfigs,
+  type KnowledgeRetrievalConfig,
+} from '@/api/knowledgeRetrievalConfig';
 
 const sending = ref(false);
 const sessionId = ref<number>();
 const lastMessage = ref<KnowledgeAiChatMessage>();
 const formRef = ref<InstanceType<typeof Form>>();
 const chatConfigs = ref<AiFeatureConfig[]>([]);
+const retrievalConfigs = ref<KnowledgeRetrievalConfig[]>([]);
 
 const form = reactive({
   aiFeatureConfigId: '',
-  question: '请用一句话说明当前模型已经可以正常响应。',
+  retrievalConfigId: '',
+  question: '',
 });
 
 const fields = computed<FormField[]>(() => [
@@ -29,6 +35,7 @@ const fields = computed<FormField[]>(() => [
     prop: 'aiFeatureConfigId',
     label: '聊天配置',
     type: 'select',
+    componentProps: { disabled: sending.value },
     placeholder: '不选则使用全局默认',
     options: [
       { label: '全局默认', value: '' },
@@ -39,23 +46,46 @@ const fields = computed<FormField[]>(() => [
     ],
   },
   {
+    prop: 'retrievalConfigId',
+    label: '检索策略',
+    type: 'select',
+    componentProps: { disabled: sending.value },
+    placeholder: '请选择已启用的检索策略',
+    options: retrievalConfigs.value.map((item) => ({
+      label: item.name,
+      value: item.id,
+    })),
+    hint: (() => {
+      const selected = retrievalConfigs.value.find(
+        (item) => item.id === Number(form.retrievalConfigId),
+      );
+      return selected
+        ? `关联工作流：${selected.workflowName || '策略内置流程'}。本次问答按该策略执行。`
+        : '请选择与目标聊天应用一致的检索策略，使用其知识范围和工作流。';
+    })(),
+  },
+  {
     prop: 'question',
     label: '问题',
     type: 'textarea',
+    componentProps: { disabled: sending.value },
     rows: 8,
   },
 ]);
 
 const rules: FormRules = {
+  retrievalConfigId: [{ required: true, message: '请选择检索策略', trigger: 'change' }],
   question: [{ required: true, message: '请输入问题', trigger: 'blur' }],
 };
 
 async function handleAsk() {
+  if (sending.value) return;
   await formRef.value?.validate();
   sending.value = true;
   try {
     const result = await askKnowledgeAi({
       question: form.question,
+      retrievalConfigId: Number(form.retrievalConfigId),
       aiFeatureConfigId: form.aiFeatureConfigId
         ? Number(form.aiFeatureConfigId)
         : undefined,
@@ -87,7 +117,23 @@ async function fetchChatConfigs() {
   chatConfigs.value = result.list.filter((item) => item.isEnabled);
 }
 
-onMounted(fetchChatConfigs);
+watch(
+  () => [form.aiFeatureConfigId, form.retrievalConfigId],
+  startNewSession,
+);
+
+async function fetchRetrievalConfigs() {
+  const result = await getKnowledgeRetrievalConfigs({
+    page: 1,
+    pageSize: 200,
+    isEnabled: true,
+  });
+  retrievalConfigs.value = result.list.filter((item) => item.isEnabled);
+}
+
+onMounted(async () => {
+  await Promise.allSettled([fetchChatConfigs(), fetchRetrievalConfigs()]);
+});
 </script>
 
 <template>
@@ -98,7 +144,7 @@ onMounted(fetchChatConfigs);
         <Button type="primary" icon="Promotion" :loading="sending" @click="handleAsk">
           发送问题
         </Button>
-        <Button icon="Refresh" @click="startNewSession">新会话</Button>
+        <Button icon="Refresh" :disabled="sending" @click="startNewSession">新会话</Button>
       </div>
 
       <div v-if="lastMessage" class="ai-chat-form__result">

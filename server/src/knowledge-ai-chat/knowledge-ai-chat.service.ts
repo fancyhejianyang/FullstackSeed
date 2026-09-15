@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Like, Repository } from 'typeorm';
 import { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-configs.service';
@@ -165,6 +165,11 @@ export class KnowledgeAiChatService {
   }
 
   async ask(dto: AskKnowledgeAiDto) {
+    if (!dto.retrievalConfigId) {
+      throw new BadRequestException('AI 问答测试必须选择检索策略');
+    }
+    const retrievalConfigId = dto.retrievalConfigId;
+    const configuredTrace = await this.resolveRetrievalConfigTrace(retrievalConfigId);
     const { target, config } = await this.resolveChatFeature(dto, {
       allowDtoConfig: true,
     });
@@ -172,8 +177,6 @@ export class KnowledgeAiChatService {
       ? await this.findSessionEntity(dto.sessionId)
       : await this.createSession(dto, target);
     const history = await this.getSessionHistory(session.id);
-    const retrievalConfigId = dto.retrievalConfigId ?? null;
-    const configuredTrace = await this.resolveRetrievalConfigTrace(retrievalConfigId);
     const workflow = this.resolveWorkflowSteps(configuredTrace);
     const standardQa = await this.buildStandardQaState({
       question: dto.question,
@@ -1000,7 +1003,7 @@ export class KnowledgeAiChatService {
     configId: number | null,
   ): Promise<KnowledgeRetrievalConfigSnapshot | null> {
     if (!configId) return null;
-    const config = await this.retrievalConfigsService.findOne(configId);
+    const config = await this.retrievalConfigsService.findUsableConfig(configId);
     const workflowRuntime =
       await this.retrievalConfigsService.resolveWorkflowRuntime(config);
     const workflowFlags = getAiWorkflowDerivedFlags(
