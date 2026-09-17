@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-09-17 侧边栏菜单搜索
+- 新增文件：无。
+- 修改文件：`web/src/layouts/MainLayout.vue`、`CHANGELOG.md`。
+- 删除文件：无。
+- 功能：Logo 下方增加可清空的菜单搜索框；基于当前用户已有权限菜单按名称进行不区分大小写、忽略首尾空格的本地模糊匹配；保留祖先路径并展开结果，匹配目录时保留其子菜单；无匹配时显示提示，支持 Esc 清空，侧栏折叠时清空搜索，清空后恢复原菜单实例。
+- 范围：仅前端布局，复用 MenuTree 与现有 MenuNode 字段，不增加请求或修改后端接口；沿用深色侧边栏设计。
+- 验证：前端 `vue-tsc --noEmit -p tsconfig.app.json`、`git diff --check` 通过；未构建、未启动服务，未进行浏览器交互验证。
+- 保留：用户已有 `web/components.d.ts` 改动不纳入提交。
+
 ### 2026-09-15 MinerU 引擎字段与单选校验提示修复
 - 新增文件：无。
 - 修改文件：`web/src/views/ai-feature-config/Edit.vue`（字段简化为“MinerU引擎”，必填规则按 change、blur 触发）；`web/src/components/Select.vue`（接入表单项校验，选择/清空后等待父级值更新再校验，失焦触发 blur）；`AGENTS-COMPONENTS.md`（补充单选自动校验契约）；`CHANGELOG.md`（快照）。

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { ElMessageBox } from 'element-plus';
 import { useUserStore } from '@/stores/user';
 import MenuTree from '@/components/MenuTree.vue';
+import type { MenuNode } from '@/api/menu';
 
 const router = useRouter();
 const route = useRoute();
@@ -15,6 +16,25 @@ const pageTitle = computed(() => String(route.meta.title || ''));
 
 // 菜单来自后端（按权限过滤，超管返回全部），由路由守卫在进入前引导加载
 const menus = computed(() => userStore.menus);
+const menuSearch = ref('');
+const searchKeyword = computed(() => menuSearch.value.trim().toLocaleLowerCase());
+const searchResult = computed(() => {
+  const opened: string[] = [];
+  function filter(items: MenuNode[], parentMatched = false): MenuNode[] {
+    return items.flatMap((item) => {
+      const matched = parentMatched || item.name.toLocaleLowerCase().includes(searchKeyword.value);
+      const children = filter(item.children || [], matched);
+      if (!matched && !children.length) return [];
+      if (children.length) opened.push(item.path || `sub-${item.id}`);
+      return [{ ...item, children }];
+    });
+  }
+  return { items: searchKeyword.value ? filter(menus.value) : [], opened };
+});
+
+watch(isCollapse, (collapsed) => {
+  if (collapsed) menuSearch.value = '';
+});
 
 async function handleLogout() {
   await ElMessageBox.confirm('确认退出登录？', '提示', { type: 'warning' });
@@ -27,7 +47,20 @@ async function handleLogout() {
   <el-container class="layout">
     <el-aside :width="isCollapse ? '64px' : '210px'" class="layout__aside">
       <div class="layout__logo">{{ isCollapse ? 'FS' : 'FullstackSeed' }}</div>
+      <div v-if="!isCollapse" class="layout__menu-search">
+        <el-input
+          v-model="menuSearch"
+          placeholder="搜索菜单..."
+          aria-label="搜索菜单"
+          clearable
+          @keydown.esc="menuSearch = ''"
+        >
+          <template #prefix><el-icon><Search /></el-icon></template>
+        </el-input>
+      </div>
+      <!-- 保留完整菜单实例，清空搜索后恢复原来的展开和滚动状态。 -->
       <el-menu
+        v-show="!searchKeyword"
         class="layout__menu"
         :default-active="activeMenu"
         :collapse="isCollapse"
@@ -35,6 +68,19 @@ async function handleLogout() {
       >
         <MenuTree :items="menus" />
       </el-menu>
+      <el-menu
+        v-if="searchKeyword && searchResult.items.length"
+        :key="searchKeyword"
+        class="layout__menu"
+        :default-active="activeMenu"
+        :default-openeds="searchResult.opened"
+        router
+      >
+        <MenuTree :items="searchResult.items" />
+      </el-menu>
+      <div v-if="searchKeyword && !searchResult.items.length" class="layout__menu-empty" role="status">
+        未找到匹配菜单
+      </div>
     </el-aside>
 
     <el-container>
@@ -77,12 +123,32 @@ async function handleLogout() {
   overflow: hidden;
 }
 .layout__logo {
+  flex-shrink: 0;
   height: 60px;
   line-height: 60px;
   text-align: center;
   color: #fff;
   font-weight: 600;
   white-space: nowrap;
+}
+.layout__menu-search {
+  flex-shrink: 0;
+  padding: 8px 12px 16px;
+}
+.layout__menu-search :deep(.el-input) {
+  --el-input-bg-color: #263445;
+  --el-input-text-color: #fff;
+  --el-input-placeholder-color: #bfcbd9;
+  --el-input-icon-color: #bfcbd9;
+  --el-input-border-color: rgba(191, 203, 217, 0.28);
+  --el-input-hover-border-color: #bfcbd9;
+  --el-input-focus-border-color: #409eff;
+}
+.layout__menu-empty {
+  padding: 20px 12px;
+  color: #bfcbd9;
+  font-size: 14px;
+  text-align: center;
 }
 .layout__aside :deep(.el-menu) {
   border-right: none;
