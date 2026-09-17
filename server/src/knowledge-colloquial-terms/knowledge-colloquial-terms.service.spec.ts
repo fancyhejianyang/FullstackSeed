@@ -1,5 +1,4 @@
 import type { Repository } from 'typeorm';
-import { KnowledgeRetrievalConfig } from '../knowledge-retrieval-configs/entities/knowledge-retrieval-config.entity';
 import { KnowledgeColloquialTerm } from './entities/knowledge-colloquial-term.entity';
 import { KnowledgeColloquialTermsService } from './knowledge-colloquial-terms.service';
 
@@ -28,7 +27,6 @@ describe('KnowledgeColloquialTermsService', () => {
   };
   const service = new KnowledgeColloquialTermsService(
     termRepository as unknown as Repository<KnowledgeColloquialTerm>,
-    {} as Repository<KnowledgeRetrievalConfig>,
   );
 
   beforeEach(() => {
@@ -38,6 +36,7 @@ describe('KnowledgeColloquialTermsService', () => {
   it('combines a product alias and an attribute expression into a standard question', async () => {
     termRepository.find.mockResolvedValue([
       createTerm(1, '小蓝', '蓝虎机器人 Pro', {
+        retrievalConfigId: 7,
         semanticType: 'product-alias',
         semanticDefinition: '“小蓝”是蓝虎机器人 Pro 的产品简称',
       }),
@@ -51,7 +50,7 @@ describe('KnowledgeColloquialTermsService', () => {
     ]);
 
     await expect(
-      service.rewriteQuestion({ question: '小蓝多重', retrievalConfigId: 7 }),
+      service.rewriteQuestion({ question: '小蓝多重' }),
     ).resolves.toEqual(
       expect.objectContaining({
         rewrittenQuestion: '蓝虎机器人 Pro 的重量是多少？',
@@ -64,20 +63,24 @@ describe('KnowledgeColloquialTermsService', () => {
     );
   });
 
-  it('gives a scoped expression precedence over the same global expression', async () => {
+  it('uses the newest duplicate regardless of its historical workflow scope', async () => {
     termRepository.find.mockResolvedValue([
-      createTerm(1, '小蓝', '蓝虎机器人标准版'),
-      createTerm(2, '小蓝', '蓝虎机器人 Pro', { retrievalConfigId: 7 }),
+      createTerm(1, '小蓝', '蓝虎机器人标准版', { retrievalConfigId: 7 }),
+      createTerm(2, '小蓝', '蓝虎机器人 Pro'),
     ]);
 
     await expect(
-      service.rewriteQuestion({ question: '小蓝', retrievalConfigId: 7 }),
+      service.rewriteQuestion({ question: '小蓝' }),
     ).resolves.toEqual(
       expect.objectContaining({
         rewrittenQuestion: '蓝虎机器人 Pro',
         matches: [expect.objectContaining({ id: 2 })],
       }),
     );
+    expect(termRepository.find).toHaveBeenCalledWith({
+      where: { isEnabled: true },
+      order: { id: 'DESC' },
+    });
   });
 
   it('does not rewrite an expression when an exclusion phrase is present', async () => {

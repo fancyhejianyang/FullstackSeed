@@ -4,8 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, Like, Repository } from 'typeorm';
-import { KnowledgeRetrievalConfig } from '../knowledge-retrieval-configs/entities/knowledge-retrieval-config.entity';
+import { In, Like, Repository } from 'typeorm';
 import {
   BatchDeleteKnowledgeColloquialTermDto,
   CreateKnowledgeColloquialTermDto,
@@ -35,7 +34,6 @@ type MatchedCandidate = {
   term: KnowledgeColloquialTerm;
   start: number;
   end: number;
-  isScoped: boolean;
 };
 
 @Injectable()
@@ -43,8 +41,6 @@ export class KnowledgeColloquialTermsService {
   constructor(
     @InjectRepository(KnowledgeColloquialTerm)
     private readonly termRepository: Repository<KnowledgeColloquialTerm>,
-    @InjectRepository(KnowledgeRetrievalConfig)
-    private readonly retrievalConfigRepository: Repository<KnowledgeRetrievalConfig>,
   ) {}
 
   async findAll(query: QueryKnowledgeColloquialTermDto) {
@@ -52,9 +48,6 @@ export class KnowledgeColloquialTermsService {
     const pageSize = query.pageSize ?? 10;
     const baseWhere = {
       ...(query.semanticType ? { semanticType: query.semanticType } : {}),
-      ...(query.retrievalConfigId
-        ? { retrievalConfigId: query.retrievalConfigId }
-        : {}),
       ...(query.isEnabled !== undefined ? { isEnabled: query.isEnabled } : {}),
     };
     const keyword = query.keyword?.trim();
@@ -80,10 +73,7 @@ export class KnowledgeColloquialTermsService {
 
   async create(dto: CreateKnowledgeColloquialTermDto) {
     const payload = await this.toEntityPayload(dto, true);
-    await this.assertNoDuplicateTerm(
-      payload.term!,
-      payload.retrievalConfigId ?? null,
-    );
+    await this.assertNoDuplicateTerm(payload.term!);
     const term = await this.termRepository.save(
       this.termRepository.create(payload),
     );
@@ -94,11 +84,8 @@ export class KnowledgeColloquialTermsService {
     const term = await this.findEntity(id);
     const payload = await this.toEntityPayload(dto, false);
     const nextTerm = payload.term ?? term.term;
-    const nextConfigId =
-      payload.retrievalConfigId === undefined
-        ? term.retrievalConfigId
-        : payload.retrievalConfigId;
-    await this.assertNoDuplicateTerm(nextTerm, nextConfigId ?? null, id);
+    // 历史不同范围可能存在同名词条，允许保留名称编辑或停用；改名时再查重。
+    if (nextTerm !== term.term) await this.assertNoDuplicateTerm(nextTerm, id);
     Object.assign(term, payload);
     await this.termRepository.save(term);
     return this.findOne(id);
@@ -128,15 +115,14 @@ export class KnowledgeColloquialTermsService {
    */
   async rewriteQuestion(params: {
     question: string;
-    retrievalConfigId?: number | null;
   }): Promise<KnowledgeColloquialQuestionRewrite> {
     const question = params.question.trim();
     if (!question) {
       return { rewrittenQuestion: '', semanticContext: '', matches: [] };
     }
-    const terms = await this.findActiveTerms(params.retrievalConfigId ?? null);
+    const terms = await this.findActiveTerms();
     const candidates = terms.flatMap((term) =>
-      this.findCandidates(question, term, params.retrievalConfigId ?? null),
+      this.findCandidates(question, term),
     );
     if (!candidates.length) {
       return { rewrittenQuestion: question, semanticContext: '', matches: [] };
@@ -152,7 +138,6 @@ export class KnowledgeColloquialTermsService {
           const leftLength = left.end - left.start;
           const rightLength = right.end - right.start;
           return (
-            Number(right.isScoped) - Number(left.isScoped) ||
             rightLength - leftLength ||
             right.term.id - left.term.id
           );
@@ -205,13 +190,6 @@ export class KnowledgeColloquialTermsService {
     if (dto.semanticType !== undefined || isCreate) {
       payload.semanticType = dto.semanticType ?? 'custom';
     }
-    if (dto.retrievalConfigId !== undefined) {
-      const configId = dto.retrievalConfigId
-        ? Number(dto.retrievalConfigId)
-        : null;
-      if (configId) await this.assertRetrievalConfig(configId);
-      payload.retrievalConfigId = configId;
-    }
     if (dto.excludePhrases !== undefined) {
       payload.excludePhrases = this.normalizeTexts(dto.excludePhrases);
     }
@@ -221,31 +199,24 @@ export class KnowledgeColloquialTermsService {
     return payload;
   }
 
-  private async findActiveTerms(retrievalConfigId: number | null) {
-    const where = retrievalConfigId
-      ? [
-          { isEnabled: true, retrievalConfigId: IsNull() },
-          { isEnabled: true, retrievalConfigId },
-        ]
-      : { isEnabled: true, retrievalConfigId: IsNull() };
-    return this.termRepository.find({ where, order: { id: 'DESC' } });
+  private async findActiveTerms() {
+    return this.termRepository.find({
+      where: { isEnabled: true },
+      order: { id: 'DESC' },
+    });
   }
 
   private findCandidates(
     question: string,
     term: KnowledgeColloquialTerm,
-    retrievalConfigId: number | null,
   ): MatchedCandidate[] {
     if (this.isExcluded(question, term.excludePhrases ?? [])) return [];
-    const isScoped = Boolean(
-      retrievalConfigId && term.retrievalConfigId === retrievalConfigId,
-    );
     const source = question.toLocaleLowerCase();
     const needle = term.term.toLocaleLowerCase();
     const candidates: MatchedCandidate[] = [];
     let start = source.indexOf(needle);
     while (start >= 0) {
-      candidates.push({ term, start, end: start + needle.length, isScoped });
+      candidates.push({ term, start, end: start + needle.length });
       start = source.indexOf(needle, start + needle.length);
     }
     return candidates;
@@ -282,50 +253,20 @@ export class KnowledgeColloquialTermsService {
 
   private async assertNoDuplicateTerm(
     term: string,
-    retrievalConfigId: number | null,
     currentId?: number,
   ) {
     const builder = this.termRepository
       .createQueryBuilder('term')
-      .where('term.term = :term', { term })
-      .andWhere(
-        retrievalConfigId
-          ? 'term.retrievalConfigId = :retrievalConfigId'
-          : 'term.retrievalConfigId IS NULL',
-        retrievalConfigId ? { retrievalConfigId } : {},
-      );
+      .where('term.term = :term', { term });
     if (currentId) builder.andWhere('term.id != :currentId', { currentId });
     const exists = await builder.getOne();
     if (exists) {
-      throw new BadRequestException('同一适用范围内已存在该口语表达');
+      throw new BadRequestException('已存在该口语表达');
     }
   }
 
   private async toViews(entries: KnowledgeColloquialTerm[]) {
-    if (!entries.length) return [];
-    const configIds = Array.from(
-      new Set(
-        entries
-          .map((entry) => entry.retrievalConfigId)
-          .filter((id): id is number => Boolean(id)),
-      ),
-    );
-    const configs = configIds.length
-      ? await this.retrievalConfigRepository.find({ where: { id: In(configIds) } })
-      : [];
-    const configNames = new Map(configs.map((config) => [config.id, config.name]));
-    return entries.map((entry) => ({
-      ...entry,
-      retrievalConfigName: entry.retrievalConfigId
-        ? (configNames.get(entry.retrievalConfigId) ??
-          `AI 工作流 #${entry.retrievalConfigId}`)
-        : '全局',
-    }));
-  }
-
-  private async assertRetrievalConfig(id: number) {
-    const config = await this.retrievalConfigRepository.findOne({ where: { id } });
-    if (!config) throw new BadRequestException('适用 AI 工作流不存在');
+    return entries.map(({ retrievalConfigId: _legacyScope, ...entry }) => entry);
   }
 
   private async findEntity(id: number) {

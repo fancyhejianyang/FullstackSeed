@@ -919,7 +919,6 @@ export class KnowledgeAiChatService {
     await this.recordStage('口语校准');
     const rewrite = await this.commandService.rewriteColloquialQuestion(
       {
-        retrievalConfigId: params.retrievalConfigId,
         question: params.question,
       },
       params.commandOptions,

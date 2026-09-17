@@ -1,5 +1,19 @@
 # CHANGELOG
 
+### 2026-09-17 口语化表达独立于工作流
+- 新增文件：无。
+- 修改文件：
+  - `web/src/views/knowledge-colloquial-term/Edit.vue`、`web/src/views/knowledge-colloquial-term/Index.vue`、`web/src/api/knowledgeColloquialTerm.ts`：移除适用工作流、范围列和筛选、工作流列表请求及范围字段。
+  - `server/src/knowledge-colloquial-terms/dto/knowledge-colloquial-term.dto.ts`、`server/src/knowledge-colloquial-terms/knowledge-colloquial-terms.service.ts`、`server/src/knowledge-colloquial-terms/knowledge-colloquial-terms.module.ts`：移除范围参数和配置仓库依赖，所有启用词条统一参与改写；新增/改名全局查重，历史同名词条仍可编辑或停用；匹配按长词优先、同词取最新 ID，不再按工作流优先。
+  - `server/src/knowledge-colloquial-terms/entities/knowledge-colloquial-term.entity.ts`：历史范围列保留但不再用于业务，避免数据库结构变更。
+  - `server/src/knowledge-ai-chat/knowledge-ai-chat-command.service.ts`、`server/src/knowledge-ai-chat/knowledge-ai-chat.service.ts`：口语改写调用不再传递工作流 ID。
+  - `server/src/ai-command-definitions/ai-command-definitions.constants.ts`：同步移除口语改写内置命令的工作流参数及上下文绑定。
+  - `server/src/knowledge-colloquial-terms/knowledge-colloquial-terms.service.spec.ts`：同步共享词库语义和服务构造参数，覆盖历史范围词条与同名优先级。
+  - `CHANGELOG.md`：修改快照。
+- 删除文件：无。
+- 验证：前端 vue-tsc、后端生产源码及口语词库测试文件类型检查、git diff --check 通过；按修复范围仅做静态检查，未运行测试、未构建或启动服务。
+- 保留：用户已有 `web/components.d.ts` 改动不纳入提交。
+
 ### 2026-09-17 侧边栏菜单搜索
 - 新增文件：无。
 - 修改文件：`web/src/layouts/MainLayout.vue`、`CHANGELOG.md`。

@@ -49,7 +49,6 @@ export class KnowledgeAiChatCommandService {
   }
 
   rewriteColloquialQuestion(params: {
-    retrievalConfigId?: number | null;
     question: string;
   }, options?: KnowledgeAiChatCommandOptions): Promise<KnowledgeColloquialQuestionRewrite> {
     return this.rewriteQuestion(params, options);
@@ -67,7 +66,6 @@ export class KnowledgeAiChatCommandService {
   }
 
   private async rewriteQuestion(params: {
-    retrievalConfigId?: number | null;
     question: string;
   }, options?: KnowledgeAiChatCommandOptions): Promise<KnowledgeColloquialQuestionRewrite> {
     await this.commandDefinitionsService.findChatCommand(

@@ -58,11 +58,9 @@ export const AI_COMMAND_CATALOG: AiCommandCatalogItem[] = [
       required: ['question'],
       properties: {
         question: { type: 'string' },
-        retrievalConfigId: { type: 'integer' },
       },
     }),
     contextBindings: toJson({
-      retrievalConfigId: '$chat.retrievalConfigId',
       source: 'manual-colloquial-terms',
     }),
     chatCallable: true,

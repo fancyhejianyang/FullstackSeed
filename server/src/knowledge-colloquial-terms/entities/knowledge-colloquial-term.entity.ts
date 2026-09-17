@@ -27,7 +27,7 @@ export class KnowledgeColloquialTerm extends BaseEntity {
   @Column({ type: 'text' })
   semanticDefinition: string;
 
-  /** 为空时全局生效；填写后仅在对应检索配置中参与改写。 */
+  /** 历史范围字段，仅保留数据库列；口语表达统一共享，不再读写或参与匹配。 */
   @Index()
   @Column({ type: 'int', nullable: true })
   retrievalConfigId: number | null;

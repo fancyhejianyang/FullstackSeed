@@ -12,8 +12,6 @@ export interface KnowledgeColloquialTerm {
   replacement: string;
   semanticType: KnowledgeColloquialSemanticType;
   semanticDefinition: string;
-  retrievalConfigId: number | null;
-  retrievalConfigName: string | null;
   excludePhrases: string[];
   isEnabled: boolean;
   createdAt: string;
@@ -30,7 +28,6 @@ export interface QueryKnowledgeColloquialTermParams {
   pageSize?: number;
   keyword?: string;
   semanticType?: KnowledgeColloquialSemanticType | '';
-  retrievalConfigId?: number | '';
   isEnabled?: boolean | '';
 }
 
@@ -39,7 +36,6 @@ export interface KnowledgeColloquialTermForm {
   replacement: string;
   semanticType: KnowledgeColloquialSemanticType;
   semanticDefinition: string;
-  retrievalConfigId?: number | null;
   excludePhrases?: string[];
   isEnabled: boolean;
 }

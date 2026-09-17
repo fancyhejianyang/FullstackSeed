@@ -33,12 +33,6 @@ export class CreateKnowledgeColloquialTermDto {
   @MaxLength(2000)
   semanticDefinition: string;
 
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @IsOptional()
-  retrievalConfigId?: number | null;
-
   @IsArray()
   @IsString({ each: true })
   @MaxLength(160, { each: true })
@@ -74,14 +68,6 @@ export class QueryKnowledgeColloquialTermDto {
   @IsIn(KNOWLEDGE_COLLOQUIAL_SEMANTIC_TYPES)
   @IsOptional()
   semanticType?: KnowledgeColloquialSemanticType;
-
-  @Transform(({ value }) =>
-    value === '' || value == null ? undefined : Number(value),
-  )
-  @IsInt()
-  @Min(1)
-  @IsOptional()
-  retrievalConfigId?: number;
 
   @Transform(({ value }) => toBoolLike(value))
   @IsBoolean()

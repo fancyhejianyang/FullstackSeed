@@ -12,10 +12,6 @@ import {
   type KnowledgeColloquialTerm,
   type KnowledgeColloquialTermForm,
 } from '@/api/knowledgeColloquialTerm';
-import {
-  getKnowledgeRetrievalConfigs,
-  type KnowledgeRetrievalConfig,
-} from '@/api/knowledgeRetrievalConfig';
 
 const props = defineProps<{
   row?: KnowledgeColloquialTerm | null;
@@ -26,14 +22,12 @@ const visible = defineModel<boolean>('visible', { required: true });
 const formRef = ref<InstanceType<typeof Form>>();
 const loading = ref(false);
 const submitting = ref(false);
-const retrievalConfigs = ref<KnowledgeRetrievalConfig[]>([]);
 
 type ColloquialTermEditForm = {
   term: string;
   replacement: string;
   semanticType: KnowledgeColloquialSemanticType;
   semanticDefinition: string;
-  retrievalConfigId: number | '';
   excludePhrasesText: string;
   isEnabled: boolean;
 };
@@ -43,18 +37,9 @@ const form = reactive<ColloquialTermEditForm>({
   replacement: '',
   semanticType: 'custom',
   semanticDefinition: '',
-  retrievalConfigId: '',
   excludePhrasesText: '',
   isEnabled: true,
 });
-
-const selectedRetrievalConfig = computed(() =>
-  retrievalConfigs.value.find((item) => item.id === Number(form.retrievalConfigId)),
-);
-
-const retrievalConfigOptions = computed(() => [
-  ...retrievalConfigs.value.map((item) => ({ label: item.name, value: item.id })),
-]);
 
 const semanticTypeHint = computed(() => {
   if (form.semanticType === 'product-alias') {
@@ -123,15 +108,6 @@ const fields = computed<FormField[]>(() => [
       : '当前为自然语言语义：命中后会被包装为结构化术语约束传给回答模型，不会作为事实答案。',
   },
   {
-    prop: 'retrievalConfigId',
-    label: '适用 AI 工作流',
-    type: 'select',
-    options: retrievalConfigOptions.value,
-    hint: selectedRetrievalConfig.value
-      ? `当前只在“${selectedRetrievalConfig.value.name}”检索时生效。`
-      : '未限制适用范围：所有 AI 工作流都可使用该表达。',
-  },
-  {
     prop: 'excludePhrasesText',
     label: '排除短语',
     type: 'textarea',
@@ -161,8 +137,6 @@ watch(visible, async (value) => {
   if (!value) return;
   loading.value = true;
   try {
-    const result = await getKnowledgeRetrievalConfigs({ page: 1, pageSize: 500 });
-    retrievalConfigs.value = result.list;
     if (props.row?.id) {
       fillForm(await getKnowledgeColloquialTerm(props.row.id));
     } else {
@@ -178,7 +152,6 @@ function resetForm() {
   form.replacement = '';
   form.semanticType = 'custom';
   form.semanticDefinition = '';
-  form.retrievalConfigId = '';
   form.excludePhrasesText = '';
   form.isEnabled = true;
 }
@@ -188,7 +161,6 @@ function fillForm(data: KnowledgeColloquialTerm) {
   form.replacement = data.replacement ?? '';
   form.semanticType = data.semanticType;
   form.semanticDefinition = data.semanticDefinition ?? '';
-  form.retrievalConfigId = data.retrievalConfigId ?? '';
   form.excludePhrasesText = (data.excludePhrases ?? []).join('\n');
   form.isEnabled = !!data.isEnabled;
 }
@@ -203,7 +175,6 @@ function buildPayload(): KnowledgeColloquialTermForm {
     replacement: form.replacement.trim(),
     semanticType: form.semanticType,
     semanticDefinition: form.semanticDefinition.trim(),
-    retrievalConfigId: form.retrievalConfigId ? Number(form.retrievalConfigId) : null,
     excludePhrases: splitTexts(form.excludePhrasesText),
     isEnabled: form.isEnabled,
   };
