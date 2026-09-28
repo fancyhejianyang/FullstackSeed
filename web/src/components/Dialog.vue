@@ -4,6 +4,7 @@
  *
  * 核心能力：
  * - v-model 控制显示隐藏，默认 append-to-body + destroy-on-close
+ * - 点击遮罩层不会关闭弹窗，避免误触导致未提交内容丢失
  * - 统一预设宽度、内容最大高度和滚动条样式
  * - 默认提供取消/确定按钮，也可通过 `showFooter=false` + `#footer` 完全自定义
  * - `confirmLoading` 交给业务提交过程控制，组件只负责展示状态
@@ -49,6 +50,7 @@ function handleCancel() {
     align-center
     append-to-body
     destroy-on-close
+    :close-on-click-modal="false"
   >
     <div
       class="pro-dialog__body"

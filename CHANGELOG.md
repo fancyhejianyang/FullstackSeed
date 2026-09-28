@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-09-28 Dialog 禁止点击遮罩关闭
+- 新增文件：无。
+- 修改文件：`web/src/components/Dialog.vue`、`AGENTS-COMPONENTS.md`、`CHANGELOG.md`。
+- 删除文件：无。
+- 调整：通用 Dialog 关闭 `close-on-click-modal`，点击遮罩层不再关闭弹窗，避免表单误触丢失；同步组件契约说明。
+- 检查：业务代码共有 29 处使用封装 Dialog；原生 `el-dialog` 仅存在于封装组件内部。19 个编辑页中 18 个使用 Dialog，知识库编辑页按既有交互使用 Drawer；其余模态交互为 MessageBox 确认或输入提示。
+- 范围：仅前端公共弹窗行为，不修改字段、接口或后端逻辑。
+- 验证：前端 `vue-tsc --noEmit`、`git diff --check` 通过；按公共组件行为调整范围不构建、不启动服务。
+- 保留：用户已有 `web/components.d.ts`、`web/src/views/product-sku/Edit.vue` 改动不纳入提交。
+
 ### 2026-09-28 SKU 规格名提示与通用参数精简
 - 新增文件：无。
 - 修改文件：`web/src/views/product-sku/Edit.vue`、`web/src/views/product-sku/specifications.ts`、`CHANGELOG.md`。
