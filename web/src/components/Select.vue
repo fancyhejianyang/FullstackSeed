@@ -6,6 +6,7 @@
  * - 不内置 API，只接收 `options: { value: string; text: string }[]`
  * - v-model 固定按 string/null 处理；传入数字会自动转字符串，业务侧建议直接使用稳定编码
  * - 支持本地搜索、防抖、键盘上下选择与 Enter 确认
+ * - 仅由明确点击或键盘操作打开；窗口失焦时关闭，避免恢复焦点产生幽灵选择
  * - 大数据默认启用虚拟滚动，只渲染可视窗口
  * - options 变化时重建一次 Map；搜索、回显、缺失值兜底都复用该 Map
  * - 回显找不到值时显示 `#id`，方便定位字典数据是否缺失
@@ -228,6 +229,11 @@ function clearValue(event: MouseEvent) {
   close();
 }
 
+function handleBlur() {
+  close();
+  void validateField('blur');
+}
+
 function handleInput(value: Event) {
   if (!props.filterable) return;
   searchInput.value = (value.target as HTMLInputElement).value;
@@ -301,10 +307,12 @@ function handleDocumentClick(event: MouseEvent) {
 
 onMounted(() => {
   document.addEventListener('mousedown', handleDocumentClick);
+  window.addEventListener('blur', close);
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener('mousedown', handleDocumentClick);
+  window.removeEventListener('blur', close);
   window.clearTimeout(searchTimer);
 });
 
@@ -331,8 +339,7 @@ watch(opened, async (value) => {
         :disabled="props.disabled"
         :placeholder="selectedText ? '' : props.placeholder"
         @input="handleInput"
-        @blur="validateField('blur')"
-        @focus="open"
+        @blur="handleBlur"
         @keydown="handleKeydown"
       />
       <button
