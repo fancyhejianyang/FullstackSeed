@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-09-28 新建 SKU 自动带出参考参数
+- 新增文件：无。
+- 修改文件：`web/src/views/product-sku/Edit.vue`、`CHANGELOG.md`。
+- 删除文件：无。
+- 功能：新建 SKU 选择产品后，自动查询该产品最新的一个 SKU，并带出其自定义参数 Name、Label；Value 保持为空，用户只需填写当前 SKU 的参数值。
+- 交互：切换产品时重新匹配参考 SKU；参数区加载期间显示遮罩；关闭弹窗或快速切换产品时忽略过期请求；编辑已有 SKU 时不执行参考参数覆盖。无参考 SKU 或参考 SKU 无自定义参数时保持空白，可继续手动添加。
+- 接口：复用现有 `GET /product-skus` 的 `productId` 筛选、倒序和规格返回能力，不新增后端接口、字段或数据库变更。
+- 验证：前端 `vue-tsc --noEmit`、生产构建、`git diff --check` 通过；未启动服务或进行浏览器联调。
+- 保留：用户已有 `web/components.d.ts` 及 `web/src/views/product-sku/Edit.vue` 中“SKU 规格”标签改动不纳入提交。
+
 ### 2026-09-28 Dialog 禁止点击遮罩关闭
 - 新增文件：无。
 - 修改文件：`web/src/components/Dialog.vue`、`AGENTS-COMPONENTS.md`、`CHANGELOG.md`。

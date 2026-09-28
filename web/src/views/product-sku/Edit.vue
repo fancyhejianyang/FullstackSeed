@@ -12,6 +12,7 @@ import {
   getProductOptions,
   getNextSkuCode,
   getProductSku,
+  getProductSkus,
   updateProductSku,
   type ProductOption,
   type ProductSku,
@@ -23,9 +24,11 @@ const emit = defineEmits<{ success: [] }>();
 const visible = defineModel<boolean>('visible', { required: true });
 const formRef = ref<InstanceType<typeof Form>>();
 const loading = ref(false);
+const referenceLoading = ref(false);
 const submitting = ref(false);
 const productOptions = ref<ProductOption[]>([]);
 const loadedSku = ref<ProductSku | null>(null);
+const referenceSkuCode = ref('');
 const form = reactive({
   productId: '' as number | '',
   skuCode: '',
@@ -38,6 +41,7 @@ const parameters = ref<SpecificationRow[]>([]);
 const commonParameters = computed(() => parameters.value.filter((row) => row.builtin));
 const customParameters = computed(() => parameters.value.filter((row) => !row.builtin));
 let previewVersion = 0;
+let referenceVersion = 0;
 async function refreshSkuCode(productId: number | '') {
   const version = ++previewVersion;
   if (!productId) { form.skuCode = ''; return; }
@@ -53,8 +57,44 @@ async function refreshSkuCode(productId: number | '') {
     // The request layer displays the error; saving still allocates a code safely.
   }
 }
+
+async function refreshReferenceParameters(productId: number | '') {
+  const version = ++referenceVersion;
+  referenceLoading.value = false;
+  if (props.row?.id) return;
+
+  referenceSkuCode.value = '';
+  parameters.value = specificationRows({});
+  if (!productId) return;
+
+  referenceLoading.value = true;
+  try {
+    const result = await getProductSkus({
+      productId: Number(productId),
+      page: 1,
+      pageSize: 1,
+    });
+    if (version !== referenceVersion || !visible.value || form.productId !== productId) return;
+    const referenceSku = result.list[0];
+    if (!referenceSku) return;
+
+    const referenceCustomParameters = specificationRows(referenceSku.specifications ?? {})
+      .filter((row) => !row.builtin)
+      .map((row) => ({ name: row.name, label: row.label, value: '' }));
+    parameters.value = [...specificationRows({}), ...referenceCustomParameters];
+    if (referenceCustomParameters.length) referenceSkuCode.value = referenceSku.skuCode;
+  } catch {
+    // The request layer displays the error; users can still add parameters manually.
+  } finally {
+    if (version === referenceVersion) referenceLoading.value = false;
+  }
+}
+
 watch(() => form.productId, (productId) => {
-  if (!loading.value && visible.value) void refreshSkuCode(productId);
+  if (!loading.value && visible.value) {
+    void refreshSkuCode(productId);
+    void refreshReferenceParameters(productId);
+  }
 });
 
 const fields = computed<FormField[]>(() => [
@@ -91,13 +131,21 @@ const rules: FormRules = {
 };
 
 watch(visible, async (value) => {
-  if (!value) { ++previewVersion; return; }
+  if (!value) {
+    ++previewVersion;
+    ++referenceVersion;
+    referenceLoading.value = false;
+    return;
+  }
   loading.value = true;
   try {
     productOptions.value = await getProductOptions();
     if (props.row?.id) fillForm(await getProductSku(props.row.id));
     else resetForm();
-    await refreshSkuCode(form.productId);
+    await Promise.all([
+      refreshSkuCode(form.productId),
+      refreshReferenceParameters(form.productId),
+    ]);
   } finally {
     loading.value = false;
   }
@@ -105,6 +153,7 @@ watch(visible, async (value) => {
 
 function resetForm() {
   loadedSku.value = null;
+  referenceSkuCode.value = '';
   form.productId = productOptions.value.length === 1 ? productOptions.value[0].id : '';
   form.skuCode = '';
   form.name = '';
@@ -170,24 +219,29 @@ async function handleSubmit() {
               <span>{{ parameter.label }}</span>
               <Input v-model="parameter.value" placeholder="参数值（含单位）" :aria-label="parameter.label" />
             </div>
-            <h4>自定义参数</h4>
-            <div class="parameters__actions">
-              <Button size="small" icon="Plus" @click="parameters.push({ name: '', label: '', value: '' })">添加自定义参数</Button>
-            </div>
-            <p class="parameters__hint">Name 为字段名，Label 为显示名称，Value 为参数值。例如 ratedVoltage / 额定电压 / 220 伏。Name 不能重复或占用内置字段。</p>
-            <div v-if="customParameters.length" class="parameters__row"><span>Name</span><span>Label</span><span>Value</span><span /></div>
-            <div v-for="(parameter, index) in customParameters" :key="index" class="parameters__row">
-              <Input v-model="parameter.name" placeholder="字段名" aria-label="Name" />
-              <Input v-model="parameter.label" placeholder="显示名称" aria-label="Label" />
-              <Input v-model="parameter.value" placeholder="参数值（含单位）" aria-label="Value" />
-              <Button
-                size="small"
-                :type="getPermissionActionColor('delete')"
-                icon="Delete"
-                @click="parameters.splice(parameters.indexOf(parameter), 1)"
-              >
-                删除
-              </Button>
+            <div v-loading="referenceLoading" class="parameters__custom">
+              <h4>自定义参数</h4>
+              <div class="parameters__actions">
+                <Button size="small" icon="Plus" @click="parameters.push({ name: '', label: '', value: '' })">添加自定义参数</Button>
+              </div>
+              <p class="parameters__hint">
+                Name 为字段名，Label 为显示名称，Value 为参数值。例如 ratedVoltage / 额定电压 / 220 伏。Name 不能重复或占用内置字段。
+                <template v-if="referenceSkuCode">已根据参考 SKU {{ referenceSkuCode }} 带出 Name 和 Label，请填写 Value。</template>
+              </p>
+              <div v-if="customParameters.length" class="parameters__row"><span>Name</span><span>Label</span><span>Value</span><span /></div>
+              <div v-for="(parameter, index) in customParameters" :key="index" class="parameters__row">
+                <Input v-model="parameter.name" placeholder="字段名" aria-label="Name" />
+                <Input v-model="parameter.label" placeholder="显示名称" aria-label="Label" />
+                <Input v-model="parameter.value" placeholder="参数值（含单位）" aria-label="Value" />
+                <Button
+                  size="small"
+                  :type="getPermissionActionColor('delete')"
+                  icon="Delete"
+                  @click="parameters.splice(parameters.indexOf(parameter), 1)"
+                >
+                  删除
+                </Button>
+              </div>
             </div>
           </div>
         </template>
