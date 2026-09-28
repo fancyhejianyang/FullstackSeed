@@ -6,6 +6,7 @@ import Button from '@/components/Button.vue';
 import Input from '@/components/Input.vue';
 import { specificationRows, buildSpecifications, type SpecificationRow } from './specifications';
 import Form, { type FormField } from '@/components/Form.vue';
+import { getPermissionActionColor } from '@/utils/permission';
 import {
   createProductSku,
   getProductOptions,
@@ -178,8 +179,15 @@ async function handleSubmit() {
             <div v-for="(parameter, index) in customParameters" :key="index" class="parameters__row">
               <Input v-model="parameter.name" placeholder="字段名" aria-label="Name" />
               <Input v-model="parameter.label" placeholder="显示名称" aria-label="Label" />
-              <Input v-model="parameter.value" mode="textarea" :rows="2" placeholder="参数值（含单位）" aria-label="Value" />
-              <Button size="small" icon="Delete" @click="parameters.splice(parameters.indexOf(parameter), 1)">移除</Button>
+              <Input v-model="parameter.value" placeholder="参数值（含单位）" aria-label="Value" />
+              <Button
+                size="small"
+                :type="getPermissionActionColor('delete')"
+                icon="Delete"
+                @click="parameters.splice(parameters.indexOf(parameter), 1)"
+              >
+                删除
+              </Button>
             </div>
           </div>
         </template>
@@ -193,5 +201,5 @@ async function handleSubmit() {
 .parameters__actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .parameters__hint { color: var(--el-text-color-secondary); font-size: 12px; line-height: 1.6; }
 .parameters__common-row { display: grid; grid-template-columns: 70px 1fr; align-items: center; gap: 8px; margin-bottom: 10px; }
-.parameters__row { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(100px, 1fr) minmax(140px, 2fr) 64px; align-items: start; gap: 8px; margin-bottom: 10px; }
+.parameters__row { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(100px, 1fr) minmax(140px, 2fr) 64px; align-items: center; gap: 8px; margin-bottom: 10px; }
 </style>
