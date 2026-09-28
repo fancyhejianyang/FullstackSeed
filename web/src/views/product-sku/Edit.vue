@@ -108,7 +108,7 @@ const fields = computed<FormField[]>(() => [
   { prop: 'skuCode', label: 'SKU 编码', type: 'input', componentProps: { readonly: true }, placeholder: '选择产品后自动生成', hint: '产品编号 + 序号，例如 PRODUCT-001。保存时分配最终编码。' },
   {
     prop: 'name',
-    label: 'SKU 规格名',
+    label: 'SKU 规格',
     type: 'input',
     placeholder: '如 2.5 × 75 毫米 / 蓝色 / 256G',
     hint: '填写用于区分同一产品下不同 SKU 的核心规格，无需重复产品名称。',
