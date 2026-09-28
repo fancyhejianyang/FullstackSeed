@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-09-28 SKU 规格名提示与通用参数精简
+- 新增文件：无。
+- 修改文件：`web/src/views/product-sku/Edit.vue`、`web/src/views/product-sku/specifications.ts`、`CHANGELOG.md`。
+- 删除文件：无。
+- 调整：SKU 规格名示例改为“2.5 × 75 毫米”等核心规格，并提示无需重复产品名称；内置通用参数移除品牌、型号，仅保留尺寸、质量、颜色。
+- 兼容：历史 SKU 已保存的品牌、型号仍按自定义参数回显和保存，避免静默丢失数据。
+- 范围：仅前端表单展示和参数预设，不修改接口、后端字段或数据库结构。
+- 验证：前端 `vue-tsc --noEmit -p tsconfig.app.json`、`git diff --check`；按表单调整范围不构建、不启动服务。
+- 保留：用户已有 `web/components.d.ts` 改动不纳入提交。
+
 ### 2026-09-28 SKU 自定义参数输入与删除按钮统一
 - 新增文件：无。
 - 修改文件：`web/src/views/product-sku/Edit.vue`、`CHANGELOG.md`。

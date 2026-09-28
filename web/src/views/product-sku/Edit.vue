@@ -70,8 +70,8 @@ const fields = computed<FormField[]>(() => [
     prop: 'name',
     label: 'SKU 规格名',
     type: 'input',
-    placeholder: '如 蓝色 / 256G / 标准版',
-    hint: '可选，但建议填写以便人工识别；最终参数以结构化规格为准。',
+    placeholder: '如 2.5 × 75 毫米 / 蓝色 / 256G',
+    hint: '填写用于区分同一产品下不同 SKU 的核心规格，无需重复产品名称。',
   },
   {
     prop: 'specifications',

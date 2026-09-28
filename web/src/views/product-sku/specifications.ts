@@ -8,8 +8,6 @@ export interface SpecificationRow {
 }
 
 export const commonSpecifications = [
-  { name: 'brand', label: '品牌' },
-  { name: 'model', label: '型号' },
   { name: 'dimensions', label: '尺寸' },
   { name: 'weight', label: '质量' },
   { name: 'color', label: '颜色' },
