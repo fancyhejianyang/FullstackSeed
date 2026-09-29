@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-09-29 Dialog 隐藏可见滚动条
+- 新增文件：无。
+- 修改文件：`web/src/components/Dialog.vue`、`AGENTS-COMPONENTS.md`、`CHANGELOG.md`。
+- 删除文件：无。
+- 调整：通用 Dialog 内容区隐藏右侧滚动条轨道与滑块，同时保留鼠标滚轮、触控板和键盘滚动能力；兼容 Chromium/Safari、Firefox 及旧版 Edge 的滚动条隐藏方式。
+- 范围：所有使用封装 Dialog 的页面统一生效，不修改内容最大高度、字段、接口或后端逻辑。
+- 验证：前端 `vue-tsc --noEmit`、`git diff --check` 通过；按样式修复范围不构建、不启动服务。
+
 ### 2026-09-28 修复 Select 窗口恢复焦点误选
 - 新增文件：无。
 - 修改文件：`web/src/components/Select.vue`、`AGENTS-COMPONENTS.md`、`CHANGELOG.md`。
