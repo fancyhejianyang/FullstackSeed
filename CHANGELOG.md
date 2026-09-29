@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-09-29 Dialog 内边距调整为 25px
+- 新增文件：无。
+- 修改文件：`web/src/components/Dialog.vue`、`AGENTS-COMPONENTS.md`、`CHANGELOG.md`。
+- 删除文件：无。
+- 调整：在通用 Dialog 根节点覆盖 Element Plus 的 `--el-dialog-padding-primary`，将内容、标题和底部操作区到弹窗边框的默认间距由 16px 统一调整为 25px。
+- 范围：所有使用封装 Dialog 的页面统一生效；滚动区域、隐藏滚动条、宽度和最大高度行为保持不变，不涉及后端或接口。
+- 验证：前端 `vue-tsc --noEmit`、`git diff --check` 通过；按样式调整范围不构建、不启动服务。
+
 ### 2026-09-29 Dialog 隐藏可见滚动条
 - 新增文件：无。
 - 修改文件：`web/src/components/Dialog.vue`、`AGENTS-COMPONENTS.md`、`CHANGELOG.md`。
