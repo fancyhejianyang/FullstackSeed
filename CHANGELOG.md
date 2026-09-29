@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-09-29 新建 SKU 同步参考参数值
+- 新增文件：无。
+- 修改文件：`web/src/views/product-sku/Edit.vue`、`CHANGELOG.md`。
+- 删除文件：无。
+- 功能：新建 SKU 识别到同产品已有参考 SKU 时，自定义参数由仅带出 Name、Label 调整为完整带出 Name、Label、Value；用户可以直接保留参考值或重新编辑 Value。
+- 兼容：复制参数行时保留原始值元数据，未修改的历史数字、布尔或对象值继续按原类型保存；修改后的 Value 按输入文本保存。内置尺寸、质量、颜色仍保持空白，不从参考 SKU 复制。
+- 接口：继续复用现有 `GET /product-skus` 查询，不新增后端接口、字段或数据库变更。
+- 验证：前端 `vue-tsc --noEmit`、生产构建、`git diff --check` 通过；未启动服务。
+
 ### 2026-09-29 Dialog 内边距调整为 25px
 - 新增文件：无。
 - 修改文件：`web/src/components/Dialog.vue`、`AGENTS-COMPONENTS.md`、`CHANGELOG.md`。

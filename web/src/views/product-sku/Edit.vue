@@ -79,8 +79,7 @@ async function refreshReferenceParameters(productId: number | '') {
     if (!referenceSku) return;
 
     const referenceCustomParameters = specificationRows(referenceSku.specifications ?? {})
-      .filter((row) => !row.builtin)
-      .map((row) => ({ name: row.name, label: row.label, value: '' }));
+      .filter((row) => !row.builtin);
     parameters.value = [...specificationRows({}), ...referenceCustomParameters];
     if (referenceCustomParameters.length) referenceSkuCode.value = referenceSku.skuCode;
   } catch {
@@ -226,7 +225,7 @@ async function handleSubmit() {
               </div>
               <p class="parameters__hint">
                 Name 为字段名，Label 为显示名称，Value 为参数值。例如 ratedVoltage / 额定电压 / 220 伏。Name 不能重复或占用内置字段。
-                <template v-if="referenceSkuCode">已根据参考 SKU {{ referenceSkuCode }} 带出 Name 和 Label，请填写 Value。</template>
+                <template v-if="referenceSkuCode">已根据参考 SKU {{ referenceSkuCode }} 带出 Name、Label 和 Value，可直接调整 Value。</template>
               </p>
               <div v-if="customParameters.length" class="parameters__row"><span>Name</span><span>Label</span><span>Value</span><span /></div>
               <div v-for="(parameter, index) in customParameters" :key="index" class="parameters__row">
