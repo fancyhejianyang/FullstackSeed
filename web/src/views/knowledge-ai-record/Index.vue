@@ -108,6 +108,29 @@ function getQaStageStatus(stage: KnowledgeAiProcessingTrace['originalQa']) {
     : { text: '未命中', type: 'warning' as const };
 }
 
+function getBusinessDataStatus(trace: KnowledgeAiProcessingTrace) {
+  const business = trace.businessData;
+  const labels = {
+    unauthorized: '未授权',
+    not_executed: '未执行',
+    running: '执行中',
+    matched: '已命中',
+    not_matched: '已执行但未命中',
+    failed: '执行失败',
+  };
+  if (business.status) return labels[business.status];
+  // 旧版把未命中写成 executed=false，只有明确的阶段记录才能纠正显示。
+  if (business.matched) return labels.matched;
+  const stage = trace.execution?.stages.find((item) => item.name === '业务数据查询');
+  if (stage?.status === 'failed') return labels.failed;
+  if (stage?.status === 'running') return labels.running;
+  if (business.executed || stage?.status === 'success') return labels.not_matched;
+  if (trace.originalQa.matched || trace.calibratedQa.matched ||
+    !trace.retrievalConfig || !trace.retrievalConfig.enableBusinessCommands ||
+    business.skippedReason?.startsWith('尚未执行')) return labels.not_executed;
+  return business.authorized ? labels.not_executed : labels.unauthorized;
+}
+
 function getRoutingRuleTypeText(type: string) {
   const map: Record<string, string> = {
     generic: '公共降权',
@@ -408,11 +431,15 @@ async function handleView(row: KnowledgeAiChatSession) {
 
               <el-collapse-item name="business">
                 <template #title>
-                  <span>8. 获授权业务数据查询</span>
+                  <span>8. 产品 / SKU 业务查询</span>
                   <el-tag class="ai-record__trace-title-tag" :type="message.processingTrace.businessData.matched ? 'success' : 'info'" effect="light" size="small">
-                    {{ message.processingTrace.businessData.matched ? '已命中' : (message.processingTrace.businessData.authorized ? '未命中' : '未授权') }}
+                    {{ getBusinessDataStatus(message.processingTrace) }}
                   </el-tag>
                 </template>
+                <div v-if="message.processingTrace.businessData.queryKeywords" class="ai-record__trace-text">
+                  产品关键词：{{ message.processingTrace.businessData.queryKeywords.join('、') || '未提炼到明确产品词' }}
+                  （{{ message.processingTrace.businessData.keywordSource === 'ai' ? 'AI 提炼' : '本地分词回退' }}）
+                </div>
                 <pre v-if="message.processingTrace.businessData.context" class="ai-record__trace-json">{{ formatJson(message.processingTrace.businessData.context) }}</pre>
                 <span v-else class="ai-record__trace-muted">{{ message.processingTrace.businessData.skippedReason || '未返回业务事实。' }}</span>
               </el-collapse-item>

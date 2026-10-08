@@ -137,6 +137,12 @@ export const AI_COMMAND_CATALOG: AiCommandCatalogItem[] = [
           type: 'string',
           description: '已完成口语校准的用户问题，可包含产品名、别名或 SKU 编码。',
         },
+        keywords: {
+          type: 'array',
+          items: { type: 'string', minLength: 2, maxLength: 40 },
+          maxItems: 6,
+          description: '从本轮原始或校准问题提炼的核心产品词，按名称/别名进行部分匹配；多产品返回候选，不猜定单一产品。',
+        },
       },
     }),
     contextBindings: toJson({

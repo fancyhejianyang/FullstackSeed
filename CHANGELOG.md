@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-10-08 聊天产品关键词提炼、部分匹配与业务查询状态修复
+- 新增文件：`server/src/product-catalog/product-search.ts`。
+- 修改文件：`server/src/product-catalog/product-catalog.service.ts`、`server/src/product-catalog/product-catalog.service.spec.ts`、`server/src/knowledge-ai-chat/knowledge-ai-chat.service.ts`、`server/src/knowledge-ai-chat/knowledge-ai-chat.service.spec.ts`、`server/src/knowledge-ai-chat/knowledge-ai-chat-command.service.ts`、`server/src/knowledge-ai-chat/knowledge-ai-chat-trace.ts`、`server/src/ai-command-definitions/ai-command-definitions.constants.ts`、`web/src/api/knowledgeAiChat.ts`、`web/src/views/knowledge-ai-record/Index.vue`、`CHANGELOG.md`。
+- 删除文件：无。
+- 现象与原因：卷尺能命中，靠枕无法命中已有的“云朵 记忆棉靠枕”；旧查询只检查问题是否包含完整产品名/别名。业务查询虽已授权并执行，但未命中时被写成 `executed=false`，且回答提示词只强调知识库未启用，导致模型错误表述成商品检索未启用。
+- 查询：在已授权、工作流已开启且未命中标准问答的前提下，用当前聊天模型从本轮原始/校准问题提炼产品词；校验关键词来源和数量，异常或非法输出回退本地分词，不携带上一轮商品干扰当前品类。提炼调用的 Token 纳入本轮统计。
+- 匹配：保留产品全名/别名识别，新增查询词对产品名称/别名/编码的包含匹配；多产品最多返回 5 组真实产品及 SKU 候选，不按排序猜定一个产品，同分 SKU 也保留候选。继续只查询已启用、未软删除的数据，不改变授权边界。
+- 前后端契约：业务轨迹新增可选 `status/queryKeywords/keywordSource`，产品结果扩展 `matchType=products/candidateProducts/totalProducts`；字段在前后端同步，不改数据库表结构。同步 `product.sku.lookup` 的可选关键词参数契约。
+- 状态与文案：分别记录未授权、未执行、执行中、已命中、已执行但未命中和执行失败；问答详情展示查询词及来源，旧记录依据已有执行阶段兼容显示，不改写历史数据。回答明确区分文档检索与商品查询，禁止把未命中说成未授权/未启用或断言商品不存在。
+- 验证：3 组针对性测试共 24 项通过，TypeORM 实体列检查、后端源码 `tsc --noEmit --incremental false -p tsconfig.build.json`、前端 `vue-tsc --noEmit -p tsconfig.app.json`、`git diff --check` 通过；只读真实产品数据复现已能用原始靠枕问题命中 3 个 SKU，卷尺仍返回 4 个 SKU。未调用真实模型、未构建或启动服务。
+- 已知基线：包含全部测试文件的后端类型检查仍报原有 `server/src/common/list-query-filters.spec.ts:68` 构造函数仅传 5 个参数、实际需要 6 个的错误；已核对 HEAD 中同样存在，本次未改动该无关文件。
+
 ### 2026-10-08 产品列表快捷启停
 - 新增文件：无。
 - 修改文件：`web/src/views/product/Index.vue`、`web/src/api/productCatalog.ts`、`CHANGELOG.md`。

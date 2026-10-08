@@ -42,6 +42,10 @@ export interface KnowledgeAiRoutingTrace {
 }
 
 export interface KnowledgeAiBusinessDataTrace {
+  /** 旧记录无此字段，前端结合执行阶段兼容展示。 */
+  status?: 'unauthorized' | 'not_executed' | 'running' | 'matched' | 'not_matched' | 'failed';
+  queryKeywords?: string[];
+  keywordSource?: 'ai' | 'fallback';
   authorized: boolean;
   executed: boolean;
   matched: boolean;

@@ -11,29 +11,36 @@ import {
 } from './dto/product-catalog.dto';
 import { Product } from './entities/product.entity';
 import { ProductSku } from './entities/product-sku.entity';
+import { normalizeProductText, sanitizeProductKeywords } from './product-search';
 
-export interface ProductSkuChatContext {
-  matchType: 'sku' | 'product';
-  product: {
-    id: number;
-    productCode: string;
-    name: string;
-    aliases: string[];
-    category: string;
-  };
-  sku: {
-    id: number;
-    skuCode: string;
-    name: string;
-    specifications: Record<string, unknown>;
-  } | null;
-  candidateSkus: Array<{
-    id: number;
-    skuCode: string;
-    name: string;
-    specifications: Record<string, unknown>;
-  }>;
+export interface ProductChatFact {
+  id: number;
+  productCode: string;
+  name: string;
+  aliases: string[];
+  category: string;
 }
+
+export interface SkuChatFact {
+  id: number;
+  skuCode: string;
+  name: string;
+  specifications: Record<string, unknown>;
+}
+
+export type ProductSkuChatContext = {
+  matchType: 'sku' | 'product';
+  product: ProductChatFact;
+  sku: SkuChatFact | null;
+  candidateSkus: SkuChatFact[];
+} | {
+  matchType: 'products';
+  product: null;
+  sku: null;
+  candidateSkus: [];
+  candidateProducts: Array<{ product: ProductChatFact; candidateSkus: SkuChatFact[] }>;
+  totalProducts: number;
+};
 
 @Injectable()
 export class ProductCatalogService {
@@ -249,37 +256,47 @@ export class ProductCatalogService {
    * 面向聊天的只读事实查询：只返回产品与 SKU 的最小 JSON，
    * 多 SKU 未能唯一定位时返回候选项，要求回答模型提示用户补充规格。
    */
-  async findSkuContextForChat(question: string): Promise<ProductSkuChatContext | null> {
+  async findSkuContextForChat(question: string, keywords: string[] = []): Promise<ProductSkuChatContext | null> {
     const normalizedQuestion = this.normalize(question);
+    const queryKeywords = sanitizeProductKeywords(keywords, question);
     if (!normalizedQuestion) return null;
     const products = await this.productRepository.find({
       where: { isEnabled: true },
       take: 5000,
     });
     const scoredProducts = products
-      .map((product) => ({ product, score: this.getProductScore(product, normalizedQuestion) }))
+      .map((product) => ({ product, score: this.getProductScore(product, normalizedQuestion, queryKeywords) }))
       .filter((item) => item.score > 0)
       .sort((left, right) => right.score - left.score || right.product.id - left.product.id);
-    const selected = scoredProducts[0]?.product;
-    if (!selected) return null;
+    if (!scoredProducts.length) return null;
+    if (scoredProducts.length > 1) {
+      const candidateProducts = await Promise.all(scoredProducts.slice(0, 5).map(async ({ product }) => ({
+        product: this.toProductContext(product),
+        candidateSkus: (await this.skuRepository.find({
+          where: { productId: product.id, isEnabled: true },
+          order: { id: 'ASC' },
+          take: 5,
+        })).map((sku) => this.toSkuContext(sku)),
+      })));
+      return { matchType: 'products', product: null, sku: null, candidateSkus: [],
+        candidateProducts, totalProducts: scoredProducts.length };
+    }
+    const selected = scoredProducts[0].product;
 
     const skus = await this.skuRepository.find({
       where: { productId: selected.id, isEnabled: true },
       order: { id: 'ASC' },
     });
-    const product = {
-      id: selected.id,
-      productCode: selected.productCode,
-      name: selected.name,
-      aliases: selected.aliases ?? [],
-      category: selected.category,
-    };
+    const product = this.toProductContext(selected);
     const candidates = skus.map((sku) => this.toSkuContext(sku));
     const scoredSkus = skus
       .map((sku) => ({ sku, score: this.getSkuScore(sku, normalizedQuestion) }))
       .filter((item) => item.score > 0)
       .sort((left, right) => right.score - left.score || left.sku.id - right.sku.id);
-    const matchedSku = scoredSkus[0]?.sku ?? (skus.length === 1 ? skus[0] : null);
+    const uniqueBestSku = scoredSkus.length &&
+      (scoredSkus.length === 1 || scoredSkus[0].score > scoredSkus[1].score)
+      ? scoredSkus[0].sku : null;
+    const matchedSku = uniqueBestSku ?? (skus.length === 1 ? skus[0] : null);
     return {
       matchType: matchedSku ? 'sku' : 'product',
       product,
@@ -306,13 +323,14 @@ export class ProductCatalogService {
     return new Map(products.map((item) => [item.id, item]));
   }
 
-  private getProductScore(product: Product, question: string) {
+  private getProductScore(product: Product, question: string, keywords: string[]) {
     const terms = [product.productCode, product.name, ...(product.aliases ?? [])]
       .map((item) => this.normalize(item))
       .filter(Boolean);
     return Math.max(
       0,
-      ...terms.map((term) => (question.includes(term) ? term.length * 100 : 0)),
+      ...terms.map((term) => (question.includes(term) ? 10000 + term.length * 100 : 0)),
+      ...keywords.map((keyword) => terms.some((term) => term.includes(keyword)) ? keyword.length * 100 : 0),
     );
   }
 
@@ -347,8 +365,13 @@ export class ProductCatalogService {
     };
   }
 
+  private toProductContext(product: Product): ProductChatFact {
+    return { id: product.id, productCode: product.productCode, name: product.name,
+      aliases: product.aliases ?? [], category: product.category };
+  }
+
   private normalize(value: string) {
-    return value.toLocaleLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '');
+    return normalizeProductText(value);
   }
 
   private normalizeTexts(values?: string[]) {

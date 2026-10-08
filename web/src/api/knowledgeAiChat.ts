@@ -95,28 +95,34 @@ export interface KnowledgeRoutingRuleMatch {
   knowledgeBaseIds: number[];
 }
 
-export interface ProductSkuChatContext {
-  matchType: 'sku' | 'product';
-  product: {
-    id: number;
-    productCode: string;
-    name: string;
-    aliases: string[];
-    category: string;
-  };
-  sku: {
-    id: number;
-    skuCode: string;
-    name: string;
-    specifications: Record<string, unknown>;
-  } | null;
-  candidateSkus: Array<{
-    id: number;
-    skuCode: string;
-    name: string;
-    specifications: Record<string, unknown>;
-  }>;
+export interface ProductChatFact {
+  id: number;
+  productCode: string;
+  name: string;
+  aliases: string[];
+  category: string;
 }
+
+export interface SkuChatFact {
+  id: number;
+  skuCode: string;
+  name: string;
+  specifications: Record<string, unknown>;
+}
+
+export type ProductSkuChatContext = {
+  matchType: 'sku' | 'product';
+  product: ProductChatFact;
+  sku: SkuChatFact | null;
+  candidateSkus: SkuChatFact[];
+} | {
+  matchType: 'products';
+  product: null;
+  sku: null;
+  candidateSkus: [];
+  candidateProducts: Array<{ product: ProductChatFact; candidateSkus: SkuChatFact[] }>;
+  totalProducts: number;
+};
 
 export interface KnowledgeAiProcessingTrace {
   version: 1;
@@ -167,6 +173,9 @@ export interface KnowledgeAiProcessingTrace {
     skippedReason: string | null;
   };
   businessData: {
+    status?: 'unauthorized' | 'not_executed' | 'running' | 'matched' | 'not_matched' | 'failed';
+    queryKeywords?: string[];
+    keywordSource?: 'ai' | 'fallback';
     authorized: boolean;
     executed: boolean;
     matched: boolean;

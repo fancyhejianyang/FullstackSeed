@@ -97,6 +97,7 @@ export class KnowledgeAiChatCommandService {
   async lookupProductSku(
     question: string,
     options?: KnowledgeAiChatCommandOptions,
+    keywords: string[] = [],
   ): Promise<ProductSkuChatContext | null> {
     if (
       options?.allowedCommandKeys &&
@@ -110,7 +111,7 @@ export class KnowledgeAiChatCommandService {
       KNOWLEDGE_AI_CHAT_COMMANDS.lookupProductSku,
       options?.allowedCommandKeys,
     );
-    return this.productCatalogService.findSkuContextForChat(question);
+    return this.productCatalogService.findSkuContextForChat(question, keywords);
   }
 
 }
