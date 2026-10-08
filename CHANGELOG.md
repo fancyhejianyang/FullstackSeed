@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-10-08 产品列表快捷启停
+- 新增文件：无。
+- 修改文件：`web/src/views/product/Index.vue`、`web/src/api/productCatalog.ts`、`CHANGELOG.md`。
+- 删除文件：无。
+- 功能：产品列表操作列按当前状态显示“启用”或“停用”；停用需二次确认，确认和请求期间自动 loading、防重复点击，成功后提示并按当前筛选条件刷新列表。
+- 规范：通过 Table 的 actions 插槽复用 Button 封装，权限沿用 `Product.update`，启停配色使用公共动作映射。
+- 接口：前端更新入参改为 `Partial<ProductForm>`，与后端 `UpdateProductDto` 对齐；复用 `PATCH /products/:id`，仅提交 `isEnabled`，不修改其他产品字段或 SKU 状态，无后端和数据库变更。
+- 验证：前端 `vue-tsc --noEmit -p tsconfig.app.json`、生产构建、`git diff --check` 通过；构建仅有依赖中的 PURE 注释警告。未启动服务或执行浏览器交互自测。
+
 ### 2026-09-29 新建 SKU 同步参考参数值
 - 新增文件：无。
 - 修改文件：`web/src/views/product-sku/Edit.vue`、`CHANGELOG.md`。

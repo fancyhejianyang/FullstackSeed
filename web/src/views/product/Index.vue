@@ -15,6 +15,7 @@ import {
   type ProductImportResult,
   deleteProduct,
   getProducts,
+  updateProduct,
   type Product,
   type QueryProductParams,
 } from '@/api/productCatalog';
@@ -99,6 +100,18 @@ function handleEdit(row: Product) {
   editVisible.value = true;
 }
 
+async function toggleProductStatus(row: Product) {
+  try {
+    const updated = await updateProduct(row.id, { isEnabled: !row.isEnabled });
+    row.isEnabled = updated.isEnabled;
+    row.updatedAt = updated.updatedAt;
+    ElMessage.success(updated.isEnabled ? '产品已启用' : '产品已停用');
+    await tableRef.value?.refresh();
+  } catch {
+    // 请求层统一提示错误；更新失败时不改动列表中的状态。
+  }
+}
+
 function deleteRequest(row: Product) {
   return deleteProduct(row.id);
 }
@@ -129,6 +142,21 @@ function batchDeleteRequest(payload: { ids: Array<number | string> }) {
         <Button perm="Product.create" icon="Upload" :auto-type="false" :type="getPermissionActionColor('Product.import')" :loading="importing" @click="fileInput?.click()">Excel 导入</Button>
         <Button perm="Product.batchDelete" :confirm="false" @click="tableRef?.runBatchDelete()">
           批量删除
+        </Button>
+      </template>
+      <template #actions="{ row }">
+        <Button
+          perm="Product.update"
+          link
+          icon=""
+          :auto-type="false"
+          :type="getPermissionActionColor(row.isEnabled ? 'Product.disable' : 'Product.enable')"
+          :confirm="row.isEnabled"
+          confirm-title="停用产品"
+          :confirm-text="`确认停用产品“${row.name}”？`"
+          @click="(_event, done) => done(toggleProductStatus(row))"
+        >
+          {{ row.isEnabled ? '停用' : '启用' }}
         </Button>
       </template>
       <template #column-aliases="{ row }">

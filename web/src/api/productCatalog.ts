@@ -104,7 +104,7 @@ export function createProduct(data: ProductForm) {
   return request.post<unknown, Product>('/products', data);
 }
 
-export function updateProduct(id: number, data: ProductForm) {
+export function updateProduct(id: number, data: Partial<ProductForm>) {
   return request.patch<unknown, Product>(`/products/${id}`, data);
 }
 
