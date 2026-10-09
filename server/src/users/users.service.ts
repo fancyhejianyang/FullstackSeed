@@ -33,6 +33,7 @@ const ADMIN_PERMISSION_MODULES = [
   'Product',
   'ProductSku',
   'ApprovalRequest',
+  'CustomerService',
   'User',
   'Role',
   'Permission',

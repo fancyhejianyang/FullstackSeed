@@ -20,6 +20,7 @@ import { UploadsModule } from './uploads/uploads.module';
 import { StorageConfigModule } from './storage-config/storage-config.module';
 import { KnowledgeAiProvidersModule } from './knowledge-ai-providers/knowledge-ai-providers.module';
 import { KnowledgeAiChatModule } from './knowledge-ai-chat/knowledge-ai-chat.module';
+import { CustomerServiceModule } from './customer-service/customer-service.module';
 import { KnowledgeBasesModule } from './knowledge-bases/knowledge-bases.module';
 import { MineruConfigsModule } from './mineru-configs/mineru-configs.module';
 import { ExternalAppsModule } from './external-apps/external-apps.module';
@@ -137,6 +138,7 @@ import { AiWorkflowsModule } from './ai-workflows/ai-workflows.module';
     VectorConfigsModule,
     DocumentParseRulesModule,
     KnowledgeAiChatModule,
+    CustomerServiceModule,
     ExternalAppsModule,
     MineruConfigsModule,
     KnowledgeBasesModule,

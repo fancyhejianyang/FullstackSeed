@@ -46,6 +46,7 @@ const form = reactive<ExternalAppForm>({
   aiFeatureConfigId: null,
   retrievalConfigId: null,
   commandKeys: [],
+  maxConcurrentChats: null,
   isEnabled: true,
   description: '',
 });
@@ -92,6 +93,14 @@ const fields = computed<FormField[]>(() => [
     hint: '工作流决定是否执行知识库、口语校准和业务指令；这里仅勾选产品/SKU等已审核的只读业务指令，二者都启用才会实际调用。',
   },
   {
+    prop: 'maxConcurrentChats',
+    label: 'AI 最大并发会话数',
+    component: 'InputNumber',
+    placeholder: '留空则不限制',
+    componentProps: { mode: 'integer', min: 1, max: 1000 },
+    hint: '仅正在执行的 AI 问答占用名额；超出后排队，人工接待不占用。留空不限，配置范围为 1–1000。',
+  },
+  {
     prop: 'domain',
     label: '白名单域名',
     type: 'textarea',
@@ -112,6 +121,16 @@ const rules: FormRules = {
   aiFeatureConfigId: [
     { required: true, message: '请选择 AI 聊天配置', trigger: 'change' },
   ],
+  maxConcurrentChats: [{
+    validator: (_rule, value, callback) => {
+      if (value == null || (Number.isInteger(value) && value >= 1 && value <= 1000)) {
+        callback();
+      } else {
+        callback(new Error('请输入 1–1000 的整数，或留空不限制'));
+      }
+    },
+    trigger: ['blur', 'change'],
+  }],
 };
 
 function resetForm() {
@@ -121,6 +140,7 @@ function resetForm() {
   form.aiFeatureConfigId = chatConfigs.value.length === 1 ? chatConfigs.value[0].id : null;
   form.retrievalConfigId = null;
   form.commandKeys = [];
+  form.maxConcurrentChats = null;
   form.isEnabled = true;
   form.description = '';
 }
@@ -134,6 +154,7 @@ function fillForm(data: ExternalApp) {
     (chatConfigs.value.length === 1 ? chatConfigs.value[0].id : null);
   form.retrievalConfigId = data.retrievalConfigId ?? null;
   form.commandKeys = data.commandKeys ?? [];
+  form.maxConcurrentChats = data.maxConcurrentChats ?? null;
   form.isEnabled = !!data.isEnabled;
   form.description = data.description ?? '';
 }
@@ -189,6 +210,7 @@ function buildPayload() {
       ? Number(form.retrievalConfigId)
       : null,
     commandKeys: form.commandKeys ?? [],
+    maxConcurrentChats: form.maxConcurrentChats ?? null,
     isEnabled: form.isEnabled,
     description: form.description?.trim(),
   };
@@ -237,7 +259,7 @@ function getRetrievalModeText(mode: string) {
     @confirm="handleSubmit"
   >
     <div v-loading="loading">
-      <Form ref="formRef" v-model="form" :fields="fields" :rules="rules" label-width="110px" />
+      <Form ref="formRef" v-model="form" :fields="fields" :rules="rules" label-width="150px" />
     </div>
   </Dialog>
 </template>

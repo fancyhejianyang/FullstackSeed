@@ -46,5 +46,6 @@ import { KnowledgeAiChatSession } from './entities/knowledge-ai-chat-session.ent
     KnowledgeAiChatRetrievalService,
     KnowledgeAiChatCommandService,
   ],
+  exports: [KnowledgeAiChatService],
 })
 export class KnowledgeAiChatModule {}

@@ -71,6 +71,7 @@ describe('列表组合筛选', () => {
       null as never,
       null as never,
       null as never,
+      null as never,
     );
 
     await service.findSessions({ isSuccess: false });

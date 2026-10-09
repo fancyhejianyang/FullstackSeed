@@ -20,6 +20,14 @@ type SeedMenu = Partial<Menu> & { parentPath?: string };
 // isSystem=true 为系统固定菜单：仅超管可见、不可分配给角色；业务菜单 isSystem=false 可分配。
 const SEED_MENUS: SeedMenu[] = [
   {
+    name: '客服工作台',
+    path: '/customer-service',
+    icon: 'Service',
+    sort: 74,
+    permissionCode: 'CustomerService.read',
+    isSystem: false,
+  },
+  {
     name: '首页',
     path: '/',
     icon: 'HomeFilled',

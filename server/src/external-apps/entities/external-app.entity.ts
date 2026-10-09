@@ -29,6 +29,10 @@ export class ExternalApp extends BaseEntity {
   @Column({ type: 'simple-json', nullable: true })
   commandKeys: string[] | null;
 
+  /** 仅正在执行的 AI 问答占用名额；NULL 保持不限额，人工接待不占用。 */
+  @Column({ type: 'int', nullable: true })
+  maxConcurrentChats: number | null;
+
   @Column({ type: 'tinyint', default: true })
   isEnabled: boolean;
 

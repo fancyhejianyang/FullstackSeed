@@ -1,5 +1,22 @@
 # CHANGELOG
 
+### 2026-10-09 应用 AI 并发、持久化排队与人工客服接待
+
+- 新增后端文件：`server/src/customer-service/customer-service.controller.ts`、`customer-service.module.ts`、`customer-service.service.ts`、`customer-service.service.spec.ts`、`legacy-knowledge-ai-chat.controller.ts`、`dto/customer-service.dto.ts`、`entities/customer-chat-message.entity.ts`、`entities/customer-chat-task.entity.ts`（后七项均位于 `server/src/customer-service/`）；`server/src/knowledge-ai-chat/knowledge-ai-chat-execution.spec.ts`、`server/src/knowledge-ai-providers/knowledge-ai-cancellation.spec.ts`、`server/src/migrations/1788911200000-AddCustomerServiceReception.ts`、`server/scripts/verify-customer-service.cjs`。
+- 新增前端文件：`web/src/api/customerService.ts`、`web/src/views/customer-service/Index.vue`、`web/src/views/customer-service/View.vue`。
+- 修改后端文件：`server/src/app.module.ts`、`server/src/common/list-query-filters.spec.ts`、`server/src/external-apps/dto/external-app.dto.ts`、`server/src/external-apps/entities/external-app.entity.ts`、`server/src/external-apps/external-apps.service.ts`、`server/src/knowledge-ai-chat/dto/knowledge-ai-chat.dto.ts`、`server/src/knowledge-ai-chat/entities/knowledge-ai-chat-session.entity.ts`、`server/src/knowledge-ai-chat/knowledge-ai-chat.controller.ts`、`server/src/knowledge-ai-chat/knowledge-ai-chat.module.ts`、`server/src/knowledge-ai-chat/knowledge-ai-chat.service.ts`、`server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`、`server/src/menus/menus.service.ts`、`server/src/users/users.service.ts`。
+- 修改前端及文档：`web/src/api/externalApp.ts`、`web/src/components/Button.vue`、`web/src/router/index.ts`、`web/src/views/external-app/Edit.vue`、`web/src/views/external-app/Index.vue`、`AGENTS-COMPONENTS.md`、`MIGRATION.md`、`CHANGELOG.md`。
+- 关联 H5 仓库 `D:\AllProjects\H5\ai-customer-service`：新增 `RECEPTION.md`、`css/reception.css`、`js/receptionApi.js`、`js/receptionStore.js`、`js/reception.js`、`tests/reception.test.cjs`；修改 `AGENTS.md`、`index.html`，单独提交。既有 `.design-spec.md`、`REQUIREMENTS.md`、`css/style.css`、`js/api.js`、`js/app.js` 与未跟踪 `OVERVIEW.md` 保持原样、不纳入提交。
+- 删除文件：无业务文件删除；只清理本次跨仓库编辑的临时工作副本。
+- 应用设置：前后端统一新增 `maxConcurrentChats`，1～1000，留空为不限额。名额按应用计算，覆盖整轮 AI 提词、检索、生成和结果保存；正常结束、失败后释放。排队和人工接待不占名额，取消中的执行在真正结束前仍占名额。
+- 调度：新增任务表及消息时间线，应用行锁串行化入队、领取与接手，FIFO 队列每应用最多 200 条、等待上限 15 分钟、AI 执行上限 180 秒。同会话限一轮活动 AI 任务；消息标识幂等，超时重试不重复入队。重启恢复待执行任务，不重跑已中断的模型调用；短暂收尾落库失败只重试保存、不重复生成。
+- 人工：访客可主动申请人工、取消等待并返回 AI；后台“客服工作台”可主动接手排队或正在回答的会话，双方继续发消息，当前接待客服可结束会话。事务裁决多人同时接手，非接待客服不能代发或结束；结束后继续咨询须新建会话。独立根菜单和 `CustomerService.read/create/update` 权限避免普通客服被超管菜单隐藏。
+- 竞态与安全：随机会话凭证仅存摘要，请求同时校验应用与凭证；旧公开流式 URL 也接入同一调度器，不能绕过限制。接待版本、执行取消信号和有条件数据库更新共同阻断接手后的迟到 AI 回复及会话覆盖。取消的 AI 结果不进入后续对话历史；删除接待记录前须结束且无活动任务，并关联软删除新旧消息和任务。
+- 客户端：H5 接入正式 API、SSE 状态/消息同步、断线恢复、排队位置、取消、转人工和可分页历史，不再以随机会话 ID 或模拟回复兜底；新会话显式创建，当前会话按标签页保存。后台按应用/接待状态/AI 队列/本人筛选，保留草稿和幂等重试，切换会话或旧请求迟到时不覆盖当前状态。历史旧会话无凭证仅本地只读。
+- 配套修复：公共 Button 的调用方 `disabled/loading` 原先会被内部 `pending=false` 覆盖，现与内部保护、权限降级合并，确保接待按钮真实禁用；补齐既有列表测试缺失的第六个构造参数，使全量后端测试恢复通过。
+- 验证：后端 19 个测试套件、128 项测试全部通过；H5 13 项测试通过；真实 MySQL 随机隔离库 12 项集成验证全部通过，覆盖迁移幂等、并发/FIFO、重复请求、凭证与跨应用隔离、双客服接手、人工收发、取消释放、单实例锁、历史分页；测试库已精确删除。后端和 Web 生产构建、Web 类型检查、H5 JavaScript 语法检查、`git diff --check` 通过。未调用真实模型、未自动重启既有业务服务，未进行浏览器端人工联调。
+- 部署边界：首版通过 MySQL 命名锁强制同库单服务进程，不支持 PM2 cluster/多副本；获授权客服可见本企业所有应用，不是分应用多租户授权。生产须备份并执行增量迁移，然后同步发布后端、Web、H5；旧客户端须升级 `sessionToken` 与 `clientMessageId`，详见 `MIGRATION.md` 第七节。
+
 ### 2026-10-08 聊天产品关键词提炼、部分匹配与业务查询状态修复
 - 新增文件：`server/src/product-catalog/product-search.ts`。
 - 修改文件：`server/src/product-catalog/product-catalog.service.ts`、`server/src/product-catalog/product-catalog.service.spec.ts`、`server/src/knowledge-ai-chat/knowledge-ai-chat.service.ts`、`server/src/knowledge-ai-chat/knowledge-ai-chat.service.spec.ts`、`server/src/knowledge-ai-chat/knowledge-ai-chat-command.service.ts`、`server/src/knowledge-ai-chat/knowledge-ai-chat-trace.ts`、`server/src/ai-command-definitions/ai-command-definitions.constants.ts`、`web/src/api/knowledgeAiChat.ts`、`web/src/views/knowledge-ai-record/Index.vue`、`CHANGELOG.md`。

@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { In, Like, Repository } from 'typeorm';
 import { KnowledgeAiProvider } from './entities/knowledge-ai-provider.entity';
 import { AiFeatureConfig } from '../ai-feature-configs/entities/ai-feature-config.entity';
@@ -146,6 +147,19 @@ export interface KnowledgeAiTokenUsage {
 
 @Injectable()
 export class KnowledgeAiProvidersService {
+  private readonly executionSignal = new AsyncLocalStorage<AbortSignal>();
+
+  /** 一轮问答中的提词、检索辅助和生成共用取消信号，不影响其它并发会话。 */
+  withExecutionSignal<T>(signal: AbortSignal, run: () => Promise<T>): Promise<T> {
+    return this.executionSignal.run(signal, run);
+  }
+
+  private fetchWithExecution(url: string, init: RequestInit): Promise<Response> {
+    const signal = this.executionSignal.getStore();
+    signal?.throwIfAborted();
+    return fetch(url, { ...init, ...(signal ? { signal } : {}) });
+  }
+
   constructor(
     @InjectRepository(KnowledgeAiProvider)
     private readonly providerRepository: Repository<KnowledgeAiProvider>,
@@ -250,7 +264,7 @@ export class KnowledgeAiProvidersService {
       const target = this.resolveFeatureTarget(provider, dto.featureType, model);
       const response =
         dto.featureType === 'embedding'
-          ? await fetch(target.url, {
+          ? await this.fetchWithExecution(target.url, {
               method: 'POST',
               headers: {
                 Authorization: `Bearer ${target.secretKey}`,
@@ -258,7 +272,7 @@ export class KnowledgeAiProvidersService {
               },
               body: JSON.stringify({ model: target.model, input: ['模型可用性校验'] }),
             })
-          : await fetch(target.url, {
+          : await this.fetchWithExecution(target.url, {
               method: 'POST',
               headers: {
                 Authorization: `Bearer ${target.secretKey}`,
@@ -489,7 +503,7 @@ export class KnowledgeAiProvidersService {
       providerId = target.providerId;
       providerName = target.providerName;
       model = target.model;
-      const response = await fetch(target.url, {
+      const response = await this.fetchWithExecution(target.url, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${target.secretKey}`,
@@ -553,7 +567,7 @@ export class KnowledgeAiProvidersService {
     const startedAt = Date.now();
     let answer = '';
     try {
-      const response = await fetch(payload.target.url, {
+      const response = await this.fetchWithExecution(payload.target.url, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${payload.target.secretKey}`,
@@ -617,7 +631,7 @@ export class KnowledgeAiProvidersService {
   ): Promise<KnowledgeAiChatCallResult> {
     const startedAt = Date.now();
     try {
-      const response = await fetch(payload.target.url, {
+      const response = await this.fetchWithExecution(payload.target.url, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${payload.target.secretKey}`,
@@ -730,7 +744,7 @@ export class KnowledgeAiProvidersService {
     input: string[],
     embeddingDimension?: number | null,
   ): Promise<number[][]> {
-    const response = await fetch(target.url, {
+    const response = await this.fetchWithExecution(target.url, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${target.secretKey}`,

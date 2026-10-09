@@ -6,6 +6,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  MaxLength,
   Min,
 } from 'class-validator';
 import { toBoolLike } from '../../common/utils/bool-like';
@@ -37,6 +38,11 @@ export class AskKnowledgeAiDto {
   @IsString()
   @IsNotEmpty()
   question: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(64)
+  clientMessageId?: string;
 
   @Type(() => Number)
   @IsInt()

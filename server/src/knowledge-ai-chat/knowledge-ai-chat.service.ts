@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Like, Repository } from 'typeorm';
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -18,6 +18,8 @@ import {
 } from './dto/knowledge-ai-chat.dto';
 import { KnowledgeAiChatMessage } from './entities/knowledge-ai-chat-message.entity';
 import { KnowledgeAiChatSession } from './entities/knowledge-ai-chat-session.entity';
+import { CustomerChatTask } from '../customer-service/entities/customer-chat-task.entity';
+import { CustomerChatMessage } from '../customer-service/entities/customer-chat-message.entity';
 import {
   type KnowledgeRetrievalConfigSnapshot,
   type KnowledgeReferenceImage,
@@ -50,6 +52,11 @@ import type {
 
 export interface KnowledgeAiChatStreamWriter {
   writeEvent: (event: string, data: unknown) => void;
+}
+
+export interface KnowledgeAiChatExecution {
+  signal: AbortSignal;
+  isCurrent?: () => boolean;
 }
 
 interface KnowledgeRetrievalState {
@@ -119,9 +126,11 @@ const USER_VISIBLE_THINKING_FORBIDDEN_PATTERN =
 
 @Injectable()
 export class KnowledgeAiChatService {
+  private readonly executionContext = new AsyncLocalStorage<KnowledgeAiChatExecution>();
   private readonly activeTrace = new AsyncLocalStorage<{
     messageId: number;
     sessionId: number;
+    sessionCriteria: { id: number; serviceStatus?: 'ai'; serviceVersion?: number };
     trace: KnowledgeAiProcessingTrace;
   }>();
 
@@ -168,6 +177,7 @@ export class KnowledgeAiChatService {
     dto: AskKnowledgeAiDto,
     run: (dto: AskKnowledgeAiDto) => Promise<T>,
   ): Promise<T> {
+    this.assertExecutionCurrent();
     const session = dto.sessionId
       ? await this.findSessionEntity(dto.sessionId)
       : await this.createSession(dto, {
@@ -238,13 +248,16 @@ export class KnowledgeAiChatService {
       }),
     );
     session.messageCount += 1;
-    session.lastQuestion = dto.question.trim();
-    session.lastAnswer = null;
-    session.isSuccess = false;
-    session.errorMessage = '处理中';
-    await this.sessionRepository.save(session);
+    // 接待状态由调度层独占更新，避免旧实体覆盖已发生的人工接手。
+    await this.sessionRepository.update(this.sessionProgressCriteria(session), {
+      messageCount: session.messageCount,
+      lastQuestion: dto.question.trim(),
+      lastAnswer: null,
+      isSuccess: false,
+      errorMessage: '处理中',
+    });
     return this.activeTrace.run(
-      { messageId: message.id, sessionId: session.id, trace },
+      { messageId: message.id, sessionId: session.id, sessionCriteria: this.sessionProgressCriteria(session), trace },
       async () => {
         try {
           await this.recordStage('加载聊天配置与工作流');
@@ -262,7 +275,7 @@ export class KnowledgeAiChatService {
             errorMessage,
             elapsedMilliseconds,
           });
-          await this.sessionRepository.update(session.id, {
+          await this.sessionRepository.update(this.sessionProgressCriteria(session), {
             isSuccess: false,
             errorMessage,
             elapsedMilliseconds,
@@ -292,6 +305,7 @@ export class KnowledgeAiChatService {
   }
 
   private async recordStage(name: string) {
+    this.assertExecutionCurrent();
     const active = this.activeTrace.getStore();
     if (!active?.trace.execution) return;
     this.finishStage('success');
@@ -310,7 +324,7 @@ export class KnowledgeAiChatService {
       id: active.messageId,
       processingTrace: active.trace,
     });
-    await this.sessionRepository.update(active.sessionId, {
+    await this.sessionRepository.update(active.sessionCriteria, {
       errorMessage: `处理中：${name}`,
     });
   }
@@ -346,6 +360,12 @@ export class KnowledgeAiChatService {
   }
 
   async ask(dto: AskKnowledgeAiDto) {
+    if (dto.sessionId) {
+      const session = await this.findSessionEntity(dto.sessionId);
+      if (session.externalAppId) {
+        throw new ForbiddenException('应用会话必须通过客服接待接口发送消息');
+      }
+    }
     return this.withProgress(dto, (trackedDto) => this.askInternal(trackedDto));
   }
 
@@ -437,10 +457,35 @@ export class KnowledgeAiChatService {
     dto: AskKnowledgeAiDto,
     writer: KnowledgeAiChatStreamWriter,
     externalApp?: ExternalApp,
+    execution?: KnowledgeAiChatExecution,
   ) {
-    return this.withProgress(dto, (trackedDto) =>
-      this.askStreamInternal(trackedDto, writer, externalApp),
+    const run = () => this.withProgress(dto, (trackedDto) =>
+      this.askStreamInternal(trackedDto, {
+        writeEvent: (event, data) => {
+          this.assertExecutionCurrent();
+          writer.writeEvent(event, data);
+        },
+      }, externalApp),
     );
+    if (!execution) return run();
+    return this.executionContext.run(execution, () =>
+      this.providersService.withExecutionSignal(execution.signal, run),
+    );
+  }
+
+  private assertExecutionCurrent() {
+    const execution = this.executionContext.getStore();
+    execution?.signal.throwIfAborted();
+    if (execution?.isCurrent && !execution.isCurrent()) {
+      throw new BadRequestException('AI 任务已取消或已转人工');
+    }
+  }
+
+  private sessionProgressCriteria(session: KnowledgeAiChatSession) {
+    return {
+      id: session.id,
+      ...(session.externalAppId ? { serviceStatus: 'ai' as const, serviceVersion: session.serviceVersion } : {}),
+    };
   }
 
   private async askStreamInternal(
@@ -642,24 +687,45 @@ export class KnowledgeAiChatService {
   }
 
   async removeSession(id: number) {
-    await this.findSessionEntity(id);
-    await this.sessionRepository.softDelete(id);
-    await this.messageRepository.softDelete({ sessionId: id });
+    const session = await this.findSessionEntity(id);
+    await this.assertSessionsDeletable([session]);
+    await this.softDeleteSessions([id]);
     return { id };
   }
 
   async batchRemoveSessions(ids: number[]) {
     const uniqueIds = Array.from(new Set(ids));
     if (!uniqueIds.length) return { ids: [] };
-    const count = await this.sessionRepository.count({
+    const sessions = await this.sessionRepository.find({
       where: { id: In(uniqueIds) },
     });
-    if (count !== uniqueIds.length) {
+    if (sessions.length !== uniqueIds.length) {
       throw new NotFoundException('部分问答记录不存在');
     }
-    await this.sessionRepository.softDelete(uniqueIds);
-    await this.messageRepository.softDelete({ sessionId: In(uniqueIds) });
+    await this.assertSessionsDeletable(sessions);
+    await this.softDeleteSessions(uniqueIds);
     return { ids: uniqueIds };
+  }
+
+  private async assertSessionsDeletable(sessions: KnowledgeAiChatSession[]) {
+    const managed = sessions.filter((session) => session.externalAppId !== null && session.externalAppId !== undefined);
+    if (managed.some((session) => session.serviceStatus !== 'closed')) {
+      throw new BadRequestException('客服会话请先在工作台结束接待，再删除记录');
+    }
+    if (managed.length && await this.sessionRepository.manager.count(CustomerChatTask, {
+      where: { sessionId: In(managed.map((session) => session.id)), status: In(['queued', 'running', 'cancelling']) },
+    })) {
+      throw new BadRequestException('AI 任务尚未结束，请稍后再删除会话');
+    }
+  }
+
+  private async softDeleteSessions(ids: number[]) {
+    await this.sessionRepository.manager.transaction(async (manager) => {
+      await manager.softDelete(KnowledgeAiChatSession, ids);
+      await manager.softDelete(KnowledgeAiChatMessage, { sessionId: In(ids) });
+      await manager.softDelete(CustomerChatTask, { sessionId: In(ids) });
+      await manager.softDelete(CustomerChatMessage, { sessionId: In(ids) });
+    });
   }
 
   private async findSessionEntity(id: number) {
@@ -1032,6 +1098,16 @@ export class KnowledgeAiChatService {
   }
 
   private async getSessionHistory(sessionId: number) {
+    const session = await this.findSessionEntity(sessionId);
+    if (session.externalAppId) {
+      // 取消/人工接手可能发生在原问答落库之后；仅将实际发布完成的轮次作为后续上下文。
+      const history = await this.messageRepository.createQueryBuilder('message')
+        .innerJoin(CustomerChatTask, 'task', 'task.aiMessageId = message.id AND task.status = :status', { status: 'completed' })
+        .where('message.sessionId = :sessionId', { sessionId })
+        .andWhere('message.isSuccess = :success', { success: true })
+        .orderBy('message.id', 'DESC').take(20).getMany();
+      return history.reverse();
+    }
     const history = await this.messageRepository.find({
       where: { sessionId, isSuccess: true },
       order: { id: 'DESC' },
@@ -1056,6 +1132,7 @@ export class KnowledgeAiChatService {
     retrieval?: KnowledgeRetrievalState,
     standardQa?: KnowledgeStandardQaState,
   ) {
+    this.assertExecutionCurrent();
     const hitKnowledgeBaseNames = this.serializeKnowledgeBaseNames(
       retrieval?.knowledgeBaseNames ?? [],
     );
@@ -1139,7 +1216,22 @@ export class KnowledgeAiChatService {
     session.isSuccess = result.isSuccess;
     session.errorMessage = result.errorMessage;
     session.elapsedMilliseconds = result.elapsedMilliseconds;
-    await this.sessionRepository.save(session);
+    this.assertExecutionCurrent();
+    await this.sessionRepository.update(this.sessionProgressCriteria(session), {
+      providerId: session.providerId,
+      providerName: session.providerName,
+      model: session.model,
+      messageCount: session.messageCount,
+      lastQuestion: session.lastQuestion,
+      lastAnswer: session.lastAnswer,
+      hitKnowledgeBaseNames: session.hitKnowledgeBaseNames,
+      lastRetrievalAt: session.lastRetrievalAt,
+      activeKnowledgeBaseId: session.activeKnowledgeBaseId,
+      lastRetrievalQuery: session.lastRetrievalQuery,
+      isSuccess: session.isSuccess,
+      errorMessage: session.errorMessage,
+      elapsedMilliseconds: session.elapsedMilliseconds,
+    });
     return message;
   }
 
@@ -1465,7 +1557,7 @@ export class KnowledgeAiChatService {
         providerName: target.providerName,
         model: target.model,
       });
-      await this.sessionRepository.update(active.sessionId, {
+      await this.sessionRepository.update(active.sessionCriteria, {
         providerId: target.providerId,
         providerName: target.providerName,
         model: target.model,

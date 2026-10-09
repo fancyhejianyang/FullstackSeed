@@ -31,6 +31,9 @@ const props = withDefaults(
   defineProps<{
     /** 权限码（Module.action，如 'User.create'）；不传则不做权限校验 */
     perm?: string;
+    /** 调用方禁用/加载状态，与组件内部提交保护合并。 */
+    disabled?: boolean;
+    loading?: boolean;
     /** 是否用权限码推导默认 type（true 时按动作后缀自动配色） */
     autoType?: boolean;
     /** 是否用权限码推导默认文案（true 时取动作中文短标签） */
@@ -69,6 +72,8 @@ const props = withDefaults(
   }>(),
   {
     perm: '',
+    disabled: false,
+    loading: false,
     autoType: true,
     autoLabel: false,
     icon: undefined,
@@ -116,8 +121,9 @@ const shouldRender = computed(() => {
   return true;
 });
 
-/** 按钮是否 disabled（仅并发保护；无权限 disable 由 fallback 处理） */
-const buttonDisabled = computed(() => pending.value);
+/** 禁止内部 pending=false 覆盖页面传入的 disabled/loading 或权限降级。 */
+const buttonDisabled = computed(() => pending.value || props.disabled || props.loading || !allowed.value);
+const buttonLoading = computed(() => pending.value || props.loading);
 
 /**
  * tooltip 是否显示：
@@ -173,7 +179,7 @@ const resolvedConfirmText = computed(() => {
 // ---- 点击处理 ----
 
 async function handleClick(e: MouseEvent) {
-  if (pending.value) return;
+  if (buttonDisabled.value) return;
 
   pending.value = true;
   try {
@@ -187,6 +193,7 @@ async function handleClick(e: MouseEvent) {
         return;
       }
     }
+    if (props.disabled || props.loading || !allowed.value) return;
     let task: Promise<unknown> | unknown;
     emit('click', e, (value) => {
       task = value;
@@ -208,7 +215,7 @@ async function handleClick(e: MouseEvent) {
     <el-button
       v-bind="$attrs"
       :type="resolvedType ?? ($attrs.type as any)"
-      :loading="pending"
+      :loading="buttonLoading"
       :disabled="buttonDisabled"
       @click="handleClick"
     >

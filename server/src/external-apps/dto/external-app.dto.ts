@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsString,
   MaxLength,
+  Max,
   Min,
   ValidateIf,
 } from 'class-validator';
@@ -45,6 +46,13 @@ export class CreateExternalAppDto {
   @MaxLength(100, { each: true })
   @IsOptional()
   commandKeys?: string[];
+
+  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1000)
+  maxConcurrentChats?: number | null;
 
   @IsBoolean()
   @IsOptional()

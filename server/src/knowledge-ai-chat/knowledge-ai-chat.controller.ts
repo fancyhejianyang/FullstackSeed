@@ -7,20 +7,12 @@ import {
   ParseIntPipe,
   Post,
   Query,
-  Req,
-  Res,
-  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import type { Request, Response } from 'express';
-import { Public } from '../common/decorators/public.decorator';
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator';
-import { ExternalApp } from '../external-apps/entities/external-app.entity';
-import { AppIdGuard } from '../external-apps/guards/app-id.guard';
 import {
   AskKnowledgeAiDto,
   BatchDeleteKnowledgeAiChatSessionDto,
-  InitKnowledgeAiChatSessionDto,
   QueryKnowledgeAiChatSessionDto,
 } from './dto/knowledge-ai-chat.dto';
 import { KnowledgeAiChatService } from './knowledge-ai-chat.service';
@@ -48,53 +40,12 @@ export class KnowledgeAiChatController {
     return this.knowledgeAiChatService.findSession(id);
   }
 
-  @Post('sessions/init')
-  @Public()
-  @UseGuards(AppIdGuard)
-  @ApiOperation({ summary: '应用端初始化 AI 问答会话' })
-  initSession(
-    @Body() dto: InitKnowledgeAiChatSessionDto,
-    @Req() req: Request & { externalApp?: ExternalApp },
-  ) {
-    return this.knowledgeAiChatService.initSession(dto, req.externalApp);
-  }
-
   @Post('ask')
   @ApiBearerAuth()
   @RequirePermissions('Menu.read')
   @ApiOperation({ summary: '发送问题并记录问答内容' })
   ask(@Body() dto: AskKnowledgeAiDto) {
     return this.knowledgeAiChatService.ask(dto);
-  }
-
-  @Post('ask/stream')
-  @Public()
-  @UseGuards(AppIdGuard)
-  @ApiOperation({ summary: '发送问题并流式返回 AI 回答' })
-  async askStream(
-    @Body() dto: AskKnowledgeAiDto,
-    @Req() req: Request & { externalApp?: ExternalApp },
-    @Res() res: Response,
-  ) {
-    this.prepareStreamResponse(res);
-    const writeEvent = (event: string, data: unknown) => {
-      res.write(`event: ${event}\n`);
-      res.write(`data: ${JSON.stringify(data)}\n\n`);
-    };
-
-    try {
-      await this.knowledgeAiChatService.askStream(
-        dto,
-        { writeEvent },
-        req.externalApp,
-      );
-    } catch (error) {
-      writeEvent('error', {
-        message: error instanceof Error ? error.message : 'AI 流式调用失败',
-      });
-    } finally {
-      res.end();
-    }
   }
 
   @Delete('sessions/:id')
@@ -113,12 +64,4 @@ export class KnowledgeAiChatController {
     return this.knowledgeAiChatService.batchRemoveSessions(dto.ids);
   }
 
-  private prepareStreamResponse(res: Response) {
-    res.status(200);
-    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-cache, no-transform');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no');
-    res.flushHeaders?.();
-  }
 }

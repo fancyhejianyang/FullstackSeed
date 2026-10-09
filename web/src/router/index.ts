@@ -147,6 +147,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '聊天应用', permission: 'Menu.read' },
       },
       {
+        path: 'customer-service',
+        name: 'customer-service',
+        component: () => import('@/views/customer-service/Index.vue'),
+        meta: { title: '客服工作台', permission: 'CustomerService.read' },
+      },
+      {
         path: 'chat-management/ai-configs',
         name: 'chat-management-ai-configs',
         component: () => import('@/views/ai-feature-config/Index.vue'),

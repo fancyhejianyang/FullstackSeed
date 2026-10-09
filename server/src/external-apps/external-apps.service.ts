@@ -89,6 +89,7 @@ export class ExternalAppsService {
             ? null
             : this.normalizeCommandKeys(dto.commandKeys),
         isEnabled: dto.isEnabled ?? true,
+        maxConcurrentChats: dto.maxConcurrentChats ?? null,
         description: this.toNullableText(dto.description),
       }),
     );
@@ -130,6 +131,9 @@ export class ExternalAppsService {
       app.commandKeys = this.normalizeCommandKeys(dto.commandKeys);
     }
     if (dto.isEnabled !== undefined) app.isEnabled = dto.isEnabled;
+    if (dto.maxConcurrentChats !== undefined) {
+      app.maxConcurrentChats = dto.maxConcurrentChats;
+    }
     if (dto.description !== undefined) {
       app.description = this.toNullableText(dto.description);
     }

@@ -24,6 +24,7 @@ const columns: TableColumn[] = [
   { prop: 'appId', label: 'AppId', minWidth: 240, slot: true },
   { prop: 'aiFeatureConfigName', label: 'AI 聊天配置', minWidth: 180, slot: true },
   { prop: 'retrievalConfigName', label: 'AI 工作流配置', minWidth: 180, slot: true },
+  { prop: 'maxConcurrentChats', label: 'AI 并发上限', width: 120, slot: true },
   { prop: 'domain', label: '白名单域名', minWidth: 260, slot: true },
   { prop: 'isEnabled', label: '状态', width: 90, slot: true },
   { prop: 'description', label: '描述', minWidth: 180 },
@@ -127,6 +128,10 @@ function splitDomains(domain: string | null) {
 
       <template #column-retrievalConfigName="{ row }">
         {{ row.retrievalConfigName || '不使用知识库' }}
+      </template>
+
+      <template #column-maxConcurrentChats="{ row }">
+        {{ row.maxConcurrentChats == null ? '不限' : `${row.maxConcurrentChats} 个` }}
       </template>
 
       <template #column-isEnabled="{ row }">

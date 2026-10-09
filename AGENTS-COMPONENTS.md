@@ -236,6 +236,7 @@
 | Prop | 类型 | 默认 | 说明 |
 | --- | --- | --- | --- |
 | `perm` | `string` | `''` | 权限码（`Module.action`，如 `'User.create'`）；不传则不做权限校验，按钮始终显示 |
+| `disabled` / `loading` | `boolean` | `false` | 与内部提交保护合并；页面禁用、加载或权限不足时不会触发操作，不会被内部 `pending=false` 覆盖 |
 | `autoType` | `boolean` | `true` | 是否按权限码动作后缀自动推导 `type` |
 | `autoLabel` | `boolean` | `false` | 是否用权限码动作后缀推导默认文案；`true` 且未传插槽内容时生效 |
 | `icon` | `string \| Component` | — | 图标覆盖：字符串（图标名）/ 组件 / 空串 `''` 强制无图标；不传则按 `perm` 自动匹配 |

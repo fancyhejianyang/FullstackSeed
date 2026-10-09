@@ -10,6 +10,7 @@ export interface ExternalApp {
   retrievalConfigId: number | null;
   retrievalConfigName: string | null;
   commandKeys: string[] | null;
+  maxConcurrentChats: number | null;
   isEnabled: boolean;
   description: string | null;
   createdAt: string;
@@ -35,6 +36,7 @@ export interface ExternalAppForm {
   aiFeatureConfigId?: number | null;
   retrievalConfigId?: number | null;
   commandKeys?: string[];
+  maxConcurrentChats?: number | null;
   isEnabled?: boolean;
   description?: string;
 }
