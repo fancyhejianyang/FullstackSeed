@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-10-13 根据组件检查线索整理 Login 表单及重复样式
+
+- 新增文件 / 删除文件：无。
+- 修改文件：`web/src/views/LoginView.vue`、`web/src/utils/permission.ts`、`.design-spec.md`、`CHANGELOG.md`。
+- 检测与整改：先执行 `npm run check:components -- src/views/LoginView.vue`，再结合源码确认裸 `el-form` / `el-input` / `el-button` 可复用；改为 `Form` 字段配置及 actions 插槽配合 `Button`，输入框由 Form 内部封装 Input 渲染。保留登录专属 `el-card`，不将后台 PageContainer 强行套入登录页。
+- 交互适配：改用封装 Form 的 Promise 校验和 `enter` 事件；保留密码显隐、用户名图标及 large 尺寸，明确账号密码 `trim: false`，防止封装默认去空格改变凭据。校验前设置共享 loading，防止按钮与回车重复提交；校验/接口错误沿用 Form/请求拦截器提示并释放 loading。输入框沿用封装默认的清空能力，补充自动填充与可访问名称。
+- 样式复用：居中布局、标题字重和提示文字颜色/字号改用既有全局工具类；标题字号使用 Element Plus token。只保留全屏高度、渐变背景、卡片宽度、按钮全宽等登录专属声明，不重复覆盖组件内部样式。
+- 配色：统一动作颜色映射新增 `login: primary` 并同步设计规范；登录 Button 不传权限码，保证未登录状态可见。不修改后端、登录请求字段或公共 Form/Input/Button 实现。
+- 验证：整改前后均执行组件线索检查，迁移后模板不再直接使用 el-form/el-form-item/el-input/el-button；`npm run type-check -- -p tsconfig.app.json` 与 `git diff --check` 通过。仅做静态检查及源码复核，未构建或启动服务，未进行浏览器登录联调。
+
 ### 2026-10-13 将组件检查器精简为通用只读线索采集脚本
 
 - 新增文件：无。

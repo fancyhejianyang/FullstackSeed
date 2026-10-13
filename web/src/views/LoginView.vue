@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
+import { ElMessage, type FormRules } from 'element-plus';
+import Form, { type FormField } from '@/components/Form.vue';
+import Button from '@/components/Button.vue';
 import { useUserStore } from '@/stores/user';
+import { getPermissionActionColor } from '@/utils/permission';
 
 const router = useRouter();
 const userStore = useUserStore();
 
-const formRef = ref<FormInstance>();
+const formRef = ref<InstanceType<typeof Form>>();
 const loading = ref(false);
 
 const form = reactive({
@@ -15,72 +18,88 @@ const form = reactive({
   password: 'root123',
 });
 
+// 凭据保持原样传递，不能使用 Input 默认的失焦去空格行为。
+const fields: FormField[] = [
+  {
+    prop: 'username',
+    label: '',
+    placeholder: '用户名',
+    componentProps: {
+      prefixIcon: 'User',
+      trim: false,
+      autocomplete: 'username',
+      'aria-label': '用户名',
+    },
+  },
+  {
+    prop: 'password',
+    label: '',
+    placeholder: '密码',
+    inputMode: 'password',
+    componentProps: {
+      trim: false,
+      autocomplete: 'current-password',
+      'aria-label': '密码',
+    },
+  },
+];
+
 const rules: FormRules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
 };
 
 async function handleLogin() {
-  if (!formRef.value) return;
-  await formRef.value.validate(async (valid) => {
-    if (!valid) return;
-    loading.value = true;
-    try {
-      await userStore.login({ ...form });
-      ElMessage.success('登录成功');
-      router.push('/');
-    } finally {
-      loading.value = false;
-    }
-  });
+  if (!formRef.value || loading.value) return;
+  // 回车同样走此入口，在异步校验前锁定，避免与按钮点击重复提交。
+  loading.value = true;
+  try {
+    if (!(await formRef.value.validate())) return;
+    await userStore.login({ ...form });
+    ElMessage.success('登录成功');
+    await router.push('/');
+  } catch {
+    // 字段错误由 Form 展示，接口错误由请求拦截器统一提示。
+  } finally {
+    loading.value = false;
+  }
 }
 </script>
 
 <template>
-  <div class="login">
+  <div class="login flex items-center justify-center">
     <el-card class="login__card">
       <template #header>
-        <div class="login__title">FullstackSeed 管理后台</div>
+        <div class="login__title text-center font-bold">FullstackSeed 管理后台</div>
       </template>
-      <el-form
+      <Form
         ref="formRef"
-        :model="form"
+        v-model="form"
+        :fields="fields"
         :rules="rules"
+        label-width="0"
         size="large"
-        @keyup.enter="handleLogin"
+        @enter="handleLogin"
+        @submit.prevent
       >
-        <el-form-item prop="username">
-          <el-input v-model="form.username" placeholder="用户名" :prefix-icon="'User'" />
-        </el-form-item>
-        <el-form-item prop="password">
-          <el-input
-            v-model="form.password"
-            type="password"
-            placeholder="密码"
-            show-password
-          />
-        </el-form-item>
-        <el-form-item>
-          <el-button
-            type="primary"
+        <template #actions>
+          <Button
+            :type="getPermissionActionColor('login')"
             class="login__btn"
             :loading="loading"
             @click="handleLogin"
           >
             登 录
-          </el-button>
-        </el-form-item>
-      </el-form>
-      <div class="login__tip">默认账号：root / root123</div>
+          </Button>
+        </template>
+      </Form>
+      <div class="mt-lg text-center text-secondary text-xs">默认账号：root / root123</div>
     </el-card>
   </div>
 </template>
 
 <style scoped>
 .login {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   height: 100vh;
   background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
 }
@@ -88,16 +107,9 @@ async function handleLogin() {
   width: 380px;
 }
 .login__title {
-  text-align: center;
-  font-size: 18px;
-  font-weight: 600;
+  font-size: var(--el-font-size-large);
 }
 .login__btn {
   width: 100%;
-}
-.login__tip {
-  text-align: center;
-  color: #909399;
-  font-size: 12px;
 }
 </style>

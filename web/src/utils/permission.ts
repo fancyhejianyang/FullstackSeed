@@ -5,7 +5,7 @@
  * 规则：
  * - 按权限码 `Module.action` 的动作后缀判色，不区分模块。
  * - 未识别动作 → 'info' 灰色兜底。
- * - 三张映射表 key 完全一致，新增动作只改这一处文件。
+ * - 业务权限动作的配色/标签/图标集中维护；无权限的登录操作只定义配色。
  */
 
 export type ElementSemanticType =
@@ -17,6 +17,7 @@ export type ElementSemanticType =
 
 /** 动作 → Element Plus tag/button `type` 语义值 */
 const ACTION_TYPE_MAP: Record<string, ElementSemanticType> = {
+  login: 'primary',
   read: 'info',
   view: 'info',
   create: 'success',
