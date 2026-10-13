@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-10-13 新增 GlobalComponents 组件复用检查脚本
+
+- 新增文件：`web/scripts/checkComponentUsage.mjs`、`web/scripts/componentUsageRules.json`、`web/scripts/checkComponentUsage.test.mjs`。
+- 修改文件：`web/package.json`、`AGENTS-FRONTEND.md`、`CHANGELOG.md`。
+- 删除文件：无。
+- 功能：支持指定一个或多个 Vue 文件/目录，默认扫描 `web/src`；从 `GlobalComponents` 本地 `.vue` 映射读取项目封装组件，结合独立 JSON 替代规则输出已引用组件及带行列的复用候选。支持组件筛选、自定义映射/规则、路径排除、JSON 报告及严格模式退出码。
+- 判断边界：第三方 El*/Router* 映射不是项目封装，不要求页面用完全部组件。解析模板与运行时导入，识别组件大小写/连字符、别名、子路径和命名空间，以及可静态确定的动态组件；跳过注释、样式、脚本文字、类型导入和 v-pre 示例。只把 `.vue` 默认导出当作映射组件，辅助函数和同名局部绑定不会误计。未知动态用法列为待人工检查，外部模板/脚本或 Pug 明确报错。
+- 例外：默认豁免基础封装实现，但组合组件仍检查；跳过依赖、产物和符号链接。原生 HTML 控件提醒需 `--include-native` 开启，不混淆 `<form>` 和 `<Form>`。ElFormItem 等无独立封装的子组件不重复报警，ElSelect/日期/上传提供候选并提醒人工核对接口和行为，不自动替换。
+- 安全与集成：脚本只读、不执行扫描文件或配置，不改 Login 及其他业务页面，不手改 `components.d.ts`；新增 `check:components` / `test:components` 命令，不接入 build、提交钩子或批量修复。无后端、数据库和接口变更。
+- 验证：37 项自动化测试全部通过，涵盖识别、误报边界、目录去重/排除、实现豁免、只读保证和 CLI 0/1/2 退出码；Node 语法检查、Web 类型检查、`git diff --check` 通过。Login 精确报告 4 处候选（Form 1、Input 2、Button 1）；全量扫描 65 个 Vue 文件、18 个豁免项，输出 62 处复用候选、5 处待人工检查、0 个解析错误。报告是整理依据，不等同于 62 个已确认缺陷。未构建或启动服务。
+
 ### 2026-10-13 AI + 云开发微信小程序极速开发流程 PPT
 
 - 新增文件：`artifacts/wechat-mini-program-ppt/AI微信小程序极速开发流程_v2.pptx`、`artifacts/wechat-mini-program-ppt/assets/cover-hero.png`。

@@ -48,6 +48,47 @@ demo 覆盖的能力：
 - 构建：`npm run build`
 - 预览：`npm run preview`
 - 类型检查：`npm run type-check`
+- 组件复用检查：`npm run check:components -- [文件或目录]`（只读）
+- 检查器测试：`npm run test:components`
+
+### 组件复用检查脚本
+
+脚本为 `web/scripts/checkComponentUsage.mjs`。在项目根目录运行：
+
+```powershell
+# 指定单文件或目录，也可传多个路径
+node web/scripts/checkComponentUsage.mjs web/src/views/LoginView.vue
+node web/scripts/checkComponentUsage.mjs web/src/views web/src/layouts
+
+# 只检查 Form / Button 的复用，严格模式发现候选时返回非零退出码
+node web/scripts/checkComponentUsage.mjs web/src/views --only Form,Button --strict
+
+# JSON 报告适合程序消费或自行重定向保存
+node web/scripts/checkComponentUsage.mjs web/src --json
+
+# 原生 HTML 提醒需要显式开启，可排除已确认的特殊页面
+node web/scripts/checkComponentUsage.mjs web/src --include-native --exclude web/src/views/demo
+```
+
+在 `web/` 内可用 `npm run check:components -- src/views/LoginView.vue`。无路径默认扫描 `web/src`；显式路径、`--mapping`、`--config`、`--exclude` 均相对**执行命令时的工作目录**，不支持 glob，含空格的路径需加引号。
+
+规则来源：
+
+- `components.d.ts` 中 `GlobalComponents` 的本地 `.vue` 映射提供项目组件名单。El*、Router* 等第三方映射不算项目封装，也不意味着每页必须用完名单中的组件。
+- `scripts/componentUsageRules.json` 声明“原始组件 → 封装候选”，如 `ElForm → Form`、`ElButton → Button`。映射表中实际存在的目标才启用规则；也可通过 `--mapping` / `--config` 指定其他声明或规则文件。自定义规则中不存在的目标会明确报错。
+- `replacements` 检查底层组件，`native` 定义可选的原生控件提醒，值均为非空组件名数组。检查器只建议候选，不承诺接口可直接互换。例如 Input 的 `mode`、多选的数据格式、上传时机等仍需人工判断。
+- 默认仅豁免规则目标组件的实现文件，`implementationComponents` 可补充基础封装。不会整片豁免 `src/components`，例如组合组件 `AiWorkflowEditor` 仍会检查。`--include-wrappers` 可检查基础实现，但通常会产生预期内提醒。
+- 默认跳过依赖、构建产物和符号链接。扫描文件本身、自动生成声明以及规则文件都不会被修改；不要为消除报告直接编辑 `components.d.ts`。
+
+检测范围与报告：
+
+- 解析 Vue HTML 模板及显式运行时组件导入，识别 PascalCase / kebab-case、导入别名、Element Plus 子路径和命名空间、静态 `<component is>` / `:is`。注释、脚本文字、样式内容和 type-only 导入不作为组件使用。
+- 每文件列出“已引用封装”和带行列的复用候选。已引用包含运行时导入，不证明组件最终参与渲染。没有引用任何封装也不自动判定为违规。
+- 不强制把 `ElCard` 替换为 `PageContainer`，不对 `ElFormItem`、`ElOption` 等无独立封装的子组件重复报警。原生 `<form>` 不等同于 `<Form>`，原生控件默认关闭提醒。
+- 无法静态确定的动态 `:is` 单独列入待检查项。render/JSX、异步组件、运行时注册、跨文件间接导出和 Form 字段配置的运行时结果不在完整分析范围内。外部 template/script src 或 Pug 模板会明确报错，不假装已检查。
+- 退出码：`0` 表示检查完成（默认即使有提醒也不阻断），`--strict` 下有复用候选返回 `1`，参数、路径、映射或解析错误返回 `2`。待人工检查项不会单独触发严格模式失败；零提醒不代表完整合规。
+
+此工具是框架整理辅助，不自动接入 build、提交钩子或批量修复流程。测试只在随机临时目录生成 fixture，结束后清理，不更改业务页面。
 
 ## 黑名单目录与文件（禁止改动）
 
