@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-10-13 修复登录按钮全宽样式失效
+
+- 新增文件 / 删除文件：无。
+- 修改文件：`web/src/views/LoginView.vue`、`CHANGELOG.md`。
+- 现象与原因：复用 Button 后，登录按钮缩成靠左的小按钮；class 已透传，但 Tooltip 插槽内的按钮未携带登录页的 scopeId，原 scoped `.login__btn` 选择器无法匹配。
+- 修复：改为 `.login :deep(.login__btn)` 并说明原因，使 `width: 100%` 作用于登录页内的实际按钮；布局仍由登录页负责，不改公共 Button 或其他页面，也不涉及后端/接口字段。
+- 验证：内存静态样式检查确认生成 `.login[data-v-login-check] .login__btn`，无需按钮携带父级 scopeId；Web 类型检查与 `git diff --check` 通过。未构建或启动服务，未进行浏览器视觉实测。
+
 ### 2026-10-13 根据组件检查线索整理 Login 表单及重复样式
 
 - 新增文件 / 删除文件：无。

@@ -109,7 +109,8 @@ async function handleLogin() {
 .login__title {
   font-size: var(--el-font-size-large);
 }
-.login__btn {
+/* Button 的 Tooltip 插槽不继承本页 scopeId；布局规则仍限定在登录页。 */
+.login :deep(.login__btn) {
   width: 100%;
 }
 </style>
