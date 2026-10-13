@@ -49,46 +49,38 @@ demo 覆盖的能力：
 - 预览：`npm run preview`
 - 类型检查：`npm run type-check`
 - 组件复用检查：`npm run check:components -- [文件或目录]`（只读）
-- 检查器测试：`npm run test:components`
 
 ### 组件复用检查脚本
 
-脚本为 `web/scripts/checkComponentUsage.mjs`。在项目根目录运行：
+单文件脚本 `web/scripts/checkComponentUsage.mjs` 只采集线索，交给 AI 阅读实际场景后决定是否及如何复用封装组件，不判断违规、不替换代码。在项目根目录运行：
 
 ```powershell
 # 指定单文件或目录，也可传多个路径
 node web/scripts/checkComponentUsage.mjs web/src/views/LoginView.vue
 node web/scripts/checkComponentUsage.mjs web/src/views web/src/layouts
 
-# 只检查 Form / Button 的复用，严格模式发现候选时返回非零退出码
-node web/scripts/checkComponentUsage.mjs web/src/views --only Form,Button --strict
-
-# JSON 报告适合程序消费或自行重定向保存
+# JSON 报告适合交给 AI 或自行重定向保存
 node web/scripts/checkComponentUsage.mjs web/src --json
-
-# 原生 HTML 提醒需要显式开启，可排除已确认的特殊页面
-node web/scripts/checkComponentUsage.mjs web/src --include-native --exclude web/src/views/demo
 ```
 
-在 `web/` 内可用 `npm run check:components -- src/views/LoginView.vue`。无路径默认扫描 `web/src`；显式路径、`--mapping`、`--config`、`--exclude` 均相对**执行命令时的工作目录**，不支持 glob，含空格的路径需加引号。
+在 `web/` 内可用 `npm run check:components -- src/views/LoginView.vue`。无路径默认扫描 `web/src` 下的 `.vue` 文件；显式路径及 `--mapping 声明文件` 相对**执行命令时的工作目录**，不支持 glob，含空格的路径需加引号。需要纯 JSON 时直接用 `node` 命令，或使用 `npm run --silent check:components -- ... --json`。
 
-规则来源：
+- 报告附上 `GlobalComponents` 的本地 `.vue` 映射作为参考，第三方 El*/Router* 映射不列为项目封装。映射不是必用清单，不维护“原组件 → 必须替换为某组件”的规则。
+- 默认采集自定义组件标签、原生表单标签和导入文本，输出文件路径、行列、命中文本及前后两行上下文。组件实现文件也正常扫描，是否属于合理的内部使用由 AI 判断。
+- 这是逐行文本匹配，不分析 Vue/TS 语义：注释、字符串、类型导入也可能命中，别名、动态及跨行语法可能遗漏。命中不等于需替换，未命中不等于已正确复用；AI 必须再阅读原文件及组件契约。
+- 目录遍历时跳过依赖、构建产物和符号链接，重叠路径去重；显式指定依赖/产物目录内的文件仍会扫描。只读取文件，不执行扫描内容或修改自动生成声明。不自动接入 build、提交钩子或修复流程。
+- 退出码：采集完成返回 `0`，参数、路径或映射读取失败返回 `1`；没有严格模式或“违规数”。JSON 保留零命中文件、实际扫描数及跳过路径，便于确认扫描范围。
 
-- `components.d.ts` 中 `GlobalComponents` 的本地 `.vue` 映射提供项目组件名单。El*、Router* 等第三方映射不算项目封装，也不意味着每页必须用完名单中的组件。
-- `scripts/componentUsageRules.json` 声明“原始组件 → 封装候选”，如 `ElForm → Form`、`ElButton → Button`。映射表中实际存在的目标才启用规则；也可通过 `--mapping` / `--config` 指定其他声明或规则文件。自定义规则中不存在的目标会明确报错。
-- `replacements` 检查底层组件，`native` 定义可选的原生控件提醒，值均为非空组件名数组。检查器只建议候选，不承诺接口可直接互换。例如 Input 的 `mode`、多选的数据格式、上传时机等仍需人工判断。
-- 默认仅豁免规则目标组件的实现文件，`implementationComponents` 可补充基础封装。不会整片豁免 `src/components`，例如组合组件 `AiWorkflowEditor` 仍会检查。`--include-wrappers` 可检查基础实现，但通常会产生预期内提醒。
-- 默认跳过依赖、构建产物和符号链接。扫描文件本身、自动生成声明以及规则文件都不会被修改；不要为消除报告直接编辑 `components.d.ts`。
+通用采集函数 `collectMatches({ targets, pattern, extensions, context })` 可单独导入，复用于其他文本检查；无需组件映射，不触发 CLI。`pattern` 为逐行匹配的正则，`extensions` 默认 `['.vue']`，`context` 默认 `2`，例如：
 
-检测范围与报告：
-
-- 解析 Vue HTML 模板及显式运行时组件导入，识别 PascalCase / kebab-case、导入别名、Element Plus 子路径和命名空间、静态 `<component is>` / `:is`。注释、脚本文字、样式内容和 type-only 导入不作为组件使用。
-- 每文件列出“已引用封装”和带行列的复用候选。已引用包含运行时导入，不证明组件最终参与渲染。没有引用任何封装也不自动判定为违规。
-- 不强制把 `ElCard` 替换为 `PageContainer`，不对 `ElFormItem`、`ElOption` 等无独立封装的子组件重复报警。原生 `<form>` 不等同于 `<Form>`，原生控件默认关闭提醒。
-- 无法静态确定的动态 `:is` 单独列入待检查项。render/JSX、异步组件、运行时注册、跨文件间接导出和 Form 字段配置的运行时结果不在完整分析范围内。外部 template/script src 或 Pug 模板会明确报错，不假装已检查。
-- 退出码：`0` 表示检查完成（默认即使有提醒也不阻断），`--strict` 下有复用候选返回 `1`，参数、路径、映射或解析错误返回 `2`。待人工检查项不会单独触发严格模式失败；零提醒不代表完整合规。
-
-此工具是框架整理辅助，不自动接入 build、提交钩子或批量修复流程。测试只在随机临时目录生成 fixture，结束后清理，不更改业务页面。
+```js
+import { collectMatches } from './web/scripts/checkComponentUsage.mjs';
+const result = await collectMatches({
+  targets: ['web/src'], pattern: /TODO|FIXME/g,
+  extensions: ['.vue', '.ts'], context: 1,
+});
+console.log(result);
+```
 
 ## 黑名单目录与文件（禁止改动）
 

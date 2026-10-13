@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-10-13 将组件检查器精简为通用只读线索采集脚本
+
+- 新增文件：无。
+- 修改文件：`web/scripts/checkComponentUsage.mjs`、`web/package.json`、`AGENTS-FRONTEND.md`、`CHANGELOG.md`。
+- 删除文件：`web/scripts/componentUsageRules.json`、`web/scripts/checkComponentUsage.test.mjs`（均可从 Git 历史恢复）；移除旧 `test:components` 命令。
+- 调整原因：脚本职责是定位线索，交给 AI 结合页面及组件契约判断，而非模拟场景理解、判定合规或维护自动替换规则。
+- 实现：单文件、仅使用 Node 内置模块；导出与 Vue 无关的 `collectMatches({ targets, pattern, extensions, context })`，复用文件遍历、逐行正则匹配、行列定位及上下文采集。组件 CLI 附带 `GlobalComponents` 本地映射，支持多个文件/目录、`--mapping`、`--json` 和帮助；移除 AST 语义分析、替换规则、严格模式及复杂筛选配置。
+- 边界：不执行或改写扫描内容；保留路径去重、依赖/产物/符号链接跳过。组件实现、注释、字符串及类型文本也可能命中，动态或跨行用法可能遗漏；报告明确不等于违规或替换清单，AI 需继续阅读原文件。未改业务页面、生成声明或前后端接口。
+- 验证：Node 语法检查、Web 类型检查与 `git diff --check` 通过；只读扫描 Login（含多行 Form/Input/Button 标签）及全量 83 个 Vue 文件通过。通用函数验证覆盖零命中、重叠目标去重、重复调用、行列/上下文、扩展名、零长度匹配、目录跳过、参数错误；扫描前后 83 个 Vue 文件及组件声明的哈希一致。JSON/npm 入口、自定义映射路径和 CLI 错误行为验证通过。未构建或启动服务。
+
 ### 2026-10-13 新增 GlobalComponents 组件复用检查脚本
 
 - 新增文件：`web/scripts/checkComponentUsage.mjs`、`web/scripts/componentUsageRules.json`、`web/scripts/checkComponentUsage.test.mjs`。

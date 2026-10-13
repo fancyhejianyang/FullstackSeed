@@ -9,8 +9,7 @@
     "preview": "vite preview",
     "lint": "eslint . --fix",
     "type-check": "vue-tsc --noEmit",
-    "check:components": "node scripts/checkComponentUsage.mjs",
-    "test:components": "node --test scripts/checkComponentUsage.test.mjs"
+    "check:components": "node scripts/checkComponentUsage.mjs"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
