@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-10-13 AI + 云开发微信小程序极速开发流程 PPT
+
+- 新增文件：`artifacts/wechat-mini-program-ppt/AI微信小程序极速开发流程_v2.pptx`、`artifacts/wechat-mini-program-ppt/assets/cover-hero.png`。
+- 修改文件：`CHANGELOG.md`。
+- 删除文件：无；生成过程中的 v1 草稿与私有构建文件未作为成果保留。
+- 内容：将账号主体/名称/类目/备案/认证、CloudBase 云环境、CodeBuddy 协作开发、总项目结构、本地管理端和交付检查整理为 8 页中文演示稿；明确“一天完成”仅指前置条件齐备后的 MVP 开发与联调，不包含备案、认证和平台审核时间。
+- 资料核对：按腾讯云官方定价页更新为 1 个免费环境、每月 3,000 资源点、按规则每次续期 6 个月；个人版 `19.9 元/月` 标注为当前限时优惠，并提示以后续官方页面为准。演示稿备注中保留 CloudBase、CodeBuddy 与备案依据链接。
+- 验证：PPTX 共 8 页，包结构、预期页面尺寸、标题适配、原生项目符号、`Noto Sans SC` 字体策略及演示工具回读全部通过；逐页渲染检查并修正总流程与项目结构连接线方向。未修改前后端代码，未构建或启动服务。
+
 ### 2026-10-09 应用 AI 并发、持久化排队与人工客服接待
 
 - 新增后端文件：`server/src/customer-service/customer-service.controller.ts`、`customer-service.module.ts`、`customer-service.service.ts`、`customer-service.service.spec.ts`、`legacy-knowledge-ai-chat.controller.ts`、`dto/customer-service.dto.ts`、`entities/customer-chat-message.entity.ts`、`entities/customer-chat-task.entity.ts`（后七项均位于 `server/src/customer-service/`）；`server/src/knowledge-ai-chat/knowledge-ai-chat-execution.spec.ts`、`server/src/knowledge-ai-providers/knowledge-ai-cancellation.spec.ts`、`server/src/migrations/1788911200000-AddCustomerServiceReception.ts`、`server/scripts/verify-customer-service.cjs`。
