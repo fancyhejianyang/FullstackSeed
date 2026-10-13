@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import PageContainer from '@/components/PageContainer.vue';
+import Button from '@/components/Button.vue';
 import Table, { type TableColumn } from '@/components/Table.vue';
 import type { FormField } from '@/components/Form.vue';
 import { formatDateTime } from '@/utils/format';
@@ -77,7 +78,7 @@ function deletePermissionRequest(row: Permission) {
       @edit="handleEdit"
     >
       <template #toolbar>
-        <el-button type="primary" @click="openCreate">新增权限</el-button>
+        <Button perm="Permission.create" :auto-icon="false" @click="openCreate">新增权限</Button>
       </template>
 
       <!-- 类型列 -->

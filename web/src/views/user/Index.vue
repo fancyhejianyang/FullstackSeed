@@ -1,17 +1,15 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 import PageContainer from '@/components/PageContainer.vue';
+import Button from '@/components/Button.vue';
 import Table, { type TableColumn } from '@/components/Table.vue';
 import type { FormField } from '@/components/Form.vue';
 import { formatDateTime } from '@/utils/format';
 import { getUsers, deleteUser, type UserItem } from '@/api/user';
-import { useUserStore } from '@/stores/user';
 import Edit from './Edit.vue';
 
 // Table 为泛型组件，InstanceType 取不到，直接声明暴露的方法类型
 const tableRef = ref<{ refresh: () => Promise<void>; search: () => Promise<void> }>();
-const userStore = useUserStore();
-const canCreate = computed(() => userStore.hasPermission('User.create'));
 
 const columns: TableColumn[] = [
   { prop: 'username', label: '用户名', minWidth: 140 },
@@ -74,7 +72,7 @@ function deleteUserRequest(row: UserItem) {
       @edit="handleEdit"
     >
       <template #toolbar>
-        <el-button v-if="canCreate" type="primary" @click="openCreate">新增用户</el-button>
+        <Button perm="User.create" :auto-icon="false" @click="openCreate">新增用户</Button>
       </template>
 
       <!-- 角色列 -->

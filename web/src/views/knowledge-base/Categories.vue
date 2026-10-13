@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox, type FormRules } from 'element-plus';
 import PageContainer from '@/components/PageContainer.vue';
 import Button from '@/components/Button.vue';
+import Input from '@/components/Input.vue';
 import Dialog from '@/components/Dialog.vue';
 import Form, { type FormField } from '@/components/Form.vue';
 import { formatDateTime } from '@/utils/format';
@@ -179,12 +180,13 @@ onMounted(fetchCategories);
     <div class="knowledge-category">
       <div class="knowledge-category__search">
         <span class="knowledge-category__label">关键词</span>
-        <el-input
+        <Input
           v-model="keyword"
           class="knowledge-category__keyword"
+          :trim="false"
           clearable
           placeholder="名称/编码/描述"
-          @keyup.enter="handleSearch"
+          @enter="handleSearch"
         />
         <Button type="primary" icon="Search" @click="handleSearch">查询</Button>
         <Button icon="RefreshLeft" @click="handleReset">重置</Button>

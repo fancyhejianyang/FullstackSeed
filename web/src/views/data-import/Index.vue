@@ -4,6 +4,10 @@ import { ElMessage, type UploadFile, type UploadUserFile } from 'element-plus';
 import { Close, Setting, UploadFilled } from '@element-plus/icons-vue';
 import PageContainer from '@/components/PageContainer.vue';
 import Dialog from '@/components/Dialog.vue';
+import Button from '@/components/Button.vue';
+import CheckboxGroup from '@/components/CheckboxGroup.vue';
+import Input from '@/components/Input.vue';
+import Select from '@/components/Select.vue';
 import Table, { type TableColumn } from '@/components/Table.vue';
 import type { FormField } from '@/components/Form.vue';
 import {
@@ -21,6 +25,7 @@ import {
   type ModuleModelSummary,
 } from '@/api/moduleModel';
 import { formatDateTime } from '@/utils/format';
+import { getPermissionActionColor } from '@/utils/permission';
 
 interface ImportFieldMappingForm {
   id: string;
@@ -49,6 +54,7 @@ const fieldMappings = ref<ImportFieldMappingForm[]>([]);
 const moduleOptions = computed(() =>
   modules.value.map((item) => ({
     label: item.moduleName,
+    text: item.moduleName,
     value: item.moduleId,
   })),
 );
@@ -59,6 +65,21 @@ const selectedModule = computed(() =>
 
 const importableFields = computed(() =>
   moduleFields.value.filter((field) => !field.readonly),
+);
+
+const importFieldOptions = computed(() =>
+  importableFields.value.map((field) => ({
+    value: field.prop,
+    text: field.label,
+  })),
+);
+
+const requiredFieldProps = computed(() =>
+  new Set(
+    importableFields.value
+      .filter((field) => field.required)
+      .map((field) => field.prop),
+  ),
 );
 
 const selectedFieldMetas = computed(() =>
@@ -173,12 +194,16 @@ async function openEditConfig(row: DataImportConfigItem) {
   }
 }
 
-async function handleModuleChange(moduleId: string) {
+async function handleModuleChange(moduleId: string | null) {
+  const nextModuleId = moduleId ?? '';
+  // 封装 Select 重选同值也会通知；只在模块真正切换时清空已编辑的字段映射。
+  if (nextModuleId === selectedModuleId.value) return;
+  selectedModuleId.value = nextModuleId;
   selectedFieldProps.value = [];
   moduleFields.value = [];
   fieldMappings.value = [];
-  if (!moduleId) return;
-  moduleFields.value = await getModuleModelFields(moduleId);
+  if (!nextModuleId) return;
+  moduleFields.value = await getModuleModelFields(nextModuleId);
 }
 
 function handleTemplateChange(file: UploadFile) {
@@ -295,7 +320,7 @@ onMounted(fetchModules);
 </script>
 
 <template>
-  <PageContainer title="数据导入">
+  <PageContainer title="数据导入" class="data-import">
     <Table
       ref="tableRef"
       :columns="columns"
@@ -304,35 +329,34 @@ onMounted(fetchModules);
       :show-actions="false"
     >
       <template #toolbar>
-        <el-button type="primary" :icon="Setting" @click="openConfig">
+        <Button
+          :type="getPermissionActionColor('update')"
+          :icon="Setting"
+          @click="(_event, done) => done(openConfig())"
+        >
           配置
-        </el-button>
+        </Button>
       </template>
 
       <template #search-moduleId="{ model }">
-        <el-select
+        <Select
           v-model="model.moduleId"
           class="data-import__module-filter"
+          :options="moduleOptions"
+          :filterable="false"
           clearable
           placeholder="请选择模块"
-        >
-          <el-option
-            v-for="item in moduleOptions"
-            :key="item.value"
-            :label="item.label"
-            :value="item.value"
-          />
-        </el-select>
+        />
       </template>
 
       <template #column-moduleName="{ row }">
-        <el-button
+        <Button
           link
-          type="primary"
-          @click="openEditConfig(row as DataImportConfigItem)"
+          :type="getPermissionActionColor('update')"
+          @click="(_event, done) => done(openEditConfig(row as DataImportConfigItem))"
         >
           {{ (row as DataImportConfigItem).moduleName }}
-        </el-button>
+        </Button>
       </template>
 
       <template #column-fieldLabels="{ row }">
@@ -348,13 +372,13 @@ onMounted(fetchModules);
       </template>
 
       <template #column-templateName="{ row }">
-        <el-button
+        <Button
           link
-          type="primary"
-          @click="downloadTemplate(row as DataImportConfigItem)"
+          :type="getPermissionActionColor('export')"
+          @click="(_event, done) => done(downloadTemplate(row as DataImportConfigItem))"
         >
           {{ (row as DataImportConfigItem).templateName }}
-        </el-button>
+        </Button>
       </template>
 
       <template #column-templateSize="{ row }">
@@ -379,21 +403,15 @@ onMounted(fetchModules);
       <div v-else class="data-import__config">
         <section class="data-import__section">
           <div class="data-import__section-title">选择模块</div>
-          <el-select
-            v-model="selectedModuleId"
+          <Select
+            :model-value="selectedModuleId"
             class="data-import__module-select"
+            :options="moduleOptions"
             clearable
             filterable
             placeholder="请选择需要导入数据的模块"
-            @change="handleModuleChange"
-          >
-            <el-option
-              v-for="item in moduleOptions"
-              :key="item.value"
-              :label="item.label"
-              :value="item.value"
-            />
-          </el-select>
+            @update:model-value="handleModuleChange"
+          />
           <span v-if="selectedModule" class="data-import__module-meta">
             {{ selectedModule.tableName }} / {{ selectedModule.modelName }}
           </span>
@@ -409,29 +427,29 @@ onMounted(fetchModules);
             v-else-if="!importableFields.length"
             description="当前模块暂无可导入字段"
           />
-          <el-checkbox-group
+          <CheckboxGroup
             v-else
             v-model="selectedFieldProps"
+            class="data-import__field-list"
+            :options="importFieldOptions"
             @change="syncFieldMappings"
           >
-            <div class="data-import__field-list">
-              <el-checkbox
-                v-for="field in importableFields"
-                :key="field.prop"
-                :label="field.prop"
-                class="data-import__field-item"
+            <template #option="{ option }">
+              <span class="data-import__field-name">{{ option.text }}</span>
+              <el-tag
+                v-if="requiredFieldProps.has(option.value)"
+                size="small"
+                type="danger"
               >
-                <span class="data-import__field-name">{{ field.label }}</span>
-                <el-tag v-if="field.required" size="small" type="danger">
-                  必填
-                </el-tag>
-              </el-checkbox>
-            </div>
-          </el-checkbox-group>
+                必填
+              </el-tag>
+            </template>
+          </CheckboxGroup>
         </section>
 
         <section class="data-import__section">
           <div class="data-import__section-title">上传模板</div>
+          <!-- 模板随配置提交原始 File，不使用立即上传并回填 URL 的 UploadFile。 -->
           <el-upload
             v-if="!hasTemplate"
             drag
@@ -454,15 +472,15 @@ onMounted(fetchModules);
           </el-upload>
           <div v-else class="data-import__uploaded-file">
             <div>
-              <el-button
+              <Button
                 v-if="existingTemplate && !templateFile"
                 link
-                type="primary"
+                :type="getPermissionActionColor('export')"
                 class="data-import__uploaded-name"
-                @click="downloadExistingTemplate"
+                @click="(_event, done) => done(downloadExistingTemplate())"
               >
                 {{ existingTemplate.name }}
-              </el-button>
+              </Button>
               <div v-else class="data-import__uploaded-name">
                 {{ templateFile?.name }}
               </div>
@@ -474,9 +492,10 @@ onMounted(fetchModules);
                 }}
               </div>
             </div>
-            <el-button
+            <Button
               circle
               text
+              :type="getPermissionActionColor('delete')"
               :icon="Close"
               aria-label="移除模板文件"
               @click="handleTemplateRemove"
@@ -490,17 +509,21 @@ onMounted(fetchModules);
             v-if="!fieldMappings.length"
             description="请选择导入字段后确认映射关系"
           />
+          <!-- 本地可编辑映射行不走分页请求，保留基础表格。 -->
           <el-table v-else :data="fieldMappings" border>
             <el-table-column label="模板字段" min-width="220">
               <template #default="{ row }">
-                <el-input
+                <Input
                   v-model="row.templateField"
+                  :trim="false"
+                  :clearable="false"
                   placeholder="模板中的字段名"
                 />
               </template>
             </el-table-column>
             <el-table-column label="系统字段" min-width="220">
               <template #default="{ row }">
+                <!-- 单元格会裁剪非 teleport 下拉；Select 尚不支持挂载到表格外。 -->
                 <el-select
                   v-model="row.fieldProp"
                   class="data-import__mapping-select"
@@ -535,7 +558,7 @@ onMounted(fetchModules);
 </template>
 
 <style scoped>
-.data-import__module-filter {
+.data-import :deep(.data-import__module-filter) {
   width: 180px;
 }
 
@@ -562,8 +585,10 @@ onMounted(fetchModules);
   font-weight: 600;
 }
 
-.data-import__module-select {
+.data-import__config .data-import__module-select {
+  display: inline-block;
   width: 320px;
+  vertical-align: middle;
 }
 
 .data-import__module-meta {
@@ -572,13 +597,13 @@ onMounted(fetchModules);
   font-size: 12px;
 }
 
-.data-import__field-list {
+.data-import__config :deep(.data-import__field-list) {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 10px 16px;
 }
 
-.data-import__field-item {
+.data-import__config :deep(.data-import__field-list .el-checkbox) {
   height: 28px;
 }
 
@@ -605,7 +630,7 @@ onMounted(fetchModules);
   background: #fafafa;
 }
 
-.data-import__uploaded-name {
+.data-import__uploaded-file :deep(.data-import__uploaded-name) {
   color: #303133;
   font-size: 14px;
   font-weight: 500;

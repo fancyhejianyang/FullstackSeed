@@ -1,16 +1,14 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 import PageContainer from '@/components/PageContainer.vue';
+import Button from '@/components/Button.vue';
 import Table, { type TableColumn } from '@/components/Table.vue';
 import type { FormField } from '@/components/Form.vue';
 import { formatDateTime } from '@/utils/format';
 import { getRoles, deleteRole, type Role } from '@/api/role';
-import { useUserStore } from '@/stores/user';
 import Edit from './Edit.vue';
 
 const tableRef = ref<{ refresh: () => Promise<void>; search: () => Promise<void> }>();
-const userStore = useUserStore();
-const canCreate = computed(() => userStore.hasPermission('Role.create'));
 
 const columns: TableColumn[] = [
   { prop: 'code', label: '角色编码', minWidth: 120 },
@@ -71,7 +69,7 @@ function deleteRoleRequest(row: Role) {
       @edit="handleEdit"
     >
       <template #toolbar>
-        <el-button v-if="canCreate" type="primary" @click="openCreate">新增角色</el-button>
+        <Button perm="Role.create" :auto-icon="false" @click="openCreate">新增角色</Button>
       </template>
 
       <template #column-permissions="{ row }">

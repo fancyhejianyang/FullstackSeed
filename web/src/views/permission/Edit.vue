@@ -35,7 +35,13 @@ const form = reactive<{
 });
 
 const fields: FormField[] = [
-  { prop: 'code', label: '权限编码', slot: true },
+  {
+    prop: 'code',
+    label: '权限编码',
+    component: 'Input',
+    placeholder: '如 read、batchDelete',
+    componentProps: { disabled: isEdit, trim: false, clearable: false },
+  },
   { prop: 'name', label: '权限名称', type: 'input' },
   {
     prop: 'type',
@@ -116,15 +122,6 @@ async function handleSubmit() {
     :confirm-loading="submitting"
     @confirm="handleSubmit"
   >
-    <Form ref="formRef" v-model="form" :fields="fields" :rules="rules" label-width="90px">
-      <!-- 编辑态编码禁改（编码是权限的唯一标识） -->
-      <template #field-code>
-        <el-input
-          v-model="form.code"
-          :disabled="isEdit"
-          placeholder="如 read、batchDelete"
-        />
-      </template>
-    </Form>
+    <Form ref="formRef" v-model="form" :fields="fields" :rules="rules" label-width="90px" />
   </Dialog>
 </template>

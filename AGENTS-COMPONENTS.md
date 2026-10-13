@@ -194,6 +194,16 @@
 
 ---
 
+## CheckboxGroup
+
+- v-model：`string[]`；`options: { value: string; text: string; disabled?: boolean }[]`，选项值保持与 SelectMultiple 相同的字符串契约。
+- Props：`disabled` 控制整组禁用；`border`（默认 `false`）控制每项边框。
+- Emits：`change(value: string[])`。
+- `#option="{ option }"`：自定义选项内容（例如权限码说明、必填标签）；不传时显示 `option.text`，页面不必再裸写 `el-checkbox`。
+- 组的默认布局为弹性换行。页面需要网格或特定尺寸时，由页面祖先限定样式；内部选项样式使用祖先限定的 `:deep(.el-checkbox)`，不要依赖业务页 scopeId 透传到组件内部。
+
+---
+
 ## UploadImage / UploadFile
 
 **契约**：上传组件默认调用统一后端接口 `POST /api/uploads`，后端返回前端可直接预览/下载的 `url`。业务模块只保存这个地址；文件原名如需展示，用 `UploadFile` 的 `v-model:name` 额外保存。

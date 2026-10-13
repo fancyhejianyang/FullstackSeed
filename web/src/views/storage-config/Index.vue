@@ -2,7 +2,9 @@
 import { onMounted, reactive, ref } from 'vue';
 import { ElMessage, type FormRules } from 'element-plus';
 import PageContainer from '@/components/PageContainer.vue';
+import Button from '@/components/Button.vue';
 import Form, { type FormField } from '@/components/Form.vue';
+import { getPermissionActionColor } from '@/utils/permission';
 import {
   getStorageConfig,
   updateStorageConfig,
@@ -124,9 +126,13 @@ onMounted(fetchConfig);
       />
 
       <div class="storage-config__footer">
-        <el-button type="primary" :loading="saving" @click="handleSave">
+        <Button
+          :type="getPermissionActionColor('update')"
+          :loading="saving"
+          @click="(_, done) => done(handleSave())"
+        >
           保存配置
-        </el-button>
+        </Button>
         <el-text v-if="form.updatedAt" type="info">
           上次保存：{{ form.updatedAt }}
         </el-text>

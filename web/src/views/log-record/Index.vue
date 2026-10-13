@@ -4,6 +4,9 @@ import { ElMessage } from 'element-plus';
 import { Setting } from '@element-plus/icons-vue';
 import PageContainer from '@/components/PageContainer.vue';
 import Dialog from '@/components/Dialog.vue';
+import Button from '@/components/Button.vue';
+import Select from '@/components/Select.vue';
+import CheckboxGroup from '@/components/CheckboxGroup.vue';
 import Table, { type TableColumn } from '@/components/Table.vue';
 import type { FormField } from '@/components/Form.vue';
 import {
@@ -16,6 +19,7 @@ import {
   type QueryLogRecordParams,
 } from '@/api/logRecord';
 import { formatDateTime } from '@/utils/format';
+import { getPermissionActionColor } from '@/utils/permission';
 
 const tableRef = ref<{ refresh: () => Promise<void> }>();
 const configVisible = ref(false);
@@ -27,6 +31,7 @@ const selectedModuleIds = ref<string[]>([]);
 const moduleOptions = computed(() =>
   moduleConfigs.value.map((item) => ({
     label: item.moduleName,
+    text: item.moduleName,
     value: item.moduleId,
   })),
 );
@@ -139,25 +144,24 @@ onMounted(fetchModuleConfigs);
       :show-actions="false"
     >
       <template #toolbar>
-        <el-button type="primary" :icon="Setting" @click="openConfig">
+        <Button
+          :type="getPermissionActionColor('update')"
+          :icon="Setting"
+          @click="(_, done) => done(openConfig())"
+        >
           配置
-        </el-button>
+        </Button>
       </template>
 
       <template #search-moduleId="{ model }">
-        <el-select
+        <Select
           v-model="model.moduleId"
+          :options="moduleOptions"
+          :filterable="false"
           class="log-record__module-filter"
           clearable
           placeholder="请选择模块"
-        >
-          <el-option
-            v-for="item in moduleOptions"
-            :key="item.value"
-            :label="item.label"
-            :value="item.value"
-          />
-        </el-select>
+        />
       </template>
 
       <template #column-createdAt="{ row }">
@@ -190,20 +194,16 @@ onMounted(fetchModuleConfigs);
           路径和操作会写入日志明细，取消勾选不会删除历史日志。
         </p>
 
-        <el-checkbox-group
+        <CheckboxGroup
           v-model="selectedModuleIds"
+          :options="moduleOptions"
           class="log-record__module-grid"
         >
-          <el-checkbox
-            v-for="item in moduleConfigs"
-            :key="item.moduleId"
-            :label="item.moduleId"
-            class="log-record__module-check"
-          >
-            <span class="log-record__config-name">{{ item.moduleName }}</span>
-            <span class="log-record__config-meta">{{ item.moduleId }}</span>
-          </el-checkbox>
-        </el-checkbox-group>
+          <template #option="{ option }">
+            <span class="log-record__config-name">{{ option.text }}</span>
+            <span class="log-record__config-meta">{{ option.value }}</span>
+          </template>
+        </CheckboxGroup>
       </div>
     </Dialog>
   </PageContainer>
@@ -227,13 +227,13 @@ onMounted(fetchModuleConfigs);
   line-height: 1.7;
 }
 
-.log-record__module-grid {
+.log-record__config .log-record__module-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px 12px;
 }
 
-.log-record__module-check {
+.log-record__module-grid :deep(.el-checkbox) {
   display: flex;
   align-items: center;
   min-width: 0;
@@ -244,7 +244,7 @@ onMounted(fetchModuleConfigs);
   border-radius: 4px;
 }
 
-.log-record__module-check :deep(.el-checkbox__label) {
+.log-record__module-grid :deep(.el-checkbox__label) {
   min-width: 0;
 }
 

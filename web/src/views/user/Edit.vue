@@ -43,12 +43,19 @@ const fields = ref<FormField[]>([]);
 
 function buildFields() {
   fields.value = [
-    { prop: 'username', label: '用户名', type: 'input' },
+    {
+      prop: 'username',
+      label: '用户名',
+      type: 'input',
+      componentProps: { disabled: isEdit },
+    },
     { prop: 'nickname', label: '昵称', type: 'input' },
     {
       prop: 'password',
       label: '密码',
       type: 'input',
+      inputMode: 'password',
+      componentProps: { trim: false },
       placeholder: isEdit.value ? '留空则不修改' : '请输入密码',
     },
     {
@@ -172,11 +179,8 @@ async function handleSubmit() {
   >
     <div v-loading="loading">
       <Form ref="formRef" v-model="form" :fields="fields" :rules="rules" label-width="120px">
-        <!-- 编辑态用户名禁改 -->
-        <template v-if="isEdit" #field-username>
-          <el-input v-model="form.username" disabled />
-        </template>
         <template #field-roleIds>
+          <!-- 末尾字段的下拉需 teleport 避免被 Dialog 裁剪；SelectMultiple 尚不支持。 -->
           <el-select
             v-model="form.roleIds"
             multiple

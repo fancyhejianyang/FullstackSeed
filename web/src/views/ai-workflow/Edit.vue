@@ -3,7 +3,10 @@ import { reactive, ref, watch } from 'vue';
 import { ElMessage, type FormRules } from 'element-plus';
 import Dialog from '@/components/Dialog.vue';
 import Form, { type FormField } from '@/components/Form.vue';
+import Button from '@/components/Button.vue';
+import Input from '@/components/Input.vue';
 import AiWorkflowEditor from '@/components/AiWorkflowEditor.vue';
+import { getPermissionActionColor } from '@/utils/permission';
 import {
   createAiWorkflow,
   getAiWorkflow,
@@ -173,14 +176,21 @@ async function handleSubmit() {
         <template #field-aiInstruction>
           <div class="ai-workflow-instruction">
             <div class="ai-workflow-instruction__actions">
-              <el-button size="small" plain type="primary" @click="generateInstructionFromWorkflow">
+              <Button
+                size="small"
+                plain
+                :type="getPermissionActionColor('update')"
+                @click="generateInstructionFromWorkflow"
+              >
                 根据画布生成 AI 执行说明
-              </el-button>
+              </Button>
               <span>生成内容会覆盖当前说明，请在生成后继续人工微调。</span>
             </div>
-            <el-input
+            <Input
               v-model="form.aiInstruction"
-              type="textarea"
+              mode="textarea"
+              :trim="false"
+              :clearable="false"
               :rows="12"
               placeholder="说明回答边界、资料使用规则、业务术语和资料不足时的处理方式。"
             />

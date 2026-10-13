@@ -43,7 +43,13 @@ const form = reactive({
 });
 
 const fields: FormField[] = [
-  { prop: 'code', label: '角色编码', type: 'input', placeholder: '如 editor' },
+  {
+    prop: 'code',
+    label: '角色编码',
+    type: 'input',
+    placeholder: '如 editor',
+    componentProps: { disabled: isEdit },
+  },
   { prop: 'name', label: '角色名称', type: 'input' },
   {
     prop: 'isActive',
@@ -254,11 +260,6 @@ async function handleSubmit() {
   >
     <div v-loading="loading">
       <Form ref="formRef" v-model="form" :fields="fields" :rules="rules">
-        <!-- 编辑态编码禁改 -->
-        <template v-if="isEdit" #field-code>
-          <el-input v-model="form.code" disabled />
-        </template>
-
         <!-- 菜单权限树 -->
         <template #field-permissionIds>
           <el-tree

@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Application, Container, Graphics, Text } from 'pixi.js';
 import Button from '@/components/Button.vue';
+import Input from '@/components/Input.vue';
 import { formatDateTime } from '@/utils/format';
 import { getKnowledgeChunkConfigs } from '@/api/knowledgeChunkConfig';
 import {
@@ -1372,8 +1373,9 @@ onBeforeUnmount(() => {
                   class="knowledge-base-view__manual-item"
                 >
                   <div class="knowledge-base-view__manual-item-head">
-                    <el-input
+                    <Input
                       v-model="item.title"
+                      :trim="false"
                       placeholder="分片标题"
                       clearable
                       :disabled="savingManualChunks"
@@ -1405,11 +1407,12 @@ onBeforeUnmount(() => {
 
       <el-tab-pane label="分片内容" name="chunks">
         <div class="knowledge-base-view__chunk-toolbar">
-          <el-input
+          <Input
             v-model="chunkKeyword"
+            :trim="false"
             clearable
             placeholder="搜索标题/内容"
-            @keyup.enter="handleChunkSearch"
+            @enter="handleChunkSearch"
           />
           <Button
             type="primary"
@@ -1496,11 +1499,12 @@ onBeforeUnmount(() => {
 
       <el-tab-pane label="索引内容" name="indexes">
         <div class="knowledge-base-view__chunk-toolbar">
-          <el-input
+          <Input
             v-model="indexKeyword"
+            :trim="false"
             clearable
             placeholder="搜索标题/索引文本"
-            @keyup.enter="handleIndexSearch"
+            @enter="handleIndexSearch"
           />
           <Button
             type="primary"

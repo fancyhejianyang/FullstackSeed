@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import PageContainer from '@/components/PageContainer.vue';
+import Switch from '@/components/Switch.vue';
 import { getMenuTree, updateMenu, type MenuNode } from '@/api/menu';
 
 const loading = ref(false);
@@ -79,14 +80,14 @@ onMounted(fetchMenus);
       </el-table-column>
       <el-table-column label="配置" width="220">
         <template #default="{ row }">
-          <el-switch
+          <Switch
             :model-value="row.isSystem"
             :active-value="true"
             :inactive-value="false"
             active-text="系统固定"
             inactive-text="可分配"
             inline-prompt
-            @change="(val: boolean) => handleToggle(row, val)"
+            @update:model-value="(val: boolean) => handleToggle(row, val)"
           />
         </template>
       </el-table-column>

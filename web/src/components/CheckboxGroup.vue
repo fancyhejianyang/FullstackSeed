@@ -21,10 +21,12 @@ const props = withDefaults(
   defineProps<{
     options?: CheckboxOption[];
     disabled?: boolean;
+    border?: boolean;
   }>(),
   {
     options: () => [],
     disabled: false,
+    border: false,
   },
 );
 
@@ -58,10 +60,11 @@ watch(
     <el-checkbox
       v-for="item in props.options"
       :key="item.value"
-      :label="item.value"
+      :value="item.value"
       :disabled="item.disabled"
+      :border="props.border"
     >
-      {{ item.text }}
+      <slot name="option" :option="item">{{ item.text }}</slot>
     </el-checkbox>
   </el-checkbox-group>
 </template>

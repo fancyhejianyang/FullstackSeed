@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
+import Button from '@/components/Button.vue';
+import { getPermissionActionColor } from '@/utils/permission';
 
 const router = useRouter();
 
@@ -16,8 +18,8 @@ function goBack() {
     <div class="not-found__code">404</div>
     <div class="not-found__desc">抱歉，您访问的页面不存在</div>
     <div class="not-found__actions">
-      <el-button @click="goBack">返回上一页</el-button>
-      <el-button type="primary" @click="goHome">回到首页</el-button>
+      <Button @click="goBack">返回上一页</Button>
+      <Button :type="getPermissionActionColor('read')" @click="goHome">回到首页</Button>
     </div>
   </div>
 </template>

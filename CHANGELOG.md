@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-10-13 按页面场景规范 views 的封装组件复用
+
+- 新增文件 / 删除文件：无。
+- 修改页面（17 个）：`web/src/views/ai-workflow/Edit.vue`、`web/src/views/data-import/Index.vue`、`web/src/views/error/NotFound.vue`、`web/src/views/knowledge-ai-provider/Index.vue`、`web/src/views/knowledge-base/Categories.vue`、`web/src/views/knowledge-base/View.vue`、`web/src/views/log-record/Index.vue`、`web/src/views/menu/Edit.vue`、`web/src/views/menu/Index.vue`、`web/src/views/permission/Edit.vue`、`web/src/views/permission/Index.vue`、`web/src/views/role/Edit.vue`、`web/src/views/role/Index.vue`、`web/src/views/storage-config/Index.vue`、`web/src/views/system/Index.vue`、`web/src/views/user/Edit.vue`、`web/src/views/user/Index.vue`。
+- 修改公共组件与文档：`web/src/components/CheckboxGroup.vue`、`AGENTS-COMPONENTS.md`、`CHANGELOG.md`。
+- 范围：依据 `check:components` 的线索逐页阅读后，将可适配的底层按钮、输入框、开关、下拉及勾选组交由 Button / Input / Switch / Select / CheckboxGroup 或 Form 字段配置承接；不重新设计页面，不改后端、API 字段、权限定义、生成声明或检查脚本。
+- 行为与样式：保留输入的非自动裁空格、清空、只读、回车及多行行为；菜单删除沿用原提示文案，由 Button 统一确认及异步防重；系统开关使用受控更新，接口成功前不改写行数据；导入模块重选同值不清空已有映射。用户名和角色编码通过 Form 配置落实原编辑禁改意图，移除未开启 slot 的无效插槽；密码使用封装 password 模式且不裁空格。角色选择保留原数字 ID 数组，不改接口类型。
+- 公共能力：CheckboxGroup 增加默认关闭的 border 和带 option 参数的选项插槽，内部采用明确的 value 绑定；权限说明和必填标签保留。页面特有的网格、下拉宽度和文件名样式仍限定在页面祖先下，跨封装内部的样式采用受限 deep 选择器。
+- 明确保留：6 处树表 / 本地编辑表 / 详情内独立分页表；1 处暂存原始 File 的 el-upload；菜单排序的步进 el-input-number；用户角色多选及导入表格内的 2 处 el-select（现有 Select/SelectMultiple 不支持 teleport，直接替换会被滚动容器裁剪）；产品 Excel 导入的隐藏原生文件 input。无对应封装的树、卡片等结构不强行替换。
+- 复扫：`npm run --silent check:components -- src/views --json` 扫描 60 个 Vue 文件、0 跳过；上一轮关注的 50 处底层控件标签降至 10 处（均为上述明确保留项），迁移 40 处标签用法；隐藏文件 input 另计。此计数仅用于对照，不将脚本命中直接视作违规。
+- 验证：显式应用 tsconfig 的 Web 类型检查、变更 Vue 文件的 script/template/style 静态编译、`git diff --check` 通过；内存 SSR / renderer 检查 CheckboxGroup 默认与自定义选项、值/边框/禁用及 scoped 样式，确认 Input/Select 跨插槽样式继承和 Switch 的受控更新；导入模块同值重选、真实切换和清空回归检查通过。未构建、未启动服务、未做浏览器视觉或真实接口联调。
+
 ### 2026-10-13 修复登录按钮全宽样式失效
 
 - 新增文件 / 删除文件：无。

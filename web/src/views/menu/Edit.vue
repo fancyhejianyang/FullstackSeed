@@ -89,8 +89,18 @@ const fields = computed<FormField[]>(() => [
   ),
   { prop: 'permissionCode', label: '权限码', type: 'input', placeholder: '如 Menu.read；为空则登录可见' },
   { prop: 'sort', label: '排序', slot: true },
-  { prop: 'isSystem', label: '系统固定', slot: true },
-  { prop: 'isActive', label: '状态', slot: true },
+  {
+    prop: 'isSystem',
+    label: '系统固定',
+    component: 'Switch',
+    componentProps: { activeText: '是', inactiveText: '否' },
+  },
+  {
+    prop: 'isActive',
+    label: '状态',
+    component: 'Switch',
+    componentProps: { activeText: '启用', inactiveText: '禁用' },
+  },
 ]);
 
 const rules: FormRules = {
@@ -196,27 +206,9 @@ async function handleSubmit() {
         />
       </template>
 
-      <!-- 排序 -->
+      <!-- 排序需保留步进按钮；当前 InputNumber 封装尚不支持该交互。 -->
       <template #field-sort>
         <el-input-number v-model="form.sort" :min="0" :step="1" controls-position="right" />
-      </template>
-
-      <!-- 系统固定 -->
-      <template #field-isSystem>
-        <el-switch
-          v-model="form.isSystem"
-          active-text="是"
-          inactive-text="否"
-        />
-      </template>
-
-      <!-- 状态 -->
-      <template #field-isActive>
-        <el-switch
-          v-model="form.isActive"
-          active-text="启用"
-          inactive-text="禁用"
-        />
       </template>
     </Form>
   </Dialog>

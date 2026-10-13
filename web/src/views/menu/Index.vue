@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessage } from 'element-plus';
 import PageContainer from '@/components/PageContainer.vue';
 import Dialog from '@/components/Dialog.vue';
+import Button from '@/components/Button.vue';
+import CheckboxGroup from '@/components/CheckboxGroup.vue';
 import { getMenuTree, deleteMenu, updateMenu, type MenuNode } from '@/api/menu';
 import { getAllPermissions, type Permission } from '@/api/permission';
 import { useUserStore } from '@/stores/user';
@@ -10,9 +12,6 @@ import { getPermissionActionLabel } from '@/utils/permission';
 import Edit from './Edit.vue';
 
 const userStore = useUserStore();
-const canCreate = computed(() => userStore.hasPermission('Menu.create'));
-const canUpdate = computed(() => userStore.hasPermission('Menu.update'));
-const canDelete = computed(() => userStore.hasPermission('Menu.delete'));
 
 const loading = ref(false);
 const tree = ref<MenuNode[]>([]);
@@ -102,6 +101,9 @@ const assigning = ref(false);
 const permissionsLoading = ref(false);
 const permissions = ref<Permission[]>([]);
 const selectedPermissionCodes = ref<string[]>([]);
+const permissionOptions = computed(() =>
+  permissions.value.map((permission) => ({ value: permission.code, text: permission.name })),
+);
 
 async function ensurePermissions() {
   if (permissions.value.length > 0) return;
@@ -146,15 +148,14 @@ function openEdit(row: MenuNode) {
   editVisible.value = true;
 }
 
-async function handleDelete(row: MenuNode) {
+function getDeleteConfirmText(row: MenuNode) {
   const hasChildren = row.children && row.children.length > 0;
-  await ElMessageBox.confirm(
-    hasChildren
-      ? `菜单「${row.name}」下含子菜单，删除将一并处理，确认删除？`
-      : `确认删除菜单「${row.name}」？`,
-    '提示',
-    { type: 'warning' },
-  );
+  return hasChildren
+    ? `菜单「${row.name}」下含子菜单，删除将一并处理，确认删除？`
+    : `确认删除菜单「${row.name}」？`;
+}
+
+async function handleDelete(row: MenuNode) {
   await deleteMenu(row.id);
   ElMessage.success('删除成功');
   await refreshAfterChange();
@@ -188,15 +189,15 @@ onMounted(async () => {
 <template>
   <PageContainer title="菜单管理">
     <div class="menu-toolbar">
-      <el-button v-if="canCreate" type="primary" @click="openCreate">新增菜单</el-button>
-      <el-button
-        v-if="canUpdate"
-        type="success"
+      <Button perm="Menu.create" :auto-icon="false" @click="openCreate">新增菜单</Button>
+      <Button
+        perm="Menu.update"
+        :auto-icon="false"
         :disabled="selectedRows.length === 0"
-        @click="openAssignPermission"
+        @click="(_, done) => done(openAssignPermission())"
       >
         分配权限
-      </el-button>
+      </Button>
     </div>
 
     <el-table
@@ -240,15 +241,21 @@ onMounted(async () => {
       </el-table-column>
       <el-table-column label="操作" width="200" fixed="right">
         <template #default="{ row }">
-          <el-button v-if="canCreate" link type="primary" @click="openCreateChild(row)">
+          <Button perm="Menu.create" link :auto-icon="false" @click="openCreateChild(row)">
             加子级
-          </el-button>
-          <el-button v-if="canUpdate" link type="primary" @click="openEdit(row)">
+          </Button>
+          <Button perm="Menu.update" link :auto-icon="false" @click="openEdit(row)">
             编辑
-          </el-button>
-          <el-button v-if="canDelete" link type="danger" @click="handleDelete(row)">
+          </Button>
+          <Button
+            perm="Menu.delete"
+            link
+            :auto-icon="false"
+            :confirm-text="getDeleteConfirmText(row)"
+            @click="(_, done) => done(handleDelete(row))"
+          >
             删除
-          </el-button>
+          </Button>
         </template>
       </el-table-column>
     </el-table>
@@ -277,21 +284,17 @@ onMounted(async () => {
           class="assign-permission__tip"
         />
         <div class="assign-permission__header">权限码</div>
-        <el-checkbox-group
+        <CheckboxGroup
           v-model="selectedPermissionCodes"
+          :options="permissionOptions"
+          border
           class="assign-permission__grid"
         >
-          <el-checkbox
-            v-for="p in permissions"
-            :key="p.id"
-            :value="p.code"
-            border
-            class="assign-permission__item"
-          >
-            <span class="assign-permission__name">{{ p.name }}</span>
-            <span class="assign-permission__code">{{ p.code }}</span>
-          </el-checkbox>
-        </el-checkbox-group>
+          <template #option="{ option }">
+            <span class="assign-permission__name">{{ option.text }}</span>
+            <span class="assign-permission__code">{{ option.value }}</span>
+          </template>
+        </CheckboxGroup>
         <div class="assign-permission__hint">
           可勾选多个权限；不勾选直接确定，将清空为登录可见。
         </div>
@@ -318,17 +321,17 @@ onMounted(async () => {
   font-size: 14px;
   color: #606266;
 }
-.assign-permission__grid {
+.assign-permission .assign-permission__grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 10px;
 }
-.assign-permission__item {
+.assign-permission__grid :deep(.el-checkbox) {
   margin: 0;
   width: 100%;
   height: 42px;
 }
-.assign-permission__item :deep(.el-checkbox__label) {
+.assign-permission__grid :deep(.el-checkbox__label) {
   min-width: 0;
   display: flex;
   align-items: center;

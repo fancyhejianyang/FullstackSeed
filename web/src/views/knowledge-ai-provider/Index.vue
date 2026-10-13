@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus';
 import type { FormRules } from 'element-plus';
 import PageContainer from '@/components/PageContainer.vue';
 import Button from '@/components/Button.vue';
+import Input from '@/components/Input.vue';
 import Table, { type TableColumn } from '@/components/Table.vue';
 import Dialog from '@/components/Dialog.vue';
 import Form, { type FormField } from '@/components/Form.vue';
@@ -242,11 +243,13 @@ async function handleTest() {
           show-icon
           :closable="false"
         />
-        <el-input
+        <Input
           v-if="testResult.answer"
           class="ai-provider__answer"
           :model-value="testResult.answer"
-          type="textarea"
+          mode="textarea"
+          :trim="false"
+          :clearable="false"
           :rows="5"
           readonly
         />
