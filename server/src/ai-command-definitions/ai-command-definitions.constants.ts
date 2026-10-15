@@ -1,3 +1,5 @@
+import { DEMO_CATEGORIES, DEMO_STATUSES } from '../demo/demo.constants';
+
 export const AI_COMMAND_ACTIONS = [
   'read',
   'create',
@@ -38,6 +40,323 @@ export const AI_CORE_CHAT_COMMAND_KEYS = [
 ] as const;
 
 const toJson = (value: unknown) => JSON.stringify(value, null, 2);
+
+interface BusinessCrudCommandSpec {
+  moduleKey: string;
+  moduleName: string;
+  controllerName: string;
+  apiBasePath: string;
+  permissionPrefix: string;
+  querySchema: Record<string, unknown>;
+  createSchema: Record<string, unknown>;
+  semanticKeywords: string[];
+  methods: {
+    list: string;
+    detail: string;
+    create: string;
+    update: string;
+    delete: string;
+    batchDelete: string;
+  };
+}
+
+const entityIdSchema = {
+  type: 'object',
+  required: ['id'],
+  properties: {
+    id: { type: 'integer', minimum: 1 },
+  },
+};
+
+const batchDeleteSchema = {
+  type: 'object',
+  required: ['ids'],
+  properties: {
+    ids: {
+      type: 'array',
+      minItems: 1,
+      uniqueItems: true,
+      items: { type: 'integer', minimum: 1 },
+    },
+  },
+};
+
+function withEntityId(schema: Record<string, unknown>) {
+  const properties =
+    schema.properties && typeof schema.properties === 'object'
+      ? (schema.properties as Record<string, unknown>)
+      : {};
+  return {
+    ...schema,
+    required: ['id'],
+    properties: {
+      id: { type: 'integer', minimum: 1 },
+      ...properties,
+    },
+  };
+}
+
+function businessCommand(
+  spec: BusinessCrudCommandSpec,
+  options: {
+    suffix: 'list' | 'detail' | 'create' | 'update' | 'delete' | 'batchDelete';
+    name: string;
+    action: AiCommandAction;
+    method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+    path: string;
+    requestSchema: Record<string, unknown>;
+    permissionAction: 'read' | 'create' | 'update' | 'delete' | 'batchDelete';
+    chatCallable: boolean;
+    semanticKeywords: string[];
+    description: string;
+  },
+): AiCommandCatalogItem {
+  const requireApproval = options.action !== 'read';
+  return {
+    commandKey: `${spec.moduleKey}.${options.suffix}`,
+    name: options.name,
+    action: options.action,
+    executionMode: 'api',
+    handlerKey: `${spec.moduleKey}.${options.suffix}`,
+    executionTarget: `${spec.controllerName}.${spec.methods[options.suffix]}`,
+    apiMethod: options.method,
+    apiPath: options.path,
+    requestSchema: toJson(options.requestSchema),
+    contextBindings: toJson({
+      requiredPermission: `${spec.permissionPrefix}.${options.permissionAction}`,
+      operatorId: '$operator.id',
+      source: 'registered-business-controller',
+    }),
+    chatCallable: options.chatCallable,
+    requireApproval,
+    semanticKeywords: Array.from(
+      new Set([...spec.semanticKeywords, ...options.semanticKeywords]),
+    ),
+    description: options.description,
+  };
+}
+
+function createBusinessCrudCatalog(
+  spec: BusinessCrudCommandSpec,
+): AiCommandCatalogItem[] {
+  return [
+    businessCommand(spec, {
+      suffix: 'list',
+      name: `查询${spec.moduleName}列表`,
+      action: 'read',
+      method: 'GET',
+      path: spec.apiBasePath,
+      requestSchema: spec.querySchema,
+      permissionAction: 'read',
+      chatCallable: true,
+      semanticKeywords: ['查询', '搜索', '列表', '有哪些'],
+      description: `按受控查询条件分页读取${spec.moduleName}，执行时继续校验当前员工的读取权限。`,
+    }),
+    businessCommand(spec, {
+      suffix: 'detail',
+      name: `查询${spec.moduleName}详情`,
+      action: 'read',
+      method: 'GET',
+      path: `${spec.apiBasePath}/{id}`,
+      requestSchema: entityIdSchema,
+      permissionAction: 'read',
+      chatCallable: true,
+      semanticKeywords: ['详情', '记录', '查看'],
+      description: `按业务记录 ID 读取${spec.moduleName}详情，模型不能猜测或绕过 ID 解析。`,
+    }),
+    businessCommand(spec, {
+      suffix: 'create',
+      name: `创建${spec.moduleName}`,
+      action: 'create',
+      method: 'POST',
+      path: spec.apiBasePath,
+      requestSchema: spec.createSchema,
+      permissionAction: 'create',
+      chatCallable: true,
+      semanticKeywords: ['创建', '新增', '添加', '录入'],
+      description: `根据受控字段生成${spec.moduleName}创建草稿；聊天调用必须人工确认后才可提交。`,
+    }),
+    businessCommand(spec, {
+      suffix: 'update',
+      name: `更新${spec.moduleName}`,
+      action: 'update',
+      method: 'PATCH',
+      path: `${spec.apiBasePath}/{id}`,
+      requestSchema: withEntityId(spec.createSchema),
+      permissionAction: 'update',
+      chatCallable: false,
+      semanticKeywords: ['更新', '修改', '编辑'],
+      description: `更新指定${spec.moduleName}；当前仅登记执行契约，不开放给聊天模型。`,
+    }),
+    businessCommand(spec, {
+      suffix: 'delete',
+      name: `删除${spec.moduleName}`,
+      action: 'delete',
+      method: 'DELETE',
+      path: `${spec.apiBasePath}/{id}`,
+      requestSchema: entityIdSchema,
+      permissionAction: 'delete',
+      chatCallable: false,
+      semanticKeywords: ['删除', '移除'],
+      description: `删除指定${spec.moduleName}；属于破坏性动作，不开放给聊天模型。`,
+    }),
+    businessCommand(spec, {
+      suffix: 'batchDelete',
+      name: `批量删除${spec.moduleName}`,
+      action: 'delete',
+      method: 'POST',
+      path: `${spec.apiBasePath}/batch-delete`,
+      requestSchema: batchDeleteSchema,
+      permissionAction: 'batchDelete',
+      chatCallable: false,
+      semanticKeywords: ['批量删除', '批量移除'],
+      description: `批量删除${spec.moduleName}；属于高风险动作，不开放给聊天模型。`,
+    }),
+  ];
+}
+
+/**
+ * 首批允许进入指令集的非 AI 业务模块。
+ *
+ * 这里只登记已有 Controller/DTO 的真实契约。账号、角色、权限、菜单、日志、
+ * 存储和模型配置等平台基础设施刻意不注册，避免 Agent 获得越权或配置篡改入口。
+ */
+export const AI_BUSINESS_COMMAND_CATALOG: AiCommandCatalogItem[] = [
+  ...createBusinessCrudCatalog({
+    moduleKey: 'demo',
+    moduleName: '示例数据',
+    controllerName: 'DemoController',
+    apiBasePath: '/api/demo',
+    permissionPrefix: 'Demo',
+    semanticKeywords: ['示例', '示例模块', '测试数据', '演示数据'],
+    querySchema: {
+      type: 'object',
+      properties: {
+        page: { type: 'integer', minimum: 1, default: 1 },
+        pageSize: { type: 'integer', minimum: 1, default: 10 },
+        keyword: { type: 'string' },
+        status: { type: 'string', enum: [...DEMO_STATUSES] },
+      },
+    },
+    createSchema: {
+      type: 'object',
+      required: ['title'],
+      properties: {
+        title: { type: 'string', minLength: 1 },
+        content: { type: 'string' },
+        category: { type: 'string', enum: [...DEMO_CATEGORIES] },
+        status: { type: 'string', enum: [...DEMO_STATUSES] },
+        publishedAt: { type: 'string', format: 'date-time' },
+        activeRange: {
+          type: 'array',
+          items: { type: 'string' },
+          maxItems: 2,
+        },
+        contactPhone: { type: 'string' },
+        email: { type: 'string', format: 'email' },
+        quantity: { type: 'integer', minimum: 0 },
+        unitPrice: { type: 'number', minimum: 0 },
+        budgetAmount: { type: 'number', minimum: 0 },
+        isFeatured: { type: 'boolean' },
+        allowComment: { type: 'boolean' },
+        tags: { type: 'array', items: { type: 'string' } },
+        channels: { type: 'array', items: { type: 'string' } },
+        imageUrl: { type: 'string' },
+        attachmentName: { type: 'string' },
+        attachmentUrl: { type: 'string' },
+      },
+    },
+    methods: {
+      list: 'findAll',
+      detail: 'findOne',
+      create: 'create',
+      update: 'update',
+      delete: 'remove',
+      batchDelete: 'batchRemove',
+    },
+  }),
+  ...createBusinessCrudCatalog({
+    moduleKey: 'product',
+    moduleName: '产品',
+    controllerName: 'ProductCatalogController',
+    apiBasePath: '/api/products',
+    permissionPrefix: 'Product',
+    semanticKeywords: ['产品', '产品资料', '产品库'],
+    querySchema: {
+      type: 'object',
+      properties: {
+        page: { type: 'integer', minimum: 1, default: 1 },
+        pageSize: { type: 'integer', minimum: 1, default: 10 },
+        keyword: { type: 'string' },
+        isEnabled: { type: 'boolean' },
+      },
+    },
+    createSchema: {
+      type: 'object',
+      required: ['productCode', 'name'],
+      properties: {
+        productCode: { type: 'string', minLength: 1, maxLength: 80 },
+        name: { type: 'string', minLength: 1, maxLength: 160 },
+        aliases: {
+          type: 'array',
+          items: { type: 'string', maxLength: 160 },
+        },
+        category: { type: 'string', maxLength: 80 },
+        description: { type: 'string' },
+        isEnabled: { type: 'boolean' },
+      },
+    },
+    methods: {
+      list: 'findProducts',
+      detail: 'findProduct',
+      create: 'createProduct',
+      update: 'updateProduct',
+      delete: 'removeProduct',
+      batchDelete: 'batchRemoveProducts',
+    },
+  }),
+  ...createBusinessCrudCatalog({
+    moduleKey: 'productSku',
+    moduleName: 'SKU',
+    controllerName: 'ProductCatalogController',
+    apiBasePath: '/api/product-skus',
+    permissionPrefix: 'ProductSku',
+    semanticKeywords: ['SKU', '产品规格', '规格型号'],
+    querySchema: {
+      type: 'object',
+      properties: {
+        page: { type: 'integer', minimum: 1, default: 1 },
+        pageSize: { type: 'integer', minimum: 1, default: 10 },
+        keyword: { type: 'string' },
+        productId: { type: 'integer', minimum: 1 },
+        isEnabled: { type: 'boolean' },
+      },
+    },
+    createSchema: {
+      type: 'object',
+      required: ['productId', 'specifications'],
+      properties: {
+        productId: { type: 'integer', minimum: 1 },
+        skuCode: { type: 'string', minLength: 1, maxLength: 100 },
+        name: { type: 'string', maxLength: 160 },
+        specifications: {
+          type: 'object',
+          additionalProperties: true,
+          minProperties: 1,
+        },
+        isEnabled: { type: 'boolean' },
+      },
+    },
+    methods: {
+      list: 'findSkus',
+      detail: 'findSku',
+      create: 'createSku',
+      update: 'updateSku',
+      delete: 'removeSku',
+      batchDelete: 'batchRemoveSkus',
+    },
+  }),
+];
 
 /**
  * 该目录是唯一可执行白名单。数据库记录只负责管理语义与启停，
@@ -135,13 +454,15 @@ export const AI_COMMAND_CATALOG: AiCommandCatalogItem[] = [
       properties: {
         question: {
           type: 'string',
-          description: '已完成口语校准的用户问题，可包含产品名、别名或 SKU 编码。',
+          description:
+            '已完成口语校准的用户问题，可包含产品名、别名或 SKU 编码。',
         },
         keywords: {
           type: 'array',
           items: { type: 'string', minLength: 2, maxLength: 40 },
           maxItems: 6,
-          description: '从本轮原始或校准问题提炼的核心产品词，按名称/别名进行部分匹配；多产品返回候选，不猜定单一产品。',
+          description:
+            '从本轮原始或校准问题提炼的核心产品词，按名称/别名进行部分匹配；多产品返回候选，不猜定单一产品。',
         },
       },
     }),
@@ -235,6 +556,7 @@ export const AI_COMMAND_CATALOG: AiCommandCatalogItem[] = [
     semanticKeywords: ['删除标准问答'],
     description: '仅管理端有权限执行；聊天模型不可调用。',
   },
+  ...AI_BUSINESS_COMMAND_CATALOG,
 ];
 
 export const AI_COMMAND_CATALOG_MAP = new Map(

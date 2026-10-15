@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-10-15 注册首批非 AI 业务指令契约
+
+- 新增文件：`server/src/ai-command-definitions/ai-command-definitions.constants.spec.ts`；删除文件：无。
+- 修改文件：`server/src/ai-command-definitions/ai-command-definitions.constants.ts`、`MD/内部Agent应用改造计划.md`、`CHANGELOG.md`。
+- 模块盘点：将现有示例数据、产品、SKU 三个非 AI 业务对象纳入代码指令白名单，共登记列表、详情、创建、更新、删除、批量删除 18 条真实 Controller/API 契约；请求 Schema 与现有 DTO 字段保持一致，并绑定 `Demo.* / Product.* / ProductSku.*` 权限。
+- 安全边界：列表、详情和创建可作为后续 Agent 的聊天候选，所有创建均要求人工确认；修改、删除和批量删除只登记契约、不允许聊天调用。用户、角色、权限、菜单、日志、存储、上传、模型账号、系统配置和审批动作不进入业务指令白名单。
+- 运行边界：指令登记不等于 Agent 自动授权，正式执行仍需具体 Agent 工具授权、当前员工权限、聊天调用开关和人工确认共同通过；本次不改意图识别和实际执行器，留待下一步独立验证。
+- 验证：TypeORM 实体列检查、后端 ESLint、NestJS 生产构建及后端全量 23 个测试套件、151 项测试通过；未启动常驻服务、未连接目标数据库，新增目录记录需服务下次启动时由现有同步机制写入数据库。
+
 ### 2026-10-15 将 Agent 工作台重构为对话产品布局
 
 - 新增文件 / 删除文件：无。
