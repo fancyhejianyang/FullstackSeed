@@ -27,6 +27,13 @@ import {
 } from "@/api/agentWorkspace";
 import AgentMessageList from "./components/AgentMessageList.vue";
 
+interface AgentPromptSuggestion {
+  kind: "chat" | "knowledge" | "query" | "write";
+  title: string;
+  description: string;
+  prompt: string;
+}
+
 const userStore = useUserStore();
 const apps = ref<AvailableAgentApp[]>([]);
 const selectedAgentId = ref<string | null>(null);
@@ -50,6 +57,67 @@ const currentApp = computed(() =>
 const agentOptions = computed(() =>
   apps.value.map((item) => ({ value: String(item.id), text: item.name })),
 );
+const currentAppInitial = computed(
+  () => currentApp.value?.name.trim().slice(0, 1).toUpperCase() || "A",
+);
+const capabilityLabels = computed(() => {
+  const result = [{ key: "model", label: "模型对话", active: false }];
+  if (currentApp.value?.knowledgeEnabled) {
+    result.push({ key: "knowledge", label: "知识增强", active: true });
+  }
+  for (const key of currentApp.value?.toolKeys ?? []) {
+    result.push({
+      key,
+      label: key === "product.query" ? "产品/SKU 查询" : "受控新增 SKU",
+      active: key === "productSku.create",
+    });
+  }
+  return result;
+});
+const promptSuggestions = computed<AgentPromptSuggestion[]>(() => {
+  const name = currentApp.value?.name || "当前 Agent";
+  const result: AgentPromptSuggestion[] = [
+    {
+      kind: "chat",
+      title: "了解一下",
+      description: `看看 ${name} 可以为你做什么`,
+      prompt: "请介绍一下你可以帮我完成哪些工作。",
+    },
+  ];
+  if (currentApp.value?.knowledgeEnabled) {
+    result.push({
+      kind: "knowledge",
+      title: "知识问答",
+      description: "从已配置的知识资料中寻找答案",
+      prompt: "请介绍一下当前知识库可以回答哪些问题。",
+    });
+  }
+  if (currentApp.value?.toolKeys.includes("product.query")) {
+    result.push({
+      kind: "query",
+      title: "查询业务数据",
+      description: "用自然语言查找产品或 SKU",
+      prompt: "帮我查询一个产品或 SKU，我稍后补充名称或编码。",
+    });
+  }
+  if (currentApp.value?.toolKeys.includes("productSku.create")) {
+    result.push({
+      kind: "write",
+      title: "创建录入草稿",
+      description: "整理信息，确认后再受控写入",
+      prompt: "我想新增一个 SKU，请引导我补充所需信息。",
+    });
+  }
+  if (result.length < 2) {
+    result.push({
+      kind: "chat",
+      title: "梳理问题",
+      description: "把零散想法整理成清晰步骤",
+      prompt: "我有一个问题需要梳理，请先告诉我应该提供哪些信息。",
+    });
+  }
+  return result.slice(0, 4);
+});
 
 async function loadSessions() {
   if (!selectedAgentId.value) {
@@ -151,6 +219,12 @@ async function send() {
   }
 }
 
+function sendPrompt(prompt: string) {
+  if (sending.value || actionBusy.value) return;
+  inputText.value = prompt;
+  void send();
+}
+
 async function stopCurrent() {
   if (!activeRequestId.value || !activeSession.value) return;
   try {
@@ -246,54 +320,51 @@ onMounted(async () => {
 </script>
 
 <template>
-  <PageContainer title="Agent 工作台">
+  <PageContainer class="agent-workspace-page" title="Agent 工作台">
     <div v-if="!apps.length" class="agent-workspace__empty">
       <el-empty description="当前没有可使用的 Agent 应用" />
     </div>
     <div v-else class="agent-workspace">
-      <header class="agent-workspace__header">
-        <Select
-          v-model="selectedAgentId"
-          class="agent-workspace__selector"
-          :options="agentOptions"
-          :clearable="false"
-          :disabled="sending || actionBusy"
-          @change="switchAgent"
-        />
-        <div class="agent-workspace__identity">
-          <strong>{{ currentApp?.name }}</strong>
-          <span>{{ currentApp?.responsibility }}</span>
-        </div>
-        <div class="agent-workspace__capabilities">
-          <el-tag type="info">模型对话</el-tag>
-          <el-tag v-if="currentApp?.knowledgeEnabled" type="success">
-            知识增强
-          </el-tag>
-          <el-tag
-            v-for="key in currentApp?.toolKeys || []"
-            :key="key"
-            type="info"
-            >{{ key === "product.query" ? "产品/SKU 查询" : "受控新增 SKU" }}</el-tag
-          >
-        </div>
-      </header>
-
-      <div class="agent-workspace__body">
-        <aside class="agent-workspace__sessions" v-loading="loadingSessions">
-          <div class="agent-workspace__session-actions">
-            <Button
-              icon="Plus"
+      <aside class="agent-workspace__sidebar" v-loading="loadingSessions">
+        <div class="agent-workspace__agent-picker">
+          <div class="agent-workspace__avatar is-sidebar">
+            {{ currentAppInitial }}
+          </div>
+          <div class="agent-workspace__agent-select">
+            <span>当前智能体</span>
+            <Select
+              v-model="selectedAgentId"
+              class="agent-workspace__selector"
+              :options="agentOptions"
+              :clearable="false"
               :disabled="sending || actionBusy"
-              @click="newSession"
-              >新会话</Button
-            >
-            <Input
-              v-model="sessionKeyword"
-              mode="search"
-              placeholder="搜索历史"
-              @search="loadSessions"
+              @change="switchAgent"
             />
           </div>
+        </div>
+
+        <div class="agent-workspace__session-actions">
+          <Button
+            class="agent-workspace__new-chat"
+            type="primary"
+            icon="Plus"
+            :disabled="sending || actionBusy"
+            @click="newSession"
+            >开启新对话</Button
+          >
+          <Input
+            v-model="sessionKeyword"
+            mode="search"
+            placeholder="搜索历史对话"
+            @search="loadSessions"
+          />
+        </div>
+
+        <div class="agent-workspace__history-title">
+          <span>最近对话</span>
+          <span>{{ sessions.length }}</span>
+        </div>
+        <div class="agent-workspace__sessions">
           <button
             v-for="session in sessions"
             :key="session.id"
@@ -302,51 +373,94 @@ onMounted(async () => {
             type="button"
             @click="selectSession(session)"
           >
-            <strong>{{ session.title }}</strong>
-            <span>{{ session.lastMessage || "暂无消息" }}</span>
-            <time>{{ formatDateTime(session.updatedAt) }}</time>
+            <el-icon class="agent-workspace__session-icon">
+              <ChatDotRound />
+            </el-icon>
+            <span class="agent-workspace__session-content">
+              <strong>{{ session.title }}</strong>
+              <span>{{ session.lastMessage || "开始一段新的对话" }}</span>
+              <time>{{ formatDateTime(session.updatedAt) }}</time>
+            </span>
           </button>
-        </aside>
+          <div v-if="!sessions.length" class="agent-workspace__history-empty">
+            暂无历史对话
+          </div>
+        </div>
+      </aside>
 
-        <main class="agent-workspace__chat" v-loading="loadingDetail">
+      <section class="agent-workspace__main" v-loading="loadingDetail">
+        <header class="agent-workspace__header">
+          <div class="agent-workspace__identity">
+            <div class="agent-workspace__avatar">
+              {{ currentAppInitial }}
+            </div>
+            <div>
+              <strong>{{ currentApp?.name }}</strong>
+              <span> <i />在线 · {{ currentApp?.responsibility }} </span>
+            </div>
+          </div>
+          <div class="agent-workspace__capabilities">
+            <span
+              v-for="item in capabilityLabels"
+              :key="item.key"
+              :class="{ 'is-active': item.active }"
+            >
+              {{ item.label }}
+            </span>
+          </div>
+        </header>
+
+        <main class="agent-workspace__chat">
           <AgentMessageList
             v-if="activeSession"
+            :agent-name="currentApp?.name || 'Agent'"
+            :responsibility="currentApp?.responsibility || ''"
+            :suggestions="promptSuggestions"
             :messages="activeSession.messages"
             :drafts="activeSession.drafts"
             :executions="activeSession.executions"
             :products="products"
-            :busy="actionBusy"
+            :busy="sending || actionBusy"
             @update-draft="handleDraftUpdate"
             @confirm-draft="handleDraftConfirm"
             @cancel-draft="handleDraftCancel"
+            @prompt="sendPrompt"
           />
           <el-empty v-else description="请选择或新建会话" />
+        </main>
 
-          <footer class="agent-workspace__composer">
+        <footer class="agent-workspace__composer-shell">
+          <div class="agent-workspace__composer">
             <Input
               v-model="inputText"
+              class="agent-workspace__composer-input"
               mode="textarea"
               :rows="3"
               :maxlength="8000"
               :disabled="sending || actionBusy"
-              placeholder="描述问题、查询条件或录入需求。Enter 发送，Shift+Enter 换行。"
+              placeholder="给 Agent 发消息，或描述查询、录入需求…"
               @compositionstart="isComposing = true"
               @compositionend="isComposing = false"
               @keydown.enter.exact.prevent="handleEnter"
             />
             <div class="agent-workspace__composer-actions">
-              <el-tag v-if="sending" type="primary">正在处理</el-tag>
-              <el-tag v-else-if="actionBusy" type="warning"
-                >正在提交并核实结果</el-tag
-              >
+              <span class="agent-workspace__composer-hint">
+                <template v-if="sending">Agent 正在处理…</template>
+                <template v-else-if="actionBusy">正在提交并核实结果…</template>
+                <template v-else>Enter 发送 · Shift + Enter 换行</template>
+              </span>
               <Button
                 v-if="sending"
+                round
                 icon="VideoPause"
                 :confirm="false"
                 @click="stopCurrent"
                 >停止</Button
               >
               <Button
+                class="agent-workspace__send"
+                type="primary"
+                round
                 icon="Promotion"
                 :loading="sending"
                 :disabled="!inputText.trim() || actionBusy"
@@ -354,49 +468,235 @@ onMounted(async () => {
                 >发送</Button
               >
             </div>
-          </footer>
-        </main>
-      </div>
+          </div>
+          <p>AI 生成内容仅供参考，重要业务操作请确认后提交</p>
+        </footer>
+      </section>
     </div>
   </PageContainer>
 </template>
 
 <style scoped>
-.agent-workspace {
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - 150px);
-  min-height: 620px;
-  border: 1px solid #dcdfe6;
-  border-radius: 8px;
+.agent-workspace-page {
   overflow: hidden;
+  padding: 0;
+  border-radius: 14px;
+  box-shadow: 0 8px 28px rgb(31 35 41 / 6%);
 }
-.agent-workspace__header {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  min-height: 74px;
-  padding: 12px 18px;
-  border-bottom: 1px solid #dcdfe6;
+.agent-workspace-page :deep(.page-container__body) {
+  height: 100%;
+}
+.agent-workspace {
+  display: grid;
+  height: calc(100vh - 100px);
+  min-height: 680px;
+  grid-template-columns: 268px minmax(0, 1fr);
+  overflow: hidden;
   background: #fff;
 }
-.agent-workspace__selector {
-  width: 220px;
-  flex: 0 0 auto;
-}
-.agent-workspace__identity {
+.agent-workspace__sidebar {
   display: flex;
-  flex: 1;
   min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  border-right: 1px solid #ebeef5;
+  background: #f7f8fa;
+}
+.agent-workspace__agent-picker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 22px 18px 16px;
+}
+.agent-workspace__avatar {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  place-items: center;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  border-radius: 13px;
+  background: linear-gradient(145deg, #79bbff, #409eff);
+  box-shadow: 0 6px 16px rgb(64 158 255 / 24%);
+}
+.agent-workspace__avatar.is-sidebar {
+  width: 42px;
+  height: 42px;
+  flex-basis: 42px;
+}
+.agent-workspace__agent-select {
+  min-width: 0;
+  flex: 1;
+}
+.agent-workspace__agent-select > span {
+  display: block;
+  margin-bottom: 3px;
+  color: #909399;
+  font-size: 11px;
+}
+.agent-workspace__selector {
+  width: 100%;
+  font-weight: 600;
+}
+.agent-workspace__selector :deep(.select__control) {
+  min-height: 28px;
+  border: 0;
+  background: transparent;
+}
+.agent-workspace__selector :deep(.select__input) {
+  height: 28px;
+  padding-left: 0;
+  font-size: 15px;
+}
+.agent-workspace__session-actions {
+  display: grid;
+  gap: 10px;
+  padding: 0 14px 18px;
+}
+.agent-workspace__session-actions :deep(.agent-workspace__new-chat) {
+  width: 100%;
+  height: 40px;
+  border-radius: 10px;
+}
+.agent-workspace__session-actions :deep(.el-input__wrapper) {
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: 0 0 0 1px #e7e9ee inset;
+}
+.agent-workspace__history-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px 9px;
+  color: #909399;
+  font-size: 12px;
+  font-weight: 600;
+}
+.agent-workspace__history-title span:last-child {
+  min-width: 22px;
+  padding: 1px 7px;
+  text-align: center;
+  border-radius: 999px;
+  background: #ebeef3;
+}
+.agent-workspace__sessions {
+  min-height: 0;
+  padding: 0 9px 16px;
+  flex: 1;
+  overflow-y: auto;
+}
+.agent-workspace__session {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 4px;
+  padding: 11px 10px;
+  text-align: left;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background-color 0.2s,
+    box-shadow 0.2s;
+}
+.agent-workspace__session:hover {
+  background: #eef0f4;
+}
+.agent-workspace__session.is-active {
+  background: #fff;
+  box-shadow: 0 4px 14px rgb(31 35 41 / 8%);
+}
+.agent-workspace__session-icon {
+  margin-top: 2px;
+  flex: 0 0 auto;
+  color: #909399;
+  font-size: 17px;
+}
+.agent-workspace__session.is-active .agent-workspace__session-icon {
+  color: #409eff;
+}
+.agent-workspace__session-content {
+  display: flex;
+  min-width: 0;
+  flex: 1;
   flex-direction: column;
   gap: 4px;
 }
-.agent-workspace__identity span {
+.agent-workspace__session strong,
+.agent-workspace__session span,
+.agent-workspace__session time {
   overflow: hidden;
-  color: #606266;
-  font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.agent-workspace__session strong {
+  color: #303133;
+  font-size: 13px;
+  font-weight: 600;
+}
+.agent-workspace__session-content > span,
+.agent-workspace__session time {
+  color: #a0a3aa;
+  font-size: 11px;
+}
+.agent-workspace__history-empty {
+  padding: 36px 12px;
+  color: #a8abb2;
+  font-size: 12px;
+  text-align: center;
+}
+.agent-workspace__main {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  background: #fff;
+}
+.agent-workspace__header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-height: 72px;
+  padding: 12px 24px;
+  border-bottom: 1px solid #f0f1f4;
+}
+.agent-workspace__identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+.agent-workspace__identity > div:last-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+.agent-workspace__identity strong {
+  color: #1f2329;
+  font-size: 16px;
+}
+.agent-workspace__identity span {
+  overflow: hidden;
+  color: #8f959e;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-workspace__identity i {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: #67c23a;
+  vertical-align: 1px;
 }
 .agent-workspace__capabilities {
   display: flex;
@@ -404,95 +704,124 @@ onMounted(async () => {
   justify-content: flex-end;
   gap: 6px;
 }
-.agent-workspace__body {
-  display: grid;
-  min-height: 0;
-  flex: 1;
-  grid-template-columns: 280px minmax(0, 1fr);
+.agent-workspace__capabilities span {
+  padding: 5px 9px;
+  color: #7d828a;
+  font-size: 11px;
+  line-height: 1;
+  border-radius: 999px;
+  background: #f2f3f5;
 }
-.agent-workspace__sessions {
-  overflow-y: auto;
-  border-right: 1px solid #dcdfe6;
-  background: #fff;
-}
-.agent-workspace__session-actions {
-  display: grid;
-  gap: 10px;
-  padding: 14px;
-  border-bottom: 1px solid #ebeef5;
-}
-.agent-workspace__session {
-  display: flex;
-  width: 100%;
-  flex-direction: column;
-  gap: 5px;
-  padding: 13px 15px;
-  text-align: left;
-  border: 0;
-  border-bottom: 1px solid #ebeef5;
-  background: transparent;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-.agent-workspace__session:hover,
-.agent-workspace__session.is-active {
-  background: rgba(64, 158, 255, 0.12);
-}
-.agent-workspace__session strong,
-.agent-workspace__session span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.agent-workspace__session span,
-.agent-workspace__session time {
-  color: #909399;
-  font-size: 12px;
+.agent-workspace__capabilities span.is-active {
+  color: #409eff;
+  background: #ecf5ff;
 }
 .agent-workspace__chat {
-  display: grid;
   min-height: 0;
-  grid-template-rows: minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+.agent-workspace__composer-shell {
+  position: relative;
+  z-index: 2;
+  padding: 12px 28px 13px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 70%), #fff 24%);
 }
 .agent-workspace__composer {
   display: grid;
-  gap: 10px;
-  padding: 14px;
-  border-top: 1px solid #dcdfe6;
+  max-width: 880px;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid #dfe3eb;
+  border-radius: 18px;
   background: #fff;
+  box-shadow: 0 8px 26px rgb(31 35 41 / 10%);
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+.agent-workspace__composer:focus-within {
+  border-color: #9acbff;
+  box-shadow: 0 10px 30px rgb(64 158 255 / 14%);
+}
+.agent-workspace__composer
+  :deep(.agent-workspace__composer-input .el-textarea__inner) {
+  min-height: 68px !important;
+  padding: 15px 17px 7px;
+  resize: none;
+  border: 0;
+  box-shadow: none;
 }
 .agent-workspace__composer-actions {
   display: flex;
+  min-height: 44px;
+  align-items: center;
   justify-content: flex-end;
   gap: 8px;
+  padding: 4px 10px 9px 16px;
+}
+.agent-workspace__composer-hint {
+  margin-right: auto;
+  color: #a8abb2;
+  font-size: 11px;
+}
+.agent-workspace__composer-actions :deep(.agent-workspace__send) {
+  min-width: 82px;
+}
+.agent-workspace__composer-shell > p {
+  margin: 7px 0 0;
+  color: #b0b3b8;
+  font-size: 11px;
+  text-align: center;
 }
 .agent-workspace__empty {
-  min-height: 500px;
   display: grid;
+  min-height: calc(100vh - 100px);
   place-items: center;
 }
-@media (max-width: 900px) {
+@media (max-width: 760px) {
   .agent-workspace {
     height: auto;
-    min-height: 720px;
+    min-height: calc(100vh - 100px);
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 720px;
+  }
+  .agent-workspace__sidebar {
+    border-right: 0;
+    border-bottom: 1px solid #ebeef5;
+  }
+  .agent-workspace__agent-picker {
+    padding-bottom: 10px;
+  }
+  .agent-workspace__session-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+  .agent-workspace__history-title {
+    display: none;
+  }
+  .agent-workspace__sessions {
+    display: flex;
+    gap: 6px;
+    padding: 0 14px 12px;
+    overflow-x: auto;
+  }
+  .agent-workspace__session {
+    width: 220px;
+    flex: 0 0 220px;
   }
   .agent-workspace__header {
     align-items: flex-start;
-    flex-wrap: wrap;
-  }
-  .agent-workspace__selector {
-    width: 100%;
+    flex-direction: column;
+    gap: 8px;
   }
   .agent-workspace__capabilities {
     justify-content: flex-start;
   }
-  .agent-workspace__body {
-    grid-template-columns: 1fr;
-    grid-template-rows: 190px minmax(500px, 1fr);
+  .agent-workspace__composer-shell {
+    padding-right: 14px;
+    padding-left: 14px;
   }
-  .agent-workspace__sessions {
-    border-right: 0;
-    border-bottom: 1px solid #dcdfe6;
+  .agent-workspace__composer-hint {
+    display: none;
   }
 }
 </style>

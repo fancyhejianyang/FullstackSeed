@@ -61,14 +61,15 @@ function showDetail() {
 
 <style scoped>
 .query-card {
-  padding: 14px;
-  border: 1px solid #dcdfe6;
-  border-radius: 8px;
-  background: #fff;
+  padding: 16px;
+  border: 1px solid #e7eaf0;
+  border-radius: 14px;
+  background: #fcfdff;
+  box-shadow: 0 6px 20px rgb(31 35 41 / 6%);
 }
 .query-card__title {
-  margin-bottom: 10px;
-  color: #303133;
+  margin-bottom: 12px;
+  color: #1f2329;
   font-weight: 600;
 }
 .query-card__hint {
@@ -77,13 +78,13 @@ function showDetail() {
 }
 .query-card__candidate {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
-  padding: 8px 0;
-  border-bottom: 1px solid #ebeef5;
+  margin-top: 8px;
+  padding: 10px 12px;
   color: #606266;
-}
-.query-card__candidate:last-child {
-  border-bottom: 0;
+  border-radius: 9px;
+  background: #f4f6f8;
 }
 .query-card__actions {
   margin-top: 12px;

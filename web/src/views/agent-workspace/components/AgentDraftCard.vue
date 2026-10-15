@@ -227,14 +227,15 @@ function statusText(status: AgentDraft["status"]) {
 
 <style scoped>
 .draft-card {
-  padding: 14px;
-  border: 1px solid #e6a23c;
-  border-radius: 8px;
-  background: #fdf6ec;
+  padding: 16px;
+  border: 1px solid #f3d19e;
+  border-radius: 14px;
+  background: #fffcf5;
+  box-shadow: 0 6px 20px rgb(31 35 41 / 6%);
 }
 .draft-card.is-submitted {
-  border-color: #67c23a;
-  background: #f0f9eb;
+  border-color: #b3e19d;
+  background: #f6fff2;
 }
 .draft-card.is-cancelled,
 .draft-card.is-expired {
