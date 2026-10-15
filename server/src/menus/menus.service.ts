@@ -14,18 +14,34 @@ export interface MenuTreeNode extends Menu {
   children: MenuTreeNode[];
 }
 
-type SeedMenu = Partial<Menu> & { parentPath?: string };
+type SeedMenu = Partial<Menu> & {
+  parentPath?: string;
+  legacyPaths?: string[];
+  reconcile?: boolean;
+};
 
 // 内置菜单种子（path 对应前端路由）
 // isSystem=true 为系统固定菜单：仅超管可见、不可分配给角色；业务菜单 isSystem=false 可分配。
 const SEED_MENUS: SeedMenu[] = [
   {
-    name: 'Agent 工作台',
-    path: '/agent-workspace',
+    name: 'Agent 管理',
+    path: '/agent-management',
     icon: 'MagicStick',
     sort: 72,
     permissionCode: 'AgentWorkspace.read',
     isSystem: false,
+    reconcile: true,
+  },
+  {
+    name: 'Agent 工作台',
+    path: '/agent-management/workspace',
+    icon: '',
+    sort: 10,
+    permissionCode: 'AgentWorkspace.read',
+    isSystem: false,
+    parentPath: '/agent-management',
+    legacyPaths: ['/agent-workspace'],
+    reconcile: true,
   },
   {
     name: '客服工作台',
@@ -179,30 +195,36 @@ const SEED_MENUS: SeedMenu[] = [
   },
   {
     name: 'Agent 调试',
-    path: '/chat-management/ai-chat',
+    path: '/agent-management/debug',
     icon: '',
-    sort: 10,
+    sort: 40,
     permissionCode: 'Menu.read',
     isSystem: true,
-    parentPath: '/chat-management',
+    parentPath: '/agent-management',
+    legacyPaths: ['/chat-management/ai-chat'],
+    reconcile: true,
   },
   {
     name: 'Agent 应用管理',
-    path: '/chat-management/agent-apps',
+    path: '/agent-management/apps',
     icon: '',
-    sort: 15,
+    sort: 20,
     permissionCode: 'AgentApp.read',
     isSystem: true,
-    parentPath: '/chat-management',
+    parentPath: '/agent-management',
+    legacyPaths: ['/chat-management/agent-apps'],
+    reconcile: true,
   },
   {
     name: 'Agent 执行记录',
-    path: '/chat-management/agent-executions',
+    path: '/agent-management/executions',
     icon: '',
-    sort: 17,
+    sort: 30,
     permissionCode: 'AgentApp.read',
     isSystem: true,
-    parentPath: '/chat-management',
+    parentPath: '/agent-management',
+    legacyPaths: ['/chat-management/agent-executions'],
+    reconcile: true,
   },
   {
     name: '产品库',
@@ -242,31 +264,35 @@ const SEED_MENUS: SeedMenu[] = [
   },
   {
     name: 'AI 指令集',
-    path: '/chat-management/commands',
+    path: '/agent-management/commands',
     icon: '',
-    sort: 32,
+    sort: 50,
     permissionCode: 'AiCommandDefinition.read',
+    isSystem: true,
+    parentPath: '/agent-management',
+    legacyPaths: ['/chat-management/commands'],
+    reconcile: true,
+  },
+  {
+    name: '知识库检索配置',
+    path: '/chat-management/retrieval-configs',
+    icon: '',
+    sort: 35,
+    permissionCode: 'Menu.read',
     isSystem: true,
     parentPath: '/chat-management',
   },
-    {
-      name: '知识库检索配置',
-      path: '/chat-management/retrieval-configs',
-      icon: '',
-      sort: 35,
-      permissionCode: 'Menu.read',
-      isSystem: true,
-      parentPath: '/chat-management',
-    },
-    {
-      name: 'AI 工作流',
-      path: '/chat-management/workflows',
-      icon: '',
-      sort: 34,
-      permissionCode: 'AiWorkflow.read',
-      isSystem: true,
-      parentPath: '/chat-management',
-    },
+  {
+    name: 'AI 工作流',
+    path: '/agent-management/workflows',
+    icon: '',
+    sort: 60,
+    permissionCode: 'AiWorkflow.read',
+    isSystem: true,
+    parentPath: '/agent-management',
+    legacyPaths: ['/chat-management/workflows'],
+    reconcile: true,
+  },
   {
     name: '知识库路由规则',
     path: '/chat-management/routing-rules',
@@ -369,7 +395,12 @@ const SEED_MENUS: SeedMenu[] = [
 ];
 
 // 锁定菜单路径：前端不限制操作，后端 API 对此类菜单统一做管理员身份校验
-const PROTECTED_MENU_PATHS = ['/menus', '/system-config', '/chat-management'];
+const PROTECTED_MENU_PATHS = [
+  '/menus',
+  '/system-config',
+  '/agent-management',
+  '/chat-management',
+];
 
 @Injectable()
 export class MenusService implements OnModuleInit {
@@ -379,20 +410,46 @@ export class MenusService implements OnModuleInit {
   ) {}
 
   /**
-   * 启动时仅补齐缺失的内置菜单。
-   * 已存在的菜单由管理员维护，启动过程不写入任何字段；仅把本次拆分前
-   * 未被人工改名的默认“AI 工作流配置”升级为“知识库检索配置”。
+   * 启动时补齐缺失的内置菜单。
+   * 普通种子仍保持“只补不改”；reconcile 种子用于受控迁移系统菜单的
+   * 路径和父级，确保历史环境也能获得最新的固定菜单结构。
    */
   async onModuleInit() {
     for (const seed of SEED_MENUS) {
-      const { parentPath, ...menuSeed } = seed;
-      const exist = await this.menuRepository.findOne({
-        where: [
-          ...(menuSeed.path ? [{ path: menuSeed.path }] : []),
-          ...(menuSeed.name ? [{ name: menuSeed.name }] : []),
-        ],
-      });
+      const {
+        parentPath,
+        legacyPaths = [],
+        reconcile = false,
+        ...menuSeed
+      } = seed;
+      const parent = parentPath
+        ? await this.menuRepository.findOne({
+            where: { path: parentPath },
+          })
+        : null;
+      let exist = menuSeed.path
+        ? await this.menuRepository.findOne({
+            where: { path: menuSeed.path },
+          })
+        : null;
+      if (!exist && legacyPaths.length) {
+        exist = await this.menuRepository.findOne({
+          where: legacyPaths.map((path) => ({ path })),
+        });
+      }
+      if (!exist && menuSeed.name) {
+        exist = await this.menuRepository.findOne({
+          where: { name: menuSeed.name },
+        });
+      }
       if (exist) {
+        if (reconcile) {
+          await this.menuRepository.update(exist.id, {
+            ...menuSeed,
+            parentId: parent?.id ?? menuSeed.parentId ?? null,
+          });
+          continue;
+        }
         if (
           menuSeed.path === '/chat-management/retrieval-configs' &&
           exist.name === 'AI 工作流配置'
@@ -404,11 +461,6 @@ export class MenusService implements OnModuleInit {
         continue;
       }
 
-      const parent = parentPath
-        ? await this.menuRepository.findOne({
-            where: { path: parentPath },
-          })
-        : null;
       await this.menuRepository.save(
         this.menuRepository.create({
           ...menuSeed,

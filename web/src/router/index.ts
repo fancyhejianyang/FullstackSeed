@@ -21,10 +21,20 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '首页' },
       },
       {
-        path: 'agent-workspace',
+        path: 'agent-management',
+        name: 'agent-management',
+        redirect: '/agent-management/workspace',
+        meta: { title: 'Agent 管理', permission: 'AgentWorkspace.read' },
+      },
+      {
+        path: 'agent-management/workspace',
         name: 'agent-workspace',
         component: () => import('@/views/agent-workspace/Index.vue'),
         meta: { title: 'Agent 工作台', permission: 'AgentWorkspace.read' },
+      },
+      {
+        path: 'agent-workspace',
+        redirect: '/agent-management/workspace',
       },
       {
         path: 'demo',
@@ -107,7 +117,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'chat-management',
         name: 'chat-management',
-        redirect: '/chat-management/ai-chat',
+        redirect: '/chat-management/apps',
         meta: { title: '聊天管理', permission: 'Menu.read' },
       },
       {
@@ -129,22 +139,34 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '审批管理', permission: 'ApprovalRequest.read' },
       },
       {
-        path: 'chat-management/ai-chat',
-        name: 'chat-management-ai-chat',
+        path: 'agent-management/debug',
+        name: 'agent-management-debug',
         component: () => import('@/views/knowledge-ai-chat/Index.vue'),
         meta: { title: 'Agent 调试', permission: 'Menu.read' },
       },
       {
-        path: 'chat-management/agent-apps',
-        name: 'chat-management-agent-apps',
+        path: 'chat-management/ai-chat',
+        redirect: '/agent-management/debug',
+      },
+      {
+        path: 'agent-management/apps',
+        name: 'agent-management-apps',
         component: () => import('@/views/agent-app/Index.vue'),
         meta: { title: 'Agent 应用管理', permission: 'AgentApp.read' },
       },
       {
-        path: 'chat-management/agent-executions',
-        name: 'chat-management-agent-executions',
+        path: 'chat-management/agent-apps',
+        redirect: '/agent-management/apps',
+      },
+      {
+        path: 'agent-management/executions',
+        name: 'agent-management-executions',
         component: () => import('@/views/agent-app/Records.vue'),
         meta: { title: 'Agent 执行记录', permission: 'AgentApp.read' },
+      },
+      {
+        path: 'chat-management/agent-executions',
+        redirect: '/agent-management/executions',
       },
       {
         path: 'business-data/products',
@@ -177,16 +199,24 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'AI 功能配置', permission: 'Menu.read' },
       },
       {
-        path: 'chat-management/commands',
-        name: 'chat-management-commands',
+        path: 'agent-management/commands',
+        name: 'agent-management-commands',
         component: () => import('@/views/ai-command-definition/Index.vue'),
         meta: { title: 'AI 指令集', permission: 'AiCommandDefinition.read' },
       },
       {
-        path: 'chat-management/workflows',
-        name: 'chat-management-workflows',
+        path: 'chat-management/commands',
+        redirect: '/agent-management/commands',
+      },
+      {
+        path: 'agent-management/workflows',
+        name: 'agent-management-workflows',
         component: () => import('@/views/ai-workflow/Index.vue'),
         meta: { title: 'AI 工作流', permission: 'AiWorkflow.read' },
+      },
+      {
+        path: 'chat-management/workflows',
+        redirect: '/agent-management/workflows',
       },
       {
         path: 'chat-management/retrieval-configs',

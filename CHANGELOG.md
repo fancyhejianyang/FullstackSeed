@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-10-15 将 Agent 入口统一归入独立管理菜单
+
+- 新增文件：`server/src/menus/menus.service.spec.ts`；删除文件：无。
+- 修改文件：`server/src/menus/menus.service.ts`、`web/src/router/index.ts`、`MD/内部Agent应用改造计划.md`、`CHANGELOG.md`。
+- 菜单结构：新增独立一级菜单“Agent 管理”，统一挂载 Agent 工作台、Agent 应用管理、Agent 执行记录、Agent 调试、AI 指令集和 AI 工作流；聊天应用、AI 功能配置、知识检索/路由、标准问答、口语词库和问答记录继续保留在“聊天管理”。
+- 兼容迁移：后端菜单种子为六个 Agent 子菜单维护受控的旧路径迁移，启动后自动更新已有记录的路径、父级和排序；前端保留旧 URL 重定向，已有书签不会直接进入 404。聊天管理默认入口改为聊天应用。
+- 权限边界：“Agent 管理”父菜单保持业务菜单属性，普通员工拥有 `AgentWorkspace.read` 时仅看到工作台；其余管理子菜单维持系统固定菜单属性，不因重组扩大可见范围。新增路径加入后端锁定菜单范围。
+- 验证：后端 ESLint、TypeORM 实体检查、NestJS 生产构建及全量 24 个测试套件、153 项测试通过；前端 `vue-tsc` 与 Vite 生产构建通过，仅有既有第三方 Rollup 注释警告。未启动常驻服务，需重启后端触发已有菜单记录迁移并重新加载前端菜单。
+
 ### 2026-10-15 注册首批非 AI 业务指令契约
 
 - 新增文件：`server/src/ai-command-definitions/ai-command-definitions.constants.spec.ts`；删除文件：无。

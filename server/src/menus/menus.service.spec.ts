@@ -1,0 +1,180 @@
+import type { Repository } from 'typeorm';
+import { Menu } from './entities/menu.entity';
+import { MenusService } from './menus.service';
+
+describe('MenusService Agent menu reconciliation', () => {
+  let rows: Menu[];
+  let nextId: number;
+  let service: MenusService;
+
+  const legacyMenus = [
+    menu({
+      id: 1,
+      name: '聊天管理',
+      path: '/chat-management',
+      icon: 'ChatDotRound',
+      sort: 75,
+      permissionCode: 'Menu.read',
+      isSystem: true,
+    }),
+    menu({
+      id: 2,
+      name: 'Agent 工作台',
+      path: '/agent-workspace',
+      icon: 'MagicStick',
+      sort: 72,
+      permissionCode: 'AgentWorkspace.read',
+    }),
+    menu({
+      id: 3,
+      parentId: 1,
+      name: 'Agent 调试',
+      path: '/chat-management/ai-chat',
+      permissionCode: 'Menu.read',
+      isSystem: true,
+    }),
+    menu({
+      id: 4,
+      parentId: 1,
+      name: 'Agent 应用管理',
+      path: '/chat-management/agent-apps',
+      permissionCode: 'AgentApp.read',
+      isSystem: true,
+    }),
+    menu({
+      id: 5,
+      parentId: 1,
+      name: 'Agent 执行记录',
+      path: '/chat-management/agent-executions',
+      permissionCode: 'AgentApp.read',
+      isSystem: true,
+    }),
+    menu({
+      id: 6,
+      parentId: 1,
+      name: 'AI 指令集',
+      path: '/chat-management/commands',
+      permissionCode: 'AiCommandDefinition.read',
+      isSystem: true,
+    }),
+    menu({
+      id: 7,
+      parentId: 1,
+      name: 'AI 工作流',
+      path: '/chat-management/workflows',
+      permissionCode: 'AiWorkflow.read',
+      isSystem: true,
+    }),
+  ];
+
+  beforeEach(() => {
+    rows = legacyMenus.map((item) => ({ ...item }));
+    nextId = 100;
+    const repository = {
+      findOne: jest.fn(({ where }: { where: unknown }) => {
+        const conditions = Array.isArray(where) ? where : [where];
+        return Promise.resolve(
+          rows.find((row) =>
+            conditions.some((condition) =>
+              Object.entries(condition as Record<string, unknown>).every(
+                ([key, value]) => row[key as keyof Menu] === value,
+              ),
+            ),
+          ) ?? null,
+        );
+      }),
+      create: jest.fn((value: Partial<Menu>) => menu(value)),
+      save: jest.fn((value: Menu) => {
+        const saved = { ...value, id: value.id || nextId++ };
+        const index = rows.findIndex((row) => row.id === saved.id);
+        if (index >= 0) rows[index] = saved;
+        else rows.push(saved);
+        return Promise.resolve(saved);
+      }),
+      update: jest.fn((id: number, value: Partial<Menu>) => {
+        const target = rows.find((row) => row.id === id);
+        if (target) Object.assign(target, value);
+        return Promise.resolve({ affected: target ? 1 : 0 });
+      }),
+      find: jest.fn(() =>
+        Promise.resolve(
+          [...rows].sort(
+            (left, right) => left.sort - right.sort || left.id - right.id,
+          ),
+        ),
+      ),
+    };
+    service = new MenusService(repository as unknown as Repository<Menu>);
+  });
+
+  it('moves every legacy Agent menu under the independent Agent management root', async () => {
+    await service.onModuleInit();
+
+    const root = rows.find((item) => item.path === '/agent-management');
+    expect(root).toEqual(
+      expect.objectContaining({
+        name: 'Agent 管理',
+        isSystem: false,
+        permissionCode: 'AgentWorkspace.read',
+      }),
+    );
+
+    expect(
+      rows
+        .filter((item) => item.parentId === root!.id)
+        .map((item) => item.path)
+        .sort(),
+    ).toEqual(
+      [
+        '/agent-management/apps',
+        '/agent-management/commands',
+        '/agent-management/debug',
+        '/agent-management/executions',
+        '/agent-management/workflows',
+        '/agent-management/workspace',
+      ].sort(),
+    );
+
+    const chat = rows.find((item) => item.path === '/chat-management')!;
+    const chatChildren = rows.filter((item) => item.parentId === chat.id);
+    expect(chatChildren.some((item) => item.name.includes('Agent'))).toBe(
+      false,
+    );
+    expect(
+      chatChildren.some((item) =>
+        ['AI 指令集', 'AI 工作流'].includes(item.name),
+      ),
+    ).toBe(false);
+  });
+
+  it('shows only the Agent workspace child to ordinary authorized employees', async () => {
+    await service.onModuleInit();
+
+    const tree = await service.findMine(false, ['AgentWorkspace.read']);
+    const root = tree.find((item) => item.path === '/agent-management');
+
+    expect(root).toBeDefined();
+    expect(root!.children.map((item) => item.path)).toEqual([
+      '/agent-management/workspace',
+    ]);
+  });
+});
+
+function menu(value: Partial<Menu>): Menu {
+  return {
+    id: 0,
+    parentId: null,
+    name: '',
+    path: '',
+    icon: '',
+    sort: 0,
+    type: 'menu',
+    permissionCode: '',
+    isSystem: false,
+    isActive: true,
+    createdAt: new Date('2026-10-15T00:00:00.000Z'),
+    updatedAt: new Date('2026-10-15T00:00:00.000Z'),
+    deletedAt: null,
+    ...value,
+  };
+}
