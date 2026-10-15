@@ -367,7 +367,7 @@ export class KnowledgeAiProvidersService {
       providerName: provider.name,
       workspaceId: provider.workspaceId ?? null,
       model: this.resolveModel(
-        this.getFeatureModels(provider, 'chat'),
+        this.joinModelTexts(provider.models, provider.textModels),
         payload.model,
       ),
       url: this.buildChatUrl(provider),
@@ -393,7 +393,7 @@ export class KnowledgeAiProvidersService {
       providerName: provider.name,
       workspaceId: provider.workspaceId ?? null,
       model: this.resolveModel(
-        this.getFeatureModels(provider, 'ocr'),
+        this.joinModelTexts(provider.visionModels, provider.models),
         payload.model,
       ),
       url: this.buildChatUrl(provider),
@@ -466,9 +466,9 @@ export class KnowledgeAiProvidersService {
   ) {
     if (featureType === 'embedding') return provider.embeddingModels;
     if (featureType === 'ocr') {
-      return provider.visionModels?.trim() || provider.models;
+      return this.joinModelTexts(provider.visionModels, provider.models);
     }
-    return provider.textModels?.trim() || provider.models;
+    return this.joinModelTexts(provider.models, provider.textModels);
   }
 
   private async removeMissingModel(
@@ -1222,6 +1222,13 @@ export class KnowledgeAiProvidersService {
         };
       })
       .filter((item) => item.code);
+  }
+
+  private joinModelTexts(...values: Array<string | null | undefined>) {
+    return values
+      .map((item) => item?.trim())
+      .filter(Boolean)
+      .join('\n');
   }
 
   private toNullableText(value?: string) {

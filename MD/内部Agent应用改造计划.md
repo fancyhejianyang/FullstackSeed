@@ -62,7 +62,7 @@
 - 基础能力：模型对话始终可用，不再要求管理员把 `knowledge.answer` 当成工具勾选；执行记录以 `model.chat` 或 `knowledge.answer` 区分纯模型回答与知识增强回答。
 - 知识增强：`workflowId / workflowName` 可为空；仅在启用并选择工作流后执行标准问答、术语校准和知识库检索，关闭时将用户问题直接交给模型。
 - 业务工具白名单：仅包含 `product.query`、`productSku.create`，可以为空；写入总开关关闭时服务端会移除写工具。系统核心问答指令随知识工作流启用，不暴露为业务工具选项。
-- 模型契约：Agent 直接保存 `providerId / providerName / models[]`，不依赖聊天配置；配置页优先只展示账号的文本模型，旧数据未维护文本模型时兼容回退到通用模型列表。首个模型为主模型，调用失败时按数组顺序尝试备用模型，职责说明作为 Agent 系统提示词。
+- 模型契约：Agent 直接保存 `providerId / providerName / models[]`，不依赖聊天配置；配置页合并账号的通用模型与文本模型，并按模型编码去重，避免任一来源被覆盖。首个模型为主模型，调用失败时按数组顺序尝试备用模型，职责说明作为 Agent 系统提示词。
 - 动作协议：`answer / query / clarify / prepare_write`。自然语言只产生结构化动作或草稿，不能直接触发正式写入。
 - 草稿状态：`collecting / pending_confirmation / submitting / submitted / cancelled / expired / failed`。
 - 执行状态：`queued / running / waiting_input / waiting_confirmation / submitting / verifying / succeeded / failed / cancelled`。

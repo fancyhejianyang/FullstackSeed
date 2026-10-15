@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-10-15 修复 Agent 模型下拉仅显示一个候选项
+
+- 新增文件 / 删除文件：无。
+- 修改文件：`server/src/agent-apps/agent-apps.service.ts`、`agent-apps.service.spec.ts`、`server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`、`knowledge-ai-providers.service.spec.ts`、`MD/内部Agent应用改造计划.md`、`CHANGELOG.md`。
+- 原因：Agent 配置接口错误地把账号的“文本模型”作为“模型列表”的替代来源；只要 `textModels` 有值，就完全忽略 `models`。当文本模型仅维护一个条目时，多选下拉自然只收到一个候选项，与多选组件本身无关。
+- 修复：重新合并 `models + textModels`，按模型编码去重并保留完整显示名称；聊天与视觉能力的模型校验同步恢复兼容合并，避免界面可选项和服务端校验范围不一致。
+- 验证：后端变更 ESLint、相关单元测试、前端类型检查及 `git diff --check` 通过；本次为缺陷修复，按项目规则未执行 build、未启动服务。
+
 ### 2026-10-15 解耦 Agent 基础对话、知识增强与业务工具
 
 - 新增文件：`server/src/migrations/1792054800000-MakeAgentKnowledgeOptional.ts`；删除文件：无。

@@ -103,9 +103,7 @@ export class AgentAppsService {
           id: item.id,
           name: item.name,
           secretKeySet: item.secretKeySet,
-          models: this.parseModelOptions(
-            item.textModels?.trim() ? item.textModels : item.models,
-          ),
+          models: this.parseModelOptions(item.models, item.textModels),
         }))
         .filter((item) => item.secretKeySet && item.models.length)
         .map(({ id, name, models }) => ({ id, name, models })),

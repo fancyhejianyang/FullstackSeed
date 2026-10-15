@@ -111,19 +111,18 @@ describe('KnowledgeAiProvidersService', () => {
       embeddingModels: 'embedding-model',
     } as KnowledgeAiProvider;
 
-    expect(internals.getFeatureModels(provider, 'chat')).toBe('text-model');
-    expect(internals.getFeatureModels(provider, 'documentParse')).toBe(
-      'text-model',
+    expect(internals.getFeatureModels(provider, 'chat')).toBe(
+      'chat-model\ntext-model',
     );
-    expect(internals.getFeatureModels(provider, 'ocr')).toBe('vision-model');
+    expect(internals.getFeatureModels(provider, 'documentParse')).toBe(
+      'chat-model\ntext-model',
+    );
+    expect(internals.getFeatureModels(provider, 'ocr')).toBe(
+      'vision-model\nchat-model',
+    );
     expect(internals.getFeatureModels(provider, 'embedding')).toBe(
       'embedding-model',
     );
-
-    provider.textModels = null;
-    provider.visionModels = null;
-    expect(internals.getFeatureModels(provider, 'chat')).toBe('chat-model');
-    expect(internals.getFeatureModels(provider, 'ocr')).toBe('chat-model');
   });
 
   it('removes only the invalid model entry and recognizes model-not-found errors', () => {

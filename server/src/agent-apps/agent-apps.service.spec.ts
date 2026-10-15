@@ -29,8 +29,8 @@ describe('AgentAppsService access and tool policy', () => {
           {
             id: 1,
             name: '模型账号',
-            models: 'qwen-image#图像模型',
-            textModels: 'qwen-plus#通义千问 Plus\ngpt-4o-mini#GPT-4o Mini',
+            models: 'qwen-plus#通义千问 Plus',
+            textModels: 'qwen-plus#重复名称\ngpt-4o-mini#GPT-4o Mini',
             secretKeySet: true,
           },
         ],
@@ -80,7 +80,7 @@ describe('AgentAppsService access and tool policy', () => {
     );
   });
 
-  it('exposes text models instead of mixing generic non-chat models', async () => {
+  it('merges generic and text model lists with complete de-duplicated labels', async () => {
     await expect(service.getConfigurationOptions()).resolves.toEqual({
       providers: [
         {
