@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-10-15 规范化数值表单空值并修复向量配置警告
+
+- 新增文件 / 删除文件：无。
+- 修改文件：`web/src/views/vector-config/Index.vue`、`web/src/api/vectorConfig.ts`、`AGENTS-COMPONENTS.md`、`CHANGELOG.md`。
+- 原因：向量化配置的“供应商向量维度”由 `InputNumber` 渲染，但初始化、重置、接口空值回填和切换模型时使用空字符串，违反组件 `number | null` 契约，触发 Vue `modelValue` prop 类型警告。
+- 修复：上述空值统一改为 `null`；收紧 `VectorConfigForm` 的两个维度字段类型为 `number | null`，使错误空字符串赋值在编译期暴露；组件契约文档补充数值空值规范。
+- 排查：扫描全部 27 处封装 `InputNumber` 用法（10 个页面）及菜单排序的原生 `el-input-number`；其余字段的初始化、重置和回填均保持 number/null 语义，无需修改。
+- 验证：前端 `vue-tsc` 类型检查、向量配置页面组件复用扫描、27 处 `InputNumber` 数值空值静态复扫、Vite 当前页面转换及 `git diff --check` 均通过；本次为前端修复，按项目规则不执行 build、不启动服务。
+
 ### 2026-10-15 落地内部 Agent 查询与受控 SKU 录入闭环
 
 - 新增后端模块：`server/src/agent-apps/`，包含 Agent 应用配置、员工会话、结构化消息、版本化草稿、执行记录、动作协议、管理/工作台接口及单元测试；新增增量迁移 `server/src/migrations/1792047600000-CreateInternalAgentApps.ts`。

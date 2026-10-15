@@ -33,7 +33,7 @@ const form = reactive<VectorConfigForm>({
   providerId: '',
   model: '',
   embeddingDimension: 768,
-  providerEmbeddingDimension: '',
+  providerEmbeddingDimension: null,
   chromaUrl: 'http://localhost:8000',
   collectionName: 'knowledge_chunks',
   tenant: 'default_tenant',
@@ -181,7 +181,7 @@ function resetForm() {
     providerId: '',
     model: '',
     embeddingDimension: 768,
-    providerEmbeddingDimension: '',
+    providerEmbeddingDimension: null,
     chromaUrl: 'http://localhost:8000',
     collectionName: 'knowledge_chunks',
     tenant: 'default_tenant',
@@ -201,7 +201,7 @@ function fillForm(data: VectorConfig) {
     providerId: data.providerId ?? '',
     model: data.model ?? '',
     embeddingDimension: data.embeddingDimension || 768,
-    providerEmbeddingDimension: data.providerEmbeddingDimension ?? '',
+    providerEmbeddingDimension: data.providerEmbeddingDimension ?? null,
     chromaUrl: data.chromaUrl,
     collectionName: data.collectionName || 'knowledge_chunks',
     tenant: data.tenant || 'default_tenant',
@@ -253,7 +253,7 @@ watch(
     const provider = selectedProvider.value;
     const models = parseProviderModelOptions(provider?.embeddingModels || '');
     if (!models.some((item) => item.value === form.model)) return;
-    form.providerEmbeddingDimension = '';
+    form.providerEmbeddingDimension = null;
     void detectCurrentDimension();
   },
 );

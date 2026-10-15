@@ -134,6 +134,7 @@
 - v-model：绑定表单数据对象（`Record<string,any>`）
 - Emits：`@enter`（回车触发，用于搜索栏）
 - 插槽：`#field-<prop>` 自定义某个字段渲染
+- 动态 `InputNumber` 字段的 v-model 必须是 `number | null`；空值统一写 `null`，禁止用空字符串 `''`，否则会触发 Vue prop 类型警告。对应 API 表单类型也应保持同一契约，让 TypeScript 在编译期拦截错误赋值。
 
 ### `defineExpose`
 

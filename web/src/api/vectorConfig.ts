@@ -52,8 +52,8 @@ export interface VectorConfigForm {
   vectorDbType?: VectorDbType;
   providerId?: number | '' | null;
   model?: string;
-  embeddingDimension?: number | '' | null;
-  providerEmbeddingDimension?: number | '' | null;
+  embeddingDimension?: number | null;
+  providerEmbeddingDimension?: number | null;
   chromaUrl: string;
   collectionName?: string;
   tenant?: string;
