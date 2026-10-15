@@ -1,8 +1,8 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import type { Repository } from 'typeorm';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
-import type { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-configs.service';
 import type { AiWorkflowsService } from '../ai-workflows/ai-workflows.service';
+import type { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
 import { AgentAppsService } from './agent-apps.service';
 import { AgentApp } from './entities/agent-app.entity';
 
@@ -22,17 +22,34 @@ describe('AgentAppsService access and tool policy', () => {
       (value: AgentApp): Promise<AgentApp> => Promise.resolve(value),
     ),
   };
-  const features = {
-    findUsableChatConfig: jest.fn(() =>
-      Promise.resolve({ id: 1, name: '聊天配置' }),
+  const providers = {
+    findAll: jest.fn(() =>
+      Promise.resolve({
+        list: [
+          {
+            id: 1,
+            name: '模型账号',
+            models: 'qwen-plus#通义千问 Plus',
+            textModels: 'qwen-plus#重复名称\ngpt-4o-mini#GPT-4o Mini',
+            secretKeySet: true,
+          },
+        ],
+        total: 1,
+      }),
+    ),
+    resolveChatTarget: jest.fn(({ id, model }: { id: number; model: string }) =>
+      Promise.resolve({ providerId: id, providerName: '模型账号', model }),
     ),
   };
   const workflows = {
+    findAll: jest.fn(() =>
+      Promise.resolve({ list: [{ id: 2, name: '知识工作流' }], total: 1 }),
+    ),
     findUsable: jest.fn(() => Promise.resolve({ id: 2, name: '知识工作流' })),
   };
   const service = new AgentAppsService(
     repository as unknown as Repository<AgentApp>,
-    features as unknown as AiFeatureConfigsService,
+    providers as unknown as KnowledgeAiProvidersService,
     workflows as unknown as AiWorkflowsService,
   );
 
@@ -63,12 +80,29 @@ describe('AgentAppsService access and tool policy', () => {
     );
   });
 
+  it('exposes enabled model accounts with complete de-duplicated model labels', async () => {
+    await expect(service.getConfigurationOptions()).resolves.toEqual({
+      providers: [
+        {
+          id: 1,
+          name: '模型账号',
+          models: [
+            { value: 'qwen-plus', text: '通义千问 Plus（qwen-plus）' },
+            { value: 'gpt-4o-mini', text: 'GPT-4o Mini（gpt-4o-mini）' },
+          ],
+        },
+      ],
+      workflows: [{ id: 2, name: '知识工作流' }],
+    });
+  });
+
   it('requires an explicit write tool whenever the write switch is enabled', async () => {
     await expect(
       service.create({
         name: '录入助手',
         responsibility: '受控录入',
-        aiFeatureConfigId: 1,
+        providerId: 1,
+        models: ['qwen-plus'],
         workflowId: 2,
         toolKeys: ['knowledge.answer'],
         writeEnabled: true,

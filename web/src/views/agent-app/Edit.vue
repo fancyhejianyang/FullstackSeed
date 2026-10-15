@@ -24,7 +24,7 @@ const loading = ref(false);
 const submitting = ref(false);
 const formRef = ref<InstanceType<typeof Form>>();
 const options = ref<AgentConfigurationOptions>({
-  chatConfigs: [],
+  providers: [],
   workflows: [],
 });
 const users = ref<UserItem[]>([]);
@@ -36,7 +36,8 @@ type EditableForm = Omit<AgentAppForm, "allowedUserIds"> & {
 const form = reactive<EditableForm>({
   name: "",
   responsibility: "",
-  aiFeatureConfigId: null,
+  providerId: null,
+  models: [],
   workflowId: null,
   toolKeys: ["knowledge.answer"],
   accessScope: "all",
@@ -63,13 +64,30 @@ const fields = computed<FormField[]>(() => [
     placeholder: "说明该 Agent 可回答、查询和录入的业务边界",
   },
   {
-    prop: "aiFeatureConfigId",
-    label: "聊天配置",
+    prop: "providerId",
+    label: "模型账号",
     type: "select",
-    options: options.value.chatConfigs.map((item) => ({
-      label: `${item.name}（${item.providerName || "-"} / ${item.model || "-"}）`,
+    placeholder: "请选择已启用的模型账号",
+    options: options.value.providers.map((item) => ({
+      label: item.name,
       value: item.id,
     })),
+    hint: "直接使用模型账号，不再依赖聊天配置；账号必须已启用并配置密钥。",
+  },
+  {
+    prop: "models",
+    label: "模型列表",
+    type: "selectMultiple",
+    placeholder: form.providerId ? "请选择一个或多个模型" : "请先选择模型账号",
+    options:
+      options.value.providers.find((item) => item.id === Number(form.providerId))
+        ?.models ?? [],
+    componentProps: {
+      disabled: !form.providerId,
+      maxTagCount: 5,
+      visibleCount: 10,
+    },
+    hint: "按选择顺序调用：首个模型为主模型，失败时依次尝试后续模型，最多选择 5 个且受单轮工具上限约束。",
   },
   {
     prop: "workflowId",
@@ -147,8 +165,11 @@ const rules: FormRules = {
   responsibility: [
     { required: true, message: "请输入职责说明", trigger: "blur" },
   ],
-  aiFeatureConfigId: [
-    { required: true, message: "请选择聊天配置", trigger: "change" },
+  providerId: [
+    { required: true, message: "请选择模型账号", trigger: "change" },
+  ],
+  models: [
+    { required: true, message: "请至少选择一个模型", trigger: "change" },
   ],
   workflowId: [
     { required: true, message: "请选择知识工作流", trigger: "change" },
@@ -162,10 +183,11 @@ function resetForm() {
   Object.assign(form, {
     name: "",
     responsibility: "",
-    aiFeatureConfigId:
-      options.value.chatConfigs.length === 1
-        ? options.value.chatConfigs[0].id
+    providerId:
+      options.value.providers.length === 1
+        ? options.value.providers[0].id
         : null,
+    models: [],
     workflowId:
       options.value.workflows.length === 1
         ? options.value.workflows[0].id
@@ -185,7 +207,8 @@ function fillForm(data: AgentApp) {
   Object.assign(form, {
     name: data.name,
     responsibility: data.responsibility,
-    aiFeatureConfigId: data.aiFeatureConfigId,
+    providerId: data.providerId,
+    models: [...data.models],
     workflowId: data.workflowId,
     toolKeys: [...data.toolKeys],
     accessScope: data.accessScope,
@@ -197,6 +220,18 @@ function fillForm(data: AgentApp) {
     maxConcurrentRuns: data.maxConcurrentRuns,
   });
 }
+
+watch(
+  () => form.providerId,
+  () => {
+    const available = new Set(
+      options.value.providers
+        .find((item) => item.id === Number(form.providerId))
+        ?.models.map((item) => item.value) ?? [],
+    );
+    form.models = form.models.filter((model) => available.has(model));
+  },
+);
 
 watch(
   () => form.writeEnabled,
@@ -236,9 +271,8 @@ function buildPayload(): AgentAppForm {
   return {
     name: form.name.trim(),
     responsibility: form.responsibility.trim(),
-    aiFeatureConfigId: form.aiFeatureConfigId
-      ? Number(form.aiFeatureConfigId)
-      : null,
+    providerId: form.providerId ? Number(form.providerId) : null,
+    models: [...form.models],
     workflowId: form.workflowId ? Number(form.workflowId) : null,
     toolKeys: [...form.toolKeys],
     accessScope: form.accessScope,
@@ -279,19 +313,35 @@ async function handleSubmit() {
   <Dialog
     v-model="visible"
     :title="props.row ? '编辑 Agent 应用' : '新增 Agent 应用'"
-    width="860px"
+    width="820px"
     :confirm-loading="submitting"
     @confirm="handleSubmit"
   >
-    <div v-loading="loading">
+    <div v-loading="loading" class="agent-app-edit">
       <Form
         ref="formRef"
         v-model="form"
         :fields="fields"
         :rules="rules"
-        label-width="140px"
-        :columns="2"
+        label-width="168px"
       />
     </div>
   </Dialog>
 </template>
+
+<style scoped>
+.agent-app-edit :deep(.el-form-item__label) {
+  white-space: nowrap;
+}
+
+.agent-app-edit :deep(.select-multiple__tag) {
+  max-width: 100%;
+  height: auto;
+  min-height: 24px;
+  overflow: visible;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
+}
+</style>

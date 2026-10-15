@@ -12,10 +12,13 @@ export class AgentApp extends BaseEntity {
   responsibility: string;
 
   @Column({ type: 'int' })
-  aiFeatureConfigId: number;
+  providerId: number;
 
   @Column({ type: 'varchar', length: 120 })
-  aiFeatureConfigName: string;
+  providerName: string;
+
+  @Column({ type: 'simple-json' })
+  models: string[];
 
   @Column({ type: 'int' })
   workflowId: number;

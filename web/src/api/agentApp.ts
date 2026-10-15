@@ -10,8 +10,9 @@ export interface AgentApp {
   id: number;
   name: string;
   responsibility: string;
-  aiFeatureConfigId: number;
-  aiFeatureConfigName: string;
+  providerId: number;
+  providerName: string;
+  models: string[];
   workflowId: number;
   workflowName: string;
   toolKeys: AgentToolKey[];
@@ -29,7 +30,8 @@ export interface AgentApp {
 export interface AgentAppForm {
   name: string;
   responsibility: string;
-  aiFeatureConfigId: number | null;
+  providerId: number | null;
+  models: string[];
   workflowId: number | null;
   toolKeys: AgentToolKey[];
   accessScope: AgentAccessScope;
@@ -54,11 +56,10 @@ export interface AgentAppListResult {
 }
 
 export interface AgentConfigurationOptions {
-  chatConfigs: Array<{
+  providers: Array<{
     id: number;
     name: string;
-    providerName: string | null;
-    model: string | null;
+    models: Array<{ value: string; text: string }>;
   }>;
   workflows: Array<{ id: number; name: string }>;
 }

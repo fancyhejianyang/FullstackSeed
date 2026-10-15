@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-10-15 调整 Agent 应用表单与直连模型配置
+
+- 新增文件：`server/src/migrations/1792051200000-UseDirectAgentModels.ts`；删除文件：无。
+- 修改后端：`server/src/agent-apps/agent-apps.module.ts`、`agent-apps.service.ts`、`agent-apps.service.spec.ts`、`agent-workspace.service.ts`、`agent-workspace.service.spec.ts`、`dto/agent-app.dto.ts`、`entities/agent-app.entity.ts`，以及 `server/src/knowledge-ai-chat/knowledge-ai-chat.service.ts`。
+- 修改前端：`web/src/api/agentApp.ts`、`web/src/views/agent-app/Edit.vue`、`Index.vue`、`View.vue`、`web/src/components/Select.vue`、`SelectMultiple.vue`；同步更新 `AGENTS-COMPONENTS.md` 与 `MD/内部Agent应用改造计划.md`。
+- 配置契约：Agent 应用由“聊天配置”改为直接保存模型账号 `providerId/providerName` 和有序 `models[]`；只提供已启用、已配置密钥且有聊天模型的账号。保存时服务端逐项核验模型，职责说明直接作为系统提示词；执行失败时按所选顺序切换备用模型，并受单轮工具调用上限约束。
+- 数据迁移：新增模型账号与模型列表列，已有 Agent 从原聊天配置回填账号和模型；旧聊天配置列保留为可空兼容列，确保新实体可写入且迁移可回滚。目标环境仍需执行数据库迁移。
+- UI：新增/编辑表单改为单列，标签宽度增至 168px 并禁止换行；模型账号后直接多选模型。公共单选/多选下拉为选中值、标签及候选项补充完整内容提示，候选超宽时支持横向滚动；管理列表和详情同步展示模型账号与模型列表。
+- 验证：TypeORM 实体列检查、后端 TypeScript 与 Agent 变更 ESLint、后端 NestJS build、前端 `vue-tsc`、Vite 生产构建、Agent 页面组件复用扫描及 `git diff --check` 通过；后端全量 22 个测试套件、141 项测试通过。未连接真实模型账号、未执行目标数据库迁移、未启动常驻服务或进行浏览器人工验收。
+
 ### 2026-10-15 规范化数值表单空值并修复向量配置警告
 
 - 新增文件 / 删除文件：无。

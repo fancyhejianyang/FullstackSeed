@@ -322,6 +322,7 @@ watch(opened, async (value) => {
           v-for="tag in visibleTags"
           :key="tag.value"
           class="select-multiple__tag"
+          :title="tag.text"
         >
           {{ tag.text }}
           <button
@@ -399,6 +400,7 @@ watch(opened, async (value) => {
                 'is-disabled': option.disabled,
               }"
               :style="{ height: `${props.itemHeight}px` }"
+              :title="option.text"
               @mousedown.prevent="toggleOption(option)"
             >
               <span class="select-multiple__check">
@@ -549,7 +551,7 @@ watch(opened, async (value) => {
 }
 
 .select-multiple__menu {
-  overflow-y: auto;
+  overflow: auto;
 }
 
 .select-multiple__virtual {
@@ -560,9 +562,11 @@ watch(opened, async (value) => {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: max-content;
   padding: 0 12px;
   color: #303133;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .select-multiple__option:hover,

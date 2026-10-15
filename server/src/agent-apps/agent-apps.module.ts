@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { AiFeatureConfigsModule } from '../ai-feature-configs/ai-feature-configs.module';
 import { AiWorkflowsModule } from '../ai-workflows/ai-workflows.module';
 import { KnowledgeAiChatModule } from '../knowledge-ai-chat/knowledge-ai-chat.module';
+import { KnowledgeAiProvidersModule } from '../knowledge-ai-providers/knowledge-ai-providers.module';
 import { ProductCatalogModule } from '../product-catalog/product-catalog.module';
 import { AgentAppsController } from './agent-apps.controller';
 import { AgentAppsService } from './agent-apps.service';
@@ -23,9 +23,9 @@ import { AgentSession } from './entities/agent-session.entity';
       AgentDraft,
       AgentExecution,
     ]),
-    AiFeatureConfigsModule,
     AiWorkflowsModule,
     KnowledgeAiChatModule,
+    KnowledgeAiProvidersModule,
     ProductCatalogModule,
   ],
   controllers: [AgentAppsController, AgentWorkspaceController],

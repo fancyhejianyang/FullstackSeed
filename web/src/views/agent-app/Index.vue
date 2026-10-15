@@ -26,7 +26,8 @@ const currentRow = ref<AgentApp | null>(null);
 const columns: TableColumn[] = [
   { prop: "name", label: "Agent 名称", minWidth: 160 },
   { prop: "responsibility", label: "职责", minWidth: 240 },
-  { prop: "aiFeatureConfigName", label: "聊天配置", minWidth: 160 },
+  { prop: "providerName", label: "模型账号", minWidth: 160 },
+  { prop: "models", label: "模型列表", minWidth: 240, slot: true },
   { prop: "workflowName", label: "知识工作流", minWidth: 160 },
   { prop: "toolKeys", label: "开放能力", minWidth: 260, slot: true },
   { prop: "accessScope", label: "使用范围", width: 130, slot: true },
@@ -50,7 +51,7 @@ const searchFields: FormField[] = [
     prop: "keyword",
     label: "关键词",
     type: "input",
-    placeholder: "名称/职责/配置/工作流",
+    placeholder: "名称/职责/模型账号/工作流",
   },
 ];
 
@@ -103,6 +104,11 @@ function batchDeleteRequest(payload: { ids: Array<string | number> }) {
       <template #column-toolKeys="{ row }">
         <el-tag v-for="key in row.toolKeys" :key="key" type="info">{{
           key
+        }}</el-tag>
+      </template>
+      <template #column-models="{ row }">
+        <el-tag v-for="model in row.models" :key="model" type="info">{{
+          model
         }}</el-tag>
       </template>
       <template #column-accessScope="{ row }">

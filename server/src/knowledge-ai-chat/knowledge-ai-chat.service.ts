@@ -374,24 +374,34 @@ export class KnowledgeAiChatService {
     dto: AskKnowledgeAiDto,
     commandOptions: KnowledgeAiChatCommandOptions,
   ) {
+    if (!dto.providerId || !dto.model || !dto.workflowId) {
+      throw new BadRequestException('内部 Agent 必须指定模型账号、模型和工作流');
+    }
     return this.withProgress(dto, (trackedDto) =>
-      this.askInternal(trackedDto, commandOptions),
+      this.askInternal(trackedDto, commandOptions, { directTarget: true }),
     );
   }
 
   private async askInternal(
     dto: AskKnowledgeAiDto,
     commandOptions?: KnowledgeAiChatCommandOptions,
+    options: { directTarget?: boolean } = {},
   ) {
-    if (!dto.aiFeatureConfigId || !dto.workflowId) {
+    if (!dto.workflowId || (!options.directTarget && !dto.aiFeatureConfigId)) {
       throw new BadRequestException('AI 问答测试必须选择聊天配置和工作流');
     }
     const selectedRetrieval = await this.retrievalConfigsService.findUsableForWorkflow(dto.workflowId);
     const retrievalConfigId = selectedRetrieval.id;
     const configuredTrace = await this.resolveRetrievalConfigTrace(retrievalConfigId);
-    const { target, config } = await this.resolveChatFeature({ aiFeatureConfigId: dto.aiFeatureConfigId }, {
-      allowDtoConfig: true,
-    });
+    const { target, config } = await this.resolveChatFeature(
+      options.directTarget
+        ? { providerId: dto.providerId, model: dto.model }
+        : { aiFeatureConfigId: dto.aiFeatureConfigId },
+      {
+        allowDtoConfig: true,
+        skipFeatureConfigFallback: options.directTarget,
+      },
+    );
     const session = dto.sessionId
       ? await this.findSessionEntity(dto.sessionId)
       : await this.createSession(dto, target);
@@ -1550,14 +1560,20 @@ export class KnowledgeAiChatService {
 
   private async resolveChatFeature(
     dto: { providerId?: number; model?: string; aiFeatureConfigId?: number },
-    options: { allowDtoConfig?: boolean; externalApp?: ExternalApp } = {},
+    options: {
+      allowDtoConfig?: boolean;
+      externalApp?: ExternalApp;
+      skipFeatureConfigFallback?: boolean;
+    } = {},
   ) {
     const configId =
       options.externalApp?.aiFeatureConfigId ??
       (options.allowDtoConfig ? dto.aiFeatureConfigId : undefined);
     const config = configId
       ? await this.featureConfigsService.findUsableChatConfig(configId)
-      : await this.featureConfigsService.findEnabledByFeature('chat');
+      : options.skipFeatureConfigFallback
+        ? null
+        : await this.featureConfigsService.findEnabledByFeature('chat');
     const useRequestTarget = !options.externalApp;
     const target = await this.providersService.resolveChatTarget({
       id: useRequestTarget

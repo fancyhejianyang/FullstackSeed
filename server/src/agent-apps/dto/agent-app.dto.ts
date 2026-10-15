@@ -41,7 +41,16 @@ export class CreateAgentAppDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  aiFeatureConfigId: number;
+  providerId: number;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @ArrayMaxSize(5)
+  @IsString({ each: true })
+  @IsNotEmpty({ each: true })
+  @MaxLength(120, { each: true })
+  models: string[];
 
   @Type(() => Number)
   @IsInt()

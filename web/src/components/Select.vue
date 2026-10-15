@@ -338,6 +338,7 @@ watch(opened, async (value) => {
         :readonly="!opened || !props.filterable"
         :disabled="props.disabled"
         :placeholder="selectedText ? '' : props.placeholder"
+        :title="selectedText"
         @input="handleInput"
         @blur="handleBlur"
         @keydown="handleKeydown"
@@ -373,6 +374,7 @@ watch(opened, async (value) => {
                 'is-disabled': option.disabled,
               }"
               :style="{ height: `${props.itemHeight}px` }"
+              :title="option.text"
               @mousedown.prevent="selectOption(option)"
             >
               {{ option.text }}
@@ -474,7 +476,7 @@ watch(opened, async (value) => {
 }
 
 .select__menu {
-  overflow-y: auto;
+  overflow: auto;
 }
 
 .select__virtual {
@@ -484,9 +486,11 @@ watch(opened, async (value) => {
 .select__option {
   display: flex;
   align-items: center;
+  min-width: max-content;
   padding: 0 12px;
   color: #303133;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .select__option:hover,

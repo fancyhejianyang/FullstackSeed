@@ -39,9 +39,14 @@ watch(visible, async (value) => {
       <el-descriptions-item label="职责">{{
         detail?.responsibility || "-"
       }}</el-descriptions-item>
-      <el-descriptions-item label="聊天配置">{{
-        detail?.aiFeatureConfigName || "-"
+      <el-descriptions-item label="模型账号">{{
+        detail?.providerName || "-"
       }}</el-descriptions-item>
+      <el-descriptions-item label="模型列表">
+        <el-tag v-for="model in detail?.models || []" :key="model" type="info">{{
+          model
+        }}</el-tag>
+      </el-descriptions-item>
       <el-descriptions-item label="知识工作流">{{
         detail?.workflowName || "-"
       }}</el-descriptions-item>

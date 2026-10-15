@@ -6,9 +6,9 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Like, Repository } from 'typeorm';
-import { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-configs.service';
 import { AiWorkflowsService } from '../ai-workflows/ai-workflows.service';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
+import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
 import {
   type CreateAgentAppDto,
   type QueryAgentAppDto,
@@ -21,7 +21,7 @@ export class AgentAppsService {
   constructor(
     @InjectRepository(AgentApp)
     private readonly repository: Repository<AgentApp>,
-    private readonly featureConfigsService: AiFeatureConfigsService,
+    private readonly providersService: KnowledgeAiProvidersService,
     private readonly workflowsService: AiWorkflowsService,
   ) {}
 
@@ -35,7 +35,7 @@ export class AgentAppsService {
       ? [
           { ...baseWhere, name: Like(`%${keyword}%`) },
           { ...baseWhere, responsibility: Like(`%${keyword}%`) },
-          { ...baseWhere, aiFeatureConfigName: Like(`%${keyword}%`) },
+          { ...baseWhere, providerName: Like(`%${keyword}%`) },
           { ...baseWhere, workflowName: Like(`%${keyword}%`) },
         ]
       : baseWhere;
@@ -83,11 +83,10 @@ export class AgentAppsService {
   }
 
   async getConfigurationOptions() {
-    const [chatConfigs, workflows] = await Promise.all([
-      this.featureConfigsService.findAll({
+    const [providers, workflows] = await Promise.all([
+      this.providersService.findAll({
         page: 1,
         pageSize: 200,
-        featureType: 'chat',
         isEnabled: true,
       }),
       this.workflowsService.findAll({
@@ -97,12 +96,15 @@ export class AgentAppsService {
       }),
     ]);
     return {
-      chatConfigs: chatConfigs.list.map((item) => ({
-        id: item.id,
-        name: item.name,
-        providerName: item.providerName,
-        model: item.model,
-      })),
+      providers: providers.list
+        .map((item) => ({
+          id: item.id,
+          name: item.name,
+          secretKeySet: item.secretKeySet,
+          models: this.parseModelOptions(item.models, item.textModels),
+        }))
+        .filter((item) => item.secretKeySet && item.models.length)
+        .map(({ id, name, models }) => ({ id, name, models })),
       workflows: workflows.list.map((item) => ({
         id: item.id,
         name: item.name,
@@ -156,12 +158,27 @@ export class AgentAppsService {
     if (dto.responsibility !== undefined) {
       payload.responsibility = dto.responsibility.trim();
     }
-    if (dto.aiFeatureConfigId !== undefined) {
-      const config = await this.featureConfigsService.findUsableChatConfig(
-        dto.aiFeatureConfigId,
-      );
-      payload.aiFeatureConfigId = config.id;
-      payload.aiFeatureConfigName = config.name;
+    if (dto.providerId !== undefined || dto.models !== undefined || isCreate) {
+      const providerId = dto.providerId ?? current?.providerId;
+      const models = Array.from(
+        new Set(
+          (dto.models ?? current?.models ?? []).map((item) => item.trim()),
+        ),
+      ).filter(Boolean);
+      if (!providerId || !models.length) {
+        throw new BadRequestException('请选择模型账号和至少一个模型');
+      }
+      let providerName = '';
+      for (const model of models) {
+        const target = await this.providersService.resolveChatTarget({
+          id: providerId,
+          model,
+        });
+        providerName = target.providerName;
+      }
+      payload.providerId = providerId;
+      payload.providerName = providerName;
+      payload.models = models;
     }
     if (dto.workflowId !== undefined) {
       const workflow = await this.workflowsService.findUsable(dto.workflowId);
@@ -207,5 +224,21 @@ export class AgentAppsService {
     }
     if (accessScope === 'all') payload.allowedUserIds = [];
     return payload;
+  }
+
+  private parseModelOptions(...sources: Array<string | null | undefined>) {
+    const options = new Map<string, string>();
+    for (const source of sources) {
+      for (const line of (source ?? '').split(/\r?\n/)) {
+        const normalized = line.trim();
+        if (!normalized) continue;
+        const [rawCode, ...nameParts] = normalized.split('#');
+        const value = rawCode.trim();
+        if (!value || options.has(value)) continue;
+        const name = nameParts.join('#').trim();
+        options.set(value, name ? `${name}（${value}）` : value);
+      }
+    }
+    return Array.from(options, ([value, text]) => ({ value, text }));
   }
 }

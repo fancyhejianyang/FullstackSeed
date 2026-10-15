@@ -22,8 +22,15 @@ describe('AgentWorkspaceService ownership and state guards', () => {
   const sessionRepository = {
     findOne: jest.fn(),
     update: jest.fn(),
+    increment: jest.fn(),
   };
-  const messageRepository = { find: jest.fn() };
+  const messageRepository = {
+    find: jest.fn(),
+    create: jest.fn((value: Partial<AgentMessage>) => value),
+    save: jest.fn((value: AgentMessage) =>
+      Promise.resolve({ ...value, id: 88 }),
+    ),
+  };
   const draftRepository = {
     findOne: jest.fn(),
     save: jest.fn(),
@@ -32,6 +39,9 @@ describe('AgentWorkspaceService ownership and state guards', () => {
     findOne: jest.fn(),
     save: jest.fn(),
   };
+  const knowledgeAiChatService = {
+    askForAgent: jest.fn(),
+  };
   const service = new AgentWorkspaceService(
     sessionRepository as unknown as Repository<AgentSession>,
     messageRepository as unknown as Repository<AgentMessage>,
@@ -39,7 +49,7 @@ describe('AgentWorkspaceService ownership and state guards', () => {
     executionRepository as unknown as Repository<AgentExecution>,
     {} as DataSource,
     {} as AgentAppsService,
-    {} as KnowledgeAiChatService,
+    knowledgeAiChatService as unknown as KnowledgeAiChatService,
     {} as ProductCatalogService,
   );
 
@@ -78,5 +88,92 @@ describe('AgentWorkspaceService ownership and state guards', () => {
       execution,
     );
     expect(executionRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('falls back through selected models in order until one succeeds', async () => {
+    const session = {
+      id: 9,
+      title: '测试会话',
+      knowledgeSessionId: null,
+      messageCount: 0,
+      lastMessage: null,
+    } as AgentSession;
+    const execution = {
+      id: 7,
+      status: 'running',
+      toolCallCount: 0,
+    } as AgentExecution;
+    executionRepository.findOne.mockResolvedValue(execution);
+    knowledgeAiChatService.askForAgent
+      .mockResolvedValueOnce({
+        session: { id: 101 },
+        message: {
+          id: 201,
+          isSuccess: false,
+          answer: '',
+          errorMessage: '主模型不可用',
+          hitKnowledgeBaseNames: [],
+          retrievalHits: [],
+          businessContext: null,
+        },
+      })
+      .mockResolvedValueOnce({
+        session: { id: 101 },
+        message: {
+          id: 202,
+          isSuccess: true,
+          answer: '备用模型回答',
+          errorMessage: null,
+          hitKnowledgeBaseNames: ['产品库'],
+          retrievalHits: [],
+          businessContext: null,
+        },
+      });
+    const processKnowledgeAnswer = Reflect.get(
+      service,
+      'processKnowledgeAnswer',
+    ) as (params: {
+      content: string;
+      session: AgentSession;
+      app: {
+        providerId: number;
+        models: string[];
+        maxToolCalls: number;
+        workflowId: number;
+        responsibility: string;
+        toolKeys: string[];
+      };
+      execution: AgentExecution;
+      user: AuthUser;
+    }) => Promise<unknown>;
+
+    await processKnowledgeAnswer.call(service, {
+      content: '介绍产品',
+      session,
+      app: {
+        providerId: 3,
+        models: ['primary-model', 'fallback-model'],
+        maxToolCalls: 5,
+        workflowId: 4,
+        responsibility: '产品助手',
+        toolKeys: ['knowledge.answer'],
+      },
+      execution,
+      user: currentUser,
+    });
+
+    expect(knowledgeAiChatService.askForAgent).toHaveBeenCalledTimes(2);
+    expect(knowledgeAiChatService.askForAgent).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ providerId: 3, model: 'primary-model' }),
+      expect.any(Object),
+    );
+    expect(knowledgeAiChatService.askForAgent).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ providerId: 3, model: 'fallback-model' }),
+      expect.any(Object),
+    );
+    expect(execution.status).toBe('succeeded');
+    expect(execution.toolCallCount).toBe(2);
   });
 });

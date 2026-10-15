@@ -561,32 +561,47 @@ export class AgentWorkspaceService {
     execution: AgentExecution;
     user: AuthUser;
   }) {
-    params.execution.toolCallCount = 1;
-    this.assertToolLimit(params.app, params.execution.toolCallCount);
     const allowProductQuery =
       params.app.toolKeys.includes('product.query') &&
       this.hasAnyPermission(params.user, ['Product.read', 'ProductSku.read']);
-    const result = await this.knowledgeAiChatService.askForAgent(
-      {
-        question: params.content,
-        aiFeatureConfigId: params.app.aiFeatureConfigId,
-        workflowId: params.app.workflowId,
-        sessionId: params.session.knowledgeSessionId ?? undefined,
-        title: params.session.title,
-      },
-      {
-        allowedCommandKeys: allowProductQuery
-          ? [KNOWLEDGE_AI_CHAT_COMMANDS.lookupProductSku]
-          : [],
-      },
-    );
-    await this.assertExecutionRunning(params.execution.id);
-    if (!params.session.knowledgeSessionId) {
-      params.session.knowledgeSessionId = result.session.id;
-      await this.sessionRepository.update(params.session.id, {
-        knowledgeSessionId: result.session.id,
-      });
+    const models = (params.app.models ?? []).slice(0, params.app.maxToolCalls);
+    if (!params.app.providerId || !models.length) {
+      throw new BadRequestException('该 Agent 尚未配置可用的模型账号和模型');
     }
+    let result: Awaited<
+      ReturnType<KnowledgeAiChatService['askForAgent']>
+    > | null = null;
+    for (const model of models) {
+      params.execution.toolCallCount += 1;
+      this.assertToolLimit(params.app, params.execution.toolCallCount);
+      result = await this.knowledgeAiChatService.askForAgent(
+        {
+          question: params.content,
+          providerId: params.app.providerId,
+          model,
+          systemPrompt: params.app.responsibility,
+          workflowId: params.app.workflowId,
+          sessionId: params.session.knowledgeSessionId ?? undefined,
+          title: params.session.title,
+        },
+        {
+          allowedCommandKeys: allowProductQuery
+            ? [KNOWLEDGE_AI_CHAT_COMMANDS.lookupProductSku]
+            : [],
+        },
+      );
+      if (!params.session.knowledgeSessionId) {
+        params.session.knowledgeSessionId = result.session.id;
+        await this.sessionRepository.update(params.session.id, {
+          knowledgeSessionId: result.session.id,
+        });
+      }
+      if (result.message.isSuccess) break;
+    }
+    if (!result) {
+      throw new BadRequestException('该 Agent 没有可执行的模型');
+    }
+    await this.assertExecutionRunning(params.execution.id);
     params.execution.status = result.message.isSuccess ? 'succeeded' : 'failed';
     params.execution.result = {
       knowledgeMessageId: result.message.id,
