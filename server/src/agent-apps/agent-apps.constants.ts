@@ -1,6 +1,23 @@
-export const AGENT_TOOL_KEYS = ['product.query', 'productSku.create'] as const;
+import { AI_BUSINESS_COMMAND_CATALOG } from '../ai-command-definitions/ai-command-definitions.constants';
 
-export type AgentToolKey = (typeof AGENT_TOOL_KEYS)[number];
+/**
+ * `product.query` 是工作台现有的产品/SKU 聚合查询能力；其余工具直接来自
+ * 指令集业务目录，避免每新增一个业务指令都要再维护 Agent 白名单。
+ */
+export const AGENT_TOOL_KEYS = Array.from(
+  new Set([
+    'product.query',
+    ...AI_BUSINESS_COMMAND_CATALOG.filter((item) => item.chatCallable).map(
+      (item) => item.commandKey,
+    ),
+  ]),
+);
+
+export const AGENT_WRITE_TOOL_KEYS = AI_BUSINESS_COMMAND_CATALOG.filter(
+  (item) => item.chatCallable && item.requireApproval,
+).map((item) => item.commandKey);
+
+export type AgentToolKey = string;
 
 export const AGENT_EXECUTION_TOOL_KEYS = [
   'model.chat',

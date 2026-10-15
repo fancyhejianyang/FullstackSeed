@@ -26,6 +26,7 @@ const formRef = ref<InstanceType<typeof Form>>();
 const options = ref<AgentConfigurationOptions>({
   providers: [],
   workflows: [],
+  businessTools: [],
 });
 const users = ref<UserItem[]>([]);
 
@@ -82,8 +83,9 @@ const fields = computed<FormField[]>(() => [
     type: "selectMultiple",
     placeholder: form.providerId ? "请选择一个或多个模型" : "请先选择模型账号",
     options:
-      options.value.providers.find((item) => item.id === Number(form.providerId))
-        ?.models ?? [],
+      options.value.providers.find(
+        (item) => item.id === Number(form.providerId),
+      )?.models ?? [],
     componentProps: {
       disabled: !form.providerId,
       maxTagCount: 5,
@@ -119,21 +121,19 @@ const fields = computed<FormField[]>(() => [
     prop: "toolKeys",
     label: "业务工具（可选）",
     type: "selectMultiple",
-    options: [
-      { label: "产品/SKU 查询（product.query）", value: "product.query" },
-      {
-        label: "受控新增 SKU（productSku.create）",
-        value: "productSku.create",
-      },
-    ],
-    hint: "不选择仍可进行模型对话；业务查询与写入分开授权，新增 SKU 始终需要员工确认和 ProductSku.create 权限。",
+    options: options.value.businessTools.map((item) => ({
+      label: `${item.name}（${item.commandKey}）${item.requireApproval ? " · 需确认" : ""}`,
+      value: item.commandKey,
+    })),
+    componentProps: { visibleCount: 10 },
+    hint: "选项来自已启用且允许聊天调用的指令集；带“需确认”的写入工具只生成草稿，员工确认并通过业务权限校验后才可提交。",
   },
   {
     prop: "writeEnabled",
     label: "写入总开关",
     component: "Switch",
     componentProps: { activeText: "允许受控录入", inactiveText: "仅只读" },
-    hint: "开启时会同步加入受控新增 SKU 工具；关闭时立即移除写入工具。",
+    hint: "开启时至少选择一个需确认的写入工具；关闭时会立即移除全部写入工具。",
   },
   {
     prop: "accessScope",
@@ -274,8 +274,16 @@ watch(
   () => form.writeEnabled,
   (enabled) => {
     const keys = new Set(form.toolKeys);
-    if (enabled) keys.add("productSku.create");
-    else keys.delete("productSku.create");
+    const writeKeys = options.value.businessTools
+      .filter((item) => item.requireApproval)
+      .map((item) => item.commandKey);
+    if (enabled && !writeKeys.some((key) => keys.has(key))) {
+      const defaultWriteKey = writeKeys.includes("productSku.create")
+        ? "productSku.create"
+        : writeKeys[0];
+      if (defaultWriteKey) keys.add(defaultWriteKey);
+    }
+    if (!enabled) writeKeys.forEach((key) => keys.delete(key));
     form.toolKeys = Array.from(keys) as AgentToolKey[];
   },
 );
@@ -283,7 +291,12 @@ watch(
 watch(
   () => [...form.toolKeys],
   (keys) => {
-    const enabled = keys.includes("productSku.create");
+    const writeKeys = new Set(
+      options.value.businessTools
+        .filter((item) => item.requireApproval)
+        .map((item) => item.commandKey),
+    );
+    const enabled = keys.some((key) => writeKeys.has(key));
     if (form.writeEnabled !== enabled) form.writeEnabled = enabled;
   },
 );
@@ -319,9 +332,7 @@ function buildPayload(): AgentAppForm {
     providerId: form.providerId ? Number(form.providerId) : null,
     models: [...form.models],
     workflowId:
-      form.knowledgeEnabled && form.workflowId
-        ? Number(form.workflowId)
-        : null,
+      form.knowledgeEnabled && form.workflowId ? Number(form.workflowId) : null,
     toolKeys: [...form.toolKeys],
     accessScope: form.accessScope,
     allowedUserIds:

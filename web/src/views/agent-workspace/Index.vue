@@ -20,6 +20,7 @@ import {
   stopAgentExecution,
   updateAgentDraft,
   type AgentDraft,
+  type AgentMessage,
   type AgentSession,
   type AgentSessionDetail,
   type AgentSkuDraftData,
@@ -32,6 +33,19 @@ interface AgentPromptSuggestion {
   title: string;
   description: string;
   prompt: string;
+}
+
+type PendingMessageStatus = "queued" | "sending" | "failed";
+
+interface PendingAgentMessage {
+  id: number;
+  sessionId: number;
+  content: string;
+  clientMessageId: string;
+  requestId: string;
+  status: PendingMessageStatus;
+  errorMessage?: string;
+  createdAt: string;
 }
 
 const userStore = useUserStore();
@@ -48,7 +62,10 @@ const sending = ref(false);
 const actionBusy = ref(false);
 const isComposing = ref(false);
 const activeRequestId = ref("");
+const pendingMessages = ref<PendingAgentMessage[]>([]);
 let requestVersion = 0;
+let localMessageId = -1;
+let queueProcessing = false;
 const confirmationKeys = new Map<number, string>();
 
 const currentApp = computed(() =>
@@ -60,16 +77,47 @@ const agentOptions = computed(() =>
 const currentAppInitial = computed(
   () => currentApp.value?.name.trim().slice(0, 1).toUpperCase() || "A",
 );
+const activePendingMessages = computed(() =>
+  pendingMessages.value.filter(
+    (item) => item.sessionId === activeSession.value?.id,
+  ),
+);
+const hasPendingMessages = computed(() => pendingMessages.value.length > 0);
+const visibleMessages = computed<AgentMessage[]>(() => {
+  if (!activeSession.value) return [];
+  const serverMessages = activeSession.value.messages;
+  const persistedClientIds = new Set(
+    serverMessages
+      .map((item) => item.clientMessageId)
+      .filter((item): item is string => Boolean(item)),
+  );
+  const optimisticMessages = activePendingMessages.value
+    .filter((item) => !persistedClientIds.has(item.clientMessageId))
+    .map<AgentMessage>((item) => ({
+      id: item.id,
+      sessionId: item.sessionId,
+      userId: userStore.userInfo?.id ?? 0,
+      role: "user",
+      messageType: "text",
+      content: item.content,
+      structuredData: null,
+      executionId: null,
+      clientMessageId: item.clientMessageId,
+      createdAt: item.createdAt,
+      updatedAt: item.createdAt,
+    }));
+  return [...serverMessages, ...optimisticMessages];
+});
 const capabilityLabels = computed(() => {
   const result = [{ key: "model", label: "模型对话", active: false }];
   if (currentApp.value?.knowledgeEnabled) {
     result.push({ key: "knowledge", label: "知识增强", active: true });
   }
-  for (const key of currentApp.value?.toolKeys ?? []) {
+  for (const tool of currentApp.value?.tools ?? []) {
     result.push({
-      key,
-      label: key === "product.query" ? "产品/SKU 查询" : "受控新增 SKU",
-      active: key === "productSku.create",
+      key: tool.commandKey,
+      label: tool.name,
+      active: tool.requireApproval,
     });
   }
   return result;
@@ -138,15 +186,15 @@ async function loadSessions() {
   }
 }
 
-async function loadSession(id: number) {
+async function loadSession(id: number, silent = false) {
   const version = ++requestVersion;
-  loadingDetail.value = true;
+  if (!silent) loadingDetail.value = true;
   try {
     const detail = await getAgentSession(id);
     if (version !== requestVersion) return;
     activeSession.value = detail;
   } finally {
-    if (version === requestVersion) loadingDetail.value = false;
+    if (!silent && version === requestVersion) loadingDetail.value = false;
   }
 }
 
@@ -169,8 +217,8 @@ async function switchAgent() {
 }
 
 async function selectSession(session: AgentSession) {
-  if (sending.value || actionBusy.value) {
-    ElMessage.warning("当前动作处理完成后再切换会话");
+  if (hasPendingMessages.value || actionBusy.value) {
+    ElMessage.warning("请先处理待发送消息或等待当前动作完成");
     return;
   }
   await loadSession(session.id);
@@ -192,37 +240,117 @@ async function ensureSession() {
 
 async function send() {
   const content = inputText.value.trim();
-  if (!content || sending.value || isComposing.value) return;
-  const sessionId = await ensureSession();
+  if (!content || actionBusy.value || isComposing.value) return;
+  let sessionId: number;
+  try {
+    sessionId = await ensureSession();
+  } catch {
+    return;
+  }
   const clientMessageId = makeKey();
   const requestId = `message:${sessionId}:${clientMessageId}`;
-  const version = requestVersion;
   inputText.value = "";
-  activeRequestId.value = requestId;
-  sending.value = true;
+  pendingMessages.value.push({
+    id: localMessageId--,
+    sessionId,
+    content,
+    clientMessageId,
+    requestId,
+    status: "queued",
+    createdAt: new Date().toISOString(),
+  });
+  void processMessageQueue();
+}
+
+async function processMessageQueue() {
+  if (queueProcessing) return;
+  queueProcessing = true;
   try {
-    await sendAgentMessage(sessionId, { content, clientMessageId });
-    if (version === requestVersion && activeSession.value?.id === sessionId) {
-      await Promise.all([loadSession(sessionId), loadSessions()]);
-    }
-  } catch (error) {
-    try {
-      await getAgentExecutionByRequest(requestId);
-      if (version === requestVersion) await loadSession(sessionId);
-    } catch {
-      inputText.value = content;
-      throw error;
+    let item = pendingMessages.value.find(
+      (message) => message.status === "queued",
+    );
+    while (item) {
+      item.status = "sending";
+      item.errorMessage = undefined;
+      sending.value = true;
+      activeRequestId.value = item.requestId;
+      let accepted = false;
+      try {
+        await sendAgentMessage(item.sessionId, {
+          content: item.content,
+          clientMessageId: item.clientMessageId,
+        });
+        accepted = true;
+      } catch {
+        try {
+          await getAgentExecutionByRequest(item.requestId);
+          accepted = true;
+        } catch {
+          item.status = "failed";
+          item.errorMessage = "发送失败，请重试或取消";
+          ElMessage.error("消息发送失败，已保留在待发送列表");
+        }
+      }
+      if (accepted) {
+        try {
+          if (activeSession.value?.id === item.sessionId) {
+            await Promise.all([
+              loadSession(item.sessionId, true),
+              loadSessions(),
+            ]);
+          }
+          pendingMessages.value = pendingMessages.value.filter(
+            (message) => message.clientMessageId !== item?.clientMessageId,
+          );
+        } catch {
+          item.status = "failed";
+          item.errorMessage = "消息已提交，但会话刷新失败，可重试同步";
+          ElMessage.warning("消息已提交，但会话刷新失败");
+        }
+      }
+      sending.value = false;
+      activeRequestId.value = "";
+      item = pendingMessages.value.find(
+        (message) => message.status === "queued",
+      );
     }
   } finally {
     sending.value = false;
     activeRequestId.value = "";
+    queueProcessing = false;
   }
 }
 
 function sendPrompt(prompt: string) {
-  if (sending.value || actionBusy.value) return;
+  if (actionBusy.value) return;
   inputText.value = prompt;
   void send();
+}
+
+function cancelPendingMessage(clientMessageId: string) {
+  const item = pendingMessages.value.find(
+    (message) => message.clientMessageId === clientMessageId,
+  );
+  if (!item || item.status === "sending") return;
+  pendingMessages.value = pendingMessages.value.filter(
+    (message) => message.clientMessageId !== clientMessageId,
+  );
+}
+
+function retryPendingMessage(clientMessageId: string) {
+  const item = pendingMessages.value.find(
+    (message) => message.clientMessageId === clientMessageId,
+  );
+  if (!item || item.status !== "failed") return;
+  item.status = "queued";
+  item.errorMessage = undefined;
+  void processMessageQueue();
+}
+
+function pendingStatusText(status: PendingMessageStatus) {
+  if (status === "sending") return "发送中";
+  if (status === "failed") return "发送失败";
+  return "待发送";
 }
 
 async function stopCurrent() {
@@ -232,7 +360,7 @@ async function stopCurrent() {
     await stopAgentExecution(execution.id);
     ElMessage.info("已停止尚未完成的动作");
     requestVersion += 1;
-    await loadSession(activeSession.value.id);
+    await loadSession(activeSession.value.id, true);
   } catch {
     ElMessage.warning("执行尚未建立或已经结束，请稍后查看会话结果");
   }
@@ -240,7 +368,7 @@ async function stopCurrent() {
 
 function handleEnter(event: KeyboardEvent) {
   if (event.isComposing || isComposing.value) return;
-  send();
+  void send();
 }
 
 async function handleDraftUpdate(draft: AgentDraft, data: AgentSkuDraftData) {
@@ -337,7 +465,7 @@ onMounted(async () => {
               class="agent-workspace__selector"
               :options="agentOptions"
               :clearable="false"
-              :disabled="sending || actionBusy"
+              :disabled="hasPendingMessages || actionBusy"
               @change="switchAgent"
             />
           </div>
@@ -348,7 +476,7 @@ onMounted(async () => {
             class="agent-workspace__new-chat"
             type="primary"
             icon="Plus"
-            :disabled="sending || actionBusy"
+            :disabled="hasPendingMessages || actionBusy"
             @click="newSession"
             >开启新对话</Button
           >
@@ -416,11 +544,11 @@ onMounted(async () => {
             :agent-name="currentApp?.name || 'Agent'"
             :responsibility="currentApp?.responsibility || ''"
             :suggestions="promptSuggestions"
-            :messages="activeSession.messages"
+            :messages="visibleMessages"
             :drafts="activeSession.drafts"
             :executions="activeSession.executions"
             :products="products"
-            :busy="sending || actionBusy"
+            :busy="hasPendingMessages || actionBusy"
             @update-draft="handleDraftUpdate"
             @confirm-draft="handleDraftConfirm"
             @cancel-draft="handleDraftCancel"
@@ -431,13 +559,54 @@ onMounted(async () => {
 
         <footer class="agent-workspace__composer-shell">
           <div class="agent-workspace__composer">
+            <div
+              v-if="activePendingMessages.length"
+              class="agent-workspace__queue"
+            >
+              <div
+                v-for="item in activePendingMessages"
+                :key="item.clientMessageId"
+                class="agent-workspace__queue-item"
+                :class="`is-${item.status}`"
+              >
+                <span class="agent-workspace__queue-status">
+                  {{ pendingStatusText(item.status) }}
+                </span>
+                <span
+                  class="agent-workspace__queue-content"
+                  :title="item.content"
+                >
+                  {{ item.content }}
+                </span>
+                <Button
+                  v-if="item.status === 'failed'"
+                  link
+                  type="primary"
+                  size="small"
+                  icon="RefreshRight"
+                  :confirm="false"
+                  @click="retryPendingMessage(item.clientMessageId)"
+                  >重试</Button
+                >
+                <Button
+                  v-if="item.status !== 'sending'"
+                  link
+                  type="info"
+                  size="small"
+                  icon="Close"
+                  :confirm="false"
+                  @click="cancelPendingMessage(item.clientMessageId)"
+                  >取消</Button
+                >
+              </div>
+            </div>
             <Input
               v-model="inputText"
               class="agent-workspace__composer-input"
               mode="textarea"
               :rows="3"
               :maxlength="8000"
-              :disabled="sending || actionBusy"
+              :disabled="actionBusy"
               placeholder="给 Agent 发消息，或描述查询、录入需求…"
               @compositionstart="isComposing = true"
               @compositionend="isComposing = false"
@@ -445,7 +614,9 @@ onMounted(async () => {
             />
             <div class="agent-workspace__composer-actions">
               <span class="agent-workspace__composer-hint">
-                <template v-if="sending">Agent 正在处理…</template>
+                <template v-if="sending">
+                  Agent 正在处理，可继续输入并排队
+                </template>
                 <template v-else-if="actionBusy">正在提交并核实结果…</template>
                 <template v-else>Enter 发送 · Shift + Enter 换行</template>
               </span>
@@ -462,10 +633,9 @@ onMounted(async () => {
                 type="primary"
                 round
                 icon="Promotion"
-                :loading="sending"
                 :disabled="!inputText.trim() || actionBusy"
                 @click="send"
-                >发送</Button
+                >{{ sending ? "加入队列" : "发送" }}</Button
               >
             </div>
           </div>
@@ -742,6 +912,53 @@ onMounted(async () => {
 .agent-workspace__composer:focus-within {
   border-color: #9acbff;
   box-shadow: 0 10px 30px rgb(64 158 255 / 14%);
+}
+.agent-workspace__queue {
+  display: grid;
+  gap: 6px;
+  max-height: 132px;
+  padding: 10px 12px 0;
+  overflow-y: auto;
+}
+.agent-workspace__queue-item {
+  display: flex;
+  min-width: 0;
+  min-height: 34px;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px 5px 10px;
+  color: #606266;
+  font-size: 12px;
+  border-radius: 9px;
+  background: #f5f7fa;
+}
+.agent-workspace__queue-item.is-sending {
+  background: #ecf5ff;
+}
+.agent-workspace__queue-item.is-failed {
+  background: #fef0f0;
+}
+.agent-workspace__queue-status {
+  flex: 0 0 auto;
+  color: #909399;
+  font-weight: 600;
+}
+.agent-workspace__queue-item.is-sending .agent-workspace__queue-status {
+  color: #409eff;
+}
+.agent-workspace__queue-item.is-failed .agent-workspace__queue-status {
+  color: #f56c6c;
+}
+.agent-workspace__queue-content {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-workspace__queue-item :deep(.el-button) {
+  min-height: 24px;
+  padding: 2px 4px;
 }
 .agent-workspace__composer
   :deep(.agent-workspace__composer-input .el-textarea__inner) {

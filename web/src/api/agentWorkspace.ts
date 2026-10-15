@@ -1,5 +1,5 @@
 import request from "@/utils/request";
-import type { AgentToolKey } from "./agentApp";
+import type { AgentBusinessToolOption, AgentToolKey } from "./agentApp";
 import type { ProductSkuChatContext } from "./knowledgeAiChat";
 
 export type AgentDraftStatus =
@@ -34,6 +34,7 @@ export interface AvailableAgentApp {
   knowledgeEnabled: boolean;
   workflowName: string | null;
   toolKeys: AgentToolKey[];
+  tools: AgentBusinessToolOption[];
   writeEnabled: boolean;
   maxToolCalls: number;
   timeoutSeconds: number;

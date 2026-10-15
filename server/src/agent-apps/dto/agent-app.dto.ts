@@ -60,7 +60,7 @@ export class CreateAgentAppDto {
 
   @IsArray()
   @ArrayUnique()
-  @ArrayMaxSize(3)
+  @ArrayMaxSize(AGENT_TOOL_KEYS.length)
   @IsIn(AGENT_TOOL_KEYS, { each: true })
   @IsOptional()
   toolKeys?: AgentToolKey[];

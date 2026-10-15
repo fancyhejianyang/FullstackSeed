@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-10-15 支持 Agent 消息排队与动态业务工具配置
+
+- 新增文件 / 删除文件：无。
+- 修改后端：`server/src/agent-apps/agent-apps.constants.ts`、`agent-apps.module.ts`、`agent-apps.service.ts`、`agent-apps.service.spec.ts`、`dto/agent-app.dto.ts`；修改前端：`web/src/api/agentApp.ts`、`agentWorkspace.ts`、`web/src/views/agent-app/Edit.vue`、`web/src/views/agent-workspace/Index.vue`；同步更新 `MD/内部Agent应用改造计划.md` 与本文件。
+- 工作台交互：消息提交后立即以用户消息上屏，不再因 Agent 执行锁定输入框；同一会话保持服务端安全所需的串行顺序，后续消息在输入卡片内展示为待发送队列。待发送项可取消，失败项可重试或取消，当前执行仍可停止；响应完成后的会话刷新改为静默刷新，避免主窗口遮罩闪现。
+- 工具配置：Agent 业务工具不再硬编码两个选项，配置接口动态返回指令集中已启用且允许聊天调用的示例数据、产品和 SKU 候选指令，并保留现有 `product.query` 兼容能力；DTO 允许项和数量上限与代码目录同步。写入总开关统一约束所有需确认的创建工具，停用或关闭聊天调用的指令不能被新配置保存。
+- 能力展示：工作台的能力标签使用后端返回的真实指令名称与确认属性，不再把未知工具错误显示为“受控新增 SKU”。本次完成指令登记到 Agent 授权选择的接线；通用意图识别和 API 指令执行器仍按下一阶段独立验证。
+- 验证：TypeORM 实体检查、后端变更 ESLint、NestJS 生产构建、后端全量 24 个测试套件 / 153 项测试、前端 `vue-tsc` 与 Vite 生产构建、Agent 页面组件复用扫描及格式检查通过；Vite 仅有既有第三方 Rollup 注释警告。未启动常驻服务、未连接真实模型或执行浏览器人工验收，后端需重启以同步新增指令并刷新动态选项。
+
 ### 2026-10-15 将 Agent 入口统一归入独立管理菜单
 
 - 新增文件：`server/src/menus/menus.service.spec.ts`；删除文件：无。

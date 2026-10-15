@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Like, Repository } from 'typeorm';
+import { AiCommandDefinitionsService } from '../ai-command-definitions/ai-command-definitions.service';
+import { AI_BUSINESS_COMMAND_CATALOG } from '../ai-command-definitions/ai-command-definitions.constants';
 import { AiWorkflowsService } from '../ai-workflows/ai-workflows.service';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
 import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
@@ -15,6 +17,7 @@ import {
   type UpdateAgentAppDto,
 } from './dto/agent-app.dto';
 import { AgentApp } from './entities/agent-app.entity';
+import { AGENT_WRITE_TOOL_KEYS } from './agent-apps.constants';
 
 @Injectable()
 export class AgentAppsService {
@@ -23,6 +26,7 @@ export class AgentAppsService {
     private readonly repository: Repository<AgentApp>,
     private readonly providersService: KnowledgeAiProvidersService,
     private readonly workflowsService: AiWorkflowsService,
+    private readonly commandDefinitionsService: AiCommandDefinitionsService,
   ) {}
 
   async findAll(query: QueryAgentAppDto) {
@@ -55,24 +59,38 @@ export class AgentAppsService {
   }
 
   async findAvailable(user: AuthUser) {
-    const apps = await this.repository.find({
-      where: { isEnabled: true },
-      order: { name: 'ASC', id: 'ASC' },
-      take: 200,
-    });
+    const [apps, businessTools] = await Promise.all([
+      this.repository.find({
+        where: { isEnabled: true },
+        order: { name: 'ASC', id: 'ASC' },
+        take: 200,
+      }),
+      this.getAvailableBusinessTools(),
+    ]);
+    const toolMap = new Map(
+      businessTools.map((item) => [item.commandKey, item]),
+    );
     return apps
       .filter((app) => this.canUse(app, user))
-      .map((app) => ({
-        id: app.id,
-        name: app.name,
-        responsibility: app.responsibility,
-        knowledgeEnabled: Boolean(app.workflowId),
-        workflowName: app.workflowName,
-        toolKeys: app.toolKeys,
-        writeEnabled: app.writeEnabled,
-        maxToolCalls: app.maxToolCalls,
-        timeoutSeconds: app.timeoutSeconds,
-      }));
+      .map((app) => {
+        const toolKeys = (app.toolKeys ?? []).filter((key) => toolMap.has(key));
+        return {
+          id: app.id,
+          name: app.name,
+          responsibility: app.responsibility,
+          knowledgeEnabled: Boolean(app.workflowId),
+          workflowName: app.workflowName,
+          toolKeys,
+          tools: toolKeys
+            .map((key) => toolMap.get(key))
+            .filter((item) => item !== undefined),
+          writeEnabled:
+            app.writeEnabled &&
+            toolKeys.some((key) => AGENT_WRITE_TOOL_KEYS.includes(key)),
+          maxToolCalls: app.maxToolCalls,
+          timeoutSeconds: app.timeoutSeconds,
+        };
+      });
   }
 
   async findAvailableOne(id: number, user: AuthUser) {
@@ -85,7 +103,7 @@ export class AgentAppsService {
   }
 
   async getConfigurationOptions() {
-    const [providers, workflows] = await Promise.all([
+    const [providers, workflows, businessTools] = await Promise.all([
       this.providersService.findAll({
         page: 1,
         pageSize: 200,
@@ -96,6 +114,7 @@ export class AgentAppsService {
         pageSize: 200,
         isEnabled: true,
       }),
+      this.getAvailableBusinessTools(),
     ]);
     return {
       providers: providers.list
@@ -111,6 +130,7 @@ export class AgentAppsService {
         id: item.id,
         name: item.name,
       })),
+      businessTools,
     };
   }
 
@@ -193,7 +213,19 @@ export class AgentAppsService {
       }
     }
     if (dto.toolKeys !== undefined || isCreate) {
-      payload.toolKeys = [...(dto.toolKeys ?? [])];
+      const toolKeys = [...(dto.toolKeys ?? [])];
+      const availableToolKeys = new Set(
+        (await this.getAvailableBusinessTools()).map((item) => item.commandKey),
+      );
+      const unavailableToolKeys = toolKeys.filter(
+        (key) => !availableToolKeys.has(key),
+      );
+      if (unavailableToolKeys.length) {
+        throw new BadRequestException(
+          `业务工具未启用或不允许聊天调用：${unavailableToolKeys.join('、')}`,
+        );
+      }
+      payload.toolKeys = toolKeys;
     }
     if (dto.accessScope !== undefined || isCreate) {
       payload.accessScope = dto.accessScope ?? 'all';
@@ -219,11 +251,16 @@ export class AgentAppsService {
 
     const toolKeys = payload.toolKeys ?? current?.toolKeys ?? [];
     const writeEnabled = payload.writeEnabled ?? current?.writeEnabled ?? false;
-    if (writeEnabled && !toolKeys.includes('productSku.create')) {
-      throw new BadRequestException('启用写入时必须勾选新增 SKU 工具');
+    const selectedWriteTools = toolKeys.filter((key) =>
+      AGENT_WRITE_TOOL_KEYS.includes(key),
+    );
+    if (writeEnabled && !selectedWriteTools.length) {
+      throw new BadRequestException('启用写入时必须至少选择一个写入工具');
     }
-    if (!writeEnabled && toolKeys.includes('productSku.create')) {
-      payload.toolKeys = toolKeys.filter((key) => key !== 'productSku.create');
+    if (!writeEnabled && selectedWriteTools.length) {
+      payload.toolKeys = toolKeys.filter(
+        (key) => !AGENT_WRITE_TOOL_KEYS.includes(key),
+      );
     }
     const accessScope = payload.accessScope ?? current?.accessScope ?? 'all';
     const allowedUserIds =
@@ -249,5 +286,35 @@ export class AgentAppsService {
       }
     }
     return Array.from(options, ([value, text]) => ({ value, text }));
+  }
+
+  private async getAvailableBusinessTools() {
+    const businessCatalogKeys = new Set(
+      AI_BUSINESS_COMMAND_CATALOG.map((item) => item.commandKey),
+    );
+    const definitions = await this.commandDefinitionsService.findAll({
+      page: 1,
+      pageSize: 200,
+      chatCallable: true,
+      isEnabled: true,
+    });
+    return [
+      {
+        commandKey: 'product.query',
+        name: '产品/SKU 智能查询',
+        action: 'read' as const,
+        requireApproval: false,
+        description: '兼容现有工作台的产品与 SKU 聚合事实查询。',
+      },
+      ...definitions.list
+        .filter((item) => businessCatalogKeys.has(item.commandKey))
+        .map((item) => ({
+          commandKey: item.commandKey,
+          name: item.name,
+          action: item.action,
+          requireApproval: item.requireApproval,
+          description: item.description,
+        })),
+    ];
   }
 }

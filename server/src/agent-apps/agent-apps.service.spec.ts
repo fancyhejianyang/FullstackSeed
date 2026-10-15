@@ -1,5 +1,7 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import type { Repository } from 'typeorm';
+import { AI_BUSINESS_COMMAND_CATALOG } from '../ai-command-definitions/ai-command-definitions.constants';
+import type { AiCommandDefinitionsService } from '../ai-command-definitions/ai-command-definitions.service';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
 import type { AiWorkflowsService } from '../ai-workflows/ai-workflows.service';
 import type { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
@@ -47,10 +49,20 @@ describe('AgentAppsService access and tool policy', () => {
     ),
     findUsable: jest.fn(() => Promise.resolve({ id: 2, name: '知识工作流' })),
   };
+  const commandDefinitions = {
+    findAll: jest.fn(() =>
+      Promise.resolve({
+        list: AI_BUSINESS_COMMAND_CATALOG.filter((item) => item.chatCallable),
+        total: AI_BUSINESS_COMMAND_CATALOG.filter((item) => item.chatCallable)
+          .length,
+      }),
+    ),
+  };
   const service = new AgentAppsService(
     repository as unknown as Repository<AgentApp>,
     providers as unknown as KnowledgeAiProvidersService,
     workflows as unknown as AiWorkflowsService,
+    commandDefinitions as unknown as AiCommandDefinitionsService,
   );
 
   beforeEach(() => jest.clearAllMocks());
@@ -81,18 +93,40 @@ describe('AgentAppsService access and tool policy', () => {
   });
 
   it('merges generic and text model lists with complete de-duplicated labels', async () => {
-    await expect(service.getConfigurationOptions()).resolves.toEqual({
-      providers: [
-        {
-          id: 1,
-          name: '模型账号',
-          models: [
-            { value: 'qwen-plus', text: '通义千问 Plus（qwen-plus）' },
-            { value: 'gpt-4o-mini', text: 'GPT-4o Mini（gpt-4o-mini）' },
-          ],
-        },
-      ],
-      workflows: [{ id: 2, name: '知识工作流' }],
+    const result = await service.getConfigurationOptions();
+    expect(result.providers).toEqual([
+      {
+        id: 1,
+        name: '模型账号',
+        models: [
+          { value: 'qwen-plus', text: '通义千问 Plus（qwen-plus）' },
+          { value: 'gpt-4o-mini', text: 'GPT-4o Mini（gpt-4o-mini）' },
+        ],
+      },
+    ]);
+    expect(result.workflows).toEqual([{ id: 2, name: '知识工作流' }]);
+    expect(result.businessTools.map((item) => item.commandKey)).toEqual([
+      'product.query',
+      ...AI_BUSINESS_COMMAND_CATALOG.filter((item) => item.chatCallable).map(
+        (item) => item.commandKey,
+      ),
+    ]);
+    expect(
+      result.businessTools.find((item) => item.commandKey === 'demo.create'),
+    ).toMatchObject({
+      commandKey: 'demo.create',
+      name: '创建示例数据',
+      action: 'create',
+      requireApproval: true,
+    });
+    expect(
+      result.businessTools.find((item) => item.commandKey === 'product.query'),
+    ).toEqual({
+      commandKey: 'product.query',
+      name: '产品/SKU 智能查询',
+      action: 'read',
+      requireApproval: false,
+      description: '兼容现有工作台的产品与 SKU 聚合事实查询。',
     });
   });
 

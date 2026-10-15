@@ -1,9 +1,15 @@
 import request from "@/utils/request";
 
-export type AgentToolKey =
-  | "product.query"
-  | "productSku.create";
+export type AgentToolKey = string;
 export type AgentAccessScope = "all" | "users";
+
+export interface AgentBusinessToolOption {
+  commandKey: AgentToolKey;
+  name: string;
+  action: "read" | "create" | "update" | "delete" | "execute";
+  requireApproval: boolean;
+  description: string | null;
+}
 
 export interface AgentApp {
   id: number;
@@ -61,6 +67,7 @@ export interface AgentConfigurationOptions {
     models: Array<{ value: string; text: string }>;
   }>;
   workflows: Array<{ id: number; name: string }>;
+  businessTools: AgentBusinessToolOption[];
 }
 
 export function getAgentApps(params: QueryAgentAppParams) {

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AiCommandDefinitionsModule } from '../ai-command-definitions/ai-command-definitions.module';
 import { AiWorkflowsModule } from '../ai-workflows/ai-workflows.module';
 import { KnowledgeAiChatModule } from '../knowledge-ai-chat/knowledge-ai-chat.module';
 import { KnowledgeAiProvidersModule } from '../knowledge-ai-providers/knowledge-ai-providers.module';
@@ -23,6 +24,7 @@ import { AgentSession } from './entities/agent-session.entity';
       AgentDraft,
       AgentExecution,
     ]),
+    AiCommandDefinitionsModule,
     AiWorkflowsModule,
     KnowledgeAiChatModule,
     KnowledgeAiProvidersModule,
