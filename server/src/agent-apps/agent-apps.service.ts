@@ -66,6 +66,8 @@ export class AgentAppsService {
         id: app.id,
         name: app.name,
         responsibility: app.responsibility,
+        knowledgeEnabled: Boolean(app.workflowId),
+        workflowName: app.workflowName,
         toolKeys: app.toolKeys,
         writeEnabled: app.writeEnabled,
         maxToolCalls: app.maxToolCalls,
@@ -101,7 +103,9 @@ export class AgentAppsService {
           id: item.id,
           name: item.name,
           secretKeySet: item.secretKeySet,
-          models: this.parseModelOptions(item.models, item.textModels),
+          models: this.parseModelOptions(
+            item.textModels?.trim() ? item.textModels : item.models,
+          ),
         }))
         .filter((item) => item.secretKeySet && item.models.length)
         .map(({ id, name, models }) => ({ id, name, models })),
@@ -180,12 +184,19 @@ export class AgentAppsService {
       payload.providerName = providerName;
       payload.models = models;
     }
-    if (dto.workflowId !== undefined) {
-      const workflow = await this.workflowsService.findUsable(dto.workflowId);
-      payload.workflowId = workflow.id;
-      payload.workflowName = workflow.name;
+    if (dto.workflowId !== undefined || isCreate) {
+      if (dto.workflowId) {
+        const workflow = await this.workflowsService.findUsable(dto.workflowId);
+        payload.workflowId = workflow.id;
+        payload.workflowName = workflow.name;
+      } else {
+        payload.workflowId = null;
+        payload.workflowName = null;
+      }
     }
-    if (dto.toolKeys !== undefined) payload.toolKeys = [...dto.toolKeys];
+    if (dto.toolKeys !== undefined || isCreate) {
+      payload.toolKeys = [...(dto.toolKeys ?? [])];
+    }
     if (dto.accessScope !== undefined || isCreate) {
       payload.accessScope = dto.accessScope ?? 'all';
     }

@@ -16,6 +16,7 @@ import { fallbackProductKeywords } from '../product-catalog/product-search';
 import {
   AGENT_EXECUTION_ACTIVE_STATUSES,
   type AgentActionType,
+  type AgentExecutionToolKey,
   type AgentSkuDraftData,
   type AgentToolKey,
 } from './agent-apps.constants';
@@ -177,8 +178,10 @@ export class AgentWorkspaceService {
 
     const activeDraft = await this.findActiveDraft(sessionId, user.userId);
     const decision = classifyAgentAction(dto.content, Boolean(activeDraft));
-    const toolKey = this.resolveToolKey(decision.type);
-    this.assertActionAuthorized(app, toolKey, user);
+    const businessToolKey = this.resolveBusinessToolKey(decision.type);
+    if (businessToolKey) {
+      this.assertActionAuthorized(app, businessToolKey, user);
+    }
     if (decision.queryBeforeWrite) {
       this.assertActionAuthorized(app, 'product.query', user);
     }
@@ -210,7 +213,7 @@ export class AgentWorkspaceService {
         agentAppId: app.id,
         messageId: userMessage.id,
         draftId: activeDraft?.id ?? null,
-        toolKey,
+        toolKey: this.resolveExecutionToolKey(decision.type, app),
         status: 'running',
         parameterSummary: {
           action: decision.type,
@@ -580,7 +583,7 @@ export class AgentWorkspaceService {
           providerId: params.app.providerId,
           model,
           systemPrompt: params.app.responsibility,
-          workflowId: params.app.workflowId,
+          workflowId: params.app.workflowId ?? undefined,
           sessionId: params.session.knowledgeSessionId ?? undefined,
           title: params.session.title,
         },
@@ -927,10 +930,20 @@ export class AgentWorkspaceService {
     return execution;
   }
 
-  private resolveToolKey(action: AgentActionType): AgentToolKey {
+  private resolveBusinessToolKey(action: AgentActionType): AgentToolKey | null {
     if (action === 'query') return 'product.query';
     if (action === 'prepare_write') return 'productSku.create';
-    return 'knowledge.answer';
+    return null;
+  }
+
+  private resolveExecutionToolKey(
+    action: AgentActionType,
+    app: AgentApp,
+  ): AgentExecutionToolKey {
+    return (
+      this.resolveBusinessToolKey(action) ??
+      (app.workflowId ? 'knowledge.answer' : 'model.chat')
+    );
   }
 
   private assertActionAuthorized(

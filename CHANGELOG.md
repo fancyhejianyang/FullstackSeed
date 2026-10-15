@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-10-15 解耦 Agent 基础对话、知识增强与业务工具
+
+- 新增文件：`server/src/migrations/1792054800000-MakeAgentKnowledgeOptional.ts`；删除文件：无。
+- 修改后端：`server/src/agent-apps/agent-apps.constants.ts`、`agent-apps.service.ts`、`agent-apps.service.spec.ts`、`agent-workspace.service.ts`、`agent-workspace.service.spec.ts`、`dto/agent-app.dto.ts`、`entities/agent-app.entity.ts`、`entities/agent-execution.entity.ts`，以及知识问答、模型账号服务及其测试。
+- 修改前端与文档：`web/src/api/agentApp.ts`、`agentWorkspace.ts`、`web/src/views/agent-app/Edit.vue`、`Index.vue`、`View.vue`、`Records.vue`、`web/src/views/agent-workspace/Index.vue`、`MD/内部Agent应用改造计划.md`、`CHANGELOG.md`。
+- 能力设计：模型对话改为 Agent 基础能力，不再要求勾选 `knowledge.answer`；知识增强通过独立开关按需绑定工作流；产品/SKU 查询与受控新增 SKU 作为可选业务工具，允许全部不选。写入仍同时受工具白名单、写入总开关、员工权限、二次确认与幂等约束。
+- 执行行为：无工作流时跳过标准问答、术语校准和知识检索，直接使用职责说明与原始问题调用模型；有工作流时恢复知识链路。执行记录使用 `model.chat` / `knowledge.answer` 区分两类回答；配置页优先展示文本模型，避免把视觉模型混入 Agent 聊天列表，旧账号未维护分类时保留兼容回退。
+- 数据迁移：Agent 的 `workflowId/workflowName` 改为可空，并从既有业务工具白名单中移除 `knowledge.answer`。未自动执行目标数据库迁移。
+- UI：表单保持单列和 168px 标签宽度，新增“知识增强”开关；工作流仅在开启时必选，业务工具改为可选且使用中文名称。列表、详情、工作台和执行记录同步展示“纯模型对话 / 知识增强 / 业务工具”的分层能力。
+- 验证：TypeORM 实体列检查、后端变更 ESLint、前端 `vue-tsc`、后端与前端生产构建、Agent 页面组件复用扫描及 `git diff --check` 通过；后端全量 22 个测试套件、145 项测试通过。未连接真实模型账号、未执行目标数据库迁移、未启动常驻服务或进行浏览器人工验收。
+
 ### 2026-10-15 修复 Agent 模型列表可超选五项
 
 - 新增文件 / 删除文件：无。

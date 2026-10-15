@@ -150,11 +150,17 @@ export class KnowledgeAiProvidersService {
   private readonly executionSignal = new AsyncLocalStorage<AbortSignal>();
 
   /** 一轮问答中的提词、检索辅助和生成共用取消信号，不影响其它并发会话。 */
-  withExecutionSignal<T>(signal: AbortSignal, run: () => Promise<T>): Promise<T> {
+  withExecutionSignal<T>(
+    signal: AbortSignal,
+    run: () => Promise<T>,
+  ): Promise<T> {
     return this.executionSignal.run(signal, run);
   }
 
-  private fetchWithExecution(url: string, init: RequestInit): Promise<Response> {
+  private fetchWithExecution(
+    url: string,
+    init: RequestInit,
+  ): Promise<Response> {
     const signal = this.executionSignal.getStore();
     signal?.throwIfAborted();
     return fetch(url, { ...init, ...(signal ? { signal } : {}) });
@@ -261,7 +267,11 @@ export class KnowledgeAiProvidersService {
     let currentProvider = provider;
     let disabledConfigCount = 0;
     try {
-      const target = this.resolveFeatureTarget(provider, dto.featureType, model);
+      const target = this.resolveFeatureTarget(
+        provider,
+        dto.featureType,
+        model,
+      );
       const response =
         dto.featureType === 'embedding'
           ? await this.fetchWithExecution(target.url, {
@@ -270,7 +280,10 @@ export class KnowledgeAiProvidersService {
                 Authorization: `Bearer ${target.secretKey}`,
                 'Content-Type': 'application/json',
               },
-              body: JSON.stringify({ model: target.model, input: ['模型可用性校验'] }),
+              body: JSON.stringify({
+                model: target.model,
+                input: ['模型可用性校验'],
+              }),
             })
           : await this.fetchWithExecution(target.url, {
               method: 'POST',
@@ -310,7 +323,8 @@ export class KnowledgeAiProvidersService {
           model,
           removed: true,
           disabledConfigCount,
-          errorMessage: '模型不存在、未开通或当前账号不可用，已从账号模型列表移除。',
+          errorMessage:
+            '模型不存在、未开通或当前账号不可用，已从账号模型列表移除。',
           provider: this.toView(currentProvider),
         };
       }
@@ -353,7 +367,7 @@ export class KnowledgeAiProvidersService {
       providerName: provider.name,
       workspaceId: provider.workspaceId ?? null,
       model: this.resolveModel(
-        this.joinModelTexts(provider.models, provider.textModels),
+        this.getFeatureModels(provider, 'chat'),
         payload.model,
       ),
       url: this.buildChatUrl(provider),
@@ -379,7 +393,7 @@ export class KnowledgeAiProvidersService {
       providerName: provider.name,
       workspaceId: provider.workspaceId ?? null,
       model: this.resolveModel(
-        this.joinModelTexts(provider.visionModels, provider.models),
+        this.getFeatureModels(provider, 'ocr'),
         payload.model,
       ),
       url: this.buildChatUrl(provider),
@@ -452,9 +466,9 @@ export class KnowledgeAiProvidersService {
   ) {
     if (featureType === 'embedding') return provider.embeddingModels;
     if (featureType === 'ocr') {
-      return this.joinModelTexts(provider.visionModels, provider.models);
+      return provider.visionModels?.trim() || provider.models;
     }
-    return this.joinModelTexts(provider.models, provider.textModels);
+    return provider.textModels?.trim() || provider.models;
   }
 
   private async removeMissingModel(
@@ -463,7 +477,10 @@ export class KnowledgeAiProvidersService {
   ) {
     provider.models = this.removeModelFromList(provider.models, model);
     provider.textModels = this.removeModelFromList(provider.textModels, model);
-    provider.visionModels = this.removeModelFromList(provider.visionModels, model);
+    provider.visionModels = this.removeModelFromList(
+      provider.visionModels,
+      model,
+    );
     provider.embeddingModels = this.removeModelFromList(
       provider.embeddingModels,
       model,
@@ -1034,18 +1051,20 @@ export class KnowledgeAiProvidersService {
     };
   }
 
-  private toSafeThinkingParameters(
-    value?: Record<string, unknown> | null,
-  ) {
+  private toSafeThinkingParameters(value?: Record<string, unknown> | null) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       return {};
     }
     return Object.fromEntries(
       Object.entries(value).filter(
         ([key]) =>
-          !['model', 'messages', 'stream', 'stream_options', 'temperature'].includes(
-            key.toLowerCase(),
-          ),
+          ![
+            'model',
+            'messages',
+            'stream',
+            'stream_options',
+            'temperature',
+          ].includes(key.toLowerCase()),
       ),
     );
   }
@@ -1203,13 +1222,6 @@ export class KnowledgeAiProvidersService {
         };
       })
       .filter((item) => item.code);
-  }
-
-  private joinModelTexts(...values: Array<string | null | undefined>) {
-    return values
-      .map((item) => item?.trim())
-      .filter(Boolean)
-      .join('\n');
   }
 
   private toNullableText(value?: string) {

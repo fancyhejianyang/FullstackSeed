@@ -20,11 +20,11 @@ export class AgentApp extends BaseEntity {
   @Column({ type: 'simple-json' })
   models: string[];
 
-  @Column({ type: 'int' })
-  workflowId: number;
+  @Column({ type: 'int', nullable: true })
+  workflowId: number | null;
 
-  @Column({ type: 'varchar', length: 120 })
-  workflowName: string;
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  workflowName: string | null;
 
   @Column({ type: 'simple-json' })
   toolKeys: AgentToolKey[];

@@ -260,7 +260,7 @@ export class KnowledgeAiChatService {
       { messageId: message.id, sessionId: session.id, sessionCriteria: this.sessionProgressCriteria(session), trace },
       async () => {
         try {
-          await this.recordStage('加载聊天配置与工作流');
+          await this.recordStage('加载模型与执行配置');
           return await run({ ...dto, sessionId: session.id });
         } catch (error) {
           const errorMessage =
@@ -369,16 +369,22 @@ export class KnowledgeAiChatService {
     return this.withProgress(dto, (trackedDto) => this.askInternal(trackedDto));
   }
 
-  /** 内部 Agent 专用入口：调用方提供已与用户权限求交集后的业务指令白名单。 */
+  /** 内部 Agent 专用入口：工作流可选，调用方仅提供已与用户权限求交集后的业务指令。 */
   async askForAgent(
     dto: AskKnowledgeAiDto,
     commandOptions: KnowledgeAiChatCommandOptions,
   ) {
-    if (!dto.providerId || !dto.model || !dto.workflowId) {
-      throw new BadRequestException('内部 Agent 必须指定模型账号、模型和工作流');
+    if (!dto.providerId || !dto.model) {
+      throw new BadRequestException('内部 Agent 必须指定模型账号和模型');
     }
+    const resolvedCommandOptions = this.resolveAgentCommandOptions(
+      dto.workflowId,
+      commandOptions,
+    );
     return this.withProgress(dto, (trackedDto) =>
-      this.askInternal(trackedDto, commandOptions, { directTarget: true }),
+      this.askInternal(trackedDto, resolvedCommandOptions, {
+        directTarget: true,
+      }),
     );
   }
 
@@ -387,11 +393,16 @@ export class KnowledgeAiChatService {
     commandOptions?: KnowledgeAiChatCommandOptions,
     options: { directTarget?: boolean } = {},
   ) {
-    if (!dto.workflowId || (!options.directTarget && !dto.aiFeatureConfigId)) {
+    if (
+      !options.directTarget &&
+      (!dto.workflowId || !dto.aiFeatureConfigId)
+    ) {
       throw new BadRequestException('AI 问答测试必须选择聊天配置和工作流');
     }
-    const selectedRetrieval = await this.retrievalConfigsService.findUsableForWorkflow(dto.workflowId);
-    const retrievalConfigId = selectedRetrieval.id;
+    const selectedRetrieval = dto.workflowId
+      ? await this.retrievalConfigsService.findUsableForWorkflow(dto.workflowId)
+      : null;
+    const retrievalConfigId = selectedRetrieval?.id ?? null;
     const configuredTrace = await this.resolveRetrievalConfigTrace(retrievalConfigId);
     const { target, config } = await this.resolveChatFeature(
       options.directTarget
@@ -406,10 +417,14 @@ export class KnowledgeAiChatService {
       ? await this.findSessionEntity(dto.sessionId)
       : await this.createSession(dto, target);
     const history = await this.getSessionHistory(session.id);
-    const workflow = this.resolveWorkflowSteps(configuredTrace);
+    const workflow =
+      options.directTarget && !dto.workflowId
+        ? this.disabledWorkflowSteps()
+        : this.resolveWorkflowSteps(configuredTrace);
     const standardQa = await this.buildStandardQaState({
       question: dto.question,
       retrievalConfigId,
+      commandOptions,
       enableOriginalStandardQa: workflow.enableOriginalStandardQa,
       enableColloquial: workflow.enableColloquial,
       enableCalibratedStandardQa: workflow.enableCalibratedStandardQa,
@@ -460,7 +475,12 @@ export class KnowledgeAiChatService {
           id: target.providerId,
           model: target.model,
           question: dto.question,
-          messages: this.buildChatMessages(dto, config, retrieval, history),
+          messages: this.buildChatMessages(
+            dto,
+            config,
+            dto.workflowId ? retrieval : undefined,
+            history,
+          ),
           temperature: config?.temperature,
           thinkingParameters: this.resolveThinkingParameters(config),
         });
@@ -830,7 +850,9 @@ export class KnowledgeAiChatService {
     }
     messages.push({
       role: 'user',
-      content: this.buildQuestionContent(dto.question, retrieval ?? null),
+      content: retrieval
+        ? this.buildQuestionContent(dto.question, retrieval)
+        : dto.question.trim(),
     });
     return messages;
   }
@@ -1393,6 +1415,30 @@ export class KnowledgeAiChatService {
       enableCalibratedStandardQa: plan.enableCalibratedStandardQa,
       enableKnowledgeRetrieval: plan.enableKnowledgeRetrieval,
       enableBusinessCommands: plan.enableBusinessCommands,
+    };
+  }
+
+  private disabledWorkflowSteps(): KnowledgeAiWorkflowSteps {
+    return {
+      enableOriginalStandardQa: false,
+      enableColloquial: false,
+      enableCalibratedStandardQa: false,
+      enableKnowledgeRetrieval: false,
+      enableBusinessCommands: false,
+    };
+  }
+
+  private resolveAgentCommandOptions(
+    workflowId: number | undefined,
+    commandOptions: KnowledgeAiChatCommandOptions,
+  ): KnowledgeAiChatCommandOptions {
+    return {
+      allowedCommandKeys: Array.from(
+        new Set([
+          ...(workflowId ? AI_CORE_CHAT_COMMAND_KEYS : []),
+          ...(commandOptions.allowedCommandKeys ?? []),
+        ]),
+      ),
     };
   }
 

@@ -1,8 +1,8 @@
 import { Column, Entity, Index } from 'typeorm';
 import { BaseEntity } from '../../common/entities/base.entity';
 import type {
+  AgentExecutionToolKey,
   AgentExecutionStatus,
-  AgentToolKey,
 } from '../agent-apps.constants';
 
 @Index('UQ_agent_executions_request', ['requestId'], { unique: true })
@@ -28,7 +28,7 @@ export class AgentExecution extends BaseEntity {
   draftId: number | null;
 
   @Column({ type: 'varchar', length: 64 })
-  toolKey: AgentToolKey;
+  toolKey: AgentExecutionToolKey;
 
   @Column({ type: 'varchar', length: 32, default: 'queued' })
   status: AgentExecutionStatus;

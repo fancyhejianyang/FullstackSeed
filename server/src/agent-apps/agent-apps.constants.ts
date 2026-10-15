@@ -1,10 +1,14 @@
-export const AGENT_TOOL_KEYS = [
-  'knowledge.answer',
-  'product.query',
-  'productSku.create',
-] as const;
+export const AGENT_TOOL_KEYS = ['product.query', 'productSku.create'] as const;
 
 export type AgentToolKey = (typeof AGENT_TOOL_KEYS)[number];
+
+export const AGENT_EXECUTION_TOOL_KEYS = [
+  'model.chat',
+  'knowledge.answer',
+  ...AGENT_TOOL_KEYS,
+] as const;
+
+export type AgentExecutionToolKey = (typeof AGENT_EXECUTION_TOOL_KEYS)[number];
 
 export const AGENT_ACCESS_SCOPES = ['all', 'users'] as const;
 export type AgentAccessScope = (typeof AGENT_ACCESS_SCOPES)[number];

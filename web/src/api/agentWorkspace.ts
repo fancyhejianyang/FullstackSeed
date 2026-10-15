@@ -22,10 +22,17 @@ export type AgentExecutionStatus =
   | "failed"
   | "cancelled";
 
+export type AgentExecutionToolKey =
+  | "model.chat"
+  | "knowledge.answer"
+  | AgentToolKey;
+
 export interface AvailableAgentApp {
   id: number;
   name: string;
   responsibility: string;
+  knowledgeEnabled: boolean;
+  workflowName: string | null;
   toolKeys: AgentToolKey[];
   writeEnabled: boolean;
   maxToolCalls: number;
@@ -121,7 +128,7 @@ export interface AgentExecution {
   agentAppId: number;
   messageId: number | null;
   draftId: number | null;
-  toolKey: AgentToolKey;
+  toolKey: AgentExecutionToolKey;
   status: AgentExecutionStatus;
   parameterSummary: Record<string, unknown> | null;
   result: Record<string, unknown> | null;

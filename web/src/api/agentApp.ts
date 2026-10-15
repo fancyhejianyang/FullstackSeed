@@ -1,7 +1,6 @@
 import request from "@/utils/request";
 
 export type AgentToolKey =
-  | "knowledge.answer"
   | "product.query"
   | "productSku.create";
 export type AgentAccessScope = "all" | "users";
@@ -13,8 +12,8 @@ export interface AgentApp {
   providerId: number;
   providerName: string;
   models: string[];
-  workflowId: number;
-  workflowName: string;
+  workflowId: number | null;
+  workflowName: string | null;
   toolKeys: AgentToolKey[];
   accessScope: AgentAccessScope;
   allowedUserIds: number[] | null;

@@ -29,9 +29,16 @@ interface KnowledgeAiChatServiceInternals {
   normalizeUserVisibleThinkingSummary: (value?: string | null) => string;
   buildSystemMessageContent: (
     overridePrompt?: string,
-    config?: { systemPrompt?: string | null; responseFormat?: string | null } | null,
+    config?: {
+      systemPrompt?: string | null;
+      responseFormat?: string | null;
+    } | null,
     workflowInstruction?: string | null,
   ) => string;
+  resolveAgentCommandOptions: (
+    workflowId: number | undefined,
+    options: { allowedCommandKeys?: string[] },
+  ) => { allowedCommandKeys: string[] };
 }
 
 describe('KnowledgeAiChatService', () => {
@@ -83,6 +90,123 @@ describe('KnowledgeAiChatService', () => {
 
     expect(message).toContain('【AI 工作流执行说明】');
     expect(message).toContain('仅依据业务数据和知识库资料回答');
+  });
+
+  it('adds core knowledge commands only when an Agent selects a workflow', () => {
+    expect(
+      internals.resolveAgentCommandOptions(undefined, {
+        allowedCommandKeys: ['product.sku.lookup'],
+      }),
+    ).toEqual({ allowedCommandKeys: ['product.sku.lookup'] });
+    expect(
+      internals.resolveAgentCommandOptions(7, {
+        allowedCommandKeys: ['product.sku.lookup'],
+      }).allowedCommandKeys,
+    ).toEqual([
+      'qa.search',
+      'colloquial.rewrite',
+      'knowledge.retrieve',
+      'product.sku.lookup',
+    ]);
+  });
+
+  it('runs direct Agent chat without a workflow or knowledge commands', async () => {
+    const session = {
+      id: 11,
+      providerId: 3,
+      providerName: '模型账号',
+      model: 'text-model',
+      externalAppId: null,
+      messageCount: 0,
+      lastQuestion: null,
+      lastAnswer: null,
+      hitKnowledgeBaseNames: null,
+      activeKnowledgeBaseId: null,
+      lastRetrievalQuery: null,
+      isSuccess: true,
+      errorMessage: null,
+      elapsedMilliseconds: 0,
+    } as KnowledgeAiChatSession;
+    const sessionRepository = {
+      create: jest.fn((value: Partial<KnowledgeAiChatSession>) => ({
+        ...session,
+        ...value,
+      })),
+      save: jest.fn().mockResolvedValue(session),
+      findOne: jest.fn().mockResolvedValue(session),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+    };
+    const messageRepository = {
+      find: jest.fn().mockResolvedValue([]),
+      create: jest.fn((value: Partial<KnowledgeAiChatMessage>) => value),
+      save: jest.fn().mockImplementation(
+        (value: Partial<KnowledgeAiChatMessage>) =>
+          Promise.resolve({
+            ...value,
+            id: 21,
+          }),
+      ),
+    };
+    const retrievalConfigs = {
+      findUsableForWorkflow: jest.fn(),
+      findUsableConfig: jest.fn(),
+    };
+    const providers = {
+      resolveChatTarget: jest.fn().mockResolvedValue({
+        providerId: 3,
+        providerName: '模型账号',
+        model: 'text-model',
+      }),
+      callChat: jest.fn().mockResolvedValue({
+        isSuccess: true,
+        model: 'text-model',
+        answer: '你好，我可以直接回答。',
+        errorMessage: null,
+        elapsedMilliseconds: 5,
+        usage: null,
+      }),
+    };
+    const commands = {
+      searchStandardQa: jest.fn(),
+      rewriteColloquialQuestion: jest.fn(),
+      lookupProductSku: jest.fn(),
+    };
+    const directService = new KnowledgeAiChatService(
+      sessionRepository as unknown as Repository<KnowledgeAiChatSession>,
+      messageRepository as unknown as Repository<KnowledgeAiChatMessage>,
+      retrievalConfigs as unknown as KnowledgeRetrievalConfigsService,
+      {} as AiFeatureConfigsService,
+      providers as unknown as KnowledgeAiProvidersService,
+      commands as unknown as KnowledgeAiChatCommandService,
+    );
+    const result = await directService.askForAgent(
+      {
+        providerId: 3,
+        model: 'text-model',
+        question: '你好',
+        systemPrompt: '你是纯聊天助手。',
+      },
+      { allowedCommandKeys: [] },
+    );
+
+    expect(result.message).toEqual(
+      expect.objectContaining({
+        isSuccess: true,
+        answer: '你好，我可以直接回答。',
+      }),
+    );
+    expect(retrievalConfigs.findUsableForWorkflow).not.toHaveBeenCalled();
+    expect(commands.searchStandardQa).not.toHaveBeenCalled();
+    expect(commands.rewriteColloquialQuestion).not.toHaveBeenCalled();
+    expect(commands.lookupProductSku).not.toHaveBeenCalled();
+    expect(providers.callChat).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: [
+          { role: 'system', content: '你是纯聊天助手。' },
+          { role: 'user', content: '你好' },
+        ],
+      }),
+    );
   });
 
   it('checks standard QA again with the calibrated question after the original question misses', async () => {

@@ -55,14 +55,15 @@ export class CreateAgentAppDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  workflowId: number;
+  @IsOptional()
+  workflowId?: number | null;
 
   @IsArray()
-  @ArrayMinSize(1)
   @ArrayUnique()
   @ArrayMaxSize(3)
   @IsIn(AGENT_TOOL_KEYS, { each: true })
-  toolKeys: AgentToolKey[];
+  @IsOptional()
+  toolKeys?: AgentToolKey[];
 
   @IsIn(AGENT_ACCESS_SCOPES)
   @IsOptional()

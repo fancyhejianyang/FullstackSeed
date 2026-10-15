@@ -10,6 +10,10 @@ const visible = defineModel<boolean>("visible", { required: true });
 const loading = ref(false);
 const detail = ref<AgentApp | null>(null);
 
+function toolLabel(key: string) {
+  return key === "product.query" ? "产品/SKU 查询" : "受控新增 SKU";
+}
+
 watch(visible, async (value) => {
   if (!value) {
     detail.value = null;
@@ -47,13 +51,16 @@ watch(visible, async (value) => {
           model
         }}</el-tag>
       </el-descriptions-item>
-      <el-descriptions-item label="知识工作流">{{
-        detail?.workflowName || "-"
+      <el-descriptions-item label="知识增强">{{
+        detail?.workflowName || "关闭（纯模型对话）"
       }}</el-descriptions-item>
-      <el-descriptions-item label="工具白名单">
-        <el-tag v-for="key in detail?.toolKeys || []" :key="key" type="info">{{
-          key
-        }}</el-tag>
+      <el-descriptions-item label="业务工具">
+        <template v-if="detail?.toolKeys.length">
+          <el-tag v-for="key in detail.toolKeys" :key="key" type="info">{{
+            toolLabel(key)
+          }}</el-tag>
+        </template>
+        <span v-else>无</span>
       </el-descriptions-item>
       <el-descriptions-item label="人员范围">
         {{

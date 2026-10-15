@@ -90,6 +90,27 @@ describe('AgentWorkspaceService ownership and state guards', () => {
     expect(executionRepository.save).not.toHaveBeenCalled();
   });
 
+  it('treats normal answers as baseline model capability instead of a tool', () => {
+    const resolveBusinessToolKey = Reflect.get(
+      service,
+      'resolveBusinessToolKey',
+    ) as (action: string) => string | null;
+    const resolveExecutionToolKey = Reflect.get(
+      service,
+      'resolveExecutionToolKey',
+    ) as (action: string, app: { workflowId: number | null }) => string;
+
+    expect(resolveBusinessToolKey.call(service, 'answer')).toBeNull();
+    expect(resolveBusinessToolKey.call(service, 'clarify')).toBeNull();
+    expect(resolveBusinessToolKey.call(service, 'query')).toBe('product.query');
+    expect(
+      resolveExecutionToolKey.call(service, 'answer', { workflowId: null }),
+    ).toBe('model.chat');
+    expect(
+      resolveExecutionToolKey.call(service, 'answer', { workflowId: 3 }),
+    ).toBe('knowledge.answer');
+  });
+
   it('falls back through selected models in order until one succeeds', async () => {
     const session = {
       id: 9,
@@ -139,7 +160,7 @@ describe('AgentWorkspaceService ownership and state guards', () => {
         providerId: number;
         models: string[];
         maxToolCalls: number;
-        workflowId: number;
+        workflowId: number | null;
         responsibility: string;
         toolKeys: string[];
       };
@@ -154,9 +175,9 @@ describe('AgentWorkspaceService ownership and state guards', () => {
         providerId: 3,
         models: ['primary-model', 'fallback-model'],
         maxToolCalls: 5,
-        workflowId: 4,
+        workflowId: null,
         responsibility: '产品助手',
-        toolKeys: ['knowledge.answer'],
+        toolKeys: [],
       },
       execution,
       user: currentUser,
@@ -165,7 +186,11 @@ describe('AgentWorkspaceService ownership and state guards', () => {
     expect(knowledgeAiChatService.askForAgent).toHaveBeenCalledTimes(2);
     expect(knowledgeAiChatService.askForAgent).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({ providerId: 3, model: 'primary-model' }),
+      expect.objectContaining({
+        providerId: 3,
+        model: 'primary-model',
+        workflowId: undefined,
+      }),
       expect.any(Object),
     );
     expect(knowledgeAiChatService.askForAgent).toHaveBeenNthCalledWith(

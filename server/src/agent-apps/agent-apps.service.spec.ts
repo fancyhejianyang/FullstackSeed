@@ -29,8 +29,8 @@ describe('AgentAppsService access and tool policy', () => {
           {
             id: 1,
             name: '模型账号',
-            models: 'qwen-plus#通义千问 Plus',
-            textModels: 'qwen-plus#重复名称\ngpt-4o-mini#GPT-4o Mini',
+            models: 'qwen-image#图像模型',
+            textModels: 'qwen-plus#通义千问 Plus\ngpt-4o-mini#GPT-4o Mini',
             secretKeySet: true,
           },
         ],
@@ -80,7 +80,7 @@ describe('AgentAppsService access and tool policy', () => {
     );
   });
 
-  it('exposes enabled model accounts with complete de-duplicated model labels', async () => {
+  it('exposes text models instead of mixing generic non-chat models', async () => {
     await expect(service.getConfigurationOptions()).resolves.toEqual({
       providers: [
         {
@@ -96,6 +96,24 @@ describe('AgentAppsService access and tool policy', () => {
     });
   });
 
+  it('creates a pure model Agent without a workflow or business tools', async () => {
+    await expect(
+      service.create({
+        name: '通用助手',
+        responsibility: '进行日常对话',
+        providerId: 1,
+        models: ['qwen-plus'],
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        workflowId: null,
+        workflowName: null,
+        toolKeys: [],
+      }),
+    );
+    expect(workflows.findUsable).not.toHaveBeenCalled();
+  });
+
   it('requires an explicit write tool whenever the write switch is enabled', async () => {
     await expect(
       service.create({
@@ -104,7 +122,7 @@ describe('AgentAppsService access and tool policy', () => {
         providerId: 1,
         models: ['qwen-plus'],
         workflowId: 2,
-        toolKeys: ['knowledge.answer'],
+        toolKeys: [],
         writeEnabled: true,
       }),
     ).rejects.toBeInstanceOf(BadRequestException);

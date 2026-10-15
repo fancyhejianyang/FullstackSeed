@@ -265,11 +265,15 @@ onMounted(async () => {
           <span>{{ currentApp?.responsibility }}</span>
         </div>
         <div class="agent-workspace__capabilities">
+          <el-tag type="info">模型对话</el-tag>
+          <el-tag v-if="currentApp?.knowledgeEnabled" type="success">
+            知识增强
+          </el-tag>
           <el-tag
             v-for="key in currentApp?.toolKeys || []"
             :key="key"
             type="info"
-            >{{ key }}</el-tag
+            >{{ key === "product.query" ? "产品/SKU 查询" : "受控新增 SKU" }}</el-tag
           >
         </div>
       </header>

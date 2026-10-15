@@ -15,7 +15,7 @@ const columns: TableColumn[] = [
   { prop: "agentAppId", label: "Agent ID", width: 100 },
   { prop: "userId", label: "用户 ID", width: 100 },
   { prop: "sessionId", label: "会话 ID", width: 100 },
-  { prop: "toolKey", label: "工具", minWidth: 180 },
+  { prop: "toolKey", label: "执行能力", minWidth: 180, slot: true },
   { prop: "status", label: "状态", width: 120, slot: true },
   { prop: "parameterSummary", label: "参数摘要", minWidth: 260, slot: true },
   { prop: "result", label: "结果摘要", minWidth: 260, slot: true },
@@ -67,6 +67,16 @@ function statusType(status: AgentExecution["status"]) {
   if (["running", "submitting"].includes(status)) return "primary";
   return "info";
 }
+
+function toolLabel(toolKey: AgentExecution["toolKey"]) {
+  const labels: Record<AgentExecution["toolKey"], string> = {
+    "model.chat": "模型对话",
+    "knowledge.answer": "知识增强",
+    "product.query": "产品/SKU 查询",
+    "productSku.create": "受控新增 SKU",
+  };
+  return labels[toolKey];
+}
 </script>
 
 <template>
@@ -78,6 +88,9 @@ function statusType(status: AgentExecution["status"]) {
       :show-actions="false"
       :fit="false"
     >
+      <template #column-toolKey="{ row }">
+        {{ toolLabel(row.toolKey) }}
+      </template>
       <template #column-status="{ row }">
         <el-tag :type="statusType(row.status)">{{ row.status }}</el-tag>
       </template>

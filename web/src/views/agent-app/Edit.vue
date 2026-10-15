@@ -30,6 +30,7 @@ const options = ref<AgentConfigurationOptions>({
 const users = ref<UserItem[]>([]);
 
 type EditableForm = Omit<AgentAppForm, "allowedUserIds"> & {
+  knowledgeEnabled: boolean;
   allowedUserIds: Array<string | number>;
 };
 
@@ -38,8 +39,9 @@ const form = reactive<EditableForm>({
   responsibility: "",
   providerId: null,
   models: [],
+  knowledgeEnabled: false,
   workflowId: null,
-  toolKeys: ["knowledge.answer"],
+  toolKeys: [],
   accessScope: "all",
   allowedUserIds: [],
   isEnabled: true,
@@ -91,30 +93,47 @@ const fields = computed<FormField[]>(() => [
     hint: "按选择顺序调用：首个模型为主模型，失败时依次尝试后续模型，最多选择 5 个且受单轮工具上限约束。",
   },
   {
+    prop: "knowledgeEnabled",
+    label: "知识增强",
+    component: "Switch",
+    componentProps: {
+      activeText: "启用知识工作流",
+      inactiveText: "纯模型对话",
+    },
+    hint: "关闭时直接使用职责说明和模型进行对话；开启后才执行标准问答、术语校准和知识库检索。",
+  },
+  {
     prop: "workflowId",
     label: "知识工作流",
     type: "select",
+    placeholder: form.knowledgeEnabled
+      ? "请选择知识工作流"
+      : "请先开启知识增强",
     options: options.value.workflows.map((item) => ({
       label: item.name,
       value: item.id,
     })),
+    componentProps: { disabled: !form.knowledgeEnabled },
   },
   {
     prop: "toolKeys",
-    label: "工具白名单",
+    label: "业务工具（可选）",
     type: "selectMultiple",
     options: [
-      { label: "知识问答（knowledge.answer）", value: "knowledge.answer" },
       { label: "产品/SKU 查询（product.query）", value: "product.query" },
-      { label: "新增 SKU（productSku.create）", value: "productSku.create" },
+      {
+        label: "受控新增 SKU（productSku.create）",
+        value: "productSku.create",
+      },
     ],
-    hint: "查询与写入分开授权；新增 SKU 始终需要员工确认和 ProductSku.create 权限。",
+    hint: "不选择仍可进行模型对话；业务查询与写入分开授权，新增 SKU 始终需要员工确认和 ProductSku.create 权限。",
   },
   {
     prop: "writeEnabled",
     label: "写入总开关",
     component: "Switch",
     componentProps: { activeText: "允许受控录入", inactiveText: "仅只读" },
+    hint: "开启时会同步加入受控新增 SKU 工具；关闭时立即移除写入工具。",
   },
   {
     prop: "accessScope",
@@ -161,7 +180,7 @@ const fields = computed<FormField[]>(() => [
   },
 ]);
 
-const rules: FormRules = {
+const rules = computed<FormRules>(() => ({
   name: [{ required: true, message: "请输入 Agent 名称", trigger: "blur" }],
   responsibility: [
     { required: true, message: "请输入职责说明", trigger: "blur" },
@@ -179,12 +198,13 @@ const rules: FormRules = {
     },
   ],
   workflowId: [
-    { required: true, message: "请选择知识工作流", trigger: "change" },
+    {
+      required: form.knowledgeEnabled,
+      message: "请选择知识工作流",
+      trigger: "change",
+    },
   ],
-  toolKeys: [
-    { required: true, message: "请至少选择一项工具", trigger: "change" },
-  ],
-};
+}));
 
 function resetForm() {
   Object.assign(form, {
@@ -195,11 +215,9 @@ function resetForm() {
         ? options.value.providers[0].id
         : null,
     models: [],
-    workflowId:
-      options.value.workflows.length === 1
-        ? options.value.workflows[0].id
-        : null,
-    toolKeys: ["knowledge.answer"] as AgentToolKey[],
+    knowledgeEnabled: false,
+    workflowId: null,
+    toolKeys: [] as AgentToolKey[],
     accessScope: "all" as AgentAccessScope,
     allowedUserIds: [],
     isEnabled: true,
@@ -216,6 +234,7 @@ function fillForm(data: AgentApp) {
     responsibility: data.responsibility,
     providerId: data.providerId,
     models: [...data.models],
+    knowledgeEnabled: Boolean(data.workflowId),
     workflowId: data.workflowId,
     toolKeys: [...data.toolKeys],
     accessScope: data.accessScope,
@@ -241,12 +260,31 @@ watch(
 );
 
 watch(
+  () => form.knowledgeEnabled,
+  (enabled) => {
+    if (!enabled) {
+      form.workflowId = null;
+    } else if (!form.workflowId && options.value.workflows.length === 1) {
+      form.workflowId = options.value.workflows[0].id;
+    }
+  },
+);
+
+watch(
   () => form.writeEnabled,
   (enabled) => {
     const keys = new Set(form.toolKeys);
     if (enabled) keys.add("productSku.create");
     else keys.delete("productSku.create");
     form.toolKeys = Array.from(keys) as AgentToolKey[];
+  },
+);
+
+watch(
+  () => [...form.toolKeys],
+  (keys) => {
+    const enabled = keys.includes("productSku.create");
+    if (form.writeEnabled !== enabled) form.writeEnabled = enabled;
   },
 );
 
@@ -280,7 +318,10 @@ function buildPayload(): AgentAppForm {
     responsibility: form.responsibility.trim(),
     providerId: form.providerId ? Number(form.providerId) : null,
     models: [...form.models],
-    workflowId: form.workflowId ? Number(form.workflowId) : null,
+    workflowId:
+      form.knowledgeEnabled && form.workflowId
+        ? Number(form.workflowId)
+        : null,
     toolKeys: [...form.toolKeys],
     accessScope: form.accessScope,
     allowedUserIds:

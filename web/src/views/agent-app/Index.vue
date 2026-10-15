@@ -28,8 +28,8 @@ const columns: TableColumn[] = [
   { prop: "responsibility", label: "职责", minWidth: 240 },
   { prop: "providerName", label: "模型账号", minWidth: 160 },
   { prop: "models", label: "模型列表", minWidth: 240, slot: true },
-  { prop: "workflowName", label: "知识工作流", minWidth: 160 },
-  { prop: "toolKeys", label: "开放能力", minWidth: 260, slot: true },
+  { prop: "workflowName", label: "知识增强", minWidth: 180, slot: true },
+  { prop: "toolKeys", label: "业务工具", minWidth: 260, slot: true },
   { prop: "accessScope", label: "使用范围", width: 130, slot: true },
   { prop: "writeEnabled", label: "写入", width: 90, slot: true },
   { prop: "isEnabled", label: "状态", width: 90, slot: true },
@@ -76,6 +76,10 @@ function deleteRequest(row: AgentApp) {
 function batchDeleteRequest(payload: { ids: Array<string | number> }) {
   return batchDeleteAgentApps(payload.ids);
 }
+
+function toolLabel(key: string) {
+  return key === "product.query" ? "产品/SKU 查询" : "受控新增 SKU";
+}
 </script>
 
 <template>
@@ -102,9 +106,17 @@ function batchDeleteRequest(payload: { ids: Array<string | number> }) {
         >
       </template>
       <template #column-toolKeys="{ row }">
-        <el-tag v-for="key in row.toolKeys" :key="key" type="info">{{
-          key
-        }}</el-tag>
+        <template v-if="row.toolKeys.length">
+          <el-tag v-for="key in row.toolKeys" :key="key" type="info">{{
+            toolLabel(key)
+          }}</el-tag>
+        </template>
+        <span v-else>无</span>
+      </template>
+      <template #column-workflowName="{ row }">
+        <el-tag :type="row.workflowId ? 'success' : 'info'">
+          {{ row.workflowName || "纯模型对话" }}
+        </el-tag>
       </template>
       <template #column-models="{ row }">
         <el-tag v-for="model in row.models" :key="model" type="info">{{
