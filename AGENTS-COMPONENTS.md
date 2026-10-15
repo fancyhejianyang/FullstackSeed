@@ -182,8 +182,9 @@
 ### SelectMultiple
 
 - v-model：`string[]`
-- 常用 props：`options` / `maxTagCount` / `placeholder` / `clearable` / `filterable` / `debounce` / `virtual`
+- 常用 props：`options` / `maxTagCount` / `maxSelections` / `placeholder` / `clearable` / `filterable` / `debounce` / `virtual`
 - tag 超过 `maxTagCount` 后显示「显示更多 +N」，点击后换行展开，再点「收起」
+- `maxSelections` 默认 `0`（不限制）；大于 `0` 时限制实际选择数量，达到上限后已选项仍可取消、其他候选项禁用。`maxTagCount` 只控制 tag 展示数量，不能用于业务数量校验。
 
 ```ts
 {

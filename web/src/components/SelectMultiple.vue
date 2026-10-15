@@ -9,6 +9,7 @@
  * - 大数据默认启用虚拟滚动，只渲染可视窗口
  * - options 变化时重建一次 Map；tag 回显和缺失值兜底都复用该 Map
  * - tag 默认按 `maxTagCount` 折叠，点击“显示更多”后换行展开
+ * - `maxSelections` 大于 0 时限制实际可选数量，达到上限后禁用未选项
  * - 回显找不到值时显示 `#id`，方便定位字典数据是否缺失
  */
 import {
@@ -35,6 +36,7 @@ const props = withDefaults(
     itemHeight?: number;
     visibleCount?: number;
     maxTagCount?: number;
+    maxSelections?: number;
     notFoundText?: string;
   }>(),
   {
@@ -48,6 +50,7 @@ const props = withDefaults(
     itemHeight: 34,
     visibleCount: 8,
     maxTagCount: 3,
+    maxSelections: 0,
     notFoundText: '暂无匹配数据',
   },
 );
@@ -202,7 +205,7 @@ function toggleOpen() {
 }
 
 function toggleOption(option: SelectOption) {
-  if (option.disabled) return;
+  if (isOptionDisabled(option)) return;
   const next = new Set(selectedValues.value);
   if (next.has(option.value)) {
     next.delete(option.value);
@@ -211,6 +214,21 @@ function toggleOption(option: SelectOption) {
   }
   model.value = Array.from(next);
   emit('change', model.value);
+}
+
+function isOptionDisabled(option: SelectOption) {
+  return (
+    Boolean(option.disabled) ||
+    (props.maxSelections > 0 &&
+      selectedValues.value.length >= props.maxSelections &&
+      !selectedSet.value.has(option.value))
+  );
+}
+
+function getOptionTitle(option: SelectOption) {
+  return isOptionDisabled(option) && !option.disabled
+    ? `${option.text}（最多选择 ${props.maxSelections} 项）`
+    : option.text;
 }
 
 function removeValue(value: string, event: MouseEvent) {
@@ -397,10 +415,10 @@ watch(opened, async (value) => {
               :class="{
                 'is-selected': selectedSet.has(option.value),
                 'is-highlighted': visibleStart + index === highlightedIndex,
-                'is-disabled': option.disabled,
+                'is-disabled': isOptionDisabled(option),
               }"
               :style="{ height: `${props.itemHeight}px` }"
-              :title="option.text"
+              :title="getOptionTitle(option)"
               @mousedown.prevent="toggleOption(option)"
             >
               <span class="select-multiple__check">

@@ -85,6 +85,7 @@ const fields = computed<FormField[]>(() => [
     componentProps: {
       disabled: !form.providerId,
       maxTagCount: 5,
+      maxSelections: 5,
       visibleCount: 10,
     },
     hint: "按选择顺序调用：首个模型为主模型，失败时依次尝试后续模型，最多选择 5 个且受单轮工具上限约束。",
@@ -170,6 +171,12 @@ const rules: FormRules = {
   ],
   models: [
     { required: true, message: "请至少选择一个模型", trigger: "change" },
+    {
+      type: "array",
+      max: 5,
+      message: "模型列表最多选择 5 项",
+      trigger: "change",
+    },
   ],
   workflowId: [
     { required: true, message: "请选择知识工作流", trigger: "change" },

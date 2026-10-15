@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-10-15 修复 Agent 模型列表可超选五项
+
+- 新增文件 / 删除文件：无。
+- 修改文件：`web/src/components/SelectMultiple.vue`、`web/src/views/agent-app/Edit.vue`、`AGENTS-COMPONENTS.md`、`CHANGELOG.md`。
+- 原因：Agent 页面原先使用 `maxTagCount: 5`，该参数仅控制已选标签的折叠数量，不限制实际选择数量；选择超过五项后请求 `/api/agent-apps`，会被后端 `ArrayMaxSize(5)` 正常拒绝并返回 `models must contain no more than 5 elements`。
+- 修复：公共多选组件新增 `maxSelections`，达到上限后保留已选项的取消能力并禁用其他候选项；Agent 模型列表设置实际选择上限 5，并增加数组长度表单校验作为提交前兜底。后端最多五项的契约保持不变。
+- 验证：前端 `vue-tsc` 类型检查、Agent 编辑页及 SelectMultiple 组件复用扫描、`git diff --check` 通过；本次为前端缺陷修复，按项目规则未执行 build、未启动服务。
+
 ### 2026-10-15 调整 Agent 应用表单与直连模型配置
 
 - 新增文件：`server/src/migrations/1792051200000-UseDirectAgentModels.ts`；删除文件：无。
