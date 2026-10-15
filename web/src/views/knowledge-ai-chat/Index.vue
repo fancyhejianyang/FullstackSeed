@@ -124,7 +124,13 @@ onMounted(async () => {
 </script>
 
 <template>
-  <PageContainer title="AI 问答测试">
+  <PageContainer title="Agent 调试">
+    <el-alert
+      class="ai-chat-form__notice"
+      type="info"
+      :closable="false"
+      title="此入口用于管理员直接调试聊天配置与工作流；员工业务使用请进入 Agent 工作台。"
+    />
     <div class="ai-chat-form">
       <Form ref="formRef" v-model="form" :fields="fields" :rules="rules" label-width="90px" />
       <div class="ai-chat-form__actions">
@@ -151,6 +157,10 @@ onMounted(async () => {
 <style scoped>
 .ai-chat-form {
   width: 100%;
+}
+
+.ai-chat-form__notice {
+  margin-bottom: 18px;
 }
 
 .ai-chat-form__actions {

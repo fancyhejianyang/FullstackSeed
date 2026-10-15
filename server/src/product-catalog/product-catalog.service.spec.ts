@@ -172,4 +172,45 @@ describe('ProductCatalogService', () => {
     expect(fallbackProductKeywords('你们没有靠枕么？')).toEqual(['靠枕']);
     expect(sanitizeProductKeywords(['靠枕', '卷尺', '靠', '款式', '%'], question)).toEqual(['靠枕']);
   });
+
+  it('returns the previously created SKU for the same Agent operation key', async () => {
+    const existing = {
+      id: 88,
+      productId: 1,
+      skuCode: 'P1-001',
+      name: '蓝色',
+      specifications: { 颜色: '蓝色' },
+      isEnabled: true,
+      agentOperationKey: 'draft:1:key',
+    };
+    const getOne = jest.fn().mockResolvedValue(existing);
+    const builder = {
+      addSelect: jest.fn().mockReturnThis(),
+      withDeleted: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      getOne,
+    };
+    const save = jest.fn();
+    const transactionRepository = {
+      createQueryBuilder: jest.fn(() => builder),
+      save,
+    };
+    const idempotentSkuRepository = {
+      manager: {
+        transaction: async (run: (manager: { getRepository: () => typeof transactionRepository }) => unknown) =>
+          run({ getRepository: () => transactionRepository }),
+      },
+    };
+    const idempotentService = new ProductCatalogService(
+      productRepository as unknown as Repository<Product>,
+      idempotentSkuRepository as unknown as Repository<ProductSku>,
+    );
+    await expect(
+      idempotentService.createSkuFromAgent(
+        { productId: 1, specifications: { 颜色: '蓝色' } },
+        'draft:1:key',
+      ),
+    ).resolves.toBe(existing);
+    expect(save).not.toHaveBeenCalled();
+  });
 });

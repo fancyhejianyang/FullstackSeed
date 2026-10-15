@@ -34,6 +34,8 @@ const ADMIN_PERMISSION_MODULES = [
   'ProductSku',
   'ApprovalRequest',
   'CustomerService',
+  'AgentApp',
+  'AgentWorkspace',
   'User',
   'Role',
   'Permission',

@@ -21,4 +21,9 @@ export class ProductSku extends BaseEntity {
 
   @Column({ type: 'tinyint', default: true })
   isEnabled: boolean;
+
+  /** 内部 Agent 写入幂等键；普通 CRUD 不接收或展示此字段。 */
+  @Index('UQ_product_skus_agent_operation', { unique: true })
+  @Column({ type: 'varchar', length: 120, nullable: true, select: false })
+  agentOperationKey: string | null;
 }

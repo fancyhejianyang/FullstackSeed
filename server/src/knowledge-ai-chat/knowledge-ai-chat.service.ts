@@ -369,7 +369,20 @@ export class KnowledgeAiChatService {
     return this.withProgress(dto, (trackedDto) => this.askInternal(trackedDto));
   }
 
-  private async askInternal(dto: AskKnowledgeAiDto) {
+  /** 内部 Agent 专用入口：调用方提供已与用户权限求交集后的业务指令白名单。 */
+  async askForAgent(
+    dto: AskKnowledgeAiDto,
+    commandOptions: KnowledgeAiChatCommandOptions,
+  ) {
+    return this.withProgress(dto, (trackedDto) =>
+      this.askInternal(trackedDto, commandOptions),
+    );
+  }
+
+  private async askInternal(
+    dto: AskKnowledgeAiDto,
+    commandOptions?: KnowledgeAiChatCommandOptions,
+  ) {
     if (!dto.aiFeatureConfigId || !dto.workflowId) {
       throw new BadRequestException('AI 问答测试必须选择聊天配置和工作流');
     }
@@ -404,7 +417,12 @@ export class KnowledgeAiChatService {
       });
     }
     const business = await this.lookupBusinessData(
-      dto.question, standardQa, target, configuredTrace, workflow,
+      dto.question,
+      standardQa,
+      target,
+      configuredTrace,
+      workflow,
+      commandOptions,
     );
     const retrieval =
       standardQa.answer || !workflow.enableKnowledgeRetrieval

@@ -36,6 +36,7 @@ import { AiCommandDefinitionsModule } from './ai-command-definitions/ai-command-
 import { ApprovalRequestsModule } from './approval-requests/approval-requests.module';
 import { ProductCatalogModule } from './product-catalog/product-catalog.module';
 import { AiWorkflowsModule } from './ai-workflows/ai-workflows.module';
+import { AgentAppsModule } from './agent-apps/agent-apps.module';
 
 @Module({
   imports: [
@@ -127,6 +128,7 @@ import { AiWorkflowsModule } from './ai-workflows/ai-workflows.module';
     KnowledgeAiProvidersModule,
     AiFeatureConfigsModule,
     AiWorkflowsModule,
+    AgentAppsModule,
     KnowledgeRetrievalConfigsModule,
     KnowledgeRoutingRulesModule,
     KnowledgeStandardQasModule,

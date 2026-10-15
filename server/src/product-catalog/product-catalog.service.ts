@@ -190,13 +190,41 @@ export class ProductCatalogService {
     return this.saveSku(dto);
   }
 
+  async createSkuFromAgent(dto: CreateProductSkuDto, operationKey: string) {
+    return this.saveSku(dto, undefined, operationKey);
+  }
+
+  async findSkuByAgentOperationKey(operationKey: string) {
+    return this.skuRepository
+      .createQueryBuilder('sku')
+      .addSelect('sku.agentOperationKey')
+      .withDeleted()
+      .where('sku.agentOperationKey = :operationKey', { operationKey })
+      .getOne();
+  }
+
   async updateSku(id: number, dto: UpdateProductSkuDto) {
     return this.saveSku(dto, id);
   }
 
-  private async saveSku(dto: UpdateProductSkuDto, id?: number) {
+  private async saveSku(
+    dto: UpdateProductSkuDto,
+    id?: number,
+    agentOperationKey?: string,
+  ) {
     return this.skuRepository.manager.transaction(async (manager) => {
       const repository = manager.getRepository(ProductSku);
+      if (agentOperationKey) {
+        const completed = await repository
+          .createQueryBuilder('sku')
+          .addSelect('sku.agentOperationKey')
+          .withDeleted()
+          .where('sku.agentOperationKey = :agentOperationKey', {
+            agentOperationKey,
+          })
+          .getOne();
+        if (completed) return completed;
+      }
       const sku = id === undefined ? repository.create() : await repository.findOne({
         where: { id }, lock: { mode: 'pessimistic_write' },
       });
@@ -218,6 +246,9 @@ export class ProductCatalogService {
       if (dto.name !== undefined || id === undefined) sku.name = dto.name?.trim() ?? '';
       if (dto.specifications !== undefined) sku.specifications = dto.specifications;
       if (dto.isEnabled !== undefined || id === undefined) sku.isEnabled = dto.isEnabled ?? true;
+      if (agentOperationKey && id === undefined) {
+        sku.agentOperationKey = agentOperationKey;
+      }
       return repository.save(sku);
     });
   }

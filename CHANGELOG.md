@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-10-15 落地内部 Agent 查询与受控 SKU 录入闭环
+
+- 新增后端模块：`server/src/agent-apps/`，包含 Agent 应用配置、员工会话、结构化消息、版本化草稿、执行记录、动作协议、管理/工作台接口及单元测试；新增增量迁移 `server/src/migrations/1792047600000-CreateInternalAgentApps.ts`。
+- 新增前端：`web/src/api/agentApp.ts`、`web/src/api/agentWorkspace.ts`；`web/src/views/agent-app/` 管理与执行记录页面；`web/src/views/agent-workspace/` 会话工作台及查询卡、草稿卡、执行状态组件。
+- 修改后端：挂载 `AgentAppsModule`；新增 `AgentApp.*`、`AgentWorkspace.*` 管理权限模块与菜单；知识问答增加仅供内部 Agent 使用的服务端业务指令白名单；SKU 增加不向普通 DTO 暴露的 `agentOperationKey` 唯一幂等键及结果核实能力；产品查询复用现有部分匹配和候选逻辑。
+- 修改前端：新增 Agent 工作台、应用管理和执行记录路由；原“AI 问答测试”改为管理员“Agent 调试”入口并保留历史记录；员工不再选择模型或工作流。
+- 安全闭环：有效能力取 Agent 工具白名单、员工业务权限和服务端会话归属的交集；自然语言只生成 `answer/query/clarify/prepare_write` 动作，SKU 必须先形成持久化草稿，再以当前版本和幂等键确认。重复请求复用同一 SKU；超时可按请求号核实；已成功执行不会被停止动作改写为取消。
+- 工作台：支持 Agent 切换、新建/搜索/恢复本人会话、完整消息流、产品/SKU 候选、自然语言补充和 Form 手工编辑同一草稿、确认/取消、回执、执行状态及窄屏布局；请求版本隔离切换会话后的迟到响应，中文输入法组合态不触发发送。
+- 计划状态：更新 `MD/内部Agent应用改造计划.md`，T01～T11 标记完成，T12 标记为自动化完成、待目标环境验收；补充已落地字段、状态、权限、接口和自测记录。
+- 删除文件：无。
+- 验证：TypeORM 实体列检查、新增 Agent 后端文件 ESLint、后端 TypeScript/NestJS build、前端 `vue-tsc` 与 Vite 生产构建、前端组件复用扫描均通过；后端全量 22 个测试套件、139 项测试通过。未执行目标数据库迁移，未连接真实模型账号，未启动常驻服务或进行浏览器人工验收。
+
 ### 2026-10-14 归档内部 Agent 应用改造计划
 
 - 新增文件：`MD/内部Agent应用改造计划.md`。

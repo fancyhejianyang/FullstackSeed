@@ -20,6 +20,14 @@ type SeedMenu = Partial<Menu> & { parentPath?: string };
 // isSystem=true 为系统固定菜单：仅超管可见、不可分配给角色；业务菜单 isSystem=false 可分配。
 const SEED_MENUS: SeedMenu[] = [
   {
+    name: 'Agent 工作台',
+    path: '/agent-workspace',
+    icon: 'MagicStick',
+    sort: 72,
+    permissionCode: 'AgentWorkspace.read',
+    isSystem: false,
+  },
+  {
     name: '客服工作台',
     path: '/customer-service',
     icon: 'Service',
@@ -170,11 +178,29 @@ const SEED_MENUS: SeedMenu[] = [
     parentPath: '/system-config',
   },
   {
-    name: 'AI 问答测试',
+    name: 'Agent 调试',
     path: '/chat-management/ai-chat',
     icon: '',
     sort: 10,
     permissionCode: 'Menu.read',
+    isSystem: true,
+    parentPath: '/chat-management',
+  },
+  {
+    name: 'Agent 应用管理',
+    path: '/chat-management/agent-apps',
+    icon: '',
+    sort: 15,
+    permissionCode: 'AgentApp.read',
+    isSystem: true,
+    parentPath: '/chat-management',
+  },
+  {
+    name: 'Agent 执行记录',
+    path: '/chat-management/agent-executions',
+    icon: '',
+    sort: 17,
+    permissionCode: 'AgentApp.read',
     isSystem: true,
     parentPath: '/chat-management',
   },

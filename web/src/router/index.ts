@@ -21,6 +21,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '首页' },
       },
       {
+        path: 'agent-workspace',
+        name: 'agent-workspace',
+        component: () => import('@/views/agent-workspace/Index.vue'),
+        meta: { title: 'Agent 工作台', permission: 'AgentWorkspace.read' },
+      },
+      {
         path: 'demo',
         name: 'demo',
         component: () => import('@/views/demo/Index.vue'),
@@ -126,7 +132,19 @@ const routes: RouteRecordRaw[] = [
         path: 'chat-management/ai-chat',
         name: 'chat-management-ai-chat',
         component: () => import('@/views/knowledge-ai-chat/Index.vue'),
-        meta: { title: 'AI 问答测试', permission: 'Menu.read' },
+        meta: { title: 'Agent 调试', permission: 'Menu.read' },
+      },
+      {
+        path: 'chat-management/agent-apps',
+        name: 'chat-management-agent-apps',
+        component: () => import('@/views/agent-app/Index.vue'),
+        meta: { title: 'Agent 应用管理', permission: 'AgentApp.read' },
+      },
+      {
+        path: 'chat-management/agent-executions',
+        name: 'chat-management-agent-executions',
+        component: () => import('@/views/agent-app/Records.vue'),
+        meta: { title: 'Agent 执行记录', permission: 'AgentApp.read' },
       },
       {
         path: 'business-data/products',
@@ -204,7 +222,7 @@ const routes: RouteRecordRaw[] = [
         path: 'system-config/ai-chat',
         name: 'system-config-ai-chat',
         component: () => import('@/views/knowledge-ai-chat/Index.vue'),
-        meta: { title: 'AI 问答测试', permission: 'Menu.read' },
+        meta: { title: 'Agent 调试', permission: 'Menu.read' },
       },
       {
         path: 'system-config/ai-record',
