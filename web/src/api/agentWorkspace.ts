@@ -27,6 +27,23 @@ export type AgentExecutionToolKey =
   | "knowledge.answer"
   | AgentToolKey;
 
+export type AgentProgressStage =
+  | "understanding"
+  | "querying"
+  | "retrieving"
+  | "preparing_draft"
+  | "generating"
+  | "summarizing";
+
+export interface AgentExecutionProgress {
+  executionId: number;
+  requestId: string;
+  sessionId: number;
+  status: AgentExecutionStatus;
+  stage: AgentProgressStage | null;
+  startedAt: string | null;
+}
+
 export interface AvailableAgentApp {
   id: number;
   name: string;
@@ -269,6 +286,13 @@ export function getAgentExecution(id: number) {
 export function getAgentExecutionByRequest(requestId: string) {
   return request.get<unknown, AgentExecution>(
     `/agent-workspace/executions/request/${encodeURIComponent(requestId)}`,
+  );
+}
+
+export function getAgentExecutionProgress(requestId: string) {
+  return request.get<unknown, AgentExecutionProgress | null>(
+    `/agent-workspace/executions/progress/${encodeURIComponent(requestId)}`,
+    { timeout: 5000, silentError: true },
   );
 }
 

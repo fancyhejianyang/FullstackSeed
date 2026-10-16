@@ -179,6 +179,7 @@ describe('KnowledgeAiChatService', () => {
       providers as unknown as KnowledgeAiProvidersService,
       commands as unknown as KnowledgeAiChatCommandService,
     );
+    const onStage = jest.fn<Promise<void>, [string]>().mockResolvedValue(undefined);
     const result = await directService.askForAgent(
       {
         providerId: 3,
@@ -187,6 +188,7 @@ describe('KnowledgeAiChatService', () => {
         systemPrompt: '你是纯聊天助手。',
       },
       { allowedCommandKeys: [] },
+      onStage,
     );
 
     expect(result.message).toEqual(
@@ -199,6 +201,10 @@ describe('KnowledgeAiChatService', () => {
     expect(commands.searchStandardQa).not.toHaveBeenCalled();
     expect(commands.rewriteColloquialQuestion).not.toHaveBeenCalled();
     expect(commands.lookupProductSku).not.toHaveBeenCalled();
+    expect(onStage.mock.calls.map(([name]) => name)).toEqual([
+      '加载模型与执行配置',
+      '模型生成回答',
+    ]);
     expect(providers.callChat).toHaveBeenCalledWith(
       expect.objectContaining({
         messages: [

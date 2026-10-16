@@ -53,6 +53,13 @@ function harness() {
     create: jest.fn((value: Partial<AgentDraft>) => ({ ...value, id: 4 })),
   };
   const executions = {
+    update: jest.fn(
+      (where: Record<string, unknown>, value: Partial<AgentExecution>) => {
+        const run = runs.find((item) => matches(item, { where }));
+        if (run) Object.assign(run, value);
+        return Promise.resolve({ affected: run ? 1 : 0 });
+      },
+    ),
     findOne: jest.fn((query: { where: Record<string, unknown> }) =>
       Promise.resolve(runs.find((run) => matches(run, query)) ?? null),
     ),
@@ -311,6 +318,11 @@ describe('generic Agent workflow and confirmation', () => {
         '{"kind":"tool","toolKey":"demo.list","parameters":{"keyword":"任务"}}',
     });
     const query = await process.call(h.service, params);
+    expect(
+      h.executions.update.mock.calls.map(
+        ([, value]) => value.parameterSummary?.progressStage,
+      ),
+    ).toEqual(['understanding', 'querying']);
     expect(h.business.query).toHaveBeenCalledWith(
       'demo.list',
       { keyword: '任务' },
@@ -331,6 +343,16 @@ describe('generic Agent workflow and confirmation', () => {
     });
     expect(create.draft?.data).toEqual({ title: '新任务' });
     expect(create.execution.status).toBe('waiting_confirmation');
+    expect(
+      h.executions.update.mock.calls.map(
+        ([, value]) => value.parameterSummary?.progressStage,
+      ),
+    ).toEqual([
+      'understanding',
+      'querying',
+      'understanding',
+      'preparing_draft',
+    ]);
     expect(h.business.create).not.toHaveBeenCalled();
   });
 });

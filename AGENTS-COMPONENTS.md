@@ -319,6 +319,7 @@
 - 响应拦截：`{ statusCode, data, success, message }` 中的 `data` 已被拆包，**页面拿到的直接是业务数据**
 - 请求拦截：token 存在时自动 `Authorization: Bearer <token>`
 - 401：清空登录态并跳登录页
+- 后台进度轮询可传 `silentError: true`，由调用方展示降级提示，避免网络异常反复弹错；普通请求默认保持原错误提示，401 不静默。
 
 ## 权限工具（`utils/permission.ts`）
 

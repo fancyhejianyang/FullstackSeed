@@ -17,6 +17,10 @@ import { AgentApp } from './entities/agent-app.entity';
 import { classifyAgentAction } from './agent-action';
 import type { AgentBusinessService } from './agent-business.service';
 import type { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
+import {
+  knowledgeStageToAgentProgress,
+  type AgentProgressStage,
+} from './agent-progress';
 
 const currentUser: AuthUser = {
   userId: 10,
@@ -46,6 +50,7 @@ describe('AgentWorkspaceService ownership and state guards', () => {
   const executionRepository = {
     findOne: jest.fn(),
     save: jest.fn(),
+    update: jest.fn().mockResolvedValue({ affected: 1 }),
   };
   const knowledgeAiChatService = {
     askForAgent: jest.fn(),
@@ -67,10 +72,105 @@ describe('AgentWorkspaceService ownership and state guards', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    executionRepository.update.mockResolvedValue({ affected: 1 });
     appsService.getExecutableToolKeys.mockResolvedValue([
       'product.query',
       'productSku.create',
     ]);
+  });
+
+  it('returns null for missing or foreign progress without exposing execution data', async () => {
+    executionRepository.findOne.mockResolvedValue(null);
+    await expect(
+      service.findExecutionProgress('message:1:abc', currentUser),
+    ).resolves.toBeNull();
+    expect(executionRepository.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { requestId: 'message:1:abc', userId: currentUser.userId },
+      }),
+    );
+    expect(executionRepository.save).not.toHaveBeenCalled();
+    expect(executionRepository.update).not.toHaveBeenCalled();
+  });
+
+  it('projects only safe stage fields and hides stale stages on completed executions', async () => {
+    const execution = {
+      id: 7,
+      requestId: 'message:1:abc',
+      sessionId: 1,
+      status: 'running',
+      startedAt: new Date(),
+      parameterSummary: { progressStage: 'querying', fields: ['secret'] },
+      result: { privateData: true },
+      errorMessage: 'internal error',
+    };
+    executionRepository.findOne.mockResolvedValue(execution);
+    expect(
+      await service.findExecutionProgress(execution.requestId, currentUser),
+    ).toEqual({
+      executionId: 7,
+      requestId: execution.requestId,
+      sessionId: 1,
+      status: 'running',
+      startedAt: execution.startedAt,
+      stage: 'querying',
+    });
+    for (const status of [
+      'cancelled',
+      'failed',
+      'succeeded',
+      'waiting_input',
+      'waiting_confirmation',
+    ]) {
+      execution.status = status;
+      expect(
+        (await service.findExecutionProgress(execution.requestId, currentUser))
+          ?.stage,
+      ).toBeNull();
+    }
+    execution.status = 'running';
+    execution.parameterSummary.progressStage = 'unrecognized';
+    expect(
+      (await service.findExecutionProgress(execution.requestId, currentUser))
+        ?.stage,
+    ).toBeNull();
+    expect(executionRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('updates stages conditionally without overwriting status and rejects a stopped execution', async () => {
+    const reportProgress = Reflect.get(service, 'reportProgress') as (
+      execution: AgentExecution,
+      stage: AgentProgressStage,
+    ) => Promise<void>;
+    const execution = Object.assign(new AgentExecution(), {
+      id: 7,
+      userId: 10,
+      status: 'running',
+      parameterSummary: { action: 'query' },
+    });
+    await reportProgress.call(service, execution, 'querying');
+    expect(executionRepository.update).toHaveBeenCalledWith(
+      { id: 7, userId: 10, status: 'running' },
+      { parameterSummary: { action: 'query', progressStage: 'querying' } },
+    );
+    await reportProgress.call(service, execution, 'querying');
+    expect(executionRepository.update).toHaveBeenCalledTimes(1);
+    executionRepository.update.mockResolvedValueOnce({ affected: 0 });
+    await expect(
+      reportProgress.call(service, execution, 'generating'),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(execution.parameterSummary?.progressStage).toBe('querying');
+    expect(executionRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('maps only real knowledge stages to public operation labels', () => {
+    expect(knowledgeStageToAgentProgress('产品关键词提炼')).toBe(
+      'understanding',
+    );
+    expect(knowledgeStageToAgentProgress('业务数据查询')).toBe('querying');
+    expect(knowledgeStageToAgentProgress('文本与向量召回')).toBe('retrieving');
+    expect(knowledgeStageToAgentProgress('模型生成回答')).toBe('generating');
+    expect(knowledgeStageToAgentProgress('回答依据摘要')).toBe('summarizing');
   });
 
   it('queries sessions with the authenticated user id and hides foreign sessions', async () => {
@@ -229,11 +329,13 @@ describe('AgentWorkspaceService ownership and state guards', () => {
         workflowId: undefined,
       }),
       expect.any(Object),
+      expect.any(Function),
     );
     expect(knowledgeAiChatService.askForAgent).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({ providerId: 3, model: 'fallback-model' }),
       expect.any(Object),
+      expect.any(Function),
     );
     expect(execution.status).toBe('succeeded');
     expect(execution.toolCallCount).toBe(2);

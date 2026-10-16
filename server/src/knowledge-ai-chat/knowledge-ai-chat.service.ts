@@ -132,6 +132,7 @@ export class KnowledgeAiChatService {
     sessionId: number;
     sessionCriteria: { id: number; serviceStatus?: 'ai'; serviceVersion?: number };
     trace: KnowledgeAiProcessingTrace;
+    onStage?: (name: string) => Promise<void>;
   }>();
 
   constructor(
@@ -176,6 +177,7 @@ export class KnowledgeAiChatService {
   private async withProgress<T>(
     dto: AskKnowledgeAiDto,
     run: (dto: AskKnowledgeAiDto) => Promise<T>,
+    onStage?: (name: string) => Promise<void>,
   ): Promise<T> {
     this.assertExecutionCurrent();
     const session = dto.sessionId
@@ -257,7 +259,13 @@ export class KnowledgeAiChatService {
       errorMessage: '处理中',
     });
     return this.activeTrace.run(
-      { messageId: message.id, sessionId: session.id, sessionCriteria: this.sessionProgressCriteria(session), trace },
+      {
+        messageId: message.id,
+        sessionId: session.id,
+        sessionCriteria: this.sessionProgressCriteria(session),
+        trace,
+        onStage,
+      },
       async () => {
         try {
           await this.recordStage('加载模型与执行配置');
@@ -308,6 +316,7 @@ export class KnowledgeAiChatService {
     this.assertExecutionCurrent();
     const active = this.activeTrace.getStore();
     if (!active?.trace.execution) return;
+    await active.onStage?.(name);
     this.finishStage('success');
     const execution = active.trace.execution;
     execution.status = 'running';
@@ -373,6 +382,7 @@ export class KnowledgeAiChatService {
   async askForAgent(
     dto: AskKnowledgeAiDto,
     commandOptions: KnowledgeAiChatCommandOptions,
+    onStage?: (name: string) => Promise<void>,
   ) {
     if (!dto.providerId || !dto.model) {
       throw new BadRequestException('内部 Agent 必须指定模型账号和模型');
@@ -381,10 +391,13 @@ export class KnowledgeAiChatService {
       dto.workflowId,
       commandOptions,
     );
-    return this.withProgress(dto, (trackedDto) =>
-      this.askInternal(trackedDto, resolvedCommandOptions, {
-        directTarget: true,
-      }),
+    return this.withProgress(
+      dto,
+      (trackedDto) =>
+        this.askInternal(trackedDto, resolvedCommandOptions, {
+          directTarget: true,
+        }),
+      onStage,
     );
   }
 

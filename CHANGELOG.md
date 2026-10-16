@@ -1,5 +1,18 @@
 # CHANGELOG
 
+### 2026-10-16 Agent 对话真实阶段动态提示
+
+- 新增文件：`server/src/agent-apps/agent-progress.ts`；`web/src/views/agent-workspace/agentProgress.ts`、`agentProgress.test.mjs`、`components/AgentProcessingIndicator.vue`。
+- 修改后端：`server/src/agent-apps/agent-workspace.controller.ts`、`agent-workspace.service.ts`、`agent-workspace.service.spec.ts`、`agent-business-workspace.spec.ts`；`server/src/knowledge-ai-chat/knowledge-ai-chat.service.ts`、`knowledge-ai-chat.service.spec.ts`。
+- 修改前端与文档：`web/src/api/agentWorkspace.ts`、`web/src/utils/request.ts`、`web/src/views/agent-workspace/Index.vue`、`components/AgentMessageList.vue`；`.design-spec.md`、`AGENTS-COMPONENTS.md`、本文件。删除文件：无。
+- 现象与原因：用户问题已乐观显示在主界面，但同步消息接口等待整轮执行结束后才返回助手消息，期间对话区域没有明确的处理反馈。
+- 体验：在对应问题下增加临时助手行，显示动态跳点、等待秒数及真实阶段：理解需求、搜索业务数据、检索参考资料、整理录入草稿、思考并生成回答、整理回答依据。完成后由正式消息接替；停止后收起。快速阶段允许跳过展示，不人为延迟回答，也不按计时器轮播虚构搜索或暴露内部思维链。动效支持减少动态效果设置。
+- 前后端契约：新增只读 `GET /agent-workspace/executions/progress/:requestId`，返回 `AgentExecutionProgress { executionId, requestId, sessionId, status, stage, startedAt } | null`；本人且拥有工作台权限才可读取，未建立/非本人记录统一 null，不触发写入结果核实。仅投影安全阶段码，不下发参数、结果、错误细节。阶段保存在已有 `parameterSummary.progressStage`，无新表/列或迁移；阶段条件更新只作用于 running 记录，不覆盖取消、失败和成功状态。
+- 后端衔接：通用业务、原产品/SKU 路径在真实操作边界更新阶段；问答入口通过独立异步上下文传递可选阶段回调，外部客服原流程不受影响。完成/失败/取消/待补充/待确认状态不再返回运行阶段。
+- 轮询生命周期：当前请求约每 1.2 秒读取一次，单请求不重叠；完成、停止或卸载后清理，代次校验丢弃旧请求迟到响应。网络失败静默降级并退避重试，连续三次失败停止轮询，不影响实际消息接口；共享请求封装增加默认关闭的 `silentError`，401 仍使用统一处理。
+- 验证：后端全量 26 套件 / 211 项测试、前端纯函数与轮询 8 项测试、前后端生产源码及变更后端测试类型检查、Agent 变更文件 ESLint、前后端生产构建、组件复用只读检查与 `git diff --check`。前端构建授权后通过（沙箱阻止 esbuild 子进程），仅有既有第三方 Rollup 注释警告；前端测试采用 Node 同进程测试模式避开沙箱子进程限制。
+- 验证边界：未启动常驻服务、未连接真实模型/数据库、未做浏览器人工验收；不修改业务授权、应用配置、写入确认或提交幂等流程。更新前后端即可生效，无数据库结构变更。
+
 ### 2026-10-16 统一接入普通业务与知识内容 Agent 工具
 
 - 新增文件：`server/src/agent-apps/agent-business.registry.ts`、`agent-business.service.ts`、`agent-business-plan.ts`、`agent-business.service.spec.ts`、`agent-business-workspace.spec.ts`；`web/src/views/agent-workspace/components/AgentBusinessQueryCard.vue`；`MD/Agent业务模块接入说明.md`。

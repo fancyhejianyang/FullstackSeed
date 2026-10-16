@@ -111,6 +111,15 @@ export class AgentWorkspaceController {
     return this.service.findExecutionByRequest(requestId, user);
   }
 
+  @Get('executions/progress/:requestId')
+  @ApiOperation({ summary: '只读查询本人消息执行阶段，未建立记录返回 null' })
+  findExecutionProgress(
+    @Param('requestId') requestId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.findExecutionProgress(requestId, user);
+  }
+
   @Get('executions/:id')
   @ApiOperation({ summary: '查询本人执行记录' })
   findExecution(

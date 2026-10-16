@@ -2,6 +2,13 @@ import axios from 'axios';
 import type { AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { ElMessage } from 'element-plus';
 
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    /** 后台进度查询可静默降级；401 仍按统一登录失效逻辑处理。 */
+    silentError?: boolean;
+  }
+}
+
 /**
  * 后端统一响应结构（与 NestJS TransformInterceptor 对齐）
  */
@@ -39,7 +46,7 @@ service.interceptors.response.use(
       if (res.success) {
         return res.data as unknown as AxiosResponse;
       }
-      ElMessage.error(res.message || '请求失败');
+      if (!response.config.silentError) ElMessage.error(res.message || '请求失败');
       return Promise.reject(new Error(res.message || 'Error'));
     }
     // 非统一结构时直接返回原始数据
@@ -50,7 +57,7 @@ service.interceptors.response.use(
     if (status === 401) {
       localStorage.removeItem('token');
       ElMessage.error('登录已过期，请重新登录');
-    } else {
+    } else if (!error?.config?.silentError) {
       ElMessage.error(error?.response?.data?.message || error.message || '网络错误');
     }
     return Promise.reject(error);

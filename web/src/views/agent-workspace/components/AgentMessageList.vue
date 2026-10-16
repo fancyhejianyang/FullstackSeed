@@ -10,6 +10,7 @@ import AgentDraftCard from "./AgentDraftCard.vue";
 import AgentExecutionStatus from "./AgentExecutionStatus.vue";
 import AgentQueryCard from "./AgentQueryCard.vue";
 import AgentBusinessQueryCard from "./AgentBusinessQueryCard.vue";
+import AgentProcessingIndicator from "./AgentProcessingIndicator.vue";
 
 const props = defineProps<{
   agentName: string;
@@ -25,6 +26,11 @@ const props = defineProps<{
   executions: AgentExecution[];
   products: ProductOption[];
   busy?: boolean;
+  processing?: {
+    clientMessageId: string;
+    text: string;
+    startedAt: string;
+  } | null;
 }>();
 const emit = defineEmits<{
   updateDraft: [draft: AgentDraft, data: AgentDraft["data"]];
@@ -71,6 +77,7 @@ watch(
   () => [
     props.messages[props.messages.length - 1]?.id ?? 0,
     props.drafts.map((item) => item.version).join(","),
+    props.processing?.clientMessageId,
   ],
   async () => {
     await nextTick();
@@ -113,69 +120,85 @@ watch(
       </div>
     </div>
     <div v-else class="message-list__content">
-      <div
-        v-for="message in messages"
-        :key="message.id"
-        class="message-list__item"
-        :class="`is-${message.role}`"
-      >
-        <div class="message-list__role">
-          <el-icon v-if="message.role === 'user'"><UserFilled /></el-icon>
-          <el-icon v-else><MagicStick /></el-icon>
-        </div>
-        <div class="message-list__body">
-          <div class="message-list__author">
-            {{ message.role === "user" ? "我" : agentName }}
+      <template v-for="message in messages" :key="message.id">
+        <div class="message-list__item" :class="`is-${message.role}`">
+          <div class="message-list__role">
+            <el-icon v-if="message.role === 'user'"><UserFilled /></el-icon>
+            <el-icon v-else><MagicStick /></el-icon>
           </div>
-          <template v-if="showDraftCard(message) && draftFor(message)">
+          <div class="message-list__body">
+            <div class="message-list__author">
+              {{ message.role === "user" ? "我" : agentName }}
+            </div>
+            <template v-if="showDraftCard(message) && draftFor(message)">
+              <div
+                v-if="message.messageType === 'draft' && message.content"
+                class="message-list__bubble"
+              >
+                {{ message.content }}
+              </div>
+              <AgentDraftCard
+                :draft="draftFor(message)!"
+                :products="products"
+                :busy="busy"
+                @update="forwardDraftUpdate"
+                @confirm="emit('confirmDraft', $event)"
+                @cancel="emit('cancelDraft', $event)"
+              />
+            </template>
+            <AgentBusinessQueryCard
+              v-else-if="message.structuredData?.businessResult"
+              :result="message.structuredData.businessResult"
+            />
+            <AgentQueryCard
+              v-else-if="message.messageType === 'query_result'"
+              :context="message.structuredData?.context"
+              :detail-path="message.structuredData?.detailPath"
+            />
             <div
-              v-if="message.messageType === 'draft' && message.content"
+              v-else
               class="message-list__bubble"
+              :class="{ 'is-error': message.messageType === 'error' }"
             >
               {{ message.content }}
+              <div
+                v-if="message.structuredData?.sourceNames"
+                class="message-list__sources"
+              >
+                <el-icon><Document /></el-icon>
+                来源：{{ message.structuredData.sourceNames }}
+              </div>
             </div>
-            <AgentDraftCard
-              :draft="draftFor(message)!"
-              :products="products"
-              :busy="busy"
-              @update="forwardDraftUpdate"
-              @confirm="emit('confirmDraft', $event)"
-              @cancel="emit('cancelDraft', $event)"
+            <AgentExecutionStatus
+              v-if="message.role !== 'user' && executionFor(message)"
+              class="message-list__status"
+              :status="executionFor(message)!.status"
+              :tool-key="executionFor(message)!.toolKey"
+              :result="executionFor(message)!.result"
+              :error-message="executionFor(message)!.errorMessage"
             />
-          </template>
-          <AgentBusinessQueryCard
-            v-else-if="message.structuredData?.businessResult"
-            :result="message.structuredData.businessResult"
-          />
-          <AgentQueryCard
-            v-else-if="message.messageType === 'query_result'"
-            :context="message.structuredData?.context"
-            :detail-path="message.structuredData?.detailPath"
-          />
-          <div
-            v-else
-            class="message-list__bubble"
-            :class="{ 'is-error': message.messageType === 'error' }"
-          >
-            {{ message.content }}
-            <div
-              v-if="message.structuredData?.sourceNames"
-              class="message-list__sources"
-            >
-              <el-icon><Document /></el-icon>
-              来源：{{ message.structuredData.sourceNames }}
-            </div>
           </div>
-          <AgentExecutionStatus
-            v-if="message.role !== 'user' && executionFor(message)"
-            class="message-list__status"
-            :status="executionFor(message)!.status"
-            :tool-key="executionFor(message)!.toolKey"
-            :result="executionFor(message)!.result"
-            :error-message="executionFor(message)!.errorMessage"
-          />
         </div>
-      </div>
+        <div
+          v-if="
+            processing &&
+            message.role === 'user' &&
+            message.clientMessageId === processing.clientMessageId
+          "
+          class="message-list__item is-assistant"
+        >
+          <div class="message-list__role">
+            <el-icon><MagicStick /></el-icon>
+          </div>
+          <div class="message-list__body">
+            <div class="message-list__author">{{ agentName }}</div>
+            <AgentProcessingIndicator
+              :text="processing.text"
+              :started-at="processing.startedAt"
+            />
+          </div>
+        </div>
+      </template>
     </div>
   </div>
 </template>

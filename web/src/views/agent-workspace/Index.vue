@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { ElMessage } from "element-plus";
 import PageContainer from "@/components/PageContainer.vue";
 import Button from "@/components/Button.vue";
@@ -13,6 +13,7 @@ import {
   confirmAgentDraft,
   createAgentSession,
   getAgentExecutionByRequest,
+  getAgentExecutionProgress,
   getAgentSession,
   getAgentSessions,
   getAvailableAgentApps,
@@ -20,12 +21,14 @@ import {
   stopAgentExecution,
   updateAgentDraft,
   type AgentDraft,
+  type AgentExecutionProgress,
   type AgentMessage,
   type AgentSession,
   type AgentSessionDetail,
   type AvailableAgentApp,
 } from "@/api/agentWorkspace";
 import AgentMessageList from "./components/AgentMessageList.vue";
+import { agentProgressText, createAgentProgressPoller } from "./agentProgress";
 
 interface AgentPromptSuggestion {
   kind: "chat" | "query" | "write";
@@ -62,6 +65,20 @@ const actionBusy = ref(false);
 const isComposing = ref(false);
 const activeRequestId = ref("");
 const pendingMessages = ref<PendingAgentMessage[]>([]);
+const executionProgress = ref<AgentExecutionProgress | null>(null);
+const progressUnavailable = ref(false);
+const processingStartedAt = ref("");
+let disposed = false;
+const progressPoller = createAgentProgressPoller({
+  fetchProgress: getAgentExecutionProgress,
+  onProgress(progress) {
+    executionProgress.value = progress;
+    progressUnavailable.value = false;
+  },
+  onUnavailable() {
+    progressUnavailable.value = true;
+  },
+});
 let requestVersion = 0;
 let localMessageId = -1;
 let queueProcessing = false;
@@ -87,6 +104,29 @@ const composerPendingMessages = computed(() =>
   activePendingMessages.value.filter((item) => item.status !== "sending"),
 );
 const hasPendingMessages = computed(() => pendingMessages.value.length > 0);
+const processingMessage = computed(() => {
+  const item = activePendingMessages.value.find(
+    (message) =>
+      message.status === "sending" &&
+      message.requestId === activeRequestId.value,
+  );
+  if (!item || executionProgress.value?.status === "cancelled") return null;
+  // 正式回答已同步时立即移除临时提示，不与完成消息并排出现。
+  if (
+    executionProgress.value &&
+    activeSession.value?.messages.some(
+      (message) =>
+        message.role === "assistant" &&
+        message.executionId === executionProgress.value?.executionId,
+    )
+  )
+    return null;
+  return {
+    clientMessageId: item.clientMessageId,
+    text: agentProgressText(executionProgress.value, progressUnavailable.value),
+    startedAt: executionProgress.value?.startedAt || processingStartedAt.value,
+  };
+});
 const visibleMessages = computed<AgentMessage[]>(() => {
   if (!activeSession.value) return [];
   const serverMessages = activeSession.value.messages;
@@ -262,25 +302,41 @@ async function send() {
 }
 
 async function processMessageQueue() {
-  if (queueProcessing) return;
+  if (queueProcessing || disposed) return;
   queueProcessing = true;
   try {
     let item = pendingMessages.value.find(
       (message) => message.status === "queued",
     );
-    while (item) {
+    while (item && !disposed) {
       item.status = "sending";
       item.errorMessage = undefined;
       sending.value = true;
       activeRequestId.value = item.requestId;
+      executionProgress.value = null;
+      progressUnavailable.value = false;
+      processingStartedAt.value = new Date().toISOString();
+      progressPoller.start(item.requestId);
       let accepted = false;
       try {
-        await sendAgentMessage(item.sessionId, {
+        const result = await sendAgentMessage(item.sessionId, {
           content: item.content,
           clientMessageId: item.clientMessageId,
         });
+        if (disposed) return;
+        progressPoller.stop();
+        progressUnavailable.value = false;
+        executionProgress.value = {
+          executionId: result.execution.id,
+          requestId: result.execution.requestId,
+          sessionId: result.execution.sessionId,
+          status: result.execution.status,
+          stage: null,
+          startedAt: result.execution.startedAt,
+        };
         accepted = true;
       } catch {
+        if (disposed) return;
         try {
           await getAgentExecutionByRequest(item.requestId);
           accepted = true;
@@ -290,6 +346,8 @@ async function processMessageQueue() {
           ElMessage.error("消息发送失败，已保留在待发送列表");
         }
       }
+      progressPoller.stop();
+      if (disposed) return;
       if (accepted) {
         try {
           if (activeSession.value?.id === item.sessionId) {
@@ -314,6 +372,8 @@ async function processMessageQueue() {
       );
     }
   } finally {
+    progressPoller.stop();
+    executionProgress.value = null;
     sending.value = false;
     activeRequestId.value = "";
     queueProcessing = false;
@@ -355,7 +415,19 @@ async function stopCurrent() {
   if (!activeRequestId.value || !activeSession.value) return;
   try {
     const execution = await getAgentExecutionByRequest(activeRequestId.value);
-    await stopAgentExecution(execution.id);
+    const stopped = await stopAgentExecution(execution.id);
+    if (disposed) return;
+    if (stopped.status === "cancelled") {
+      progressPoller.stop();
+      executionProgress.value = {
+        executionId: stopped.id,
+        requestId: stopped.requestId,
+        sessionId: stopped.sessionId,
+        status: stopped.status,
+        stage: null,
+        startedAt: stopped.startedAt,
+      };
+    }
     ElMessage.info("已停止尚未完成的动作");
     requestVersion += 1;
     await loadSession(activeSession.value.id, true);
@@ -452,6 +524,12 @@ onMounted(async () => {
   await loadSessions();
   if (sessions.value.length) await loadSession(sessions.value[0].id);
   else await newSession();
+});
+
+onUnmounted(() => {
+  disposed = true;
+  progressPoller.stop();
+  requestVersion += 1;
 });
 </script>
 
@@ -557,6 +635,7 @@ onMounted(async () => {
             :executions="activeSession.executions"
             :products="products"
             :busy="hasPendingMessages || actionBusy"
+            :processing="processingMessage"
             @update-draft="handleDraftUpdate"
             @confirm-draft="handleDraftConfirm"
             @cancel-draft="handleDraftCancel"

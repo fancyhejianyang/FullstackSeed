@@ -47,6 +47,12 @@ import { AgentDraft } from './entities/agent-draft.entity';
 import { AgentExecution } from './entities/agent-execution.entity';
 import { AgentMessage } from './entities/agent-message.entity';
 import { AgentSession } from './entities/agent-session.entity';
+import {
+  AGENT_PROGRESS_STAGES,
+  knowledgeStageToAgentProgress,
+  type AgentExecutionProgress,
+  type AgentProgressStage,
+} from './agent-progress';
 
 class AgentTimeoutError extends Error {}
 
@@ -238,6 +244,7 @@ export class AgentWorkspaceService {
         parameterSummary: {
           action: decision.type,
           contentLength: dto.content.length,
+          progressStage: 'understanding',
         },
         result: null,
         errorMessage: null,
@@ -569,6 +576,56 @@ export class AgentWorkspaceService {
     return execution;
   }
 
+  /** 只读轮询，不触发写入核实；尚未建立记录与非本人记录统一返回 null。 */
+  async findExecutionProgress(
+    requestId: string,
+    user: AuthUser,
+  ): Promise<AgentExecutionProgress | null> {
+    const execution = await this.executionRepository.findOne({
+      where: { requestId, userId: user.userId },
+      select: [
+        'id',
+        'requestId',
+        'sessionId',
+        'status',
+        'parameterSummary',
+        'startedAt',
+      ],
+    });
+    if (!execution) return null;
+    const stage = execution.parameterSummary
+      ?.progressStage as AgentProgressStage;
+    return {
+      executionId: execution.id,
+      requestId: execution.requestId,
+      sessionId: execution.sessionId,
+      status: execution.status,
+      stage:
+        execution.status === 'running' && AGENT_PROGRESS_STAGES.includes(stage)
+          ? stage
+          : null,
+      startedAt: execution.startedAt,
+    };
+  }
+
+  private async reportProgress(
+    execution: AgentExecution,
+    stage: AgentProgressStage,
+  ) {
+    if (execution.parameterSummary?.progressStage === stage) return;
+    const parameterSummary = {
+      ...execution.parameterSummary,
+      progressStage: stage,
+    };
+    // 仅更新仍在运行的阶段信息，不能用内存中的旧实体复活已取消/超时的执行。
+    const result = await this.executionRepository.update(
+      { id: execution.id, userId: execution.userId, status: 'running' },
+      { parameterSummary },
+    );
+    if (!result.affected) throw new ConflictException('执行已停止或失效');
+    execution.parameterSummary = parameterSummary;
+  }
+
   async stopExecution(id: number, user: AuthUser) {
     const execution = await this.findExecution(id, user);
     if (['succeeded', 'failed', 'cancelled'].includes(execution.status)) {
@@ -641,6 +698,7 @@ export class AgentWorkspaceService {
     activeDraft: AgentDraft | null;
     user: AuthUser;
   }) {
+    await this.reportProgress(params.execution, 'preparing_draft');
     // 重新读取当前员工、当前会话的草稿；聊天确认不新建、不修改、不提交草稿。
     const draft = params.activeDraft
       ? await this.draftRepository.findOne({
@@ -792,6 +850,11 @@ export class AgentWorkspaceService {
             ? [KNOWLEDGE_AI_CHAT_COMMANDS.lookupProductSku]
             : [],
         },
+        (name) =>
+          this.reportProgress(
+            params.execution,
+            knowledgeStageToAgentProgress(name),
+          ),
       );
       if (!params.session.knowledgeSessionId) {
         params.session.knowledgeSessionId = result.session.id;
@@ -844,6 +907,7 @@ export class AgentWorkspaceService {
   }) {
     params.execution.toolCallCount += 1;
     this.assertToolLimit(params.app, params.execution.toolCallCount);
+    await this.reportProgress(params.execution, 'querying');
     const context = await this.findProductContext(
       params.session.id,
       params.user.userId,
@@ -899,6 +963,7 @@ export class AgentWorkspaceService {
   }) {
     params.execution.toolCallCount = 1;
     this.assertToolLimit(params.app, 1);
+    await this.reportProgress(params.execution, 'querying');
     const context = await this.findProductContext(
       params.session.id,
       params.user.userId,
@@ -910,6 +975,7 @@ export class AgentWorkspaceService {
       return this.finishQuery(params, context);
     }
 
+    await this.reportProgress(params.execution, 'preparing_draft');
     const patch = extractSkuDraftPatch(params.content);
     const product = this.uniqueProductFromContext(context);
     const data: AgentSkuDraftData = params.activeDraft
@@ -1032,6 +1098,7 @@ export class AgentWorkspaceService {
     user: AuthUser;
   }) {
     const { app, execution, user, session } = params;
+    await this.reportProgress(execution, 'understanding');
     const executable = await this.appsService.getExecutableToolKeys(app);
     const allowedKeys = executable.filter(
       (key) => !this.toolUnavailableReason(app, key, user, executable),
@@ -1154,6 +1221,7 @@ export class AgentWorkspaceService {
     await this.assertActionAuthorized(app, key, user);
     execution.toolKey = key;
     execution.parameterSummary = {
+      ...execution.parameterSummary,
       toolKey: key,
       fields: Object.keys(plan.parameters),
     };
@@ -1169,6 +1237,7 @@ export class AgentWorkspaceService {
     execution.toolCallCount += 1;
     this.assertToolLimit(app, execution.toolCallCount);
     if (tool.operation !== 'create') {
+      await this.reportProgress(execution, 'querying');
       const businessResult = await this.businessService.query(
         key,
         plan.parameters,
@@ -1198,6 +1267,7 @@ export class AgentWorkspaceService {
       });
       return { assistantMessage, execution };
     }
+    await this.reportProgress(execution, 'preparing_draft');
     const sourceDraft = activeDraft?.toolKey === key ? activeDraft : null;
     const checked = this.businessService.validate(key, {
       ...(sourceDraft?.data ?? {}),
