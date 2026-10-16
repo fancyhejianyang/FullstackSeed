@@ -82,6 +82,11 @@ const activePendingMessages = computed(() =>
     (item) => item.sessionId === activeSession.value?.id,
   ),
 );
+// 当前请求已在主对话中乐观展示；输入区只保留等待发送或需要重试的消息。
+// 保留内部 sending 状态，避免把模型仍在处理误当成完成或提前释放串行队列。
+const composerPendingMessages = computed(() =>
+  activePendingMessages.value.filter((item) => item.status !== "sending"),
+);
 const hasPendingMessages = computed(() => pendingMessages.value.length > 0);
 const visibleMessages = computed<AgentMessage[]>(() => {
   if (!activeSession.value) return [];
@@ -337,7 +342,6 @@ function retryPendingMessage(clientMessageId: string) {
 }
 
 function pendingStatusText(status: PendingMessageStatus) {
-  if (status === "sending") return "发送中";
   if (status === "failed") return "发送失败";
   return "待发送";
 }
@@ -549,11 +553,11 @@ onMounted(async () => {
         <footer class="agent-workspace__composer-shell">
           <div class="agent-workspace__composer">
             <div
-              v-if="activePendingMessages.length"
+              v-if="composerPendingMessages.length"
               class="agent-workspace__queue"
             >
               <div
-                v-for="item in activePendingMessages"
+                v-for="item in composerPendingMessages"
                 :key="item.clientMessageId"
                 class="agent-workspace__queue-item"
                 :class="`is-${item.status}`"
@@ -578,7 +582,6 @@ onMounted(async () => {
                   >重试</Button
                 >
                 <Button
-                  v-if="item.status !== 'sending'"
                   link
                   type="info"
                   size="small"
@@ -921,9 +924,6 @@ onMounted(async () => {
   border-radius: 9px;
   background: #f5f7fa;
 }
-.agent-workspace__queue-item.is-sending {
-  background: #ecf5ff;
-}
 .agent-workspace__queue-item.is-failed {
   background: #fef0f0;
 }
@@ -931,9 +931,6 @@ onMounted(async () => {
   flex: 0 0 auto;
   color: #909399;
   font-weight: 600;
-}
-.agent-workspace__queue-item.is-sending .agent-workspace__queue-status {
-  color: #409eff;
 }
 .agent-workspace__queue-item.is-failed .agent-workspace__queue-status {
   color: #f56c6c;
