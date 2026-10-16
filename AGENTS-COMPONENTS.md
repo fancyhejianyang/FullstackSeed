@@ -135,6 +135,7 @@
 - Emits：`@enter`（回车触发，用于搜索栏）
 - 插槽：`#field-<prop>` 自定义某个字段渲染
 - 动态 `InputNumber` 字段的 v-model 必须是 `number | null`；空值统一写 `null`，禁止用空字符串 `''`，否则会触发 Vue prop 类型警告。对应 API 表单类型也应保持同一契约，让 TypeScript 在编译期拦截错误赋值。
+- `Form.validate()` 同时检查当前动态 `InputNumber` 的组件校验和原有 Element Plus 字段规则；越界等错误会拒绝提交，不会自动改成边界值。自定义插槽仍由页面规则或组件 ref 校验，不自动扫描插槽内部。
 
 ### `defineExpose`
 
@@ -146,6 +147,17 @@
 - `select` 默认使用项目封装 `Select`；`selectMultiple` 默认使用项目封装 `SelectMultiple`
 - 更复杂的封装组件建议通过 `component: ComponentName` 使用，动态组件 props 支持 `ref/computed` 自动解包
 - `hint` 同样支持 `ref/computed` 自动解包；配置页的阈值、权重、时长等字段应优先用它说明当前值的实际含义与取舍
+
+---
+
+## InputNumber
+
+- v-model：`number | null`；支持 `mode: 'number' | 'integer' | 'money'`，money 模式继续按 `precision` 限制小数位。
+- `min` / `max` 仅用于校验，不在输入、失焦或提交时强制截断；例如 `min: 10` 时可以连续输入 `1 → 18 → 180`。
+- 输入中的 `-`、`.`、`-.`、尾随小数点及小数零由内部草稿保留，数值同步不覆盖草稿；父表单赋入不同值时正常回显。
+- change/blur、显式 `validate()` 和 Enter 时执行校验，越界显示原有错误提示，保留输入值；校验失败不发出 `enter`。重新输入时清除旧提示。
+- `required` 默认关闭；`rulesEnabled=false` 关闭内置校验，`rules` 可覆盖默认 required/range 规则。
+- 暴露 `validate(): true | string`；Form 动态数字字段自动参与提交校验，单独使用或放在插槽内时由调用方检查返回值。
 
 ---
 

@@ -5,7 +5,7 @@
  * 核心能力：
  * - v-model 固定输出 number | null，输入过程允许短暂保留 `-` / `.` 这类未完成状态
  * - `mode` 支持 number / integer / money；money 按 `precision` 限制小数位
- * - 内置 required/range 校验，可通过 `rulesEnabled=false` 关闭，或通过 `rules` 完全覆盖
+ * - min/max 只参与校验，不在输入或失焦时强制改值；内置规则可关闭或覆盖
  * - `prefixText` / `suffixText` 用于单位、币种等轻量展示，宽度默认撑满
  * - 暴露 `validate()`，业务表单可在提交前主动触发组件内置校验
  */
@@ -64,29 +64,33 @@ const emit = defineEmits<{
 const displayValue = computed(() => draftValue.value);
 
 watch(model, (value) => {
+  // 忽略输入值经 v-model 返回的同值同步，保留 `1.` / `1.20` / `-` 等编辑草稿。
+  // 父表单真正赋入不同值（加载、重置等）时仍正常回显。
+  if (Object.is(value, parseValue(draftValue.value))) return;
   const nextValue = formatDraftValue(value);
   if (draftValue.value !== nextValue) {
     draftValue.value = nextValue;
+    error.value = '';
   }
 });
 
 function handleInput(value: string | number) {
   const normalized = normalizeInput(String(value));
   draftValue.value = normalized;
-  const parsed = parseValue(normalized, false);
-  model.value = typeof parsed === 'number' ? parsed : null;
+  model.value = parseValue(normalized);
+  error.value = '';
   emit('input', model.value);
 }
 
 function handleChange(value: string | number) {
-  model.value = parseValue(String(value), true) as number | null;
+  model.value = parseValue(String(value));
   draftValue.value = formatDraftValue(model.value);
   validate();
   emit('change', model.value);
 }
 
 function handleBlur(event: FocusEvent) {
-  model.value = parseValue(draftValue.value, true) as number | null;
+  model.value = parseValue(draftValue.value);
   draftValue.value = formatDraftValue(model.value);
   validate();
   emit('blur', event);
@@ -100,28 +104,35 @@ function handleClear() {
 }
 
 function handleEnter() {
-  emit('enter', model.value);
+  if (validate() === true) emit('enter', model.value);
 }
 
-function parseValue(value: string, final: boolean) {
-  // 输入中保留未完成的数字形态，最终确认时再落成 null，避免用户无法输入负数/小数。
+function parseValue(value: string): number | null {
+  // 未完成数字只保留在 draftValue 中，对外始终输出 number | null。
   const normalized = normalizeInput(value);
-  if (normalized === '' || normalized === '-' || normalized === '.') {
-    return final ? null : normalized;
+  if (
+    normalized === '' ||
+    normalized === '-' ||
+    normalized === '.' ||
+    normalized === '-.'
+  ) {
+    return null;
   }
 
   let numeric = Number(normalized);
   if (Number.isNaN(numeric)) return null;
   if (props.mode === 'integer') numeric = Math.trunc(numeric);
-  if (typeof props.min === 'number') numeric = Math.max(props.min, numeric);
-  if (typeof props.max === 'number') numeric = Math.min(props.max, numeric);
+  // 范围约束由 validate 提示，不应篡改用户输入（例如输入 180 的首位 1）。
   return numeric;
 }
 
 function normalizeInput(value: string) {
   return props.mode === 'integer'
     ? normalizeInteger(value)
-    : normalizeNumber(value, props.mode === 'money' ? props.precision : undefined);
+    : normalizeNumber(
+        value,
+        props.mode === 'money' ? props.precision : undefined,
+      );
 }
 
 function formatDraftValue(value: number | null) {

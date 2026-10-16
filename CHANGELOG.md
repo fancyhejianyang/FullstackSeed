@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-10-16 公共数字输入组件取消实时范围强制修正
+
+- 现象与原因：Agent 应用的超时秒数字段设置 `min: 10`，输入 `1` 立即变为 `10`，干扰继续输入 `180`。公共 InputNumber 在每次 input 中执行 min/max 截断，随后 model watcher 又将数值格式化回填；同一回填也可能打断负号、小数点和尾随小数零的编辑。
+- 修复：InputNumber 的 min/max 仅参与校验，不在输入、失焦或提交时强制改值；model 同值同步保留数字草稿，父表单赋入不同值仍正常回显。change/blur/显式校验/Enter 时提示越界，失败不发出 enter；继续编辑清除旧提示，保留 number/null、整数/小数/金额精度、清空、required、自定义规则及关闭规则的既有契约。
+- 提交保护：Form 原先只执行页面的 Element Plus 规则，未检查数字组件的内置范围规则。本次让当前动态 InputNumber 的 validate 参与 Form.validate，越界拒绝提交且保留页面已有校验错误；不扩展到其它控件或自定义插槽，不修改业务页的范围设置、后端字段/API、数据库或 Agent 超时配置。
+- 新增文件（1）：`web/src/components/inputNumber.test.mjs`，包含连续输入、范围/Enter、负数小数草稿、外部赋值/规则选项、Form 提交拦截和动态字段/既有错误兼容六组回归用例。
+- 修改文件（5）：`web/src/components/InputNumber.vue`、`web/src/components/Form.vue`、`AGENTS-COMPONENTS.md`、`.design-spec.md`、本文件。删除文件：无。
+- 验证：Vue 类型检查、组件/用例 Prettier 检查、用例 node --check 语法检查、组件复用只读扫描与 git diff --check 通过。遵循修复类改动仅静态检查的规则，未执行回归用例、未进行浏览器交互测试，未 build、启动/重启服务或调用生图接口。
+
 ### 2026-10-16 Agent 执行状态渲染空值兜底
 
 - 现象：执行记录页曾出现 `Cannot read properties of undefined (reading 'type')`，用户刷新后恢复，并要求仅做兜底判断。代码中状态组件直接返回 `map[status]`，缺失或未知状态会使模板读取 `statusMeta.type` 时抛错；未取得现场堆栈，不将具体历史记录或表格预扫描认定为已复现的现场原因。

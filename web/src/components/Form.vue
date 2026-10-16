@@ -15,10 +15,7 @@ import type { FormInstance, FormRules } from 'element-plus';
 import Input, { type InputMode } from './Input.vue';
 import Select, { type SelectOption } from './Select.vue';
 import SelectMultiple from './SelectMultiple.vue';
-import {
-  FORM_COMPONENT_MAP,
-  getFormComponent,
-} from './componentRegistry';
+import { FORM_COMPONENT_MAP, getFormComponent } from './componentRegistry';
 import type { ComponentName } from './Component';
 type DicValue = string | number | boolean | null;
 type FormOption = {
@@ -80,6 +77,21 @@ defineEmits<{
 }>();
 
 const formRef = ref<FormInstance>();
+type NumberInputRef = { validate: () => true | string };
+const numberInputs = new Map<string, NumberInputRef>();
+
+function setNumberInputRef(prop: string, instance: unknown) {
+  if (
+    instance &&
+    typeof instance === 'object' &&
+    'validate' in instance &&
+    typeof instance.validate === 'function'
+  ) {
+    numberInputs.set(prop, instance as NumberInputRef);
+  } else {
+    numberInputs.delete(prop);
+  }
+}
 
 /** 将 fields 中可能为 Ref 的 options / hint 统一解包 */
 const resolvedFields = computed<ResolvedFormField[]>(() =>
@@ -90,8 +102,29 @@ const resolvedFields = computed<ResolvedFormField[]>(() =>
   })),
 );
 
-function validate() {
-  return formRef.value?.validate();
+async function validate() {
+  // InputNumber 不再强制截断 min/max；提交必须检查其内置/自定义规则。
+  // 仅处理当前实际渲染的数字字段，不改变其它组件或自定义插槽的校验契约。
+  const invalidFields: Record<string, { field: string; message: string }[]> =
+    {};
+  for (const field of resolvedFields.value) {
+    if (field.slot || field.component !== 'InputNumber') continue;
+    const result = numberInputs.get(field.prop)?.validate();
+    if (typeof result === 'string') {
+      invalidFields[field.prop] = [{ field: field.prop, message: result }];
+    }
+  }
+  let valid: boolean | undefined;
+  try {
+    valid = await formRef.value?.validate();
+  } catch (fields) {
+    // 保留 Element Plus 原有字段错误，同时附上组件范围错误。
+    if (fields && typeof fields === 'object' && !(fields instanceof Error))
+      throw { ...fields, ...invalidFields };
+    throw fields;
+  }
+  if (Object.keys(invalidFields).length) throw invalidFields;
+  return valid;
 }
 function resetFields() {
   formRef.value?.resetFields();
@@ -137,7 +170,9 @@ function setSelectModel(field: ResolvedFormField, value: string | null) {
   }
 
   // Select 内部严格使用字符串；写回表单时恢复老 options 的原始 value 类型。
-  const option = (field.options ?? []).find((item) => toOptionKey(item.value) === key);
+  const option = (field.options ?? []).find(
+    (item) => toOptionKey(item.value) === key,
+  );
   model.value[field.prop] = option ? option.value : key;
 }
 
@@ -178,6 +213,11 @@ defineExpose({ validate, resetFields });
       <component
         :is="getDynamicComponent(field)"
         v-else-if="field.component && field.component in FORM_COMPONENT_MAP"
+        :ref="
+          field.component === 'InputNumber'
+            ? (instance) => setNumberInputRef(field.prop, instance)
+            : undefined
+        "
         v-model="model[field.prop]"
         v-bind="getDynamicComponentProps(field)"
         :placeholder="field.placeholder"
