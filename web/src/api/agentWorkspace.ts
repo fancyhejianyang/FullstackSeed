@@ -54,6 +54,7 @@ export interface AgentSession {
 }
 
 export interface AgentMessageStructuredData {
+  businessResult?: AgentBusinessQueryResult;
   action?: "answer" | "query" | "clarify" | "prepare_write";
   reason?: "write_not_executed";
   queryStatus?: "matched" | "not_matched";
@@ -94,7 +95,7 @@ export interface AgentMessage {
   updatedAt: string;
 }
 
-export interface AgentSkuDraftData {
+export interface AgentSkuDraftData extends Record<string, unknown> {
   productId: number | null;
   productName: string;
   skuCode: string;
@@ -103,15 +104,45 @@ export interface AgentSkuDraftData {
   isEnabled: boolean;
 }
 
+export interface AgentBusinessField {
+  prop: string;
+  label: string;
+  type: string;
+  required: boolean;
+  enum?: string[];
+  default?: unknown;
+  minimum?: number;
+  maxLength?: number;
+  options?: { label: string; value: number | string }[];
+}
+export interface AgentBusinessForm {
+  name: string;
+  permission: string;
+  detailPath: string;
+  note: string;
+  fields: AgentBusinessField[];
+}
+export interface AgentBusinessQueryResult {
+  toolKey: string;
+  name: string;
+  fields: { prop: string; label: string }[];
+  list: Record<string, unknown>[];
+  total: number;
+  page: number;
+  pageSize: number;
+  detailPath: string;
+}
+
 export interface AgentDraft {
   id: number;
   sessionId: number;
   userId: number;
   agentAppId: number;
-  toolKey: "productSku.create";
+  toolKey: string;
   status: AgentDraftStatus;
   version: number;
-  data: AgentSkuDraftData;
+  data: Record<string, unknown>;
+  form?: AgentBusinessForm;
   missingFields: string[];
   validationErrors: string[];
   submittedRecordId: number | null;
@@ -204,7 +235,7 @@ export function sendAgentMessage(
 
 export function updateAgentDraft(
   id: number,
-  data: { version: number; data: AgentSkuDraftData },
+  data: { version: number; data: Record<string, unknown> },
 ) {
   return request.patch<unknown, AgentDraft>(
     `/agent-workspace/drafts/${id}`,

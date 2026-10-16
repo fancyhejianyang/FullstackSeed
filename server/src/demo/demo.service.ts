@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Like, Repository } from 'typeorm';
+import { EntityManager, In, Like, Repository } from 'typeorm';
 import { Demo } from './entities/demo.entity';
 import { CreateDemoDto, UpdateDemoDto, QueryDemoDto } from './dto/demo.dto';
 
@@ -37,8 +37,9 @@ export class DemoService {
   }
 
   /** 创建 */
-  create(dto: CreateDemoDto) {
-    return this.demoRepository.save(this.demoRepository.create(dto));
+  create(dto: CreateDemoDto, manager?: EntityManager) {
+    const repository = manager?.getRepository(Demo) ?? this.demoRepository;
+    return repository.save(repository.create(dto));
   }
 
   /** 更新 */

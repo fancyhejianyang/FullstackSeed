@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Like, Repository } from 'typeorm';
+import { EntityManager, In, Like, Repository } from 'typeorm';
 import { KnowledgeAiChatMessage } from '../knowledge-ai-chat/entities/knowledge-ai-chat-message.entity';
 import {
   BatchDeleteKnowledgeStandardQaDto,
@@ -57,10 +57,12 @@ export class KnowledgeStandardQasService {
     return (await this.toViews([await this.findEntity(id)]))[0];
   }
 
-  async create(dto: CreateKnowledgeStandardQaDto) {
+  async create(dto: CreateKnowledgeStandardQaDto, manager?: EntityManager) {
     const payload = await this.toEntityPayload(dto, true);
-    const qa = await this.qaRepository.save(this.qaRepository.create(payload));
-    return this.findOne(qa.id);
+    const repository =
+      manager?.getRepository(KnowledgeStandardQa) ?? this.qaRepository;
+    const qa = await repository.save(repository.create(payload));
+    return (await this.toViews([qa]))[0];
   }
 
   async update(id: number, dto: UpdateKnowledgeStandardQaDto) {

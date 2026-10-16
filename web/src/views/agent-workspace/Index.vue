@@ -23,7 +23,6 @@ import {
   type AgentMessage,
   type AgentSession,
   type AgentSessionDetail,
-  type AgentSkuDraftData,
   type AvailableAgentApp,
 } from "@/api/agentWorkspace";
 import AgentMessageList from "./components/AgentMessageList.vue";
@@ -134,20 +133,26 @@ const promptSuggestions = computed<AgentPromptSuggestion[]>(() => {
       prompt: "请介绍一下你可以帮我完成哪些工作。",
     },
   ];
-  if (currentApp.value?.toolKeys.includes("product.query")) {
+  const queryTool = currentApp.value?.tools.find(
+    (tool) => tool.action === "read",
+  );
+  const writeTool = currentApp.value?.tools.find(
+    (tool) => tool.action === "create",
+  );
+  if (queryTool) {
     result.push({
       kind: "query",
       title: "查询业务数据",
-      description: "用自然语言查找产品或 SKU",
-      prompt: "帮我查询一个产品或 SKU，我稍后补充名称或编码。",
+      description: queryTool.name,
+      prompt: `${queryTool.name}，请先展示第一页。`,
     });
   }
-  if (currentApp.value?.toolKeys.includes("productSku.create")) {
+  if (writeTool) {
     result.push({
       kind: "write",
       title: "创建录入草稿",
       description: "整理信息，确认后再受控写入",
-      prompt: "我想新增一个 SKU，请引导我补充所需信息。",
+      prompt: `我想${writeTool.name}，请引导我补充所需信息。`,
     });
   }
   if (result.length < 2) {
@@ -364,11 +369,12 @@ function handleEnter(event: KeyboardEvent) {
   void send();
 }
 
-async function handleDraftUpdate(draft: AgentDraft, data: AgentSkuDraftData) {
+async function handleDraftUpdate(draft: AgentDraft, data: AgentDraft["data"]) {
   if (!activeSession.value) return;
   actionBusy.value = true;
   try {
     await updateAgentDraft(draft.id, { version: draft.version, data });
+    confirmationKeys.delete(draft.id);
     await loadSession(activeSession.value.id);
     ElMessage.success("草稿已更新，旧版本确认已失效");
   } finally {
@@ -389,13 +395,13 @@ async function handleDraftConfirm(draft: AgentDraft) {
     });
     const receipt = result.execution.result;
     const hasReceipt =
-      receipt?.recordType === "productSku" &&
+      receipt?.recordType === draft.toolKey.split(".")[0] &&
       typeof receipt.recordId === "number" &&
       Number.isInteger(receipt.recordId) &&
       receipt.recordId > 0;
     if (result.execution.status === "succeeded" && hasReceipt) {
       confirmationKeys.delete(draft.id);
-      ElMessage.success("SKU 已成功录入");
+      ElMessage.success("业务数据已成功录入");
     } else {
       ElMessage.warning(
         result.execution.errorMessage ||

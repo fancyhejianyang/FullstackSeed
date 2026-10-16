@@ -1,6 +1,10 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Like, Repository } from 'typeorm';
+import { EntityManager, In, Like, Repository } from 'typeorm';
 import {
   CreateProductDto,
   CreateProductSkuDto,
@@ -92,11 +96,13 @@ export class ProductCatalogService {
     return product;
   }
 
-  async createProduct(dto: CreateProductDto) {
+  async createProduct(dto: CreateProductDto, manager?: EntityManager) {
+    const repository =
+      manager?.getRepository(Product) ?? this.productRepository;
     const productCode = dto.productCode.trim();
     await this.assertProductCodeUnique(productCode);
-    return this.productRepository.save(
-      this.productRepository.create({
+    return repository.save(
+      repository.create({
         productCode,
         name: dto.name.trim(),
         aliases: this.normalizeTexts(dto.aliases),

@@ -15,6 +15,8 @@ import { AgentMessage } from './entities/agent-message.entity';
 import { AgentSession } from './entities/agent-session.entity';
 import { AgentApp } from './entities/agent-app.entity';
 import { classifyAgentAction } from './agent-action';
+import type { AgentBusinessService } from './agent-business.service';
+import type { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
 
 const currentUser: AuthUser = {
   userId: 10,
@@ -59,6 +61,8 @@ describe('AgentWorkspaceService ownership and state guards', () => {
     appsService as unknown as AgentAppsService,
     knowledgeAiChatService as unknown as KnowledgeAiChatService,
     productCatalogService as unknown as ProductCatalogService,
+    {} as AgentBusinessService,
+    {} as KnowledgeAiProvidersService,
   );
 
   beforeEach(() => {
@@ -392,7 +396,7 @@ describe('AgentWorkspaceService ownership and state guards', () => {
         ['productSku.create'],
       ),
     ).toContain('缺少业务权限');
-    expect(reason.call(service, app, 'demo.create', currentUser, [])).toContain(
+    expect(reason.call(service, app, 'demo.delete', currentUser, [])).toContain(
       '尚未接通',
     );
   });

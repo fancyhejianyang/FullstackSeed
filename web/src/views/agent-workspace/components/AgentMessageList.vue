@@ -9,6 +9,7 @@ import type {
 import AgentDraftCard from "./AgentDraftCard.vue";
 import AgentExecutionStatus from "./AgentExecutionStatus.vue";
 import AgentQueryCard from "./AgentQueryCard.vue";
+import AgentBusinessQueryCard from "./AgentBusinessQueryCard.vue";
 
 const props = defineProps<{
   agentName: string;
@@ -142,6 +143,10 @@ watch(
               @cancel="emit('cancelDraft', $event)"
             />
           </template>
+          <AgentBusinessQueryCard
+            v-else-if="message.structuredData?.businessResult"
+            :result="message.structuredData.businessResult"
+          />
           <AgentQueryCard
             v-else-if="message.messageType === 'query_result'"
             :context="message.structuredData?.context"

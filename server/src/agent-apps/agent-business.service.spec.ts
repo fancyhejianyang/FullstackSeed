@@ -1,0 +1,234 @@
+import type { EntityManager } from 'typeorm';
+import type { AuthUser } from '../common/decorators/current-user.decorator';
+import type { DemoService } from '../demo/demo.service';
+import type { ProductCatalogService } from '../product-catalog/product-catalog.service';
+import type { KnowledgeStandardQasService } from '../knowledge-standard-qas/knowledge-standard-qas.service';
+import type { KnowledgeColloquialTermsService } from '../knowledge-colloquial-terms/knowledge-colloquial-terms.service';
+import type { KnowledgeBasesService } from '../knowledge-bases/knowledge-bases.service';
+import { AgentBusinessService } from './agent-business.service';
+import { AGENT_BUSINESS_TOOLS } from './agent-business.registry';
+import { parseAgentBusinessPlan } from './agent-business-plan';
+
+const admin: AuthUser = {
+  userId: 1,
+  username: 'root',
+  isAdmin: true,
+  permissions: [],
+  roles: [],
+};
+const makeCrud = () => ({
+  findAll: jest.fn().mockResolvedValue({ list: [], total: 0 }),
+  findOne: jest.fn().mockResolvedValue({ id: 1 }),
+  create: jest.fn().mockResolvedValue({ id: 12 }),
+});
+describe('Agent reusable business adapters', () => {
+  const demo = makeCrud();
+  const products = {
+    findProducts: jest.fn().mockResolvedValue({ list: [], total: 0 }),
+    findProduct: jest.fn().mockResolvedValue({ id: 1 }),
+    createProduct: jest.fn().mockResolvedValue({ id: 2 }),
+    findSkus: jest.fn().mockResolvedValue({ list: [], total: 0 }),
+    findSku: jest.fn().mockResolvedValue({ id: 1 }),
+    findProductOptions: jest
+      .fn()
+      .mockResolvedValue([{ id: 1, name: '产品', productCode: 'P1' }]),
+  };
+  const qa = makeCrud();
+  const terms = makeCrud();
+  const knowledge = {
+    findBases: jest.fn().mockResolvedValue({ list: [], total: 0 }),
+    findBase: jest.fn().mockResolvedValue({ id: 1 }),
+    createBase: jest.fn().mockResolvedValue({ id: 9 }),
+    findCategories: jest.fn().mockResolvedValue([{ id: 7, name: '售前' }]),
+  };
+  const service = new AgentBusinessService(
+    demo as unknown as DemoService,
+    products as unknown as ProductCatalogService,
+    qa as unknown as KnowledgeStandardQasService,
+    terms as unknown as KnowledgeColloquialTermsService,
+    knowledge as unknown as KnowledgeBasesService,
+  );
+  beforeEach(() => jest.clearAllMocks());
+
+  it('registers list/detail/create for six business modules, not arbitrary controllers', () => {
+    expect(AGENT_BUSINESS_TOOLS).toHaveLength(18);
+    for (const key of [
+      'user.create',
+      'role.list',
+      'product.delete',
+      'standardQa.update',
+      'knowledgeBase.index',
+    ])
+      expect(
+        AGENT_BUSINESS_TOOLS.find((tool) => tool.commandKey === key),
+      ).toBeUndefined();
+  });
+
+  it.each(
+    AGENT_BUSINESS_TOOLS.filter((tool) => tool.operation !== 'create').map(
+      (tool) => [tool.commandKey, tool.operation],
+    ),
+  )('dispatches %s through its real read service', async (key, operation) => {
+    const result = await service.query(
+      key,
+      operation === 'list' ? { page: 2, pageSize: 500 } : { id: 1 },
+      admin,
+    );
+    expect(result.toolKey).toBe(key);
+    expect(result.pageSize).toBe(operation === 'list' ? 20 : 1);
+  });
+
+  it('projects only registered fields from returned entities', async () => {
+    demo.findAll.mockResolvedValueOnce({
+      list: [
+        {
+          id: 1,
+          title: '测试',
+          secretKey: 'never-return',
+          deletedAt: 'private',
+        },
+      ],
+      total: 1,
+    });
+    const result = await service.query('demo.list', {}, admin);
+    expect(result.list).toEqual([{ id: 1, title: '测试' }]);
+  });
+
+  it('checks employee rights including related product/category reads', async () => {
+    const employee = {
+      ...admin,
+      isAdmin: false,
+      permissions: ['ProductSku.create', 'KnowledgeBase.create'],
+    };
+    expect(service.permissionError('productSku.create', employee)).toContain(
+      'Product.read',
+    );
+    expect(service.permissionError('knowledgeBase.create', employee)).toContain(
+      'KnowledgeBase.read',
+    );
+    await expect(
+      service.query('standardQa.list', {}, employee),
+    ).rejects.toThrow('KnowledgeStandardQa.read');
+    expect(qa.findAll).not.toHaveBeenCalled();
+  });
+
+  it('reuses DTO rules, validates required/type fields and blocks extra write fields', () => {
+    expect(
+      service.validate('demo.create', { title: '测试', email: 'bad-email' })
+        .validationErrors.length,
+    ).toBeGreaterThan(0);
+    expect(
+      service.validate('product.create', { name: '测试' }).missingFields,
+    ).toContain('产品编码');
+    expect(
+      service.validate('productSku.create', {
+        productId: 1,
+        specifications: {},
+      }).validationErrors,
+    ).toContain('规格参数格式不正确');
+    expect(
+      service.validate('colloquialTerm.create', {
+        term: '垫子',
+        replacement: '靠枕',
+        semanticDefinition: '产品别名',
+        isEnabled: 'false',
+      }).validationErrors,
+    ).toContain('是否启用格式不正确');
+    expect(
+      service.validate('standardQa.create', {
+        question: '保修多久',
+        answer: '一年',
+        status: 'published',
+      }).validationErrors[0],
+    ).toContain('status');
+    expect(
+      service.validate('knowledgeBase.create', {
+        name: '售后',
+        categoryId: 7,
+        contentText: '资料',
+        fileUrl: 'https://example.com',
+      }).validationErrors[0],
+    ).toContain('fileUrl');
+  });
+
+  it('uses safe defaults and transaction-scoped business services, with QA remaining draft', async () => {
+    const manager = {} as EntityManager;
+    await service.create(
+      'standardQa.create',
+      { question: '保修多久', answer: '一年' },
+      admin,
+      manager,
+    );
+    expect(qa.create).toHaveBeenCalledWith(
+      { question: '保修多久', answer: '一年', status: 'draft' },
+      manager,
+    );
+    await service.create(
+      'colloquialTerm.create',
+      { term: '枕头', replacement: '靠枕', semanticDefinition: '产品' },
+      admin,
+      manager,
+    );
+    expect(terms.create).toHaveBeenCalledWith(
+      expect.objectContaining({ isEnabled: false }),
+      manager,
+    );
+    await service.create(
+      'knowledgeBase.create',
+      { categoryId: 7, name: '售后', contentText: '文本' },
+      admin,
+      manager,
+    );
+    expect(knowledge.createBase).toHaveBeenCalledWith(
+      expect.objectContaining({ contentType: 'text', isEnabled: false }),
+      manager,
+    );
+    await service.create('demo.create', { title: '示例' }, admin, manager);
+    expect(demo.create).toHaveBeenCalledWith({ title: '示例' }, manager);
+    await service.create(
+      'product.create',
+      { productCode: 'P1', name: '产品' },
+      admin,
+      manager,
+    );
+    expect(products.createProduct).toHaveBeenCalledWith(
+      { productCode: 'P1', name: '产品' },
+      manager,
+    );
+  });
+
+  it('returns field metadata and real category choices for the shared form', async () => {
+    const form = await service.form('knowledgeBase.create', admin);
+    expect(
+      form.fields.find((field) => field.prop === 'categoryId')?.options,
+    ).toEqual([{ label: '售前', value: 7 }]);
+    expect(
+      form.fields.find((field) => field.prop === 'contentText')?.required,
+    ).toBe(true);
+    expect(form.note).toContain('索引须在知识库页面执行');
+  });
+
+  it('accepts only constrained JSON plans and never dispatches supplied URLs', () => {
+    expect(
+      parseAgentBusinessPlan(
+        '```json\n{"kind":"tool","toolKey":"demo.list","parameters":{"keyword":"测试"}}\n```',
+        ['demo.list'],
+      ).parameters,
+    ).toEqual({ keyword: '测试' });
+    expect(() =>
+      parseAgentBusinessPlan(
+        '{"kind":"tool","toolKey":"user.create","parameters":{}}',
+        ['demo.list'],
+      ),
+    ).toThrow('未授权');
+    expect(() => parseAgentBusinessPlan('我已成功写入', ['demo.list'])).toThrow(
+      '未执行写入',
+    );
+    expect(() =>
+      parseAgentBusinessPlan(
+        '{"kind":"tool","toolKey":"demo.list","parameters":[]}',
+        ['demo.list'],
+      ),
+    ).toThrow('参数格式');
+  });
+});

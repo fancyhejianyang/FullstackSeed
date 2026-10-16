@@ -1,10 +1,7 @@
 import { Column, Entity, Index } from 'typeorm';
 import { BaseEntity } from '../../common/entities/base.entity';
-import type {
-  AgentDraftStatus,
-  AgentSkuDraftData,
-  AgentToolKey,
-} from '../agent-apps.constants';
+import type { AgentDraftStatus, AgentToolKey } from '../agent-apps.constants';
+import type { AgentBusinessForm } from '../agent-business.registry';
 
 @Index('IDX_agent_drafts_session_status', ['sessionId', 'status'])
 @Entity('agent_drafts')
@@ -28,7 +25,10 @@ export class AgentDraft extends BaseEntity {
   version: number;
 
   @Column({ type: 'simple-json' })
-  data: AgentSkuDraftData;
+  data: Record<string, unknown>;
+
+  /** 响应时由代码目录生成，不落库，不能由请求覆盖。 */
+  form?: AgentBusinessForm;
 
   @Column({ type: 'simple-json' })
   missingFields: string[];

@@ -1,4 +1,5 @@
 import { DEMO_CATEGORIES, DEMO_STATUSES } from '../demo/demo.constants';
+import { KNOWLEDGE_COLLOQUIAL_SEMANTIC_TYPES } from '../knowledge-colloquial-terms/entities/knowledge-colloquial-term.entity';
 
 export const AI_COMMAND_ACTIONS = [
   'read',
@@ -222,6 +223,127 @@ function createBusinessCrudCatalog(
  * 存储和模型配置等平台基础设施刻意不注册，避免 Agent 获得越权或配置篡改入口。
  */
 export const AI_BUSINESS_COMMAND_CATALOG: AiCommandCatalogItem[] = [
+  ...createBusinessCrudCatalog({
+    moduleKey: 'standardQa',
+    moduleName: '标准问答',
+    controllerName: 'KnowledgeStandardQasController',
+    apiBasePath: '/api/knowledge-standard-qas',
+    permissionPrefix: 'KnowledgeStandardQa',
+    semanticKeywords: ['标准问答', '标准问题', '标准答案'],
+    querySchema: {
+      type: 'object',
+      properties: {
+        keyword: { type: 'string' },
+        status: {
+          type: 'string',
+          enum: ['draft', 'pending', 'published', 'disabled'],
+        },
+      },
+    },
+    createSchema: {
+      type: 'object',
+      required: ['question', 'answer'],
+      properties: {
+        question: { type: 'string', title: '标准问题', maxLength: 2000 },
+        answer: { type: 'string', title: '标准答案' },
+        aliases: {
+          type: 'array',
+          title: '相似问法',
+          items: { type: 'string' },
+        },
+      },
+    },
+    methods: {
+      list: 'findAll',
+      detail: 'findOne',
+      create: 'create',
+      update: 'update',
+      delete: 'remove',
+      batchDelete: 'batchRemove',
+    },
+  }),
+  ...createBusinessCrudCatalog({
+    moduleKey: 'colloquialTerm',
+    moduleName: '口语词条',
+    controllerName: 'KnowledgeColloquialTermsController',
+    apiBasePath: '/api/knowledge-colloquial-terms',
+    permissionPrefix: 'KnowledgeColloquialTerm',
+    semanticKeywords: ['口语', '词库', '词条', '术语'],
+    querySchema: {
+      type: 'object',
+      properties: {
+        keyword: { type: 'string' },
+        isEnabled: { type: 'boolean' },
+      },
+    },
+    createSchema: {
+      type: 'object',
+      required: ['term', 'replacement', 'semanticDefinition'],
+      properties: {
+        term: { type: 'string', title: '口语表达', maxLength: 160 },
+        replacement: { type: 'string', title: '标准替换文本', maxLength: 500 },
+        semanticDefinition: {
+          type: 'string',
+          title: '业务定性',
+          maxLength: 2000,
+        },
+        semanticType: {
+          type: 'string',
+          title: '语义类型',
+          enum: [...KNOWLEDGE_COLLOQUIAL_SEMANTIC_TYPES],
+          default: 'custom',
+        },
+        excludePhrases: {
+          type: 'array',
+          title: '排除短语',
+          items: { type: 'string' },
+        },
+        isEnabled: { type: 'boolean', title: '是否启用', default: false },
+      },
+    },
+    methods: {
+      list: 'findAll',
+      detail: 'findOne',
+      create: 'create',
+      update: 'update',
+      delete: 'remove',
+      batchDelete: 'batchRemove',
+    },
+  }),
+  ...createBusinessCrudCatalog({
+    moduleKey: 'knowledgeBase',
+    moduleName: '知识库文本',
+    controllerName: 'KnowledgeBasesController',
+    apiBasePath: '/api/knowledge-bases',
+    permissionPrefix: 'KnowledgeBase',
+    semanticKeywords: ['知识库', '知识内容', '知识文档'],
+    querySchema: {
+      type: 'object',
+      properties: {
+        keyword: { type: 'string' },
+        categoryId: { type: 'integer', minimum: 1 },
+      },
+    },
+    createSchema: {
+      type: 'object',
+      required: ['categoryId', 'name', 'contentText'],
+      properties: {
+        categoryId: { type: 'integer', title: '知识库分类 ID', minimum: 1 },
+        name: { type: 'string', title: '知识库名称' },
+        description: { type: 'string', title: '描述' },
+        contentText: { type: 'string', title: '文本正文' },
+        isEnabled: { type: 'boolean', title: '是否启用', default: false },
+      },
+    },
+    methods: {
+      list: 'findBases',
+      detail: 'findBase',
+      create: 'createBase',
+      update: 'updateBase',
+      delete: 'removeBase',
+      batchDelete: 'batchRemoveBases',
+    },
+  }),
   ...createBusinessCrudCatalog({
     moduleKey: 'demo',
     moduleName: '示例数据',

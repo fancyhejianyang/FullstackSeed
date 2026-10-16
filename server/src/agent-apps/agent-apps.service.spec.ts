@@ -110,8 +110,8 @@ describe('AgentAppsService access and tool policy', () => {
       name: '创建示例数据',
       action: 'create',
       requireApproval: true,
-      runtimeAvailable: false,
-      unavailableReason: '仅登记了指令契约，尚未接入 Agent 执行器',
+      runtimeAvailable: true,
+      unavailableReason: null,
     });
     expect(
       result.businessTools.find((item) => item.commandKey === 'product.query'),
@@ -172,7 +172,7 @@ describe('AgentAppsService access and tool policy', () => {
         instructionMarkdown: '# 业务录入',
         providerId: 1,
         models: ['qwen-plus'],
-        toolKeys: ['demo.create'],
+        toolKeys: ['demo.delete'],
         writeEnabled: true,
       }),
     ).rejects.toThrow('尚未接入 Agent 执行器');
@@ -209,11 +209,12 @@ describe('AgentAppsService access and tool policy', () => {
     repository.find.mockResolvedValue([app]);
     await expect(service.getExecutableToolKeys(app)).resolves.toEqual([
       'product.query',
+      'demo.create',
       'productSku.create',
     ]);
     await expect(service.findAvailable(user(10))).resolves.toEqual([
       expect.objectContaining({
-        toolKeys: ['product.query', 'productSku.create'],
+        toolKeys: ['product.query', 'demo.create', 'productSku.create'],
         writeEnabled: true,
       }),
     ]);

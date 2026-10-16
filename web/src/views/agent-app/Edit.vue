@@ -104,7 +104,7 @@ const businessToolOptions = computed(() => {
 
 const businessToolHint = computed(() => {
   const base =
-    "仅已接入 Agent 执行器的工具可选；写入工具须同时开启写入总开关，员工确认并通过业务权限校验后才可提交。";
+    "示例数据、产品、SKU、标准问答、口语词库、文本知识库已接入查询/详情/受控新增。请按职责选用，接入不等于自动授权；写入须开启总开关并确认草稿。标准问答只建草稿，知识库不自动索引。通用业务识别加执行至少需要 2 次单轮调用额度。";
   const unavailable = unavailableSelectedTools.value;
   if (!unavailable.length) return base;
   return `${base} 当前保留了不可执行的历史配置，请手动移除后保存：${unavailable.map((item) => `${item.key}（${item.reason}）`).join("、")}。`;

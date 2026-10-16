@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { AgentExecution, AgentExecutionStatus } from "@/api/agentWorkspace";
+import type {
+  AgentExecution,
+  AgentExecutionStatus,
+} from "@/api/agentWorkspace";
 import { getPermissionActionColor } from "@/utils/permission";
 
 const props = defineProps<{
@@ -14,10 +17,10 @@ const statusMeta = computed(() => {
   // Execution completion is not a write receipt: historical records may have
   // succeeded without a confirmed business record and must remain conservative.
   if (props.status === "succeeded") {
-    if (props.toolKey === "productSku.create") {
+    if (props.toolKey?.endsWith(".create")) {
       const recordId = props.result?.recordId;
       const hasReceipt =
-        props.result?.recordType === "productSku" &&
+        props.result?.recordType === props.toolKey.split(".")[0] &&
         typeof recordId === "number" &&
         Number.isInteger(recordId) &&
         recordId > 0;
@@ -36,7 +39,8 @@ const statusMeta = computed(() => {
         "qa.search",
         "knowledge.retrieve",
         "session.context.read",
-      ].includes(props.toolKey ?? "")
+      ].includes(props.toolKey ?? "") ||
+      /\.(list|detail)$/.test(props.toolKey ?? "")
     ) {
       return { label: "查询完成", type: getPermissionActionColor("read") };
     }

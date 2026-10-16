@@ -1,5 +1,18 @@
 # CHANGELOG
 
+### 2026-10-16 统一接入普通业务与知识内容 Agent 工具
+
+- 新增文件：`server/src/agent-apps/agent-business.registry.ts`、`agent-business.service.ts`、`agent-business-plan.ts`、`agent-business.service.spec.ts`、`agent-business-workspace.spec.ts`；`web/src/views/agent-workspace/components/AgentBusinessQueryCard.vue`；`MD/Agent业务模块接入说明.md`。
+- 修改后端：`server/src/agent-apps/agent-apps.constants.ts`、`agent-apps.module.ts`、`agent-apps.service.spec.ts`、`agent-workspace.service.ts`、`agent-workspace.service.spec.ts`、`entities/agent-draft.entity.ts`；`server/src/ai-command-definitions/ai-command-definitions.constants.ts`、`ai-command-definitions.constants.spec.ts`；`server/src/demo/demo.module.ts`、`demo.service.ts`；`server/src/product-catalog/product-catalog.service.ts`；`server/src/knowledge-standard-qas/knowledge-standard-qas.service.ts`；`server/src/knowledge-colloquial-terms/knowledge-colloquial-terms.service.ts`；`server/src/knowledge-bases/knowledge-bases.module.ts`、`knowledge-bases.service.ts`。
+- 修改前端与文档：`web/src/api/agentWorkspace.ts`、`web/src/views/agent-app/Edit.vue`、`web/src/views/agent-workspace/Index.vue`、`components/AgentDraftCard.vue`、`components/AgentExecutionStatus.vue`、`components/AgentMessageList.vue`；`.design-spec.md`、本文件。删除文件：无。
+- 接入范围：示例数据、产品、SKU、标准问答、口语词库、文本知识库共六类模块，开放 18 个列表/详情/受控创建工具，保留 `product.query`。通用注册声明、服务绑定和 DTO 驱动执行，不通过 Controller 反射或模型指定 URL 执行。更新、删除、批量操作和敏感系统模块仍不开放。
+- 真实规划：通用应用使用模型输出受约束 JSON 识别模块、操作和字段，从人话提炼查询关键词；模型不能决定授权或直接写入。只处理当前一步，条件新增先查询再由员工决定是否建草稿；模型失败按应用模型顺序回退，受单轮调用额度和超时约束。仅使用原两个工具的应用保留兼容流程。
+- 前后端契约：`AgentDraft.toolKey` 扩为字符串，`data` 扩为字段对象；新增不落库的 `form` 元数据与 `businessResult` 查询结构。复用 Form/Dialog/Button 生成编辑表单；查询卡投影安全字段，显示总数/页码/未命中/内容截断。所有模块的真实创建回执均校验记录类型与正整数 ID；草稿修改后重置确认幂等键。
+- 安全与事务：执行前及确认时校验应用授权、写入开关、指令可用状态和员工业务权限；内部 Service 调用显式复用 DTO 验证。通用写入锁定草稿，业务记录、执行回执、草稿和聊天回执同一事务保存；失败回滚后记录失败状态，不能伪报成功。草稿编辑/取消增加行锁和版本/状态复核，已提交或提交中的草稿不能取消；SKU 继续沿用原业务幂等键与核实流程。
+- 知识内容：标准问答强制 draft 并保留原审批；口语词条、文本知识库默认停用，员工可确认前修改；知识库复用分类及文本拆分，不触发文件下载/上传、后台解析、分片或索引。保存成功不代表已发布或可检索。
+- 验证：后端全量单元测试（26 套件 / 207 项）、生产源码及五个变更测试文件类型检查、Agent/指令目录变更文件 ESLint、前后端生产构建、前端组件复用只读扫描与 `git diff --check`。业务服务原文件已有未使用变量、无 await 的 async、通用字符串化及格式 lint 问题，核对 HEAD 后未扩范围清理，未宣称全仓 lint 通过。前端构建首次受沙箱子进程限制，授权重试成功，仅有既有第三方 Rollup 注释警告。
+- 验证边界与部署：未启动常驻服务、未连接真实模型、未修改业务数据，未做浏览器人工验收或真实 MySQL 故障注入；事务编排测试使用内存事务桩。本次无数据库结构迁移，部署需重启后端补齐指令目录；既有应用不自动增加授权或开启写入。完整接入、配置和验收说明见新增 MD。
+
 ### 2026-10-16 修复 Agent 写入确认分流与真实能力反馈
 
 - 新增文件 / 删除文件：无。

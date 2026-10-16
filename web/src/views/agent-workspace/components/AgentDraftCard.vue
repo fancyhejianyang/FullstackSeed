@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { ElMessage, type FormRules } from "element-plus";
 import Button from "@/components/Button.vue";
 import Dialog from "@/components/Dialog.vue";
 import Form, { type FormField } from "@/components/Form.vue";
 import type { ProductOption } from "@/api/productCatalog";
-import type { AgentDraft, AgentSkuDraftData } from "@/api/agentWorkspace";
+import type { AgentDraft, AgentBusinessForm } from "@/api/agentWorkspace";
+import { getPermissionActionColor } from "@/utils/permission";
 
 const props = defineProps<{
   draft: AgentDraft;
@@ -14,20 +15,51 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  update: [draft: AgentDraft, data: AgentSkuDraftData];
+  update: [draft: AgentDraft, data: AgentDraft["data"]];
   confirm: [draft: AgentDraft];
   cancel: [draft: AgentDraft];
 }>();
 
 const editVisible = ref(false);
 const formRef = ref<InstanceType<typeof Form>>();
-const form = reactive({
-  productId: "" as string | number,
-  skuCode: "",
-  name: "",
-  specificationsText: "{}",
-  isEnabled: true,
-});
+const form = ref<Record<string, unknown>>({});
+// 旧 SKU 草稿无需迁移，继续从已有产品选项回显；其余模块使用后端声明。
+const definition = computed<AgentBusinessForm>(
+  () =>
+    props.draft.form ?? {
+      name: "新增 SKU",
+      permission: "ProductSku.create",
+      detailPath: "/business-data/product-skus",
+      note: "SKU 编码留空自动生成；修改后仍需确认录入。",
+      fields: [
+        {
+          prop: "productId",
+          label: "所属产品",
+          type: "integer",
+          required: true,
+          options: props.products.map((p) => ({
+            label: `${p.name}（${p.productCode}）`,
+            value: p.id,
+          })),
+        },
+        { prop: "skuCode", label: "SKU 编码", type: "string", required: false },
+        { prop: "name", label: "SKU 名称", type: "string", required: false },
+        {
+          prop: "specifications",
+          label: "规格参数",
+          type: "object",
+          required: true,
+        },
+        {
+          prop: "isEnabled",
+          label: "是否启用",
+          type: "boolean",
+          required: false,
+          default: true,
+        },
+      ],
+    },
+);
 
 const canEdit = computed(() =>
   ["collecting", "pending_confirmation", "failed"].includes(props.draft.status),
@@ -39,85 +71,120 @@ const canConfirm = computed(
     !props.draft.validationErrors.length,
 );
 
-const fields = computed<FormField[]>(() => [
-  {
-    prop: "productId",
-    label: "所属产品",
-    type: "select",
-    options: props.products.map((item) => ({
-      label: `${item.name}（${item.productCode}）`,
-      value: item.id,
-    })),
-  },
-  {
-    prop: "skuCode",
-    label: "SKU 编码",
-    type: "input",
-    placeholder: "留空则自动生成",
-  },
-  {
-    prop: "name",
-    label: "SKU 名称",
-    type: "input",
-    placeholder: "可选展示名称",
-  },
-  {
-    prop: "specificationsText",
-    label: "规格参数",
-    type: "textarea",
-    rows: 7,
-    placeholder: '{"颜色":"蓝色","容量":"256G"}',
-    hint: "使用 JSON 对象录入规格；保存后仍只是草稿。",
-  },
-  {
-    prop: "isEnabled",
-    label: "启用状态",
-    component: "Switch",
-    componentProps: { activeText: "启用", inactiveText: "停用" },
-  },
-]);
-
-const rules: FormRules = {
-  productId: [{ required: true, message: "请选择所属产品", trigger: "change" }],
-  specificationsText: [
-    { required: true, message: "请输入规格参数", trigger: "blur" },
-  ],
-};
+const fields = computed<FormField[]>(() =>
+  definition.value.fields.map((field) => {
+    const base = { prop: field.prop, label: field.label };
+    if (field.options || field.enum)
+      return {
+        ...base,
+        type: "select",
+        options:
+          field.options ??
+          field.enum!.map((value) => ({ label: value, value })),
+      };
+    if (field.type === "boolean") return { ...base, component: "Switch" };
+    if (["integer", "number"].includes(field.type))
+      return {
+        ...base,
+        component: "InputNumber",
+        componentProps: {
+          min: field.minimum,
+          precision: field.type === "integer" ? 0 : undefined,
+        },
+      };
+    if (["array", "object"].includes(field.type))
+      return {
+        ...base,
+        type: "textarea",
+        rows: 4,
+        hint:
+          field.type === "array"
+            ? "每行填写一项"
+            : '填写 JSON 对象，例如 {"颜色":"蓝色"}',
+      };
+    const multiline = /content|answer|description|semanticDefinition/i.test(
+      field.prop,
+    );
+    return {
+      ...base,
+      type: multiline ? "textarea" : "input",
+      rows: 5,
+      componentProps: { maxlength: field.maxLength },
+    };
+  }),
+);
+const rules = computed<FormRules>(() =>
+  Object.fromEntries(
+    definition.value.fields
+      .filter((field) => field.required)
+      .map((field) => [
+        field.prop,
+        [{ required: true, message: `请填写${field.label}`, trigger: "blur" }],
+      ]),
+  ),
+);
 
 watch(editVisible, (value) => {
   if (!value) return;
-  form.productId = props.draft.data.productId ?? "";
-  form.skuCode = props.draft.data.skuCode;
-  form.name = props.draft.data.name;
-  form.specificationsText = JSON.stringify(
-    props.draft.data.specifications,
-    null,
-    2,
+  form.value = Object.fromEntries(
+    definition.value.fields.map((field) => {
+      const current = props.draft.data[field.prop] ?? field.default;
+      const value =
+        field.type === "object"
+          ? JSON.stringify(current ?? {}, null, 2)
+          : field.type === "array"
+            ? Array.isArray(current)
+              ? current.join("\n")
+              : ""
+            : (current ??
+              (["integer", "number"].includes(field.type)
+                ? null
+                : field.type === "boolean"
+                  ? false
+                  : ""));
+      return [field.prop, value];
+    }),
   );
-  form.isEnabled = props.draft.data.isEnabled;
 });
 
 async function saveEdit() {
   await formRef.value?.validate();
-  let specifications: Record<string, unknown>;
+  const data: Record<string, unknown> = {};
   try {
-    const parsed = JSON.parse(form.specificationsText) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-      throw new Error();
-    specifications = parsed as Record<string, unknown>;
-  } catch {
-    ElMessage.warning("规格参数必须是合法的 JSON 对象");
+    for (const field of definition.value.fields) {
+      const raw = form.value[field.prop];
+      if (raw === "" || raw === undefined || raw === null) continue;
+      if (field.type === "object") {
+        const value: unknown = JSON.parse(String(raw));
+        if (!value || typeof value !== "object" || Array.isArray(value))
+          throw new Error(`${field.label}必须是 JSON 对象`);
+        data[field.prop] = value;
+      } else if (field.type === "array")
+        data[field.prop] = String(raw)
+          .split("\n")
+          .map((s) => s.trim())
+          .filter(Boolean);
+      else data[field.prop] = raw;
+    }
+  } catch (error) {
+    ElMessage.warning(
+      error instanceof Error ? error.message : "字段格式不正确",
+    );
     return;
   }
-  emit("update", props.draft, {
-    productId: Number(form.productId),
-    productName: "",
-    skuCode: form.skuCode.trim(),
-    name: form.name.trim(),
-    specifications,
-    isEnabled: form.isEnabled,
-  });
+  emit("update", props.draft, data);
   editVisible.value = false;
+}
+
+function displayValue(prop: string) {
+  const value = props.draft.data[prop];
+  const label = definition.value.fields
+    .find((f) => f.prop === prop)
+    ?.options?.find((o) => o.value === value)?.label;
+  if (label) return label;
+  if (value === undefined || value === null || value === "") return "未填写";
+  if (typeof value === "boolean") return value ? "是" : "否";
+  return typeof value === "object" ? JSON.stringify(value) : String(value);
 }
 
 function statusText(status: AgentDraft["status"]) {
@@ -139,38 +206,35 @@ function statusText(status: AgentDraft["status"]) {
     <div class="draft-card__header">
       <strong>{{
         draft.status === "submitted"
-          ? "新增 SKU 回执"
-          : "待确认：新增 SKU — 尚未保存"
+          ? `${definition.name}回执`
+          : `${definition.name}草稿 — 尚未保存`
       }}</strong>
       <el-tag
         :type="
           draft.status === 'submitted'
-            ? 'success'
+            ? getPermissionActionColor('create')
             : draft.status === 'failed'
-              ? 'danger'
-              : 'warning'
+              ? getPermissionActionColor('reject')
+              : getPermissionActionColor('audit')
         "
       >
         {{ statusText(draft.status) }}
       </el-tag>
     </div>
     <el-descriptions :column="1" border size="small">
-      <el-descriptions-item label="所属产品">{{
-        draft.data.productName || "待选择"
-      }}</el-descriptions-item>
-      <el-descriptions-item label="SKU 编码">{{
-        draft.data.skuCode || "保存时自动生成"
-      }}</el-descriptions-item>
-      <el-descriptions-item label="SKU 名称">{{
-        draft.data.name || "-"
-      }}</el-descriptions-item>
-      <el-descriptions-item label="规格">{{
-        JSON.stringify(draft.data.specifications)
-      }}</el-descriptions-item>
+      <el-descriptions-item
+        v-for="field in definition.fields"
+        :key="field.prop"
+        :label="field.label"
+        ><span class="draft-card__value">{{
+          displayValue(field.prop)
+        }}</span></el-descriptions-item
+      >
       <el-descriptions-item v-if="draft.submittedRecordId" label="记录 ID">{{
         draft.submittedRecordId
       }}</el-descriptions-item>
     </el-descriptions>
+    <p v-if="definition.note" class="draft-card__note">{{ definition.note }}</p>
     <el-alert
       v-if="draft.missingFields.length || draft.validationErrors.length"
       class="draft-card__alert"
@@ -180,26 +244,26 @@ function statusText(status: AgentDraft["status"]) {
     />
     <div v-if="canEdit" class="draft-card__actions">
       <Button
-        perm="ProductSku.create"
+        :perm="definition.permission"
         :auto-type="false"
-        type="primary"
+        :type="getPermissionActionColor('update')"
         icon="Edit"
         :disabled="busy"
         @click="editVisible = true"
         >修改信息</Button
       >
       <Button
-        perm="ProductSku.create"
+        :perm="definition.permission"
         confirm
-        confirm-text="确认录入当前版本的 SKU 草稿？"
+        :confirm-text="`确认提交当前版本的${definition.name}草稿？${definition.note}`"
         :disabled="!canConfirm || busy"
         @click="emit('confirm', draft)"
         >确认录入</Button
       >
       <Button
-        perm="ProductSku.create"
+        :perm="definition.permission"
         :auto-type="false"
-        type="info"
+        :type="getPermissionActionColor('read')"
         icon="Close"
         :confirm="false"
         :disabled="busy"
@@ -210,7 +274,7 @@ function statusText(status: AgentDraft["status"]) {
 
     <Dialog
       v-model="editVisible"
-      title="修改 SKU 草稿"
+      :title="`修改${definition.name}草稿`"
       width="720px"
       @confirm="saveEdit"
     >
@@ -251,6 +315,15 @@ function statusText(status: AgentDraft["status"]) {
 }
 .draft-card__alert {
   margin-top: 10px;
+}
+.draft-card__value {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.draft-card__note {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.6;
 }
 .draft-card__actions {
   display: flex;

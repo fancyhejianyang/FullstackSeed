@@ -8,5 +8,6 @@ import { DemoController } from './demo.controller';
   imports: [TypeOrmModule.forFeature([Demo])],
   controllers: [DemoController],
   providers: [DemoService],
+  exports: [DemoService],
 })
 export class DemoModule {}

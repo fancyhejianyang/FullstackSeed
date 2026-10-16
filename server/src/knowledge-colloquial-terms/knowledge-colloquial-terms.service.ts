@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Like, Repository } from 'typeorm';
+import { EntityManager, In, Like, Repository } from 'typeorm';
 import {
   BatchDeleteKnowledgeColloquialTermDto,
   CreateKnowledgeColloquialTermDto,
@@ -71,13 +71,13 @@ export class KnowledgeColloquialTermsService {
     return (await this.toViews([await this.findEntity(id)]))[0];
   }
 
-  async create(dto: CreateKnowledgeColloquialTermDto) {
+  async create(dto: CreateKnowledgeColloquialTermDto, manager?: EntityManager) {
     const payload = await this.toEntityPayload(dto, true);
     await this.assertNoDuplicateTerm(payload.term!);
-    const term = await this.termRepository.save(
-      this.termRepository.create(payload),
-    );
-    return this.findOne(term.id);
+    const repository =
+      manager?.getRepository(KnowledgeColloquialTerm) ?? this.termRepository;
+    const term = await repository.save(repository.create(payload));
+    return (await this.toViews([term]))[0];
   }
 
   async update(id: number, dto: UpdateKnowledgeColloquialTermDto) {
@@ -137,10 +137,7 @@ export class KnowledgeColloquialTermsService {
         .sort((left, right) => {
           const leftLength = left.end - left.start;
           const rightLength = right.end - right.start;
-          return (
-            rightLength - leftLength ||
-            right.term.id - left.term.id
-          );
+          return rightLength - leftLength || right.term.id - left.term.id;
         })[0];
       if (!candidate) {
         parts.push(question[position]);

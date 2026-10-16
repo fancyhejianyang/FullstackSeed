@@ -1,4 +1,5 @@
 import { AI_BUSINESS_COMMAND_CATALOG } from '../ai-command-definitions/ai-command-definitions.constants';
+import { AGENT_BUSINESS_TOOLS } from './agent-business.registry';
 
 /**
  * `product.query` 是工作台现有的产品/SKU 聚合查询能力；其余工具直接来自
@@ -16,7 +17,7 @@ export const AGENT_TOOL_KEYS = Array.from(
 /** 只有已经接入工作台执行器的工具才可以配置执行；指令目录登记不等于可调用。 */
 export const AGENT_RUNTIME_TOOL_KEYS: readonly string[] = [
   'product.query',
-  'productSku.create',
+  ...AGENT_BUSINESS_TOOLS.map((tool) => tool.commandKey),
 ];
 
 export const AGENT_WRITE_TOOL_KEYS = AI_BUSINESS_COMMAND_CATALOG.filter(
@@ -91,7 +92,7 @@ export const AGENT_EXECUTION_ACTIVE_STATUSES: AgentExecutionStatus[] = [
   'verifying',
 ];
 
-export interface AgentSkuDraftData {
+export interface AgentSkuDraftData extends Record<string, unknown> {
   productId: number | null;
   productName: string;
   skuCode: string;

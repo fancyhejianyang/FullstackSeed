@@ -41,5 +41,6 @@ import { DocumentParseRulesModule } from '../document-parse-rules/document-parse
   ],
   controllers: [KnowledgeBasesController],
   providers: [KnowledgeBasesService, KnowledgeTaskFileLogger],
+  exports: [KnowledgeBasesService],
 })
 export class KnowledgeBasesModule {}

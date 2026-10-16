@@ -9,13 +9,20 @@ describe('AI command catalog', () => {
     expect(AI_COMMAND_CATALOG_MAP.size).toBe(AI_COMMAND_CATALOG.length);
   });
 
-  it('registers the existing non-AI demo, product and SKU CRUD contracts', () => {
+  it('registers six business/content modules with explicit CRUD contracts', () => {
     const keys = new Set(
       AI_BUSINESS_COMMAND_CATALOG.map((item) => item.commandKey),
     );
-    expect(keys.size).toBe(18);
+    expect(keys.size).toBe(36);
 
-    for (const moduleKey of ['demo', 'product', 'productSku']) {
+    for (const moduleKey of [
+      'demo',
+      'product',
+      'productSku',
+      'standardQa',
+      'colloquialTerm',
+      'knowledgeBase',
+    ]) {
       for (const suffix of [
         'list',
         'detail',
@@ -39,7 +46,7 @@ describe('AI command catalog', () => {
       expect(command.executionMode).toBe('api');
       expect(command.apiPath).toMatch(/^\/api\//);
       expect(bindings.requiredPermission).toMatch(
-        /^(Demo|Product|ProductSku)\.(read|create|update|delete|batchDelete)$/,
+        /^(Demo|Product|ProductSku|KnowledgeStandardQa|KnowledgeColloquialTerm|KnowledgeBase)\.(read|create|update|delete|batchDelete)$/,
       );
       expect(bindings.operatorId).toBe('$operator.id');
     }
@@ -50,6 +57,9 @@ describe('AI command catalog', () => {
       (item) => item.chatCallable && item.action !== 'read',
     );
     expect(chatWrites.map((item) => item.commandKey)).toEqual([
+      'standardQa.create',
+      'colloquialTerm.create',
+      'knowledgeBase.create',
       'demo.create',
       'product.create',
       'productSku.create',

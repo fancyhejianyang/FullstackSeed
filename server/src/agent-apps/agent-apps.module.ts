@@ -4,6 +4,11 @@ import { AiCommandDefinitionsModule } from '../ai-command-definitions/ai-command
 import { KnowledgeAiChatModule } from '../knowledge-ai-chat/knowledge-ai-chat.module';
 import { KnowledgeAiProvidersModule } from '../knowledge-ai-providers/knowledge-ai-providers.module';
 import { ProductCatalogModule } from '../product-catalog/product-catalog.module';
+import { DemoModule } from '../demo/demo.module';
+import { KnowledgeStandardQasModule } from '../knowledge-standard-qas/knowledge-standard-qas.module';
+import { KnowledgeColloquialTermsModule } from '../knowledge-colloquial-terms/knowledge-colloquial-terms.module';
+import { KnowledgeBasesModule } from '../knowledge-bases/knowledge-bases.module';
+import { AgentBusinessService } from './agent-business.service';
 import { AgentAppsController } from './agent-apps.controller';
 import { AgentAppsService } from './agent-apps.service';
 import { AgentWorkspaceController } from './agent-workspace.controller';
@@ -27,9 +32,13 @@ import { AgentSession } from './entities/agent-session.entity';
     KnowledgeAiChatModule,
     KnowledgeAiProvidersModule,
     ProductCatalogModule,
+    DemoModule,
+    KnowledgeStandardQasModule,
+    KnowledgeColloquialTermsModule,
+    KnowledgeBasesModule,
   ],
   controllers: [AgentAppsController, AgentWorkspaceController],
-  providers: [AgentAppsService, AgentWorkspaceService],
+  providers: [AgentAppsService, AgentWorkspaceService, AgentBusinessService],
   exports: [AgentAppsService],
 })
 export class AgentAppsModule {}
