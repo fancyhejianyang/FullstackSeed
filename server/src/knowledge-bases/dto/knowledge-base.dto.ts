@@ -174,6 +174,20 @@ export class QueryNextCategoryCodeDto {
   parentId?: number;
 }
 
+export class QueryKnowledgeBaseCategoryPageDto extends QueryKnowledgeBaseCategoryDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  page?: number = 1;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  pageSize?: number = 10;
+}
+
 export class CreateKnowledgeBaseDocumentDto {
   @Type(() => Number)
   @IsInt()

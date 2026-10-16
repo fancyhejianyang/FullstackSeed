@@ -13,7 +13,7 @@ describe('AI command catalog', () => {
     const keys = new Set(
       AI_BUSINESS_COMMAND_CATALOG.map((item) => item.commandKey),
     );
-    expect(keys.size).toBe(36);
+    expect(keys.size).toBe(39);
 
     for (const moduleKey of [
       'demo',
@@ -60,6 +60,7 @@ describe('AI command catalog', () => {
       'standardQa.create',
       'colloquialTerm.create',
       'knowledgeBase.create',
+      'knowledgeCategory.create',
       'demo.create',
       'product.create',
       'productSku.create',

@@ -30,6 +30,8 @@ import { KnowledgeBasesService } from '../knowledge-bases/knowledge-bases.servic
 import {
   CreateKnowledgeBaseDto,
   QueryKnowledgeBaseDto,
+  CreateKnowledgeBaseCategoryDto,
+  QueryKnowledgeBaseCategoryPageDto,
 } from '../knowledge-bases/dto/knowledge-base.dto';
 import {
   AGENT_BUSINESS_TOOLS,
@@ -120,6 +122,17 @@ export class AgentBusinessService {
             m,
           ),
       },
+      knowledgeCategory: {
+        createDto: CreateKnowledgeBaseCategoryDto,
+        queryDto: QueryKnowledgeBaseCategoryPageDto,
+        list: (d) => knowledge.findCategoriesPage(d),
+        detail: (id) => knowledge.findCategory(id),
+        create: (d, m) =>
+          knowledge.createCategory(
+            d as unknown as CreateKnowledgeBaseCategoryDto,
+            m,
+          ),
+      },
     };
     for (const tool of AGENT_BUSINESS_TOOLS) {
       if (!this.adapters[tool.moduleKey])
@@ -153,7 +166,11 @@ export class AgentBusinessService {
         }),
       );
     }
-    const category = fields.find((field) => field.prop === 'categoryId');
+    const category = fields.find(
+      (field) =>
+        field.prop === 'categoryId' ||
+        (tool.moduleKey === 'knowledgeCategory' && field.prop === 'parentId'),
+    );
     if (category) {
       category.options = (await this.knowledge.findCategories({})).map(
         (item) => ({ value: item.id, label: item.name }),

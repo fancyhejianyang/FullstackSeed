@@ -9,6 +9,7 @@ import type { KnowledgeAiChatService } from '../knowledge-ai-chat/knowledge-ai-c
 import type { ProductCatalogService } from '../product-catalog/product-catalog.service';
 import type { AgentAppsService } from './agent-apps.service';
 import { AgentWorkspaceService } from './agent-workspace.service';
+import { AgentModelRouterService } from './agent-model-router.service';
 import { AgentDraft } from './entities/agent-draft.entity';
 import { AgentExecution } from './entities/agent-execution.entity';
 import { AgentMessage } from './entities/agent-message.entity';
@@ -68,6 +69,12 @@ describe('AgentWorkspaceService ownership and state guards', () => {
     productCatalogService as unknown as ProductCatalogService,
     {} as AgentBusinessService,
     {} as KnowledgeAiProvidersService,
+    new AgentModelRouterService({
+      withExecutionSignal: (
+        _signal: AbortSignal,
+        run: () => Promise<unknown>,
+      ) => run(),
+    } as KnowledgeAiProvidersService),
   );
 
   beforeEach(() => {
@@ -297,6 +304,7 @@ describe('AgentWorkspaceService ownership and state guards', () => {
         providerId: number;
         models: string[];
         maxToolCalls: number;
+        timeoutSeconds: number;
         responsibility: string;
         instructionMarkdown: string;
         toolKeys: string[];
@@ -312,6 +320,7 @@ describe('AgentWorkspaceService ownership and state guards', () => {
         providerId: 3,
         models: ['primary-model', 'fallback-model'],
         maxToolCalls: 5,
+        timeoutSeconds: 60,
         responsibility: '产品助手',
         instructionMarkdown: '# 工作目标\n\n回答产品问题。',
         toolKeys: [],
@@ -338,7 +347,16 @@ describe('AgentWorkspaceService ownership and state guards', () => {
       expect.any(Function),
     );
     expect(execution.status).toBe('succeeded');
-    expect(execution.toolCallCount).toBe(2);
+    expect(execution.toolCallCount).toBe(0);
+    expect(execution.parameterSummary?.modelRouting).toMatchObject({
+      attempts: [
+        { model: 'primary-model', status: 'failed' },
+        {
+          model: 'fallback-model',
+          status: 'succeeded',
+        },
+      ],
+    });
   });
 
   const app = {

@@ -40,6 +40,11 @@ describe('Agent reusable business adapters', () => {
     findBase: jest.fn().mockResolvedValue({ id: 1 }),
     createBase: jest.fn().mockResolvedValue({ id: 9 }),
     findCategories: jest.fn().mockResolvedValue([{ id: 7, name: '售前' }]),
+    findCategoriesPage: jest
+      .fn()
+      .mockResolvedValue({ list: [{ id: 7, name: '售前' }], total: 1 }),
+    findCategory: jest.fn().mockResolvedValue({ id: 7, name: '售前' }),
+    createCategory: jest.fn().mockResolvedValue({ id: 8 }),
   };
   const service = new AgentBusinessService(
     demo as unknown as DemoService,
@@ -50,14 +55,16 @@ describe('Agent reusable business adapters', () => {
   );
   beforeEach(() => jest.clearAllMocks());
 
-  it('registers list/detail/create for six business modules, not arbitrary controllers', () => {
-    expect(AGENT_BUSINESS_TOOLS).toHaveLength(18);
+  it('registers list/detail/create for seven business modules, not arbitrary controllers', () => {
+    expect(AGENT_BUSINESS_TOOLS).toHaveLength(21);
     for (const key of [
       'user.create',
       'role.list',
       'product.delete',
       'standardQa.update',
       'knowledgeBase.index',
+      'knowledgeCategory.update',
+      'knowledgeCategory.delete',
     ])
       expect(
         AGENT_BUSINESS_TOOLS.find((tool) => tool.commandKey === key),
@@ -106,6 +113,9 @@ describe('Agent reusable business adapters', () => {
     expect(service.permissionError('knowledgeBase.create', employee)).toContain(
       'KnowledgeBase.read',
     );
+    expect(
+      service.permissionError('knowledgeCategory.create', employee),
+    ).toContain('KnowledgeBase.read');
     await expect(
       service.query('standardQa.list', {}, employee),
     ).rejects.toThrow('KnowledgeStandardQa.read');
@@ -206,6 +216,36 @@ describe('Agent reusable business adapters', () => {
       form.fields.find((field) => field.prop === 'contentText')?.required,
     ).toBe(true);
     expect(form.note).toContain('索引须在知识库页面执行');
+  });
+
+  it('creates categories only with valid fields and the confirmation transaction manager', async () => {
+    const form = await service.form('knowledgeCategory.create', admin);
+    expect(
+      form.fields.find((field) => field.prop === 'parentId')?.options,
+    ).toEqual([{ label: '售前', value: 7 }]);
+    expect(
+      service.validate('knowledgeCategory.create', {}).missingFields,
+    ).toContain('分类名称');
+    expect(
+      service.validate('knowledgeCategory.create', {
+        name: '新分类',
+        code: 'x'.repeat(81),
+      }).validationErrors.length,
+    ).toBeGreaterThan(0);
+    const manager = {} as EntityManager;
+    await service.create(
+      'knowledgeCategory.create',
+      { name: '子分类', parentId: 7 },
+      admin,
+      manager,
+    );
+    expect(knowledge.createCategory).toHaveBeenCalledWith(
+      { name: '子分类', parentId: 7 },
+      manager,
+    );
+    await expect(
+      service.query('knowledgeCategory.create', { name: '禁止直写' }, admin),
+    ).rejects.toThrow('草稿确认');
   });
 
   it('accepts only constrained JSON plans and never dispatches supplied URLs', () => {

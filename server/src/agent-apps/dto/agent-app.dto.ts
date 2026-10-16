@@ -16,6 +16,7 @@ import {
   MaxLength,
   Matches,
   Min,
+  ValidateNested,
 } from 'class-validator';
 import { toBoolLike } from '../../common/utils/bool-like';
 import {
@@ -26,6 +27,40 @@ import {
   type AgentToolKey,
 } from '../agent-apps.constants';
 import type { AgentExecutionStatus } from '../agent-apps.constants';
+import { AGENT_MODEL_STRATEGIES } from '../agent-model-routing';
+import type { AgentModelRouting } from '../agent-model-routing';
+
+export class AgentModelRoutingDto implements AgentModelRouting {
+  @IsIn(AGENT_MODEL_STRATEGIES)
+  strategy: AgentModelRouting['strategy'];
+
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMaxSize(5)
+  @IsString({ each: true })
+  simpleModels: string[];
+
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMaxSize(5)
+  @IsString({ each: true })
+  complexModels: string[];
+
+  @IsInt()
+  @Min(3)
+  @Max(20)
+  maxAttempts: number;
+
+  @IsInt()
+  @Min(3)
+  @Max(120)
+  attemptTimeoutSeconds: number;
+
+  @IsInt()
+  @Min(5)
+  @Max(3600)
+  cooldownSeconds: number;
+}
 
 export class CreateAgentAppDto {
   @IsString()
@@ -56,6 +91,11 @@ export class CreateAgentAppDto {
   @IsNotEmpty({ each: true })
   @MaxLength(120, { each: true })
   models: string[];
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AgentModelRoutingDto)
+  modelRouting?: AgentModelRoutingDto;
 
   @IsArray()
   @ArrayUnique()

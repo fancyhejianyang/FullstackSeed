@@ -23,6 +23,7 @@ import {
 } from './agent-apps.constants';
 import { AgentAppsService } from './agent-apps.service';
 import { AgentBusinessService } from './agent-business.service';
+import { AgentModelRouterService } from './agent-model-router.service';
 import {
   AGENT_BUSINESS_TOOLS,
   getAgentBusinessTool,
@@ -82,6 +83,7 @@ export class AgentWorkspaceService {
     private readonly productCatalogService: ProductCatalogService,
     private readonly businessService: AgentBusinessService,
     private readonly providersService: KnowledgeAiProvidersService,
+    private readonly modelRouter: AgentModelRouterService,
   ) {}
 
   findAvailableApps(user: AuthUser) {
@@ -822,51 +824,74 @@ export class AgentWorkspaceService {
       executableToolKeys,
       params.activeDraft,
     );
-    const models = (params.app.models ?? []).slice(
-      0,
-      params.app.maxToolCalls - params.execution.toolCallCount,
-    );
-    if (!params.app.providerId || !models.length) {
+    if (!params.app.providerId || !params.app.models?.length) {
       throw new BadRequestException('该 Agent 尚未配置可用的模型账号和模型');
     }
-    let result: Awaited<
-      ReturnType<KnowledgeAiChatService['askForAgent']>
-    > | null = null;
-    for (const model of models) {
-      params.execution.toolCallCount += 1;
-      this.assertToolLimit(params.app, params.execution.toolCallCount);
-      result = await this.knowledgeAiChatService.askForAgent(
-        {
-          question: params.content,
-          providerId: params.app.providerId,
-          model,
-          systemPrompt,
-          workflowId: undefined,
-          sessionId: params.session.knowledgeSessionId ?? undefined,
-          title: params.session.title,
-        },
-        {
-          allowedCommandKeys: allowProductQuery
-            ? [KNOWLEDGE_AI_CHAT_COMMANDS.lookupProductSku]
-            : [],
-        },
-        (name) =>
-          this.reportProgress(
-            params.execution,
-            knowledgeStageToAgentProgress(name),
-          ),
-      );
-      if (!params.session.knowledgeSessionId) {
-        params.session.knowledgeSessionId = result.session.id;
-        await this.sessionRepository.update(params.session.id, {
-          knowledgeSessionId: result.session.id,
-        });
-      }
-      if (result.message.isSuccess) break;
-    }
-    if (!result) {
-      throw new BadRequestException('该 Agent 没有可执行的模型');
-    }
+    const history =
+      params.app.modelRouting?.strategy === 'intent'
+        ? await this.messageRepository.find({
+            where: { sessionId: params.session.id, userId: params.user.userId },
+            order: { id: 'DESC' },
+            take: 6,
+          })
+        : [];
+    const result = await this.modelRouter.call({
+      app: params.app,
+      execution: params.execution,
+      content: params.content,
+      context: JSON.stringify(
+        history
+          .reverse()
+          .map((m) => ({ role: m.role, content: m.content.slice(0, 1000) })),
+      ),
+      purpose: 'answer',
+      assertRunning: () => this.assertExecutionRunning(params.execution.id),
+      persist: () => this.persistModelTrace(params.execution),
+      invoke: async (model) => {
+        const result = await this.knowledgeAiChatService.askForAgent(
+          {
+            question: params.content,
+            providerId: params.app.providerId,
+            model,
+            systemPrompt,
+            workflowId: undefined,
+            sessionId: params.session.knowledgeSessionId ?? undefined,
+            title: params.session.title,
+          },
+          {
+            allowedCommandKeys: allowProductQuery
+              ? [KNOWLEDGE_AI_CHAT_COMMANDS.lookupProductSku]
+              : [],
+          },
+          (name) => {
+            if (name === '业务数据查询') {
+              params.execution.toolCallCount += 1;
+              this.assertToolLimit(params.app, params.execution.toolCallCount);
+            }
+            return this.reportProgress(
+              params.execution,
+              knowledgeStageToAgentProgress(name),
+            );
+          },
+        );
+        if (!params.session.knowledgeSessionId) {
+          params.session.knowledgeSessionId = result.session.id;
+          await this.sessionRepository.update(params.session.id, {
+            knowledgeSessionId: result.session.id,
+          });
+        }
+        return {
+          value: result,
+          isSuccess: result.message.isSuccess,
+          errorMessage: result.message.errorMessage,
+          usage: {
+            promptTokens: result.message.promptTokens,
+            completionTokens: result.message.completionTokens,
+            totalTokens: result.message.totalTokens,
+          },
+        };
+      },
+    });
     await this.assertExecutionRunning(params.execution.id);
     params.execution.status = result.message.isSuccess ? 'succeeded' : 'failed';
     params.execution.result = {
@@ -1179,19 +1204,27 @@ export class AgentWorkspaceService {
         request: params.content,
       }),
     };
-    let result:
-      | Awaited<ReturnType<KnowledgeAiProvidersService['callChat']>>
-      | undefined;
-    const signal = AbortSignal.timeout(app.timeoutSeconds * 1000);
-    for (const model of app.models) {
-      execution.toolCallCount += 1;
-      this.assertToolLimit(app, execution.toolCallCount);
-      result = await this.providersService.withExecutionSignal(signal, () =>
-        this.providersService.callChat({ ...payload, model }),
-      );
-      await this.assertExecutionRunning(execution.id);
-      if (result.isSuccess) break;
-    }
+    const result = await this.modelRouter.call({
+      app,
+      execution,
+      content: params.content,
+      context: JSON.stringify(context),
+      purpose: 'planning',
+      assertRunning: () => this.assertExecutionRunning(execution.id),
+      persist: () => this.persistModelTrace(execution),
+      invoke: async (model) => {
+        const result = await this.providersService.callChat({
+          ...payload,
+          model,
+        });
+        return {
+          value: result,
+          isSuccess: result.isSuccess,
+          errorMessage: result.errorMessage,
+          usage: result.usage,
+        };
+      },
+    });
     await this.assertExecutionRunning(execution.id);
     if (!result?.isSuccess)
       throw new BadRequestException(
@@ -1823,6 +1856,20 @@ export class AgentWorkspaceService {
     if (!execution || execution.status !== 'running') {
       throw new ConflictException('本次执行已停止或失效');
     }
+  }
+
+  private async persistModelTrace(execution: AgentExecution) {
+    const result = await this.executionRepository.update(
+      { id: execution.id, userId: execution.userId, status: 'running' },
+      {
+        parameterSummary: {
+          ...execution.parameterSummary,
+          modelRouting: execution.parameterSummary
+            ?.modelRouting as import('./agent-model-routing').AgentModelTrace,
+        },
+      },
+    );
+    if (!result.affected) throw new ConflictException('执行已停止或失效');
   }
 
   private async findSessionEntity(id: number, user: AuthUser) {

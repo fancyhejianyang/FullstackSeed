@@ -24,6 +24,7 @@ import {
   ParseKnowledgeBaseDocumentDto,
   ParseKnowledgeBaseDocumentRequestDto,
   QueryKnowledgeBaseCategoryDto,
+  QueryKnowledgeBaseCategoryPageDto,
   QueryNextCategoryCodeDto,
   QueryKnowledgeBaseChunkDto,
   QueryKnowledgeBaseDocumentDto,
@@ -69,6 +70,20 @@ export class KnowledgeBasesController {
   @ApiOperation({ summary: '生成下一个知识库分类编码' })
   nextCategoryCode(@Query() query: QueryNextCategoryCodeDto) {
     return this.knowledgeBasesService.nextCategoryCode(query.parentId);
+  }
+
+  @Get('categories/page')
+  @RequirePermissions('KnowledgeBase.read')
+  @ApiOperation({ summary: '分页查询知识库分类' })
+  findCategoriesPage(@Query() query: QueryKnowledgeBaseCategoryPageDto) {
+    return this.knowledgeBasesService.findCategoriesPage(query);
+  }
+
+  @Get('categories/:id')
+  @RequirePermissions('KnowledgeBase.read')
+  @ApiOperation({ summary: '查询知识库分类详情' })
+  findCategory(@Param('id', ParseIntPipe) id: number) {
+    return this.knowledgeBasesService.findCategory(id);
   }
 
   @Get('documents')

@@ -9,6 +9,11 @@ const props = defineProps<{ row?: AgentApp | null }>();
 const visible = defineModel<boolean>("visible", { required: true });
 const loading = ref(false);
 const detail = ref<AgentApp | null>(null);
+const routingLabels = {
+  priority: "优先顺序",
+  balanced: "均衡使用",
+  intent: "按意图与需求复杂度",
+};
 
 function toolLabel(key: string) {
   return key === "product.query" ? "产品/SKU 查询" : key;
@@ -58,6 +63,22 @@ watch(visible, async (value) => {
           type="info"
           >{{ model }}</el-tag
         >
+      </el-descriptions-item>
+      <el-descriptions-item label="模型调度">
+        {{ routingLabels[detail?.modelRouting?.strategy ?? "priority"] }}
+        <template v-if="detail?.modelRouting?.strategy === 'intent'">
+          <div>轻量任务：{{ detail.modelRouting.simpleModels.join("、") }}</div>
+          <div>
+            复杂任务：{{ detail.modelRouting.complexModels.join("、") }}
+          </div>
+        </template>
+        <div>
+          每轮最多 {{ detail?.modelRouting?.maxAttempts ?? 8 }} 次模型阶段尝试，
+          单次最多 {{ detail?.modelRouting?.attemptTimeoutSeconds ?? 20 }} 秒，
+          失败冷却
+          {{ detail?.modelRouting?.cooldownSeconds ?? 60 }} 秒（额度不足至少 10
+          分钟）
+        </div>
       </el-descriptions-item>
       <el-descriptions-item label="业务工具">
         <template v-if="detail?.toolKeys.length">

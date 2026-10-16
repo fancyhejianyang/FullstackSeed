@@ -7,6 +7,7 @@ import type { ProductCatalogService } from '../product-catalog/product-catalog.s
 import type { AgentAppsService } from './agent-apps.service';
 import type { AgentBusinessService } from './agent-business.service';
 import { AgentWorkspaceService } from './agent-workspace.service';
+import { AgentModelRouterService } from './agent-model-router.service';
 import { AgentDraft } from './entities/agent-draft.entity';
 import { AgentExecution } from './entities/agent-execution.entity';
 import { AgentMessage } from './entities/agent-message.entity';
@@ -173,6 +174,9 @@ function harness() {
     {} as ProductCatalogService,
     business as unknown as AgentBusinessService,
     models as unknown as KnowledgeAiProvidersService,
+    new AgentModelRouterService(
+      models as unknown as KnowledgeAiProvidersService,
+    ),
   );
   return {
     service,
@@ -295,6 +299,7 @@ describe('generic Agent workflow and confirmation', () => {
 
   it('routes semantic queries and create drafts without executing a write', async () => {
     const h = harness();
+    h.app.maxToolCalls = 1;
     const execution = Object.assign(new AgentExecution(), {
       id: 30,
       status: 'running',
@@ -319,9 +324,11 @@ describe('generic Agent workflow and confirmation', () => {
     });
     const query = await process.call(h.service, params);
     expect(
-      h.executions.update.mock.calls.map(
-        ([, value]) => value.parameterSummary?.progressStage,
-      ),
+      h.executions.update.mock.calls
+        .map(([, value]) => value.parameterSummary?.progressStage)
+        .filter(
+          (stage, index, stages) => index === 0 || stage !== stages[index - 1],
+        ),
     ).toEqual(['understanding', 'querying']);
     expect(h.business.query).toHaveBeenCalledWith(
       'demo.list',
@@ -329,6 +336,7 @@ describe('generic Agent workflow and confirmation', () => {
       user,
     );
     expect(query.execution.status).toBe('succeeded');
+    expect(query.execution.toolCallCount).toBe(1);
     execution.status = 'running';
     execution.toolCallCount = 0;
     await h.executions.save(execution);
@@ -344,9 +352,11 @@ describe('generic Agent workflow and confirmation', () => {
     expect(create.draft?.data).toEqual({ title: '新任务' });
     expect(create.execution.status).toBe('waiting_confirmation');
     expect(
-      h.executions.update.mock.calls.map(
-        ([, value]) => value.parameterSummary?.progressStage,
-      ),
+      h.executions.update.mock.calls
+        .map(([, value]) => value.parameterSummary?.progressStage)
+        .filter(
+          (stage, index, stages) => index === 0 || stage !== stages[index - 1],
+        ),
     ).toEqual([
       'understanding',
       'querying',

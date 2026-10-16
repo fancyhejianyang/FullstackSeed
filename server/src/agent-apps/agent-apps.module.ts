@@ -9,6 +9,7 @@ import { KnowledgeStandardQasModule } from '../knowledge-standard-qas/knowledge-
 import { KnowledgeColloquialTermsModule } from '../knowledge-colloquial-terms/knowledge-colloquial-terms.module';
 import { KnowledgeBasesModule } from '../knowledge-bases/knowledge-bases.module';
 import { AgentBusinessService } from './agent-business.service';
+import { AgentModelRouterService } from './agent-model-router.service';
 import { AgentAppsController } from './agent-apps.controller';
 import { AgentAppsService } from './agent-apps.service';
 import { AgentWorkspaceController } from './agent-workspace.controller';
@@ -38,7 +39,12 @@ import { AgentSession } from './entities/agent-session.entity';
     KnowledgeBasesModule,
   ],
   controllers: [AgentAppsController, AgentWorkspaceController],
-  providers: [AgentAppsService, AgentWorkspaceService, AgentBusinessService],
+  providers: [
+    AgentAppsService,
+    AgentWorkspaceService,
+    AgentBusinessService,
+    AgentModelRouterService,
+  ],
   exports: [AgentAppsService],
 })
 export class AgentAppsModule {}

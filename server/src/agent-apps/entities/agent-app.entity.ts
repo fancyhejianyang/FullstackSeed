@@ -1,6 +1,7 @@
 import { Column, Entity, Index } from 'typeorm';
 import { BaseEntity } from '../../common/entities/base.entity';
 import type { AgentAccessScope, AgentToolKey } from '../agent-apps.constants';
+import type { AgentModelRouting } from '../agent-model-routing';
 
 @Entity('agent_apps')
 export class AgentApp extends BaseEntity {
@@ -22,6 +23,9 @@ export class AgentApp extends BaseEntity {
 
   @Column({ type: 'simple-json' })
   models: string[];
+
+  @Column({ type: 'simple-json', nullable: true })
+  modelRouting: AgentModelRouting | null;
 
   @Column({ type: 'int', nullable: true })
   workflowId: number | null;

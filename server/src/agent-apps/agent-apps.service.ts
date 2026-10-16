@@ -16,6 +16,7 @@ import {
   type UpdateAgentAppDto,
 } from './dto/agent-app.dto';
 import { AgentApp } from './entities/agent-app.entity';
+import { normalizeModelRouting } from './agent-model-routing';
 import {
   AGENT_RUNTIME_TOOL_KEYS,
   AGENT_WRITE_TOOL_KEYS,
@@ -218,6 +219,16 @@ export class AgentAppsService {
       payload.providerId = providerId;
       payload.providerName = providerName;
       payload.models = models;
+    }
+    if (
+      dto.modelRouting !== undefined ||
+      dto.models !== undefined ||
+      isCreate
+    ) {
+      payload.modelRouting = normalizeModelRouting(
+        dto.modelRouting ?? current?.modelRouting,
+        payload.models ?? current?.models ?? [],
+      );
     }
     // Agent 已改用 Markdown 工作指令，不再从配置绑定知识工作流。
     payload.workflowId = null;

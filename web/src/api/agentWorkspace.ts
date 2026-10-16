@@ -178,7 +178,9 @@ export interface AgentExecution {
   draftId: number | null;
   toolKey: AgentExecutionToolKey;
   status: AgentExecutionStatus;
-  parameterSummary: Record<string, unknown> | null;
+  parameterSummary:
+    | (Record<string, unknown> & { modelRouting?: AgentModelTrace })
+    | null;
   result: Record<string, unknown> | null;
   errorMessage: string | null;
   toolCallCount: number;
@@ -187,6 +189,23 @@ export interface AgentExecution {
   createdAt: string;
   updatedAt: string;
   elapsedMilliseconds?: number | null;
+}
+
+export interface AgentModelTrace {
+  strategy: "priority" | "balanced" | "intent";
+  decision?: {
+    intent: "chat" | "query" | "write" | "analysis";
+    complexity: "simple" | "complex";
+    source: "classifier" | "fallback";
+  };
+  attempts: Array<{
+    purpose: "routing" | "planning" | "answer";
+    model: string;
+    status: "succeeded" | "failed";
+    reason: string | null;
+    elapsedMilliseconds: number;
+    totalTokens: number | null;
+  }>;
 }
 
 export interface AgentSessionDetail extends AgentSession {

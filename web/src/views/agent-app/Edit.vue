@@ -11,6 +11,7 @@ import {
   type AgentAccessScope,
   type AgentApp,
   type AgentAppForm,
+  type AgentModelRouting,
   type AgentConfigurationOptions,
   type AgentToolKey,
 } from "@/api/agentApp";
@@ -29,9 +30,10 @@ const options = ref<AgentConfigurationOptions>({
 });
 const users = ref<UserItem[]>([]);
 
-type EditableForm = Omit<AgentAppForm, "allowedUserIds"> & {
-  allowedUserIds: Array<string | number>;
-};
+type EditableForm = Omit<AgentAppForm, "allowedUserIds" | "modelRouting"> &
+  AgentModelRouting & {
+    allowedUserIds: Array<string | number>;
+  };
 
 const DEFAULT_INSTRUCTION_MARKDOWN = `# 工作目标
 
@@ -54,6 +56,12 @@ const form = reactive<EditableForm>({
   instructionMarkdown: DEFAULT_INSTRUCTION_MARKDOWN,
   providerId: null,
   models: [],
+  strategy: "balanced",
+  simpleModels: [],
+  complexModels: [],
+  maxAttempts: 8,
+  attemptTimeoutSeconds: 20,
+  cooldownSeconds: 60,
   toolKeys: [],
   accessScope: "all",
   allowedUserIds: [],
@@ -104,7 +112,7 @@ const businessToolOptions = computed(() => {
 
 const businessToolHint = computed(() => {
   const base =
-    "示例数据、产品、SKU、标准问答、口语词库、文本知识库已接入查询/详情/受控新增。请按职责选用，接入不等于自动授权；写入须开启总开关并确认草稿。标准问答只建草稿，知识库不自动索引。通用业务识别加执行至少需要 2 次单轮调用额度。";
+    "示例数据、产品、SKU、标准问答、口语词库、文本知识库及知识库分类已接入查询/详情/受控新增。请按职责选用，接入不等于自动授权；写入须开启总开关并确认草稿。标准问答只建草稿，知识库不自动索引。模型尝试与业务工具次数独立限制。";
   const unavailable = unavailableSelectedTools.value;
   if (!unavailable.length) return base;
   return `${base} 当前保留了不可执行的历史配置，请手动移除后保存：${unavailable.map((item) => `${item.key}（${item.reason}）`).join("、")}。`;
@@ -165,7 +173,49 @@ const fields = computed<FormField[]>(() => [
       maxSelections: 5,
       visibleCount: 10,
     },
-    hint: "按选择顺序调用：首个模型为主模型，失败时依次尝试后续模型，最多选择 5 个且受单轮工具上限约束。",
+    hint: "最多选择 5 个授权模型，调度只在此范围内进行。限流、超时、额度异常时自动切换；同账号共享余额耗尽不能靠换模型解决。",
+  },
+  {
+    prop: "strategy",
+    label: "模型调度策略",
+    type: "select",
+    options: [
+      { label: "优先顺序（主模型优先）", value: "priority" },
+      { label: "均衡使用（按当前负载与轮转）", value: "balanced" },
+      { label: "按意图与需求复杂度", value: "intent" },
+    ],
+    hint: "按意图模式使用轻量组识别本轮意图和复杂度，简单任务走轻量组，复杂推理/分析走复杂组；识别失败保守走复杂组，各组内均衡调用。只做模型选型，不扩大工具授权。",
+  },
+  ...(["simpleModels", "complexModels"] as const).map(
+    (prop): FormField => ({
+      prop,
+      label: prop === "simpleModels" ? "轻量任务模型组" : "复杂任务模型组",
+      type: "selectMultiple",
+      options: form.models.map((value) => ({ label: value, value })),
+      componentProps: { disabled: form.strategy !== "intent", maxTagCount: 5 },
+      hint: "从上方已选模型中指定，不按模型名称猜测性能。首选组不可用时会尝试其余已选模型；两组相同则无法产生性能分层。",
+    }),
+  ),
+  {
+    prop: "maxAttempts",
+    label: "模型阶段尝试上限",
+    component: "InputNumber",
+    componentProps: { mode: "integer", min: 3, max: 20 },
+    hint: "本轮意图识别、动作规划、回答阶段的尝试共用此上限，与业务工具次数分离；按意图模式正常问答通常需要 3 次阶段尝试。",
+  },
+  {
+    prop: "attemptTimeoutSeconds",
+    label: "单次模型超时（秒）",
+    component: "InputNumber",
+    componentProps: { mode: "integer", min: 3, max: 120 },
+    hint: "受本轮总超时约束，自动给备用模型预留时间；不会无限重试。",
+  },
+  {
+    prop: "cooldownSeconds",
+    label: "失败冷却（秒）",
+    component: "InputNumber",
+    componentProps: { mode: "integer", min: 5, max: 3600 },
+    hint: "冷却模型暂不参与调度，额度不足至少冷却 10 分钟。健康状态在当前后端进程内共享、重启清空，不代表供应商真实余额。",
   },
   {
     prop: "toolKeys",
@@ -206,6 +256,7 @@ const fields = computed<FormField[]>(() => [
     label: "单轮工具上限",
     component: "InputNumber",
     componentProps: { mode: "integer", min: 1, max: 20 },
+    hint: "仅限制业务工具操作，不含模型识别与重试。",
   },
   {
     prop: "timeoutSeconds",
@@ -252,6 +303,30 @@ const rules = computed<FormRules>(() => ({
       trigger: "change",
     },
   ],
+  simpleModels:
+    form.strategy === "intent"
+      ? [
+          {
+            required: true,
+            type: "array",
+            min: 1,
+            message: "请选择轻量任务模型",
+            trigger: "change",
+          },
+        ]
+      : [],
+  complexModels:
+    form.strategy === "intent"
+      ? [
+          {
+            required: true,
+            type: "array",
+            min: 1,
+            message: "请选择复杂任务模型",
+            trigger: "change",
+          },
+        ]
+      : [],
 }));
 
 function resetForm() {
@@ -264,6 +339,12 @@ function resetForm() {
         ? options.value.providers[0].id
         : null,
     models: [],
+    strategy: "balanced",
+    simpleModels: [],
+    complexModels: [],
+    maxAttempts: 8,
+    attemptTimeoutSeconds: 20,
+    cooldownSeconds: 60,
     toolKeys: [] as AgentToolKey[],
     accessScope: "all" as AgentAccessScope,
     allowedUserIds: [],
@@ -283,6 +364,12 @@ function fillForm(data: AgentApp) {
       data.instructionMarkdown || DEFAULT_INSTRUCTION_MARKDOWN,
     providerId: data.providerId,
     models: [...data.models],
+    strategy: data.modelRouting?.strategy ?? "priority",
+    simpleModels: [...(data.modelRouting?.simpleModels ?? [])],
+    complexModels: [...(data.modelRouting?.complexModels ?? [])],
+    maxAttempts: data.modelRouting?.maxAttempts ?? 8,
+    attemptTimeoutSeconds: data.modelRouting?.attemptTimeoutSeconds ?? 20,
+    cooldownSeconds: data.modelRouting?.cooldownSeconds ?? 60,
     toolKeys: [...data.toolKeys],
     accessScope: data.accessScope,
     allowedUserIds: [...(data.allowedUserIds ?? [])],
@@ -313,6 +400,15 @@ watch(
   },
 );
 
+watch(
+  () => form.models,
+  (models) => {
+    form.simpleModels = form.simpleModels.filter((m) => models.includes(m));
+    form.complexModels = form.complexModels.filter((m) => models.includes(m));
+  },
+  { deep: true },
+);
+
 watch(visible, async (value) => {
   if (!value) return;
   loading.value = true;
@@ -337,6 +433,14 @@ function buildPayload(): AgentAppForm {
     instructionMarkdown: form.instructionMarkdown.trim(),
     providerId: form.providerId ? Number(form.providerId) : null,
     models: [...form.models],
+    modelRouting: {
+      strategy: form.strategy,
+      simpleModels: [...form.simpleModels],
+      complexModels: [...form.complexModels],
+      maxAttempts: Number(form.maxAttempts),
+      attemptTimeoutSeconds: Number(form.attemptTimeoutSeconds),
+      cooldownSeconds: Number(form.cooldownSeconds),
+    },
     toolKeys: [...form.toolKeys],
     accessScope: form.accessScope,
     allowedUserIds:

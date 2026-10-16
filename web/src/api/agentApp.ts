@@ -3,6 +3,15 @@ import request from "@/utils/request";
 export type AgentToolKey = string;
 export type AgentAccessScope = "all" | "users";
 
+export interface AgentModelRouting {
+  strategy: "priority" | "balanced" | "intent";
+  simpleModels: string[];
+  complexModels: string[];
+  maxAttempts: number;
+  attemptTimeoutSeconds: number;
+  cooldownSeconds: number;
+}
+
 export interface AgentBusinessToolOption {
   commandKey: AgentToolKey;
   name: string;
@@ -21,6 +30,7 @@ export interface AgentApp {
   providerId: number;
   providerName: string;
   models: string[];
+  modelRouting: AgentModelRouting | null;
   toolKeys: AgentToolKey[];
   accessScope: AgentAccessScope;
   allowedUserIds: number[] | null;
@@ -39,6 +49,7 @@ export interface AgentAppForm {
   instructionMarkdown: string;
   providerId: number | null;
   models: string[];
+  modelRouting: AgentModelRouting;
   toolKeys: AgentToolKey[];
   accessScope: AgentAccessScope;
   allowedUserIds: number[];

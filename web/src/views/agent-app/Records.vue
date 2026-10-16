@@ -18,6 +18,13 @@ const columns: TableColumn[] = [
   { prop: "sessionId", label: "会话 ID", width: 100 },
   { prop: "toolKey", label: "执行能力", minWidth: 180, slot: true },
   { prop: "status", label: "状态", width: 120, slot: true },
+  {
+    prop: "modelRouting",
+    label: "模型调度",
+    minWidth: 300,
+    slot: true,
+    showOverflowTooltip: false,
+  },
   { prop: "parameterSummary", label: "参数摘要", minWidth: 260, slot: true },
   { prop: "result", label: "结果摘要", minWidth: 260, slot: true },
   { prop: "elapsedMilliseconds", label: "耗时", width: 110, slot: true },
@@ -67,7 +74,47 @@ function toolLabel(toolKey: AgentExecution["toolKey"]) {
     "product.query": "产品/SKU 查询",
     "productSku.create": "受控新增 SKU",
   };
-  return labels[toolKey];
+  return labels[toolKey] || toolKey;
+}
+
+function routingSummary(row: AgentExecution) {
+  const trace = row.parameterSummary?.modelRouting;
+  if (!trace) return "—";
+  const strategies = {
+    priority: "优先顺序",
+    balanced: "均衡使用",
+    intent: "意图调度",
+  };
+  const intents = {
+    chat: "问答",
+    query: "查询",
+    write: "录入",
+    analysis: "分析",
+  };
+  const purposes = { routing: "识别", planning: "规划", answer: "回答" };
+  const reasons: Record<string, string> = {
+    account_auth: "账号鉴权失败",
+    account_balance: "账号余额不足",
+    quota: "额度不足",
+    rate_limit: "限流",
+    timeout: "超时",
+    context_length: "上下文超限",
+    model_unavailable: "模型不可用",
+    request_failed: "请求失败",
+    invalid_output: "识别格式无效",
+  };
+  return [
+    strategies[trace.strategy],
+    trace.decision
+      ? `${intents[trace.decision.intent]} · ${trace.decision.complexity === "complex" ? "复杂" : "简单"}${trace.decision.source === "fallback" ? "（保守回退）" : ""}`
+      : "",
+    ...trace.attempts.map(
+      (a) =>
+        `${purposes[a.purpose]}：${a.model} · ${a.status === "succeeded" ? "成功" : reasons[a.reason ?? ""] || "失败"}${a.totalTokens == null ? "" : ` · ${a.totalTokens} tokens`}`,
+    ),
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 </script>
 
@@ -93,6 +140,9 @@ function toolLabel(toolKey: AgentExecution["toolKey"]) {
       <template #column-parameterSummary="{ row }">
         <code>{{ JSON.stringify(row.parameterSummary) }}</code>
       </template>
+      <template #column-modelRouting="{ row }">
+        <span class="routing-summary">{{ routingSummary(row) }}</span>
+      </template>
       <template #column-result="{ row }">
         <code>{{ row.errorMessage || JSON.stringify(row.result) }}</code>
       </template>
@@ -111,6 +161,10 @@ function toolLabel(toolKey: AgentExecution["toolKey"]) {
 </template>
 
 <style scoped>
+.routing-summary {
+  white-space: pre-line;
+  line-height: 1.7;
+}
 code {
   color: #606266;
   font-family: Consolas, Monaco, monospace;

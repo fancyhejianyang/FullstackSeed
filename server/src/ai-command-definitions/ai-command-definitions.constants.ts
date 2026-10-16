@@ -345,6 +345,56 @@ export const AI_BUSINESS_COMMAND_CATALOG: AiCommandCatalogItem[] = [
     },
   }),
   ...createBusinessCrudCatalog({
+    moduleKey: 'knowledgeCategory',
+    moduleName: '知识库分类',
+    controllerName: 'KnowledgeBasesController',
+    apiBasePath: '/api/knowledge-bases/categories',
+    permissionPrefix: 'KnowledgeBase',
+    semanticKeywords: ['知识库分类', '知识分类', '上级分类'],
+    querySchema: {
+      type: 'object',
+      properties: {
+        keyword: { type: 'string' },
+        parentId: { type: 'integer', title: '上级分类', minimum: 1 },
+      },
+    },
+    createSchema: {
+      type: 'object',
+      required: ['name'],
+      properties: {
+        parentId: { type: 'integer', title: '上级分类', minimum: 1 },
+        name: {
+          type: 'string',
+          title: '分类名称',
+          minLength: 1,
+          maxLength: 120,
+        },
+        code: { type: 'string', title: '分类编码', maxLength: 80 },
+        description: { type: 'string', title: '描述', maxLength: 2000 },
+      },
+    },
+    methods: {
+      list: 'findCategoriesPage',
+      detail: 'findCategory',
+      create: 'createCategory',
+      update: 'updateCategory',
+      delete: 'removeCategory',
+      batchDelete: '',
+    },
+  })
+    .filter((item) =>
+      [
+        'knowledgeCategory.list',
+        'knowledgeCategory.detail',
+        'knowledgeCategory.create',
+      ].includes(item.commandKey),
+    )
+    .map((item) =>
+      item.commandKey === 'knowledgeCategory.list'
+        ? { ...item, apiPath: `${item.apiPath}/page` }
+        : item,
+    ),
+  ...createBusinessCrudCatalog({
     moduleKey: 'demo',
     moduleName: '示例数据',
     controllerName: 'DemoController',

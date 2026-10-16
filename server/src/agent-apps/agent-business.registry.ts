@@ -34,6 +34,12 @@ export const AGENT_BUSINESS_MODULES = {
     path: '/knowledge-bases/list',
     note: '仅创建文本内容，默认停用；沿用文本拆分规则，分片、索引须在知识库页面执行。',
   },
+  knowledgeCategory: {
+    name: '知识库分类',
+    permission: 'KnowledgeBase',
+    path: '/knowledge-bases/categories',
+    note: '仅新增分类，不移动、删除分类；上级为空表示顶级分类，编码可选。',
+  },
 } as const;
 
 export type AgentBusinessModuleKey = keyof typeof AGENT_BUSINESS_MODULES;
@@ -120,7 +126,8 @@ export const AGENT_BUSINESS_TOOLS = AI_BUSINESS_COMMAND_CATALOG.filter(
     extraPermissions:
       operation === 'create' && moduleKey === 'productSku'
         ? ['Product.read']
-        : operation === 'create' && moduleKey === 'knowledgeBase'
+        : operation === 'create' &&
+            ['knowledgeBase', 'knowledgeCategory'].includes(moduleKey)
           ? ['KnowledgeBase.read']
           : [],
     detailPath: module.path,

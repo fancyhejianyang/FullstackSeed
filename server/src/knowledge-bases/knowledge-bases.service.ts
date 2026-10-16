@@ -892,7 +892,7 @@ export class KnowledgeBasesService implements OnModuleInit {
     }
   }
 
-  async findCategories(query: QueryKnowledgeBaseCategoryDto) {
+  private categoryQuery(query: QueryKnowledgeBaseCategoryDto) {
     const qb = this.categoryRepository
       .createQueryBuilder('category')
       .orderBy('category.id', 'ASC');
@@ -907,7 +907,23 @@ export class KnowledgeBasesService implements OnModuleInit {
         { keyword: `%${query.keyword.trim()}%` },
       );
     }
-    return qb.getMany();
+    return qb;
+  }
+
+  async findCategories(query: QueryKnowledgeBaseCategoryDto) {
+    return this.categoryQuery(query).getMany();
+  }
+
+  async findCategoriesPage(
+    query: QueryKnowledgeBaseCategoryDto & { page?: number; pageSize?: number },
+  ) {
+    const page = Math.max(1, query.page ?? 1);
+    const pageSize = Math.min(200, Math.max(1, query.pageSize ?? 10));
+    const [list, total] = await this.categoryQuery(query)
+      .skip((page - 1) * pageSize)
+      .take(pageSize)
+      .getManyAndCount();
+    return { list, total };
   }
 
   async findCategoryTree(query: QueryKnowledgeBaseCategoryDto) {
@@ -955,10 +971,20 @@ export class KnowledgeBasesService implements OnModuleInit {
     return `${prefix}_${String(max + 1).padStart(3, '0')}`;
   }
 
-  async createCategory(dto: CreateKnowledgeBaseCategoryDto) {
-    await this.assertParentCategory(dto.parentId);
-    return this.categoryRepository.save(
-      this.categoryRepository.create({
+  async createCategory(
+    dto: CreateKnowledgeBaseCategoryDto,
+    manager?: EntityManager,
+  ) {
+    const repository =
+      manager?.getRepository(KnowledgeBaseCategory) ?? this.categoryRepository;
+    if (
+      dto.parentId &&
+      !(await repository.findOne({ where: { id: dto.parentId } }))
+    ) {
+      throw new NotFoundException('上级分类不存在');
+    }
+    return repository.save(
+      repository.create({
         parentId: dto.parentId ?? null,
         name: dto.name.trim(),
         code: dto.code?.trim() ?? '',

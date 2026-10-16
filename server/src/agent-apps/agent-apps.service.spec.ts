@@ -7,6 +7,7 @@ import type { KnowledgeAiProvidersService } from '../knowledge-ai-providers/know
 import { AGENT_RUNTIME_TOOL_KEYS } from './agent-apps.constants';
 import { AgentAppsService } from './agent-apps.service';
 import { AgentApp } from './entities/agent-app.entity';
+import { normalizeModelRouting } from './agent-model-routing';
 
 const user = (id: number, isAdmin = false): AuthUser => ({
   userId: id,
@@ -146,8 +147,35 @@ describe('AgentAppsService access and tool policy', () => {
         workflowName: null,
         instructionMarkdown: '# 工作目标\n\n协助员工处理日常问题。',
         toolKeys: [],
+        modelRouting: normalizeModelRouting(undefined, ['qwen-plus']),
       }),
     );
+  });
+
+  it('persists routing configuration and refuses groups outside the approved model list', async () => {
+    const dto = {
+      name: '调度助手',
+      responsibility: '查询分析',
+      instructionMarkdown: '# 工作目标',
+      providerId: 1,
+      models: ['qwen-plus', 'gpt-4o-mini'],
+      modelRouting: normalizeModelRouting(
+        {
+          strategy: 'intent',
+          simpleModels: ['gpt-4o-mini'],
+          complexModels: ['qwen-plus'],
+        },
+        ['qwen-plus', 'gpt-4o-mini'],
+      ),
+    };
+    expect(await service.create(dto)).toMatchObject({
+      modelRouting: dto.modelRouting,
+    });
+    repository.save.mockClear();
+    await expect(
+      service.create({ ...dto, models: ['qwen-plus'] }),
+    ).rejects.toThrow('当前模型列表');
+    expect(repository.save).not.toHaveBeenCalled();
   });
 
   it('requires an explicit write tool whenever the write switch is enabled', async () => {

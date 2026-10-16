@@ -1,5 +1,19 @@
 # CHANGELOG
 
+### 2026-10-16 补齐知识库分类工具与 Agent 主动模型调度
+
+- 新增文件（5）：`server/src/agent-apps/agent-model-routing.ts`、`agent-model-router.service.ts`、`agent-model-router.service.spec.ts`；`server/src/knowledge-bases/knowledge-category-agent.spec.ts`；`server/src/migrations/1792166400000-AddAgentModelRouting.ts`。
+- 修改后端（16）：`server/src/agent-apps/agent-apps.module.ts`、`agent-apps.service.ts`、`agent-apps.service.spec.ts`、`agent-business.registry.ts`、`agent-business.service.ts`、`agent-business.service.spec.ts`、`agent-business-workspace.spec.ts`、`agent-workspace.service.ts`、`agent-workspace.service.spec.ts`、`dto/agent-app.dto.ts`、`entities/agent-app.entity.ts`；`server/src/ai-command-definitions/ai-command-definitions.constants.ts`、`ai-command-definitions.constants.spec.ts`；`server/src/knowledge-bases/dto/knowledge-base.dto.ts`、`knowledge-bases.controller.ts`、`knowledge-bases.service.ts`。
+- 修改前端（5）：`web/src/api/agentApp.ts`、`agentWorkspace.ts`；`web/src/views/agent-app/Edit.vue`、`Records.vue`、`View.vue`。修改文档（3）：`.design-spec.md`、`MD/Agent业务模块接入说明.md`、本文件。删除文件：无，共 29 个文件。
+- 工具补齐：接通 `knowledgeCategory.list/detail/create` 的真实服务，支持关键词/上级筛选、分页、详情和确认后新增，七类普通业务/知识模块共 21 个通用工具，另保留 `product.query`。分类下拉继续沿用原全量接口，新加 `/knowledge-bases/categories/page` 和 `/categories/:id` 与目录契约对齐；不开放分类移动、更新、删除或账号权限模块。
+- 权限与事务：分类创建要求应用授权、写入开关及员工 `KnowledgeBase.create/read`；上级必须真实存在，名称/编码按实体长度验证。分类草稿复用 Form/确认/幂等流程，父分类读取和保存使用确认事务的 EntityManager；不会先在默认仓库提交业务记录再写回执。
+- 模型字段对齐：前后端统一 `modelRouting { strategy, simpleModels, complexModels, maxAttempts, attemptTimeoutSeconds, cooldownSeconds }`。新增可空 JSON 文本列，旧配置 null 保留 priority；新建 UI 默认 balanced，API 未传时仍兼容 priority。模型组必须属于当前已选模型，intent 模式必填两组。
+- 主动调度：priority 按健康模型顺序；balanced 按进行中调用数及最近使用轮转；intent 用模型结合本轮问题/近期对话识别问答、查询、录入、分析及简单/复杂程度，选择轻量或复杂组，组内均衡，必要时回退其他已选模型。分类仅接受固定字符串枚举，失败保守走复杂组，不改变业务授权或执行确认。
+- 失败保护：模型限流、超时、临时失败进入进程内共享冷却，额度不足至少 10 分钟；上下文/分类格式问题不全局熔断模型。明确账号鉴权或余额异常停止同账号重试。通过已有 AbortSignal 中止超时模型网络请求，为备用模型保留本轮时间；所有阶段尝试受独立上限和总超时约束。模型分类、规划、回答不再消耗业务工具次数，实际查询/准备草稿仍计数。
+- UI 与审计：编辑页复用封装 Form/下拉/数字组件配置策略、模型组和限制；详情显示保存配置，执行记录新增真实模型轨迹列，显示策略、意图/复杂度、阶段、实际模型、结果、规范化失败原因和已返回的 Token 用量。仅新增结构化记录，不暴露思维链、密钥或供应商原始错误。
+- 验证：后端全量 28 套件 / 241 项测试、前端进度 8 项测试、生产源码及全部变更测试类型检查、Agent/目录/新增文件 ESLint、前端变更文件 Prettier、前后端生产构建、组件复用只读扫描、`git diff --check` 通过。Vite 构建在沙箱阻止 esbuild 子进程后授权重试通过，仅既有第三方注释警告；知识库大型历史服务未做全量格式重写，不宣称全仓 lint 通过。
+- 部署与边界：未启动常驻服务、未连接真实模型/数据库、未执行迁移或浏览器验收。生产先审阅并执行迁移再重启，启动补齐分类指令，既有应用不自动授权工具或改策略。健康/负载仅当前进程共享、重启清空，多实例需另接共享协调；不查询真实供应商余额、不跨账号，无法保证共享额度永不耗尽。模型上限按阶段计数，不是知识问答内部全部底层 API 次数；其他外部客服/工作流模型策略不受改动影响。配置、部署和人工验收步骤见接入说明。
+
 ### 2026-10-16 Agent 对话真实阶段动态提示
 
 - 新增文件：`server/src/agent-apps/agent-progress.ts`；`web/src/views/agent-workspace/agentProgress.ts`、`agentProgress.test.mjs`、`components/AgentProcessingIndicator.vue`。
