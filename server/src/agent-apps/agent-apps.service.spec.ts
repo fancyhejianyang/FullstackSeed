@@ -19,6 +19,7 @@ const user = (id: number, isAdmin = false): AuthUser => ({
 
 describe('AgentAppsService access and tool policy', () => {
   const repository = {
+    findOne: jest.fn(),
     find: jest.fn((): Promise<AgentApp[]> => Promise.resolve([])),
     create: jest.fn((value: Partial<AgentApp>): AgentApp => value as AgentApp),
     save: jest.fn(
@@ -26,6 +27,7 @@ describe('AgentAppsService access and tool policy', () => {
     ),
   };
   const providers = {
+    findOne: jest.fn(),
     findAll: jest.fn(() =>
       Promise.resolve({
         list: [
@@ -60,6 +62,80 @@ describe('AgentAppsService access and tool policy', () => {
   );
 
   beforeEach(() => jest.clearAllMocks());
+
+  it('keeps vision and generation references separate and preserves omitted media settings', async () => {
+    providers.findOne.mockResolvedValue({
+      id: 2,
+      isEnabled: true,
+      secretKeySet: true,
+      visionModels: 'vision#识图',
+      imageGenerationModels: 'image#生图',
+      imageGenerationApiUrl: 'https://provider.example/images',
+    });
+    const references = {
+      vision: { providerId: 2, model: 'vision' },
+      imageGeneration: { providerId: 2, model: 'image' },
+    };
+    const created = await service.create({
+      name: '助手',
+      responsibility: '媒体',
+      instructionMarkdown: '识图',
+      providerId: 1,
+      models: ['qwen-plus'],
+      mediaModels: references,
+    });
+    expect(created.mediaModels).toEqual(references);
+    repository.findOne.mockResolvedValue(created);
+    const updated = await service.update(1, { name: '改名' });
+    expect(updated.mediaModels).toEqual(references);
+    const cleared = await service.update(1, {
+      mediaModels: {
+        vision: null,
+        imageGeneration: references.imageGeneration,
+      },
+    });
+    expect(cleared.mediaModels).toEqual({
+      vision: null,
+      imageGeneration: references.imageGeneration,
+    });
+    await expect(
+      service.update(1, {
+        mediaModels: {
+          vision: references.imageGeneration,
+          imageGeneration: null,
+        },
+      }),
+    ).rejects.toThrow('对应能力目录');
+    providers.findOne.mockResolvedValueOnce({
+      isEnabled: false,
+      secretKeySet: true,
+    });
+    await expect(
+      service.update(1, { mediaModels: references }),
+    ).rejects.toThrow('未启用');
+  });
+
+  it('requires an explicitly configured generation endpoint before saving a generation reference', async () => {
+    providers.findOne.mockResolvedValueOnce({
+      isEnabled: true,
+      secretKeySet: true,
+      imageGenerationModels: 'image',
+      imageGenerationApiUrl: '',
+    });
+    repository.findOne.mockResolvedValue({
+      id: 1,
+      models: ['qwen-plus'],
+      toolKeys: [],
+    });
+    await expect(
+      service.update(1, {
+        mediaModels: {
+          vision: null,
+          imageGeneration: { providerId: 2, model: 'image' },
+        },
+      }),
+    ).rejects.toThrow('生图接口地址');
+  });
 
   it('filters user-scoped apps while allowing administrators', async () => {
     repository.find.mockResolvedValue([

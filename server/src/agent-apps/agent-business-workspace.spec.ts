@@ -8,6 +8,7 @@ import type { AgentAppsService } from './agent-apps.service';
 import type { AgentBusinessService } from './agent-business.service';
 import { AgentWorkspaceService } from './agent-workspace.service';
 import { AgentModelRouterService } from './agent-model-router.service';
+import type { AgentMediaService } from './agent-media.service';
 import { AgentDraft } from './entities/agent-draft.entity';
 import { AgentExecution } from './entities/agent-execution.entity';
 import { AgentMessage } from './entities/agent-message.entity';
@@ -163,6 +164,24 @@ function harness() {
     ),
     callChat: jest.fn(),
   };
+  const media = {
+    run: jest.fn().mockResolvedValue({
+      content: '图片已生成',
+      images: [
+        { id: 9, mimeType: 'image/png', size: 100, source: 'generated' },
+      ],
+      providerId: 1,
+      model: 'image-model',
+    }),
+    cancel: jest.fn(),
+    read: jest.fn().mockResolvedValue({
+      id: 9,
+      mimeType: 'image/png',
+      size: 100,
+      source: 'upload',
+    }),
+    reference: jest.fn((image: unknown) => image),
+  };
   const service = new AgentWorkspaceService(
     sessions as unknown as Repository<AgentSession>,
     chats as unknown as Repository<AgentMessage>,
@@ -177,9 +196,12 @@ function harness() {
     new AgentModelRouterService(
       models as unknown as KnowledgeAiProvidersService,
     ),
+    media as unknown as AgentMediaService,
   );
   return {
     service,
+    media,
+    sessions,
     business,
     apps,
     app,
@@ -198,6 +220,79 @@ function harness() {
 }
 
 describe('generic Agent workflow and confirmation', () => {
+  it('generates images once per message id without running business tools or touching an active draft', async () => {
+    const h = harness();
+    const payload = {
+      mode: 'imageGeneration' as const,
+      content: '生成商品海报',
+      clientMessageId: 'image-1',
+    };
+    const result = await h.service.sendMessage(2, payload, user);
+    expect(result.execution).toMatchObject({
+      toolKey: 'media.imageGeneration',
+      status: 'succeeded',
+      draftId: null,
+    });
+    expect(result.execution?.result).toMatchObject({
+      images: [
+        { id: 9, mimeType: 'image/png', size: 100, source: 'generated' },
+      ],
+    });
+    await h.service.sendMessage(2, payload, user);
+    expect(h.media.run).toHaveBeenCalledTimes(1);
+    expect(h.business.create).not.toHaveBeenCalled();
+    expect(h.models.callChat).not.toHaveBeenCalled();
+    expect(h.drafts.save).not.toHaveBeenCalled();
+  });
+
+  it('does not revive a stopped media execution when a provider returns late', async () => {
+    const h = harness();
+    h.media.run.mockImplementationOnce(
+      async (params: { executionId: number }) => {
+        await h.service.stopExecution(params.executionId, user);
+        return {
+          content: 'late',
+          images: [],
+          providerId: 1,
+          model: 'image-model',
+        };
+      },
+    );
+    const result = await h.service.sendMessage(
+      2,
+      {
+        mode: 'imageGeneration',
+        content: '生成海报',
+        clientMessageId: 'image-stop',
+      },
+      user,
+    );
+    expect(result.execution?.status).toBe('cancelled');
+    expect(h.media.cancel).toHaveBeenCalled();
+    expect(h.draft.status).toBe('pending_confirmation');
+  });
+
+  it('checks attachment ownership before accepting a vision message', async () => {
+    const h = harness();
+    h.media.read.mockRejectedValueOnce(
+      new BadRequestException('图片不属于当前会话'),
+    );
+    await expect(
+      h.service.sendMessage(
+        2,
+        {
+          mode: 'vision',
+          imageId: 9,
+          content: '识别此图',
+          clientMessageId: 'vision-1',
+        },
+        user,
+      ),
+    ).rejects.toThrow('图片不属于当前会话');
+    expect(h.media.read).toHaveBeenCalledWith(9, 2, user.userId);
+    expect(h.media.run).not.toHaveBeenCalled();
+    expect(h.runs).toHaveLength(0);
+  });
   it('guides confirmation without a real draft using current module capabilities, not SKU-only wording', async () => {
     const h = harness();
     const execution = Object.assign(new AgentExecution(), {

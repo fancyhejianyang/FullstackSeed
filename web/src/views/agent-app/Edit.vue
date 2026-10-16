@@ -12,6 +12,7 @@ import {
   type AgentApp,
   type AgentAppForm,
   type AgentModelRouting,
+  type AgentModelReference,
   type AgentConfigurationOptions,
   type AgentToolKey,
 } from "@/api/agentApp";
@@ -30,9 +31,14 @@ const options = ref<AgentConfigurationOptions>({
 });
 const users = ref<UserItem[]>([]);
 
-type EditableForm = Omit<AgentAppForm, "allowedUserIds" | "modelRouting"> &
+type EditableForm = Omit<
+  AgentAppForm,
+  "allowedUserIds" | "modelRouting" | "mediaModels"
+> &
   AgentModelRouting & {
     allowedUserIds: Array<string | number>;
+    visionModel: string;
+    imageGenerationModel: string;
   };
 
 const DEFAULT_INSTRUCTION_MARKDOWN = `# 工作目标
@@ -57,6 +63,8 @@ const form = reactive<EditableForm>({
   providerId: null,
   models: [],
   strategy: "balanced",
+  visionModel: "",
+  imageGenerationModel: "",
   simpleModels: [],
   complexModels: [],
   maxAttempts: 8,
@@ -118,6 +126,30 @@ const businessToolHint = computed(() => {
   return `${base} 当前保留了不可执行的历史配置，请手动移除后保存：${unavailable.map((item) => `${item.key}（${item.reason}）`).join("、")}。`;
 });
 
+function mediaKey(reference?: AgentModelReference | null) {
+  return reference ? `${reference.providerId}:${reference.model}` : "";
+}
+function mediaReference(value: string): AgentModelReference | null {
+  if (!value) return null;
+  const separator = value.indexOf(":");
+  return {
+    providerId: Number(value.slice(0, separator)),
+    model: value.slice(separator + 1),
+  };
+}
+function mediaOptions(kind: "vision" | "imageGeneration", selected: string) {
+  const list = (options.value.mediaModels?.[kind] ?? []).map((item) => ({
+    value: mediaKey(item),
+    label: `${item.providerName} / ${item.text}`,
+  }));
+  if (selected && !list.some((item) => item.value === selected))
+    list.push({
+      value: selected,
+      label: `${selected}（引用已失效，请清除或重新选择）`,
+    });
+  return list;
+}
+
 const fields = computed<FormField[]>(() => [
   {
     prop: "name",
@@ -149,7 +181,7 @@ const fields = computed<FormField[]>(() => [
   },
   {
     prop: "providerId",
-    label: "模型账号",
+    label: "文本模型账号",
     type: "select",
     placeholder: "请选择已启用的模型账号",
     options: options.value.providers.map((item) => ({
@@ -160,7 +192,7 @@ const fields = computed<FormField[]>(() => [
   },
   {
     prop: "models",
-    label: "模型列表",
+    label: "文本模型列表",
     type: "selectMultiple",
     placeholder: form.providerId ? "请选择一个或多个模型" : "请先选择模型账号",
     options:
@@ -177,25 +209,30 @@ const fields = computed<FormField[]>(() => [
   },
   {
     prop: "strategy",
-    label: "模型调度策略",
+    label: "文本模型调度策略",
     type: "select",
     options: [
       { label: "优先顺序（主模型优先）", value: "priority" },
       { label: "均衡使用（按当前负载与轮转）", value: "balanced" },
       { label: "按意图与需求复杂度", value: "intent" },
     ],
-    hint: "按意图模式使用轻量组识别本轮意图和复杂度，简单任务走轻量组，复杂推理/分析走复杂组；识别失败保守走复杂组，各组内均衡调用。只做模型选型，不扩大工具授权。",
+    hint:
+      form.strategy === "intent"
+        ? "使用轻量组识别意图和复杂度，简单任务走轻量组，复杂任务走复杂组；识别失败保守走复杂组，各组内均衡调用。"
+        : "当前策略不使用轻量/复杂模型分组。若要按任务难度选模型，请切换为‘按意图与需求复杂度’，下方将显示分组设置。",
   },
-  ...(["simpleModels", "complexModels"] as const).map(
-    (prop): FormField => ({
-      prop,
-      label: prop === "simpleModels" ? "轻量任务模型组" : "复杂任务模型组",
-      type: "selectMultiple",
-      options: form.models.map((value) => ({ label: value, value })),
-      componentProps: { disabled: form.strategy !== "intent", maxTagCount: 5 },
-      hint: "从上方已选模型中指定，不按模型名称猜测性能。首选组不可用时会尝试其余已选模型；两组相同则无法产生性能分层。",
-    }),
-  ),
+  ...(form.strategy === "intent"
+    ? (["simpleModels", "complexModels"] as const).map(
+        (prop): FormField => ({
+          prop,
+          label: prop === "simpleModels" ? "轻量任务模型组" : "复杂任务模型组",
+          type: "selectMultiple",
+          options: form.models.map((value) => ({ label: value, value })),
+          componentProps: { maxTagCount: 5 },
+          hint: "从上方已选模型中指定，不按模型名称猜测性能。首选组不可用时会尝试其余已选模型；两组相同则无法产生性能分层。",
+        }),
+      )
+    : []),
   {
     prop: "maxAttempts",
     label: "模型阶段尝试上限",
@@ -208,7 +245,7 @@ const fields = computed<FormField[]>(() => [
     label: "单次模型超时（秒）",
     component: "InputNumber",
     componentProps: { mode: "integer", min: 3, max: 120 },
-    hint: "受本轮总超时约束，自动给备用模型预留时间；不会无限重试。",
+    hint: "仅用于文本调度，受本轮总超时约束，自动给备用模型预留时间；不会无限重试。图片识别/生成使用下方的总超时，不自动重试。",
   },
   {
     prop: "cooldownSeconds",
@@ -216,6 +253,22 @@ const fields = computed<FormField[]>(() => [
     component: "InputNumber",
     componentProps: { mode: "integer", min: 5, max: 3600 },
     hint: "冷却模型暂不参与调度，额度不足至少冷却 10 分钟。健康状态在当前后端进程内共享、重启清空，不代表供应商真实余额。",
+  },
+  {
+    prop: "visionModel",
+    label: "图片识别模型",
+    type: "select",
+    options: mediaOptions("vision", form.visionModel),
+    placeholder: "可选：账号 / 视觉识别模型",
+    hint: "在‘大模型账号 → 视觉识别模型’登记后引用，使用兼容 Chat Completions 的图片输入。独立于文本模型组；未配置时工作台不开放识图。",
+  },
+  {
+    prop: "imageGenerationModel",
+    label: "图片生成模型",
+    type: "select",
+    options: mediaOptions("imageGeneration", form.imageGenerationModel),
+    placeholder: "可选：账号 / 生图模型",
+    hint: "先在‘大模型账号’配置生图模型、协议及完整接口地址。工作台每次生成一张，受本轮超时限制，不自动重试或切换模型；识图模型不等于生图模型。",
   },
   {
     prop: "toolKeys",
@@ -340,6 +393,8 @@ function resetForm() {
         : null,
     models: [],
     strategy: "balanced",
+    visionModel: "",
+    imageGenerationModel: "",
     simpleModels: [],
     complexModels: [],
     maxAttempts: 8,
@@ -365,6 +420,8 @@ function fillForm(data: AgentApp) {
     providerId: data.providerId,
     models: [...data.models],
     strategy: data.modelRouting?.strategy ?? "priority",
+    visionModel: mediaKey(data.mediaModels?.vision),
+    imageGenerationModel: mediaKey(data.mediaModels?.imageGeneration),
     simpleModels: [...(data.modelRouting?.simpleModels ?? [])],
     complexModels: [...(data.modelRouting?.complexModels ?? [])],
     maxAttempts: data.modelRouting?.maxAttempts ?? 8,
@@ -433,6 +490,10 @@ function buildPayload(): AgentAppForm {
     instructionMarkdown: form.instructionMarkdown.trim(),
     providerId: form.providerId ? Number(form.providerId) : null,
     models: [...form.models],
+    mediaModels: {
+      vision: mediaReference(form.visionModel),
+      imageGeneration: mediaReference(form.imageGenerationModel),
+    },
     modelRouting: {
       strategy: form.strategy,
       simpleModels: [...form.simpleModels],

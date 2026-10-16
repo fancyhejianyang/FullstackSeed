@@ -17,6 +17,7 @@ import {
 } from './dto/agent-app.dto';
 import { AgentApp } from './entities/agent-app.entity';
 import { normalizeModelRouting } from './agent-model-routing';
+import type { AgentMediaModels } from './agent-media-models';
 import {
   AGENT_RUNTIME_TOOL_KEYS,
   AGENT_WRITE_TOOL_KEYS,
@@ -89,6 +90,10 @@ export class AgentAppsService {
             toolKeys.some((key) => AGENT_WRITE_TOOL_KEYS.includes(key)),
           maxToolCalls: app.maxToolCalls,
           timeoutSeconds: app.timeoutSeconds,
+          mediaCapabilities: {
+            vision: !!app.mediaModels?.vision,
+            imageGeneration: !!app.mediaModels?.imageGeneration,
+          },
         };
       });
   }
@@ -146,6 +151,28 @@ export class AgentAppsService {
         .filter((item) => item.secretKeySet && item.models.length)
         .map(({ id, name, models }) => ({ id, name, models })),
       businessTools,
+      mediaModels: {
+        vision: providers.list
+          .filter((item) => item.secretKeySet)
+          .flatMap((item) =>
+            this.parseModelOptions(item.visionModels).map((model) => ({
+              providerId: item.id,
+              providerName: item.name,
+              model: model.value,
+              text: model.text,
+            })),
+          ),
+        imageGeneration: providers.list
+          .filter((item) => item.secretKeySet && item.imageGenerationApiUrl)
+          .flatMap((item) =>
+            this.parseModelOptions(item.imageGenerationModels).map((model) => ({
+              providerId: item.id,
+              providerName: item.name,
+              model: model.value,
+              text: model.text,
+            })),
+          ),
+      },
     };
   }
 
@@ -233,6 +260,12 @@ export class AgentAppsService {
     // Agent 已改用 Markdown 工作指令，不再从配置绑定知识工作流。
     payload.workflowId = null;
     payload.workflowName = null;
+    if (dto.mediaModels !== undefined || isCreate) {
+      payload.mediaModels = await this.normalizeMediaModels(
+        dto.mediaModels,
+        current?.mediaModels,
+      );
+    }
     if (dto.toolKeys !== undefined || isCreate) {
       const toolKeys = Array.from(new Set(dto.toolKeys ?? []));
       const unsupportedToolKeys = toolKeys.filter(
@@ -300,6 +333,58 @@ export class AgentAppsService {
     }
     if (accessScope === 'all') payload.allowedUserIds = [];
     return payload;
+  }
+
+  private async normalizeMediaModels(
+    input: Partial<AgentMediaModels> | null | undefined,
+    current?: AgentMediaModels | null,
+  ): Promise<AgentMediaModels> {
+    const result: AgentMediaModels = {
+      vision:
+        input === null
+          ? null
+          : input?.vision === undefined
+            ? (current?.vision ?? null)
+            : input.vision,
+      imageGeneration:
+        input === null
+          ? null
+          : input?.imageGeneration === undefined
+            ? (current?.imageGeneration ?? null)
+            : input.imageGeneration,
+    };
+    for (const key of ['vision', 'imageGeneration'] as const) {
+      const reference = result[key];
+      if (!reference) continue;
+      const label = key === 'vision' ? '图片识别' : '图片生成';
+      if (
+        !Number.isInteger(reference.providerId) ||
+        reference.providerId < 1 ||
+        typeof reference.model !== 'string' ||
+        !reference.model.trim()
+      ) {
+        throw new BadRequestException(`${label}模型引用无效`);
+      }
+      const provider = await this.providersService.findOne(
+        reference.providerId,
+      );
+      if (!provider.isEnabled || !provider.secretKeySet)
+        throw new BadRequestException(`${label}模型账号未启用或未配置密钥`);
+      if (key === 'imageGeneration' && !provider.imageGenerationApiUrl)
+        throw new BadRequestException('请先在模型账号配置生图接口地址和协议');
+      const models = this.parseModelOptions(
+        key === 'vision'
+          ? provider.visionModels
+          : provider.imageGenerationModels,
+      );
+      const model = reference.model.trim();
+      if (!models.some((item) => item.value === model))
+        throw new BadRequestException(
+          `${label}模型未登记在账号的对应能力目录中，请重新选择`,
+        );
+      result[key] = { providerId: reference.providerId, model };
+    }
+    return result;
   }
 
   private parseModelOptions(...sources: Array<string | null | undefined>) {

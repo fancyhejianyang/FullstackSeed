@@ -28,6 +28,8 @@ export type AgentExecutionToolKey =
   | AgentToolKey;
 
 export type AgentProgressStage =
+  | "recognizing_image"
+  | "generating_image"
   | "understanding"
   | "querying"
   | "retrieving"
@@ -45,6 +47,7 @@ export interface AgentExecutionProgress {
 }
 
 export interface AvailableAgentApp {
+  mediaCapabilities: { vision: boolean; imageGeneration: boolean };
   id: number;
   name: string;
   responsibility: string;
@@ -71,6 +74,8 @@ export interface AgentSession {
 }
 
 export interface AgentMessageStructuredData {
+  mode?: AgentMessageMode;
+  images?: AgentImageReference[];
   businessResult?: AgentBusinessQueryResult;
   action?: "answer" | "query" | "clarify" | "prepare_write";
   reason?: "write_not_executed";
@@ -260,12 +265,41 @@ export function getAgentSession(id: number) {
 
 export function sendAgentMessage(
   sessionId: number,
-  data: { content: string; clientMessageId: string },
+  data: {
+    content: string;
+    clientMessageId: string;
+    mode?: AgentMessageMode;
+    imageId?: number;
+  },
 ) {
   return request.post<unknown, AgentActionResult>(
     `/agent-workspace/sessions/${sessionId}/messages`,
     data,
     { timeout: 310000 },
+  );
+}
+
+export type AgentMessageMode = "chat" | "vision" | "imageGeneration";
+export interface AgentImageReference {
+  id: number;
+  mimeType: string;
+  size: number;
+  source: "upload" | "generated";
+}
+
+export function uploadAgentImage(sessionId: number, file: File) {
+  const data = new FormData();
+  data.append("file", file);
+  return request.post<unknown, AgentImageReference>(
+    `/agent-workspace/sessions/${sessionId}/images`,
+    data,
+    { timeout: 60000 },
+  );
+}
+export function getAgentImage(sessionId: number, imageId: number) {
+  return request.get<unknown, Blob>(
+    `/agent-workspace/sessions/${sessionId}/images/${imageId}`,
+    { responseType: "blob", silentError: true },
   );
 }
 

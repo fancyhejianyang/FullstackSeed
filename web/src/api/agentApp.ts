@@ -3,6 +3,15 @@ import request from "@/utils/request";
 export type AgentToolKey = string;
 export type AgentAccessScope = "all" | "users";
 
+export interface AgentModelReference {
+  providerId: number;
+  model: string;
+}
+export interface AgentMediaModels {
+  vision: AgentModelReference | null;
+  imageGeneration: AgentModelReference | null;
+}
+
 export interface AgentModelRouting {
   strategy: "priority" | "balanced" | "intent";
   simpleModels: string[];
@@ -31,6 +40,7 @@ export interface AgentApp {
   providerName: string;
   models: string[];
   modelRouting: AgentModelRouting | null;
+  mediaModels: AgentMediaModels | null;
   toolKeys: AgentToolKey[];
   accessScope: AgentAccessScope;
   allowedUserIds: number[] | null;
@@ -50,6 +60,7 @@ export interface AgentAppForm {
   providerId: number | null;
   models: string[];
   modelRouting: AgentModelRouting;
+  mediaModels: AgentMediaModels;
   toolKeys: AgentToolKey[];
   accessScope: AgentAccessScope;
   allowedUserIds: number[];
@@ -73,6 +84,10 @@ export interface AgentAppListResult {
 }
 
 export interface AgentConfigurationOptions {
+  mediaModels?: Record<
+    keyof AgentMediaModels,
+    Array<AgentModelReference & { providerName: string; text: string }>
+  >;
   providers: Array<{
     id: number;
     name: string;

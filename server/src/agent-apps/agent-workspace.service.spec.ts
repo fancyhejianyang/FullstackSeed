@@ -10,6 +10,7 @@ import type { ProductCatalogService } from '../product-catalog/product-catalog.s
 import type { AgentAppsService } from './agent-apps.service';
 import { AgentWorkspaceService } from './agent-workspace.service';
 import { AgentModelRouterService } from './agent-model-router.service';
+import type { AgentMediaService } from './agent-media.service';
 import { AgentDraft } from './entities/agent-draft.entity';
 import { AgentExecution } from './entities/agent-execution.entity';
 import { AgentMessage } from './entities/agent-message.entity';
@@ -75,6 +76,7 @@ describe('AgentWorkspaceService ownership and state guards', () => {
         run: () => Promise<unknown>,
       ) => run(),
     } as KnowledgeAiProvidersService),
+    {} as AgentMediaService,
   );
 
   beforeEach(() => {

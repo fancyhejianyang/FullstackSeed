@@ -4,6 +4,8 @@ import type {
 } from "@/api/agentWorkspace";
 
 const labels: Record<AgentProgressStage, string> = {
+  recognizing_image: "正在识别图片并理解内容",
+  generating_image: "正在生成图片，请稍候",
   understanding: "正在理解需求",
   querying: "正在搜索业务数据",
   retrieving: "正在检索参考资料",

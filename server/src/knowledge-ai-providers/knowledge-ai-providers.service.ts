@@ -401,6 +401,66 @@ export class KnowledgeAiProvidersService {
     };
   }
 
+  /** Agent 媒体引用必须在专用目录内，不能回退到通用/文本模型。 */
+  async resolveAgentMediaTarget(
+    providerId: number,
+    model: string,
+    kind: 'vision' | 'imageGeneration',
+  ) {
+    const provider = await this.findEntity(providerId);
+    if (!provider.isEnabled || !provider.secretKey) {
+      throw new BadRequestException('媒体模型账号未启用或未配置密钥');
+    }
+    const catalog =
+      kind === 'vision'
+        ? provider.visionModels
+        : provider.imageGenerationModels;
+    if (!catalog?.trim())
+      throw new BadRequestException('账号未配置对应媒体模型目录');
+    // 媒体目录为空/格式不合法时不得套用通用模型的默认回退。
+    if (!this.parseModels(catalog).some((item) => item.code === model)) {
+      throw new BadRequestException('调用模型不在该账号媒体模型列表中');
+    }
+    const selected = model;
+    let url = this.buildChatUrl(provider);
+    if (kind === 'imageGeneration') {
+      if (!provider.imageGenerationApiUrl)
+        throw new BadRequestException('请在模型账号中配置完整的生图接口地址');
+      url = this.applyWorkspaceId({
+        ...provider,
+        apiUrl: provider.imageGenerationApiUrl,
+      });
+      this.assertImageGenerationUrl(url);
+    }
+    return {
+      providerId: provider.id,
+      providerName: provider.name,
+      model: selected,
+      url,
+      secretKey: this.normalizeSecretKey(provider.secretKey),
+      protocol: provider.imageGenerationProtocol || 'openai',
+    };
+  }
+
+  private assertImageGenerationUrl(value: string) {
+    try {
+      const url = new URL(value);
+      if (
+        url.protocol === 'https:' &&
+        !url.username &&
+        !url.password &&
+        !url.hash &&
+        !url.search
+      )
+        return;
+    } catch {
+      /* 统一返回配置错误，不回显密钥或地址。 */
+    }
+    throw new BadRequestException(
+      '生图接口须为完整 HTTPS 地址，不能包含账号、密码、查询参数或片段',
+    );
+  }
+
   async resolveEmbeddingTarget(
     payload: KnowledgeAiChatTargetPayload,
   ): Promise<KnowledgeAiChatTarget> {
@@ -942,6 +1002,18 @@ export class KnowledgeAiProvidersService {
     if (dto.visionModels !== undefined) {
       payload.visionModels = this.toNullableText(dto.visionModels);
     }
+    if (dto.imageGenerationModels !== undefined) {
+      payload.imageGenerationModels = this.toNullableText(
+        dto.imageGenerationModels,
+      );
+    }
+    if (dto.imageGenerationProtocol !== undefined || isCreate)
+      payload.imageGenerationProtocol = dto.imageGenerationProtocol || 'openai';
+    if (dto.imageGenerationApiUrl !== undefined) {
+      const url = dto.imageGenerationApiUrl.trim();
+      if (url) this.assertImageGenerationUrl(url);
+      payload.imageGenerationApiUrl = url || null;
+    }
     if (dto.embeddingModels !== undefined) {
       payload.embeddingModels = this.toNullableText(dto.embeddingModels);
     }
@@ -964,6 +1036,9 @@ export class KnowledgeAiProvidersService {
       models: provider.models ?? '',
       textModels: provider.textModels ?? '',
       visionModels: provider.visionModels ?? '',
+      imageGenerationModels: provider.imageGenerationModels ?? '',
+      imageGenerationProtocol: provider.imageGenerationProtocol || 'openai',
+      imageGenerationApiUrl: provider.imageGenerationApiUrl ?? '',
       embeddingModels: provider.embeddingModels ?? '',
       isEnabled: !!provider.isEnabled,
       description: provider.description ?? '',

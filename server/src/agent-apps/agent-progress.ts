@@ -2,6 +2,8 @@ import type { AgentExecutionStatus } from './agent-apps.constants';
 
 export const AGENT_PROGRESS_STAGES = [
   'understanding',
+  'recognizing_image',
+  'generating_image',
   'querying',
   'retrieving',
   'preparing_draft',

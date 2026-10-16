@@ -29,6 +29,35 @@ import {
 import type { AgentExecutionStatus } from '../agent-apps.constants';
 import { AGENT_MODEL_STRATEGIES } from '../agent-model-routing';
 import type { AgentModelRouting } from '../agent-model-routing';
+import type {
+  AgentMediaModels,
+  AgentModelReference,
+} from '../agent-media-models';
+
+export class AgentModelReferenceDto implements AgentModelReference {
+  @IsInt()
+  @Min(1)
+  providerId: number;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(120)
+  model: string;
+}
+
+export class AgentMediaModelsDto implements AgentMediaModels {
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => AgentModelReferenceDto)
+  vision: AgentModelReferenceDto | null;
+
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => AgentModelReferenceDto)
+  imageGeneration: AgentModelReferenceDto | null;
+}
 
 export class AgentModelRoutingDto implements AgentModelRouting {
   @IsIn(AGENT_MODEL_STRATEGIES)
@@ -96,6 +125,12 @@ export class CreateAgentAppDto {
   @ValidateNested()
   @Type(() => AgentModelRoutingDto)
   modelRouting?: AgentModelRoutingDto;
+
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => AgentMediaModelsDto)
+  mediaModels?: AgentMediaModelsDto | null;
 
   @IsArray()
   @ArrayUnique()
@@ -257,6 +292,15 @@ export class QueryAgentSessionDto {
 }
 
 export class SendAgentMessageDto {
+  @IsOptional()
+  @IsIn(['chat', 'vision', 'imageGeneration'])
+  mode?: 'chat' | 'vision' | 'imageGeneration';
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  imageId?: number;
+
   @IsString()
   @IsNotEmpty()
   @MaxLength(8000)

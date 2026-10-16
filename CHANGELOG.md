@@ -1,5 +1,20 @@
 # CHANGELOG
 
+### 2026-10-16 Agent 识图与生图端到端接入
+
+- 需求与现象：优先顺序策略下轻量/复杂组禁用容易被误认为异常；现有视觉目录仅用于 OCR，缺少 Agent 视觉引用与真实生图链路。本次按用户确认同时接通工作台上传识图和文生图，不只保存配置。
+- 新增文件（9）：`server/src/agent-apps/agent-media-models.ts`、`agent-media.service.ts`、`agent-media.service.spec.ts`、`agent-image-utils.ts`、`agent-image-utils.spec.ts`、`entities/agent-image.entity.ts`；`server/src/knowledge-ai-providers/knowledge-ai-media-target.spec.ts`；`server/src/migrations/1792170000000-AddAgentMediaModelReferences.ts`；`web/src/views/agent-workspace/components/AgentImageAttachment.vue`。
+- 修改后端（14）：`server/src/agent-apps/agent-apps.constants.ts`、`agent-apps.module.ts`、`agent-apps.service.ts`、`agent-apps.service.spec.ts`、`agent-business-workspace.spec.ts`、`agent-progress.ts`、`agent-workspace.controller.ts`、`agent-workspace.service.ts`、`agent-workspace.service.spec.ts`、`dto/agent-app.dto.ts`、`entities/agent-app.entity.ts`；`server/src/knowledge-ai-providers/dto/knowledge-ai-provider.dto.ts`、`entities/knowledge-ai-provider.entity.ts`、`knowledge-ai-providers.service.ts`。
+- 修改前端（12）：`web/src/api/agentApp.ts`、`agentWorkspace.ts`、`knowledgeAiProvider.ts`；`web/src/views/agent-app/Edit.vue`、`View.vue`；`web/src/views/agent-workspace/Index.vue`、`agentProgress.ts`、`agentProgress.test.mjs`、`components/AgentExecutionStatus.vue`、`components/AgentMessageList.vue`；`web/src/views/knowledge-ai-provider/Edit.vue`、`View.vue`。
+- 修改文档（4）：`.design-spec.md`、`AGENTS-COMPONENTS.md`、`MD/Agent业务模块接入说明.md`、本文件。合计新增 9 / 修改 30 / 删除 0；未改公共 Select/Form/UploadImage 实现、未手改生成类型声明或工程依赖。
+- 字段与接口：Agent 新增可空 `mediaModels`，分别保存 `vision` / `imageGeneration` 的 `{providerId,model}` 引用；账号新增生图目录、协议和完整接口地址。配置时与执行时均校验独立目录、启用状态和密钥，不套用通用模型默认回退。消息增加 `mode/imageId`，旧请求仍按 chat；增加本人会话图片上传和鉴权读取接口。
+- UI：文本调度策略说明当前是否使用分组，仅 intent 展示轻量/复杂组；媒体引用单独选择，历史失效值保留提示。工作台复用 Select/UploadImage/Button 增加明确模式选择、单图上传、真实阶段提示、图片消息及放大预览，清空/切换/卸载释放 Blob URL。识图不自动入库，生图不伪装成业务写入回执。
+- 执行：接通 Chat Completions 图片输入、OpenAI Images 兼容同步生成、DashScope 同步多模态生图。每次生成一张，不自动重试/切换以避免重复扣费；保留幂等消息、员工/应用并发及总超时。媒体成功与助手消息同事务提交，停止/失败条件更新，迟到结果不复活终态；停止不承诺供应商免计费。
+- 安全与存储：`agent_images` 私有二进制表，默认查询不加载数据，不暴露公开上传 URL 或模型密钥。本人/同会话/应用范围校验；输入 5 MB、输出 10 MB、模型响应 16 MB；仅接受 PNG/JPEG/WebP 签名。生成图下载只用公网 IPv4 HTTPS 443，拒绝重定向/私网，固定解析后的 IP 防 DNS 重绑定，不向 CDN 转发鉴权。
+- 验证：后端 31 套件 / 262 项测试、前端阶段轮询 8 项测试、后端生产源码与前端类型检查、全部变更后端文件 ESLint、前后端生产构建及 `git diff --check` 通过；组件复用脚本对相关页面采集只读线索，新增输入/选择/上传/操作继续使用项目封装。Vite 构建在沙箱阻止 esbuild 后授权重试通过，仅既有第三方 Rollup 注释警告。
+- 验证边界：全仓后端严格类型检查仍有既有 `server/src/menus/menus.service.spec.ts:177` 的 `deletedAt: null` 与 `Date` 类型不符，未修改该无关文件；本次生产源码和修改测试无类型错误。不调用真实付费模型、不启动服务、不执行数据库迁移；真实账号联调、MySQL 集成及浏览器验收未执行。
+- 部署：先备份/审阅并执行迁移，再更新服务，按接入说明分别登记模型、协议、完整端点和 Agent 引用。旧应用默认不开启媒体。当前仅同步文生图，暂不支持异步生成、编辑、多图或跨进程网络取消；历史/孤立图片未自动清理，需部署方制定保留策略并配置足够的数据库包大小。迁移回滚会删除私有图片表，必须先备份。
+
 ### 2026-10-16 补齐知识库分类工具与 Agent 主动模型调度
 
 - 新增文件（5）：`server/src/agent-apps/agent-model-routing.ts`、`agent-model-router.service.ts`、`agent-model-router.service.spec.ts`；`server/src/knowledge-bases/knowledge-category-agent.spec.ts`；`server/src/migrations/1792166400000-AddAgentModelRouting.ts`。

@@ -19,6 +19,8 @@ import { AgentDraft } from './entities/agent-draft.entity';
 import { AgentExecution } from './entities/agent-execution.entity';
 import { AgentMessage } from './entities/agent-message.entity';
 import { AgentSession } from './entities/agent-session.entity';
+import { AgentImage } from './entities/agent-image.entity';
+import { AgentMediaService } from './agent-media.service';
 
 @Module({
   imports: [
@@ -28,6 +30,7 @@ import { AgentSession } from './entities/agent-session.entity';
       AgentMessage,
       AgentDraft,
       AgentExecution,
+      AgentImage,
     ]),
     AiCommandDefinitionsModule,
     KnowledgeAiChatModule,
@@ -44,6 +47,7 @@ import { AgentSession } from './entities/agent-session.entity';
     AgentWorkspaceService,
     AgentBusinessService,
     AgentModelRouterService,
+    AgentMediaService,
   ],
   exports: [AgentAppsService],
 })

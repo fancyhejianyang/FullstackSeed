@@ -7,7 +7,13 @@ import {
   Patch,
   Post,
   Query,
+  Res,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
+import { AGENT_UPLOAD_LIMIT } from './agent-image-utils';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   CurrentUser,
@@ -71,6 +77,41 @@ export class AgentWorkspaceController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.service.sendMessage(id, dto, user);
+  }
+
+  @Post('sessions/:id/images')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: AGENT_UPLOAD_LIMIT, files: 1 },
+    }),
+  )
+  @ApiOperation({
+    summary: '上传本人会话的私有识别图片（PNG/JPEG/WebP，5 MB）',
+  })
+  uploadImage(
+    @Param('id', ParseIntPipe) id: number,
+    @UploadedFile() file: { buffer: Buffer } | undefined,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.uploadImage(id, file?.buffer, user);
+  }
+
+  @Get('sessions/:id/images/:imageId')
+  @ApiOperation({ summary: '经会话鉴权读取私有图片' })
+  async readImage(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('imageId', ParseIntPipe) imageId: number,
+    @CurrentUser() user: AuthUser,
+    @Res() response: Response,
+  ) {
+    const image = await this.service.readImage(id, imageId, user);
+    response.set({
+      'Content-Type': image.mimeType,
+      'Content-Length': String(image.size),
+      'Cache-Control': 'private, no-store',
+      'X-Content-Type-Options': 'nosniff',
+    });
+    response.send(image.data);
   }
 
   @Patch('drafts/:id')

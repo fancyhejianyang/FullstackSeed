@@ -27,6 +27,8 @@ export const AGENT_WRITE_TOOL_KEYS = AI_BUSINESS_COMMAND_CATALOG.filter(
 export type AgentToolKey = string;
 
 export const AGENT_EXECUTION_TOOL_KEYS = [
+  'media.vision',
+  'media.imageGeneration',
   'model.chat',
   'knowledge.answer',
   ...AGENT_TOOL_KEYS,

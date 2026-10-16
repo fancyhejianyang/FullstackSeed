@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
 import PageContainer from "@/components/PageContainer.vue";
 import Button from "@/components/Button.vue";
 import Input from "@/components/Input.vue";
 import Select from "@/components/Select.vue";
+import UploadImage from "@/components/UploadImage.vue";
 import { useUserStore } from "@/stores/user";
 import { formatDateTime } from "@/utils/format";
 import { getProductOptions, type ProductOption } from "@/api/productCatalog";
@@ -20,6 +21,9 @@ import {
   sendAgentMessage,
   stopAgentExecution,
   updateAgentDraft,
+  uploadAgentImage,
+  type AgentImageReference,
+  type AgentMessageMode,
   type AgentDraft,
   type AgentExecutionProgress,
   type AgentMessage,
@@ -40,6 +44,8 @@ interface AgentPromptSuggestion {
 type PendingMessageStatus = "queued" | "sending" | "failed";
 
 interface PendingAgentMessage {
+  mode: AgentMessageMode;
+  image?: AgentImageReference;
   id: number;
   sessionId: number;
   content: string;
@@ -58,6 +64,11 @@ const activeSession = ref<AgentSessionDetail | null>(null);
 const products = ref<ProductOption[]>([]);
 const sessionKeyword = ref("");
 const inputText = ref("");
+const inputMode = ref<AgentMessageMode>("chat");
+const uploadBusy = ref(false);
+const attachedImage = ref<AgentImageReference | null>(null);
+const imagePreview = ref<string | null>("");
+let previewObjectUrl = "";
 const loadingSessions = ref(false);
 const loadingDetail = ref(false);
 const sending = ref(false);
@@ -87,6 +98,65 @@ const confirmationKeys = new Map<number, string>();
 const currentApp = computed(() =>
   apps.value.find((item) => item.id === Number(selectedAgentId.value)),
 );
+const modeOptions = computed(() => [
+  { value: "chat", text: "对话 / 业务" },
+  {
+    value: "vision",
+    text: currentApp.value?.mediaCapabilities?.vision
+      ? "识别图片"
+      : "识别图片（未配置）",
+    disabled: !currentApp.value?.mediaCapabilities?.vision,
+  },
+  {
+    value: "imageGeneration",
+    text: currentApp.value?.mediaCapabilities?.imageGeneration
+      ? "生成图片"
+      : "生成图片（未配置）",
+    disabled: !currentApp.value?.mediaCapabilities?.imageGeneration,
+  },
+]);
+const mediaHint = computed(() =>
+  inputMode.value === "vision"
+    ? "上传一张 PNG / JPEG / WebP（≤ 5 MB）并描述问题。只分析图片，不自动入库。"
+    : inputMode.value === "imageGeneration"
+      ? "描述画面内容，每次生成一张。可能产生费用；失败或停止不会自动重试。"
+      : "图片能力需在 Agent 应用中分别配置识别 / 生图模型。",
+);
+function clearImage() {
+  if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
+  previewObjectUrl = "";
+  imagePreview.value = "";
+  attachedImage.value = null;
+}
+function resetMediaInput() {
+  clearImage();
+  inputMode.value = "chat";
+}
+watch(inputMode, (mode) => {
+  if (mode !== "vision") clearImage();
+});
+async function uploadImage(file: File) {
+  const sessionId = activeSession.value?.id;
+  if (!sessionId) throw new Error("请先创建会话");
+  uploadBusy.value = true;
+  try {
+    const image = await uploadAgentImage(sessionId, file);
+    if (disposed || activeSession.value?.id !== sessionId)
+      throw new Error("会话已切换，请重新上传图片");
+    clearImage();
+    attachedImage.value = image;
+    previewObjectUrl = URL.createObjectURL(file);
+    return {
+      url: previewObjectUrl,
+      fileName: String(image.id),
+      originalName: file.name,
+      mimeType: image.mimeType,
+      size: image.size,
+    };
+  } finally {
+    uploadBusy.value = false;
+  }
+}
 const agentOptions = computed(() =>
   apps.value.map((item) => ({ value: String(item.id), text: item.name })),
 );
@@ -144,7 +214,10 @@ const visibleMessages = computed<AgentMessage[]>(() => {
       role: "user",
       messageType: "text",
       content: item.content,
-      structuredData: null,
+      structuredData: {
+        mode: item.mode,
+        ...(item.image ? { images: [item.image] } : {}),
+      },
       executionId: null,
       clientMessageId: item.clientMessageId,
       createdAt: item.createdAt,
@@ -154,6 +227,10 @@ const visibleMessages = computed<AgentMessage[]>(() => {
 });
 const capabilityLabels = computed(() => {
   const result = [{ key: "model", label: "模型对话", active: false }];
+  if (currentApp.value?.mediaCapabilities?.vision)
+    result.push({ key: "vision", label: "图片识别", active: true });
+  if (currentApp.value?.mediaCapabilities?.imageGeneration)
+    result.push({ key: "imageGeneration", label: "图片生成", active: true });
   for (const tool of currentApp.value?.tools ?? []) {
     result.push({
       key: tool.commandKey,
@@ -238,6 +315,8 @@ async function loadSession(id: number, silent = false) {
 }
 
 async function newSession() {
+  if (uploadBusy.value) return;
+  resetMediaInput();
   if (!selectedAgentId.value) return;
   requestVersion += 1;
   const session = await createAgentSession({
@@ -248,6 +327,7 @@ async function newSession() {
 }
 
 async function switchAgent() {
+  resetMediaInput();
   requestVersion += 1;
   activeSession.value = null;
   sessionKeyword.value = "";
@@ -256,10 +336,11 @@ async function switchAgent() {
 }
 
 async function selectSession(session: AgentSession) {
-  if (hasPendingMessages.value || actionBusy.value) {
+  if (hasPendingMessages.value || actionBusy.value || uploadBusy.value) {
     ElMessage.warning("请先处理待发送消息或等待当前动作完成");
     return;
   }
+  resetMediaInput();
   await loadSession(session.id);
 }
 
@@ -279,7 +360,15 @@ async function ensureSession() {
 
 async function send() {
   const content = inputText.value.trim();
-  if (!content || actionBusy.value || isComposing.value) return;
+  if (!content || actionBusy.value || isComposing.value || uploadBusy.value)
+    return;
+  const mode = inputMode.value;
+  const image =
+    mode === "vision" ? (attachedImage.value ?? undefined) : undefined;
+  if (mode === "vision" && !image) {
+    ElMessage.warning("请先上传要识别的图片");
+    return;
+  }
   let sessionId: number;
   try {
     sessionId = await ensureSession();
@@ -293,11 +382,14 @@ async function send() {
     id: localMessageId--,
     sessionId,
     content,
+    mode,
+    image,
     clientMessageId,
     requestId,
     status: "queued",
     createdAt: new Date().toISOString(),
   });
+  clearImage();
   void processMessageQueue();
 }
 
@@ -322,6 +414,8 @@ async function processMessageQueue() {
         const result = await sendAgentMessage(item.sessionId, {
           content: item.content,
           clientMessageId: item.clientMessageId,
+          mode: item.mode,
+          imageId: item.image?.id,
         });
         if (disposed) return;
         progressPoller.stop();
@@ -381,7 +475,8 @@ async function processMessageQueue() {
 }
 
 function sendPrompt(prompt: string) {
-  if (actionBusy.value) return;
+  if (actionBusy.value || uploadBusy.value) return;
+  resetMediaInput();
   inputText.value = prompt;
   void send();
 }
@@ -527,6 +622,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  clearImage();
   disposed = true;
   progressPoller.stop();
   requestVersion += 1;
@@ -551,7 +647,7 @@ onUnmounted(() => {
               class="agent-workspace__selector"
               :options="agentOptions"
               :clearable="false"
-              :disabled="hasPendingMessages || actionBusy"
+              :disabled="hasPendingMessages || actionBusy || uploadBusy"
               @change="switchAgent"
             />
           </div>
@@ -562,7 +658,7 @@ onUnmounted(() => {
             class="agent-workspace__new-chat"
             type="primary"
             icon="Plus"
-            :disabled="hasPendingMessages || actionBusy"
+            :disabled="hasPendingMessages || actionBusy || uploadBusy"
             @click="newSession"
             >开启新对话</Button
           >
@@ -646,6 +742,26 @@ onUnmounted(() => {
 
         <footer class="agent-workspace__composer-shell">
           <div class="agent-workspace__composer">
+            <div class="agent-workspace__media-toolbar">
+              <Select
+                v-model="inputMode"
+                :options="modeOptions"
+                :clearable="false"
+                :disabled="uploadBusy || actionBusy"
+                aria-label="消息模式"
+              />
+              <span>{{ mediaHint }}</span>
+            </div>
+            <UploadImage
+              v-if="inputMode === 'vision'"
+              v-model="imagePreview"
+              class="agent-workspace__image-upload"
+              accept="image/png,image/jpeg,image/webp"
+              :max-size-mb="5"
+              :disabled="uploadBusy || actionBusy || !activeSession"
+              :upload-request="uploadImage"
+              @remove="clearImage"
+            />
             <div
               v-if="composerPendingMessages.length"
               class="agent-workspace__queue"
@@ -693,7 +809,13 @@ onUnmounted(() => {
               :rows="3"
               :maxlength="8000"
               :disabled="actionBusy"
-              placeholder="给 Agent 发消息，或描述查询、录入需求…"
+              :placeholder="
+                inputMode === 'imageGeneration'
+                  ? '描述要生成的画面、风格和细节…'
+                  : inputMode === 'vision'
+                    ? '想了解图片中的什么？例如：提取商品信息…'
+                    : '给 Agent 发消息，或描述查询、录入需求…'
+              "
               @compositionstart="isComposing = true"
               @compositionend="isComposing = false"
               @keydown.enter.exact.prevent="handleEnter"
@@ -719,7 +841,12 @@ onUnmounted(() => {
                 type="primary"
                 round
                 icon="Promotion"
-                :disabled="!inputText.trim() || actionBusy"
+                :disabled="
+                  !inputText.trim() ||
+                  actionBusy ||
+                  uploadBusy ||
+                  (inputMode === 'vision' && !attachedImage)
+                "
                 @click="send"
                 >{{ sending ? "加入队列" : "发送" }}</Button
               >
@@ -733,6 +860,29 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.agent-workspace__media-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 8px;
+}
+.agent-workspace__media-toolbar :deep(.select) {
+  width: 200px;
+  flex-shrink: 0;
+}
+.agent-workspace__media-toolbar > span {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #909399;
+}
+.agent-workspace__image-upload {
+  margin-bottom: 8px;
+}
+.agent-workspace__image-upload :deep(.el-upload--picture-card),
+.agent-workspace__image-upload :deep(.el-upload-list__item) {
+  width: 76px;
+  height: 76px;
+}
 .agent-workspace-page {
   overflow: hidden;
   padding: 0;

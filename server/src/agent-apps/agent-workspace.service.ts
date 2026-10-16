@@ -24,6 +24,7 @@ import {
 import { AgentAppsService } from './agent-apps.service';
 import { AgentBusinessService } from './agent-business.service';
 import { AgentModelRouterService } from './agent-model-router.service';
+import { AgentMediaService } from './agent-media.service';
 import {
   AGENT_BUSINESS_TOOLS,
   getAgentBusinessTool,
@@ -84,10 +85,35 @@ export class AgentWorkspaceService {
     private readonly businessService: AgentBusinessService,
     private readonly providersService: KnowledgeAiProvidersService,
     private readonly modelRouter: AgentModelRouterService,
+    private readonly mediaService: AgentMediaService,
   ) {}
 
   findAvailableApps(user: AuthUser) {
     return this.appsService.findAvailable(user);
+  }
+
+  async uploadImage(
+    sessionId: number,
+    data: Buffer | undefined,
+    user: AuthUser,
+  ) {
+    const session = await this.findSessionEntity(sessionId, user);
+    const app = await this.appsService.findAvailableOne(
+      session.agentAppId,
+      user,
+    );
+    if (session.status !== 'active')
+      throw new ConflictException('当前会话不可上传图片');
+    if (!app.mediaModels?.vision)
+      throw new BadRequestException('当前 Agent 未配置图片识别模型');
+    if (!data) throw new BadRequestException('请上传图片文件');
+    return this.mediaService.upload(sessionId, user.userId, data);
+  }
+
+  async readImage(sessionId: number, id: number, user: AuthUser) {
+    const session = await this.findSessionEntity(sessionId, user);
+    await this.appsService.findAvailableOne(session.agentAppId, user);
+    return this.mediaService.read(id, sessionId, user.userId);
   }
 
   async findExecutionRecords(query: QueryAgentExecutionDto) {
@@ -210,7 +236,22 @@ export class AgentWorkspaceService {
     });
     if (existing) return this.recoverMessageResult(session, existing, user);
 
-    const activeDraft = await this.findActiveDraft(sessionId, user.userId);
+    const mediaMode =
+      dto.mode === 'vision' || dto.mode === 'imageGeneration' ? dto.mode : null;
+    if (!dto.content.trim()) throw new BadRequestException('消息不能为空');
+    if (mediaMode === 'vision' && !dto.imageId)
+      throw new BadRequestException('请先上传要识别的图片');
+    if (mediaMode !== 'vision' && dto.imageId)
+      throw new BadRequestException('图片附件仅用于图片识别模式');
+    const attachedImage =
+      mediaMode === 'vision'
+        ? this.mediaService.reference(
+            await this.mediaService.read(dto.imageId!, sessionId, user.userId),
+          )
+        : null;
+    const activeDraft = mediaMode
+      ? null
+      : await this.findActiveDraft(sessionId, user.userId);
     const decision = classifyAgentAction(dto.content, Boolean(activeDraft));
     const businessToolKey = this.resolveBusinessToolKey(decision.type);
     await this.assertConcurrencyAvailable(app, user.userId);
@@ -222,7 +263,11 @@ export class AgentWorkspaceService {
         role: 'user',
         messageType: 'text',
         content: dto.content.trim(),
-        structuredData: { action: decision.type },
+        structuredData: {
+          action: mediaMode ? 'answer' : decision.type,
+          mode: dto.mode ?? 'chat',
+          ...(attachedImage ? { images: [attachedImage] } : {}),
+        },
         executionId: null,
         clientMessageId: dto.clientMessageId,
       }),
@@ -241,10 +286,13 @@ export class AgentWorkspaceService {
         agentAppId: app.id,
         messageId: userMessage.id,
         draftId: activeDraft?.id ?? null,
-        toolKey: this.resolveExecutionToolKey(decision.type),
+        toolKey: mediaMode
+          ? `media.${mediaMode}`
+          : this.resolveExecutionToolKey(decision.type),
         status: 'running',
         parameterSummary: {
-          action: decision.type,
+          action: mediaMode ? 'answer' : decision.type,
+          mode: dto.mode ?? 'chat',
           contentLength: dto.content.length,
           progressStage: 'understanding',
         },
@@ -263,25 +311,39 @@ export class AgentWorkspaceService {
 
     try {
       // 权限失败也应保存为本轮明确的失败回执，而不是伪装成消息未送达。
-      if (businessToolKey && !this.usesGenericBusiness(app, activeDraft)) {
+      if (
+        !mediaMode &&
+        businessToolKey &&
+        !this.usesGenericBusiness(app, activeDraft)
+      ) {
         await this.assertActionAuthorized(app, businessToolKey, user);
       }
       if (
+        !mediaMode &&
         decision.queryBeforeWrite &&
         !this.usesGenericBusiness(app, activeDraft)
       ) {
         await this.assertActionAuthorized(app, 'product.query', user);
       }
       const actionResult = await this.withTimeout(
-        this.processAction({
-          decision,
-          content: dto.content.trim(),
-          session,
-          app,
-          execution,
-          activeDraft,
-          user,
-        }),
+        mediaMode
+          ? this.processMediaAction(
+              session,
+              app,
+              execution,
+              user,
+              dto,
+              mediaMode,
+            )
+          : this.processAction({
+              decision,
+              content: dto.content.trim(),
+              session,
+              app,
+              execution,
+              activeDraft,
+              user,
+            }),
         app.timeoutSeconds,
       );
       return {
@@ -290,6 +352,7 @@ export class AgentWorkspaceService {
         ...actionResult,
       };
     } catch (error) {
+      if (mediaMode) this.mediaService.cancel(execution.id);
       const current = await this.executionRepository.findOne({
         where: { id: execution.id },
       });
@@ -298,21 +361,37 @@ export class AgentWorkspaceService {
       }
       const message =
         error instanceof AgentTimeoutError
-          ? '执行超时，未产生业务写入；可在执行记录中查看最终状态。'
+          ? mediaMode
+            ? '媒体任务超时，供应商可能仍在处理或计费；系统不会自动重试，请核实后再发送。'
+            : '执行超时，未产生业务写入；可在执行记录中查看最终状态。'
           : error instanceof Error
             ? error.message
             : 'Agent 执行失败';
       execution.status = 'failed';
       execution.errorMessage = message;
       execution.finishedAt = new Date();
-      await this.executionRepository.save(execution);
+      if (mediaMode) {
+        const failed = await this.executionRepository.update(
+          { id: execution.id, status: 'running' },
+          {
+            status: 'failed',
+            errorMessage: message,
+            finishedAt: execution.finishedAt,
+          },
+        );
+        if (!failed.affected)
+          return this.recoverMessageResult(session, userMessage, user);
+      } else await this.executionRepository.save(execution);
       const assistantMessage = await this.appendAssistantMessage(
         session,
         user,
         execution,
         'error',
         message,
-        { action: decision.type },
+        {
+          action: mediaMode ? 'answer' : decision.type,
+          mode: dto.mode ?? 'chat',
+        },
       );
       await this.sessionRepository.update(session.id, {
         lastExecutionStatus: execution.status,
@@ -633,6 +712,26 @@ export class AgentWorkspaceService {
     if (['succeeded', 'failed', 'cancelled'].includes(execution.status)) {
       return execution;
     }
+    if (execution.toolKey.startsWith('media.')) {
+      const stopped = await this.dataSource.transaction(async (manager) => {
+        const result = await manager.getRepository(AgentExecution).update(
+          { id, userId: user.userId, status: 'running' },
+          {
+            status: 'cancelled',
+            errorMessage:
+              '用户已停止媒体任务；供应商可能仍在处理或计费，请核实后再发送',
+            finishedAt: new Date(),
+          },
+        );
+        if (result.affected)
+          await manager
+            .getRepository(AgentSession)
+            .update(execution.sessionId, { lastExecutionStatus: 'cancelled' });
+        return !!result.affected;
+      });
+      if (stopped) this.mediaService.cancel(id);
+      return this.findExecution(id, user);
+    }
     execution.status = 'cancelled';
     execution.errorMessage = '用户已停止尚未完成的动作';
     execution.finishedAt = new Date();
@@ -651,6 +750,77 @@ export class AgentWorkspaceService {
       lastExecutionStatus: 'cancelled',
     });
     return execution;
+  }
+
+  private async processMediaAction(
+    session: AgentSession,
+    app: AgentApp,
+    execution: AgentExecution,
+    user: AuthUser,
+    dto: SendAgentMessageDto,
+    mode: 'vision' | 'imageGeneration',
+  ) {
+    await this.reportProgress(
+      execution,
+      mode === 'vision' ? 'recognizing_image' : 'generating_image',
+    );
+    await this.assertExecutionRunning(execution.id);
+    const result = await this.mediaService.run({
+      app,
+      executionId: execution.id,
+      sessionId: session.id,
+      userId: user.userId,
+      mode,
+      content: dto.content.trim(),
+      imageId: dto.imageId,
+    });
+    // 结果与消息在同一事务中完成；与停止/超时竞争时仅一个 running 状态转换能成功。
+    return this.dataSource.transaction(async (manager) => {
+      const finishedAt = new Date();
+      const receipt = {
+        providerId: result.providerId,
+        model: result.model,
+        images: result.images,
+      };
+      const completed = await manager.getRepository(AgentExecution).update(
+        { id: execution.id, status: 'running' },
+        {
+          status: 'succeeded',
+          finishedAt,
+          result: receipt,
+        },
+      );
+      if (!completed.affected)
+        throw new ConflictException('媒体执行已停止或失效');
+      const messages = manager.getRepository(AgentMessage);
+      const assistantMessage = await messages.save(
+        messages.create({
+          sessionId: session.id,
+          userId: user.userId,
+          role: 'assistant',
+          messageType: 'text',
+          content: result.content,
+          structuredData: { action: 'answer', mode, images: result.images },
+          executionId: execution.id,
+          clientMessageId: null,
+        }),
+      );
+      await manager
+        .getRepository(AgentSession)
+        .increment({ id: session.id }, 'messageCount', 1);
+      await manager.getRepository(AgentSession).update(session.id, {
+        lastMessage: result.content.slice(0, 2000),
+        lastExecutionStatus: 'succeeded',
+      });
+      return {
+        assistantMessage,
+        execution: Object.assign(execution, {
+          status: 'succeeded' as const,
+          finishedAt,
+          result: receipt,
+        }),
+      };
+    });
   }
 
   private async processAction(params: {

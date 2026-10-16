@@ -1,4 +1,4 @@
-import request from '@/utils/request';
+import request from "@/utils/request";
 
 export interface KnowledgeAiProvider {
   id: number;
@@ -9,6 +9,9 @@ export interface KnowledgeAiProvider {
   models: string;
   textModels: string;
   visionModels: string;
+  imageGenerationModels: string;
+  imageGenerationProtocol: "openai" | "dashscope";
+  imageGenerationApiUrl: string;
   embeddingModels: string;
   isEnabled: boolean;
   description: string;
@@ -27,7 +30,7 @@ export interface QueryKnowledgeAiProviderParams {
   page?: number;
   pageSize?: number;
   keyword?: string;
-  isEnabled?: boolean | '';
+  isEnabled?: boolean | "";
 }
 
 export interface KnowledgeAiProviderForm {
@@ -39,6 +42,9 @@ export interface KnowledgeAiProviderForm {
   models?: string;
   textModels?: string;
   visionModels?: string;
+  imageGenerationModels?: string;
+  imageGenerationProtocol?: "openai" | "dashscope";
+  imageGenerationApiUrl?: string;
   embeddingModels?: string;
   isEnabled?: boolean;
   description?: string;
@@ -61,7 +67,7 @@ export interface TestKnowledgeAiProviderResult {
 export interface ValidateKnowledgeAiProviderModelPayload {
   id: number;
   model: string;
-  featureType: 'chat' | 'documentParse' | 'ocr' | 'rerank' | 'embedding';
+  featureType: "chat" | "documentParse" | "ocr" | "rerank" | "embedding";
 }
 
 export interface ValidateKnowledgeAiProviderModelResult {
@@ -73,19 +79,26 @@ export interface ValidateKnowledgeAiProviderModelResult {
   provider: KnowledgeAiProvider;
 }
 
-export function getKnowledgeAiProviders(params: QueryKnowledgeAiProviderParams) {
+export function getKnowledgeAiProviders(
+  params: QueryKnowledgeAiProviderParams,
+) {
   return request.get<unknown, KnowledgeAiProviderListResult>(
-    '/knowledge-ai-providers',
+    "/knowledge-ai-providers",
     { params },
   );
 }
 
 export function getKnowledgeAiProvider(id: number) {
-  return request.get<unknown, KnowledgeAiProvider>(`/knowledge-ai-providers/${id}`);
+  return request.get<unknown, KnowledgeAiProvider>(
+    `/knowledge-ai-providers/${id}`,
+  );
 }
 
 export function createKnowledgeAiProvider(data: KnowledgeAiProviderForm) {
-  return request.post<unknown, KnowledgeAiProvider>('/knowledge-ai-providers', data);
+  return request.post<unknown, KnowledgeAiProvider>(
+    "/knowledge-ai-providers",
+    data,
+  );
 }
 
 export function updateKnowledgeAiProvider(
@@ -99,19 +112,21 @@ export function updateKnowledgeAiProvider(
 }
 
 export function deleteKnowledgeAiProvider(id: number) {
-  return request.delete<unknown, { id: number }>(`/knowledge-ai-providers/${id}`);
+  return request.delete<unknown, { id: number }>(
+    `/knowledge-ai-providers/${id}`,
+  );
 }
 
 export function batchDeleteKnowledgeAiProviders(ids: Array<string | number>) {
   return request.post<unknown, { ids: number[] }>(
-    '/knowledge-ai-providers/batch-delete',
+    "/knowledge-ai-providers/batch-delete",
     { ids: ids.map(Number) },
   );
 }
 
 export function testKnowledgeAiProvider(data: TestKnowledgeAiProviderPayload) {
   return request.post<unknown, TestKnowledgeAiProviderResult>(
-    '/knowledge-ai-providers/test',
+    "/knowledge-ai-providers/test",
     data,
   );
 }
@@ -120,7 +135,7 @@ export function validateKnowledgeAiProviderModel(
   data: ValidateKnowledgeAiProviderModelPayload,
 ) {
   return request.post<unknown, ValidateKnowledgeAiProviderModelResult>(
-    '/knowledge-ai-providers/validate-model',
+    "/knowledge-ai-providers/validate-model",
     data,
   );
 }

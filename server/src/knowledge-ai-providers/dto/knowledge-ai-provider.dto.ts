@@ -56,6 +56,19 @@ export class CreateKnowledgeAiProviderDto {
 
   @IsString()
   @IsOptional()
+  imageGenerationModels?: string;
+
+  @IsOptional()
+  @IsIn(['openai', 'dashscope'])
+  imageGenerationProtocol?: 'openai' | 'dashscope';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  imageGenerationApiUrl?: string;
+
+  @IsString()
+  @IsOptional()
   embeddingModels?: string;
 
   @IsBoolean()

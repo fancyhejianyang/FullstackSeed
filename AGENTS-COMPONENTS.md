@@ -214,6 +214,7 @@
 - `UploadImage`：v-model 为图片 URL，默认 `accept='image/*'`
 - `UploadFile`：v-model 为文件 URL，`v-model:name` 为文件名，已上传后隐藏拖拽区并显示可下载文件名
 - `uploadRequest(file)`：可覆盖默认上传实现，未来直传 OSS 或特殊业务上传时仍保持组件契约不变
+- Agent 私有图片复用 `UploadImage.uploadRequest` 对接会话鉴权上传：组件 v-model 仅用本地 Blob URL 预览，发送消息使用服务端图片 ID，不把公开上传 URL 当作权限凭据。页面负责切换/卸载时释放 Blob URL。
 - 后端本地存储默认暴露 `/uploads/...`；未来 OSS/CDN 只调整上传服务或 `UPLOAD_PUBLIC_BASE_URL`
 - 系统配置下的「OSS/CDN 配置」页面会保存上传存储开关和云厂商参数；上传接口读取该配置决定本地或 OSS 分支
 

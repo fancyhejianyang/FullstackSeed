@@ -88,6 +88,20 @@ watch(visible, async (value) => {
         </template>
         <span v-else>无</span>
       </el-descriptions-item>
+      <el-descriptions-item label="图片识别模型">
+        {{
+          detail?.mediaModels?.vision
+            ? `账号 #${detail.mediaModels.vision.providerId} / ${detail.mediaModels.vision.model}`
+            : "未配置"
+        }}
+      </el-descriptions-item>
+      <el-descriptions-item label="图片生成模型">
+        {{
+          detail?.mediaModels?.imageGeneration
+            ? `账号 #${detail.mediaModels.imageGeneration.providerId} / ${detail.mediaModels.imageGeneration.model}`
+            : "未配置"
+        }}
+      </el-descriptions-item>
       <el-descriptions-item label="人员范围">
         {{
           detail?.accessScope === "all"

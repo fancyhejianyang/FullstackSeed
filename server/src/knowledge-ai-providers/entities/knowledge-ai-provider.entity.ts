@@ -28,6 +28,15 @@ export class KnowledgeAiProvider extends BaseEntity {
   visionModels: string | null;
 
   @Column({ type: 'text', nullable: true })
+  imageGenerationModels: string | null;
+
+  @Column({ type: 'varchar', length: 24, default: 'openai' })
+  imageGenerationProtocol: 'openai' | 'dashscope';
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  imageGenerationApiUrl: string | null;
+
+  @Column({ type: 'text', nullable: true })
   embeddingModels: string | null;
 
   @Column({ type: 'tinyint', default: true })

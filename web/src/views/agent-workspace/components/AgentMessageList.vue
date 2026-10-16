@@ -11,6 +11,7 @@ import AgentExecutionStatus from "./AgentExecutionStatus.vue";
 import AgentQueryCard from "./AgentQueryCard.vue";
 import AgentBusinessQueryCard from "./AgentBusinessQueryCard.vue";
 import AgentProcessingIndicator from "./AgentProcessingIndicator.vue";
+import AgentImageAttachment from "./AgentImageAttachment.vue";
 
 const props = defineProps<{
   agentName: string;
@@ -169,6 +170,12 @@ watch(
                 来源：{{ message.structuredData.sourceNames }}
               </div>
             </div>
+            <AgentImageAttachment
+              v-for="image in message.structuredData?.images || []"
+              :key="image.id"
+              :session-id="message.sessionId"
+              :image="image"
+            />
             <AgentExecutionStatus
               v-if="message.role !== 'user' && executionFor(message)"
               class="message-list__status"

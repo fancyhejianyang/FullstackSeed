@@ -1,28 +1,29 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
-import Dialog from '@/components/Dialog.vue';
-import { formatDateTime } from '@/utils/format';
+import { computed, ref, watch } from "vue";
+import Dialog from "@/components/Dialog.vue";
+import { formatDateTime } from "@/utils/format";
 import {
   getKnowledgeAiProvider,
   type KnowledgeAiProvider,
-} from '@/api/knowledgeAiProvider';
+} from "@/api/knowledgeAiProvider";
 
 const props = defineProps<{
   row?: KnowledgeAiProvider | null;
 }>();
 
-const visible = defineModel<boolean>('visible', { required: true });
+const visible = defineModel<boolean>("visible", { required: true });
 const loading = ref(false);
 const detail = ref<KnowledgeAiProvider | null>(null);
 const rowData = computed(() => detail.value);
 const isEmbeddingOnlyProvider = computed(() => {
   const data = rowData.value;
   if (!data) return false;
-  const defaultChatModels = ['qwen-plus'];
+  const defaultChatModels = ["qwen-plus"];
   return (
     getModelLines(data.embeddingModels).length > 0 &&
     getModelLines(data.textModels).length === 0 &&
     getModelLines(data.visionModels).length === 0 &&
+    getModelLines(data.imageGenerationModels).length === 0 &&
     getModelLines(data.models).every((item) => defaultChatModels.includes(item))
   );
 });
@@ -42,7 +43,7 @@ watch(visible, async (value) => {
 });
 
 function getModelLines(value?: string | null) {
-  return (value || '')
+  return (value || "")
     .split(/\r?\n/)
     .map((item) => item.trim())
     .filter(Boolean);
@@ -54,52 +55,94 @@ function shouldShowModelGroup(value?: string | null) {
 </script>
 
 <template>
-  <Dialog v-model="visible" title="查看大模型账号" width="860px" :show-footer="false">
+  <Dialog
+    v-model="visible"
+    title="查看大模型账号"
+    width="860px"
+    :show-footer="false"
+  >
     <div v-loading="loading">
       <el-descriptions :column="1" border>
         <el-descriptions-item label="名称">
-          {{ rowData?.name || '-' }}
+          {{ rowData?.name || "-" }}
         </el-descriptions-item>
         <el-descriptions-item label="API 地址">
-          {{ rowData?.apiUrl || '-' }}
+          {{ rowData?.apiUrl || "-" }}
         </el-descriptions-item>
         <el-descriptions-item label="业务空间">
-          {{ rowData?.workspaceId || '-' }}
+          {{ rowData?.workspaceId || "-" }}
         </el-descriptions-item>
-        <el-descriptions-item v-if="!isEmbeddingOnlyProvider" label="Chat API 路径">
-          {{ rowData?.chatApiPath || '-' }}
+        <el-descriptions-item
+          v-if="!isEmbeddingOnlyProvider"
+          label="Chat API 路径"
+        >
+          {{ rowData?.chatApiPath || "-" }}
         </el-descriptions-item>
         <el-descriptions-item label="密钥">
           <el-tag :type="rowData?.secretKeySet ? 'success' : 'warning'">
-            {{ rowData?.secretKeySet ? '已配置' : '未配置' }}
+            {{ rowData?.secretKeySet ? "已配置" : "未配置" }}
           </el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="状态">
           <el-tag :type="rowData?.isEnabled ? 'success' : 'info'">
-            {{ rowData?.isEnabled ? '启用' : '停用' }}
+            {{ rowData?.isEnabled ? "启用" : "停用" }}
           </el-tag>
         </el-descriptions-item>
-        <el-descriptions-item v-if="shouldShowModelGroup(rowData?.models)" label="模型列表">
+        <el-descriptions-item
+          v-if="shouldShowModelGroup(rowData?.models)"
+          label="模型列表"
+        >
           <div class="ai-provider-view__models">
-            <el-tag v-for="line in getModelLines(rowData?.models)" :key="line" type="info">
+            <el-tag
+              v-for="line in getModelLines(rowData?.models)"
+              :key="line"
+              type="info"
+            >
               {{ line }}
             </el-tag>
           </div>
         </el-descriptions-item>
-        <el-descriptions-item v-if="shouldShowModelGroup(rowData?.textModels)" label="文本模型">
+        <el-descriptions-item
+          v-if="shouldShowModelGroup(rowData?.textModels)"
+          label="文本模型"
+        >
           <div class="ai-provider-view__models">
-            <el-tag v-for="line in getModelLines(rowData?.textModels)" :key="line" type="info">
+            <el-tag
+              v-for="line in getModelLines(rowData?.textModels)"
+              :key="line"
+              type="info"
+            >
               {{ line }}
             </el-tag>
           </div>
         </el-descriptions-item>
-        <el-descriptions-item v-if="shouldShowModelGroup(rowData?.visionModels)" label="视觉模型">
+        <el-descriptions-item
+          v-if="shouldShowModelGroup(rowData?.visionModels)"
+          label="视觉模型"
+        >
           <div class="ai-provider-view__models">
-            <el-tag v-for="line in getModelLines(rowData?.visionModels)" :key="line" type="info">
+            <el-tag
+              v-for="line in getModelLines(rowData?.visionModels)"
+              :key="line"
+              type="info"
+            >
               {{ line }}
             </el-tag>
           </div>
         </el-descriptions-item>
+        <el-descriptions-item label="生图模型">
+          {{ getModelLines(rowData?.imageGenerationModels).join("、") || "-" }}
+        </el-descriptions-item>
+        <el-descriptions-item label="生图协议">
+          {{
+            rowData?.imageGenerationProtocol === "dashscope"
+              ? "DashScope 同步多模态"
+              : "OpenAI Images 兼容"
+          }}
+        </el-descriptions-item>
+        <el-descriptions-item label="生图接口地址">{{
+          rowData?.imageGenerationApiUrl || "未配置"
+        }}</el-descriptions-item>
         <el-descriptions-item label="向量模型">
           <div
             v-if="getModelLines(rowData?.embeddingModels).length"
@@ -116,13 +159,13 @@ function shouldShowModelGroup(value?: string | null) {
           <span v-else>-</span>
         </el-descriptions-item>
         <el-descriptions-item label="描述">
-          {{ rowData?.description || '-' }}
+          {{ rowData?.description || "-" }}
         </el-descriptions-item>
         <el-descriptions-item label="创建时间">
-          {{ rowData?.createdAt ? formatDateTime(rowData.createdAt) : '-' }}
+          {{ rowData?.createdAt ? formatDateTime(rowData.createdAt) : "-" }}
         </el-descriptions-item>
         <el-descriptions-item label="更新时间">
-          {{ rowData?.updatedAt ? formatDateTime(rowData.updatedAt) : '-' }}
+          {{ rowData?.updatedAt ? formatDateTime(rowData.updatedAt) : "-" }}
         </el-descriptions-item>
       </el-descriptions>
     </div>

@@ -17,6 +17,18 @@ const statusMeta = computed(() => {
   // Execution completion is not a write receipt: historical records may have
   // succeeded without a confirmed business record and must remain conservative.
   if (props.status === "succeeded") {
+    if (props.toolKey === "media.vision")
+      return { label: "识别完成", type: getPermissionActionColor("read") };
+    if (props.toolKey === "media.imageGeneration") {
+      const images = props.result?.images;
+      const hasImage =
+        Array.isArray(images) &&
+        images.some((image) => typeof image?.id === "number" && image.id > 0);
+      return {
+        label: hasImage ? "图片生成完成" : "图片结果待核实",
+        type: getPermissionActionColor(hasImage ? "create" : "audit"),
+      };
+    }
     if (props.toolKey?.endsWith(".create")) {
       const recordId = props.result?.recordId;
       const hasReceipt =

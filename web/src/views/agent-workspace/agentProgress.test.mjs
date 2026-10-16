@@ -35,6 +35,14 @@ const progress = (
 });
 
 test("labels follow actual phases; missing/failed progress never invents a search", () => {
+  assert.equal(
+    agentProgressText(progress("running", "a", "recognizing_image")),
+    "正在识别图片并理解内容",
+  );
+  assert.equal(
+    agentProgressText(progress("running", "a", "generating_image")),
+    "正在生成图片，请稍候",
+  );
   assert.equal(agentProgressText(null), "正在连接 Agent");
   assert.equal(agentProgressText(progress()), "正在理解需求");
   assert.equal(
