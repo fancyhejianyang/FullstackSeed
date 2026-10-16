@@ -12,6 +12,25 @@ export interface AgentMediaModels {
   imageGeneration: AgentModelReference | null;
 }
 
+export interface AgentMediaProbeResult extends AgentModelReference {
+  kind: keyof AgentMediaModels;
+  status: "valid" | "invalid" | "inconclusive";
+  reason: string;
+  message: string;
+  checkedAt: string;
+  cached: boolean;
+}
+
+export function probeAgentMediaModel(
+  data: AgentModelReference & { kind: keyof AgentMediaModels },
+) {
+  return request.post<unknown, AgentMediaProbeResult>(
+    "/agent-apps/probe-media-model",
+    data,
+    { timeout: 100000 },
+  );
+}
+
 export interface AgentModelRouting {
   strategy: "priority" | "balanced" | "intent";
   simpleModels: string[];

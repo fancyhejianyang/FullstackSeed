@@ -12,11 +12,17 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator';
 import {
+  CurrentUser,
+  type AuthUser,
+} from '../common/decorators/current-user.decorator';
+import { AgentMediaProbeService } from './agent-media-probe.service';
+import {
   BatchDeleteAgentAppDto,
   CreateAgentAppDto,
   QueryAgentAppDto,
   QueryAgentExecutionDto,
   UpdateAgentAppDto,
+  ProbeAgentMediaModelDto,
 } from './dto/agent-app.dto';
 import { AgentAppsService } from './agent-apps.service';
 import { AgentWorkspaceService } from './agent-workspace.service';
@@ -28,6 +34,7 @@ export class AgentAppsController {
   constructor(
     private readonly service: AgentAppsService,
     private readonly workspaceService: AgentWorkspaceService,
+    private readonly mediaProbeService: AgentMediaProbeService,
   ) {}
 
   @Get()
@@ -49,6 +56,18 @@ export class AgentAppsController {
   @ApiOperation({ summary: '分页查询 Agent 工具执行记录' })
   findExecutionRecords(@Query() query: QueryAgentExecutionDto) {
     return this.workspaceService.findExecutionRecords(query);
+  }
+
+  @Post('probe-media-model')
+  @RequirePermissions('AgentApp.read')
+  @ApiOperation({
+    summary: '以图片协议测试模型能力（可能计费，不修改账号目录）',
+  })
+  probeMediaModel(
+    @Body() dto: ProbeAgentMediaModelDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.mediaProbeService.probe(dto, user);
   }
 
   @Get(':id')

@@ -1,13 +1,18 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from "vue";
+import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { ElMessage, type FormRules } from "element-plus";
 import Dialog from "@/components/Dialog.vue";
 import Form, { type FormField } from "@/components/Form.vue";
+import Button from "@/components/Button.vue";
+import { getPermissionActionColor } from "@/utils/permission";
 import {
   createAgentApp,
   getAgentApp,
   getAgentConfigurationOptions,
   updateAgentApp,
+  probeAgentMediaModel,
+  type AgentMediaProbeResult,
+  type AgentMediaModels,
   type AgentAccessScope,
   type AgentApp,
   type AgentAppForm,
@@ -30,6 +35,22 @@ const options = ref<AgentConfigurationOptions>({
   businessTools: [],
 });
 const users = ref<UserItem[]>([]);
+type MediaKind = keyof AgentMediaModels;
+const mediaChecks = reactive<Partial<Record<MediaKind, AgentMediaProbeResult>>>(
+  {},
+);
+const rejectedMedia = reactive(new Map<string, AgentMediaProbeResult>());
+const probingKind = ref<MediaKind | null>(null);
+const refreshingMedia = ref(false);
+let probeVersion = 0;
+let configurationVersion = 0;
+let clearingRejected = false;
+const mediaProps = {
+  vision: "visionModel",
+  imageGeneration: "imageGenerationModel",
+} as const;
+const mediaLabel = (kind: MediaKind) =>
+  kind === "vision" ? "图片识别" : "图片生成";
 
 type EditableForm = Omit<
   AgentAppForm,
@@ -140,6 +161,7 @@ function mediaReference(value: string): AgentModelReference | null {
 function mediaOptions(kind: "vision" | "imageGeneration", selected: string) {
   const list = (options.value.mediaModels?.[kind] ?? [])
     .filter((item) => item.providerId === Number(form.providerId))
+    .filter((item) => !rejectedMedia.has(`${kind}:${mediaKey(item)}`))
     .map((item) => ({
       value: mediaKey(item),
       label: item.text,
@@ -153,6 +175,120 @@ function mediaOptions(kind: "vision" | "imageGeneration", selected: string) {
     });
   return list;
 }
+
+const rejectedForProvider = computed(() =>
+  [...rejectedMedia.values()].filter(
+    (item) => item.providerId === Number(form.providerId),
+  ),
+);
+const probeBusy = computed(() => !!probingKind.value || refreshingMedia.value);
+function mediaCheckHint(kind: MediaKind) {
+  if (probingKind.value === kind)
+    return "正在发送真实图片测试请求，请等待；可能产生费用，关闭窗口不会保证供应商停止计费。";
+  const check = mediaChecks[kind];
+  if (check)
+    return `${check.message}${check.cached ? "（60 秒内复用最近结果，未重复调用）" : ""}`;
+  return "手动选择后自动测试，打开已有配置不自动调用。识图发送真实测试图片；生图实际生成一张，可能计费，不自动重试。";
+}
+
+function invalidateMediaProbe() {
+  probeVersion++;
+  probingKind.value = null;
+  delete mediaChecks.vision;
+  delete mediaChecks.imageGeneration;
+}
+
+async function checkMediaModel(kind: MediaKind) {
+  const selected = form[mediaProps[kind]];
+  const reference = mediaReference(selected);
+  if (
+    !reference ||
+    reference.providerId !== Number(form.providerId) ||
+    loading.value ||
+    !visible.value
+  )
+    return;
+  const version = ++probeVersion;
+  probingKind.value = kind;
+  delete mediaChecks[kind];
+  try {
+    const result = await probeAgentMediaModel({ ...reference, kind });
+    if (
+      version !== probeVersion ||
+      !visible.value ||
+      form[mediaProps[kind]] !== selected ||
+      Number(form.providerId) !== reference.providerId
+    )
+      return;
+    mediaChecks[kind] = result;
+    if (result.status === "invalid") {
+      rejectedMedia.set(`${kind}:${selected}`, result);
+      clearingRejected = true;
+      try {
+        form[mediaProps[kind]] = "";
+      } finally {
+        clearingRejected = false;
+      }
+      ElMessage.warning(
+        `${mediaLabel(kind)} ${reference.model} 已从当前候选移除，账号目录未修改`,
+      );
+    }
+  } catch {
+    if (version === probeVersion && visible.value) {
+      mediaChecks[kind] = {
+        ...reference,
+        kind,
+        status: "inconclusive",
+        reason: "network",
+        message:
+          "请求未完成，无法判断图片能力；候选保留。请检查网络后重试，供应商可能已计费。",
+        checkedAt: new Date().toISOString(),
+        cached: false,
+      };
+    }
+  } finally {
+    if (version === probeVersion) probingKind.value = null;
+  }
+}
+
+async function refreshMediaOptions() {
+  if (probeBusy.value) return;
+  const version = ++probeVersion;
+  refreshingMedia.value = true;
+  try {
+    const configuration = await getAgentConfigurationOptions();
+    if (version !== probeVersion || !visible.value) return;
+    options.value = configuration;
+    rejectedMedia.clear();
+    delete mediaChecks.vision;
+    delete mediaChecks.imageGeneration;
+    ElMessage.success(
+      "候选已按账号配置刷新，选择模型后测试；同配置 60 秒内复用最近结果",
+    );
+  } catch {
+    // 统一请求层展示错误；保留当前候选与移除记录，避免刷新失败伪装成恢复成功。
+  } finally {
+    if (version === probeVersion) refreshingMedia.value = false;
+  }
+}
+
+for (const kind of ["vision", "imageGeneration"] as const) {
+  watch(
+    () => form[mediaProps[kind]],
+    (value) => {
+      if (loading.value || !visible.value || clearingRejected) return;
+      if (value) void checkMediaModel(kind);
+      else {
+        invalidateMediaProbe();
+      }
+    },
+    { flush: "sync" },
+  );
+}
+onBeforeUnmount(() => {
+  configurationVersion++;
+  invalidateMediaProbe();
+});
 
 const fields = computed<FormField[]>(() => [
   {
@@ -188,6 +324,7 @@ const fields = computed<FormField[]>(() => [
     label: "模型账号",
     type: "select",
     placeholder: "请选择已启用的模型账号",
+    componentProps: { disabled: probeBusy.value },
     options: options.value.providers.map((item) => ({
       label: item.name,
       value: item.id,
@@ -266,8 +403,11 @@ const fields = computed<FormField[]>(() => [
     placeholder: form.providerId
       ? "选择当前账号的视觉识别模型"
       : "请先选择模型账号",
-    componentProps: { disabled: !form.providerId },
-    hint: "仅列出所选账号已登记的视觉识别模型，不按模型名称猜测能力。无选项时请到‘大模型账号 → 视觉识别模型’补充；工作台支持粘贴图片并自动识别意图。",
+    componentProps: {
+      disabled: !form.providerId || probeBusy.value,
+      notFoundText: "无可选识图模型，请更新大模型账号的视觉识别模型目录",
+    },
+    hint: `仅列出当前账号的视觉识别目录。${mediaCheckHint("vision")}`,
   },
   {
     prop: "imageGenerationModel",
@@ -277,8 +417,16 @@ const fields = computed<FormField[]>(() => [
     placeholder: form.providerId
       ? "选择当前账号的生图模型"
       : "请先选择模型账号",
-    componentProps: { disabled: !form.providerId },
-    hint: "仅列出所选账号的生图模型；无选项时请在该账号配置生图模型、协议和完整接口地址。根据明确创作意图生成一张，可能产生费用，不自动重试；识图模型不等于生图模型。",
+    componentProps: {
+      disabled: !form.providerId || probeBusy.value,
+      notFoundText: "无生图候选：请配置该账号的生图模型、协议及完整接口地址",
+    },
+    hint: `来源为当前账号的生图目录与完整生图端点，不能从文本/视觉目录推断。${mediaCheckHint("imageGeneration")}`,
+  },
+  {
+    prop: "mediaProbeControls",
+    label: "图片模型测试",
+    slot: true,
   },
   {
     prop: "toolKeys",
@@ -452,6 +600,7 @@ watch(
   () => form.providerId,
   (providerId, previous) => {
     if (loading.value || String(providerId) === String(previous)) return;
+    invalidateMediaProbe();
     form.visionModel = "";
     form.imageGenerationModel = "";
     const available = new Set(
@@ -480,22 +629,35 @@ watch(
   { deep: true },
 );
 
-watch(visible, async (value) => {
-  if (!value) return;
-  loading.value = true;
-  try {
-    const [configuration, userResult] = await Promise.all([
-      getAgentConfigurationOptions(),
-      getUsers({ page: 1, pageSize: 1000, isActive: true }),
-    ]);
-    options.value = configuration;
-    users.value = userResult.list;
-    if (props.row?.id) fillForm(await getAgentApp(props.row.id));
-    else resetForm();
-  } finally {
-    loading.value = false;
-  }
-});
+watch(
+  visible,
+  async (value) => {
+    const version = ++configurationVersion;
+    invalidateMediaProbe();
+    refreshingMedia.value = false;
+    rejectedMedia.clear();
+    if (!value) {
+      loading.value = false;
+      return;
+    }
+    loading.value = true;
+    try {
+      const [configuration, userResult] = await Promise.all([
+        getAgentConfigurationOptions(),
+        getUsers({ page: 1, pageSize: 1000, isActive: true }),
+      ]);
+      const app = props.row?.id ? await getAgentApp(props.row.id) : null;
+      if (version !== configurationVersion || !visible.value) return;
+      options.value = configuration;
+      users.value = userResult.list;
+      if (app) fillForm(app);
+      else resetForm();
+    } finally {
+      if (version === configurationVersion) loading.value = false;
+    }
+  },
+  { flush: "sync" },
+);
 
 function buildPayload(): AgentAppForm {
   return {
@@ -529,6 +691,10 @@ function buildPayload(): AgentAppForm {
 }
 
 async function handleSubmit() {
+  if (probeBusy.value) {
+    ElMessage.warning("请等待图片模型测试或候选刷新完成后再保存");
+    return;
+  }
   await formRef.value?.validate();
   if (unavailableSelectedTools.value.length) {
     ElMessage.warning("请先手动移除业务工具中标记为不可执行的历史选项");
@@ -582,12 +748,53 @@ async function handleSubmit() {
         :fields="fields"
         :rules="rules"
         label-width="168px"
-      />
+      >
+        <template #field-mediaProbeControls>
+          <section class="agent-app-edit__media-tests" aria-live="polite">
+            <p>
+              图片模型测试：仅明确无效的选项会从当前窗口移除，不自动修改大模型账号。限流、超时、余额不足或结果无法核验时保留候选。
+            </p>
+            <div class="agent-app-edit__media-test-actions">
+              <Button
+                :type="getPermissionActionColor('read')"
+                :disabled="probeBusy || loading"
+                @click="refreshMediaOptions"
+                >刷新模型候选</Button
+              >
+              <Button
+                v-for="kind in ['vision', 'imageGeneration'] as const"
+                :key="kind"
+                :type="getPermissionActionColor('read')"
+                :disabled="probeBusy || loading || !form[mediaProps[kind]]"
+                @click="checkMediaModel(kind)"
+                >重测{{ mediaLabel(kind) }}</Button
+              >
+            </div>
+            <p
+              v-for="item in rejectedForProvider"
+              :key="`${item.kind}:${item.model}`"
+            >
+              已移除 {{ mediaLabel(item.kind) }}：{{ item.model }} ·
+              {{ item.message }}
+            </p>
+          </section>
+        </template>
+      </Form>
     </div>
   </Dialog>
 </template>
 
 <style scoped>
+.agent-app-edit__media-tests {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.agent-app-edit__media-test-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .agent-app-edit :deep(.el-form-item__label) {
   white-space: nowrap;
 }

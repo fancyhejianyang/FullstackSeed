@@ -69,6 +69,27 @@
 
 协议按 [OpenAI Images API](https://developers.openai.com/api/reference/resources/images/methods/generate)、[OpenAI 图片输入指南](https://developers.openai.com/api/docs/guides/images-vision) 和 [百炼同步文生图 API](https://help.aliyun.com/zh/model-studio/qwen-image-api) 核对；不硬编码或自动推荐供应商模型名称。
 
+### 选择图片模型时的真实能力测试
+
+在 Agent 应用编辑页手动选择「图片识别模型 / 图片生成模型」后自动测试；**打开已有应用、回填历史值、刷新候选不会自动发起付费测试**。模型字段下显示测试结果，紧邻字段的「图片模型测试」区可重新测试或刷新候选。两种能力分开判断，不根据模型名字推断。
+
+- 识图：以现有 Chat Completions 图片协议发送服务端生成的随机四色块 PNG，要求返回实际颜色顺序，并限制回答 `max_tokens: 256`。只有内容与图片匹配才通过；单纯回复 OK、HTTP 200 或自称有视觉能力不算通过。回答格式/内容不匹配只表示“无法确认”，不证明它一定是文本模型。
+- 生图：按账号保存的协议发送单张请求。OpenAI Images 兼容使用 `model/prompt/n:1/size:1024x1024`；DashScope 同步使用 `model/input.messages/parameters.n:1`，保留模型默认尺寸。与工作台复用同一请求体构造和图片解析/下载安全校验。必须拿到真实图片字节且通过格式/大小校验；异步任务 ID、Markdown 链接或文字“生成成功”不算通过。测试图只在内存校验，不保存到会话、数据库或公开目录。
+- 明确无效：供应商明确返回模型 ID 不存在/无效，或明确不支持此次图片能力，清空该字段并隐藏当前编辑窗口中的对应候选，展示原因。**不删除账号目录、不修改其他应用**；返回「大模型账号 → 编辑」修正目录后，点「刷新模型候选」重新获取并选择。
+- 无法确认：鉴权失败、权限不足、余额/额度异常、429 限流、服务故障、超时、网络或接口参数不匹配，均保留候选并提示检查。HTTP 400/404 本身不等于模型无效，尤其不能把错误的接口地址/尺寸配置误判为非图片模型。
+- 新接口 `POST /agent-apps/probe-media-model` 接收 `{providerId, model, kind: 'vision' | 'imageGeneration'}`，返回同一引用及 `{status: 'valid' | 'invalid' | 'inconclusive', reason, message, checkedAt, cached}`；要求登录、`AgentApp.read`，并有 `AgentApp.create` 或 `AgentApp.update`（超管放行）。只允许服务端已保存、启用、有密钥且模型在对应目录的目标；不接收客户端 URL/密钥，不返回供应商原始错误。
+- 识图最多等 30 秒，生图最多等 90 秒；每员工同时一个测试，每分钟最多 6 次实际调用。同一员工/能力/配置的已完成结果缓存 60 秒；账号端点、密钥或模型变更后不复用旧结果。均为有界进程内保护，多实例不共享。模型测试与聊天并发配额独立，不批量扫模型、不自动重试，关闭页面也不能保证供应商停止处理或计费。刷新候选不是强制绕过缓存；未知结果重试前可核实供应商记录。
+
+此次测试功能不新增数据库字段/迁移，部署更新前后端即可；模型引用能力本身仍依赖前述既有媒体迁移。
+
+### 生图下拉为空时去哪里配置
+
+来源已经接通，候选是**所选账号的「生图模型」专用目录**，而不是普通文本模型列表或视觉识别模型列表。账号还必须启用、有密钥，并填写完整「生图接口地址」。下拉为空仅表示没得到满足这些配置条件的候选，不能证明供应商没有生图模型，也不能证明账号已经开通了生图权限。
+
+例如阿里云百炼提供 Qwen-Image 同步接口，可按[官方 Qwen-Image API 文档](https://help.aliyun.com/zh/model-studio/qwen-image-api)核对该账号实际可用的 `qwen-image-2.0` / `qwen-image-2.0-pro` 等模型及地域/业务空间。把实际模型登记到「大模型账号 → 生图模型」，协议选「阿里云 DashScope 同步多模态生图」，填写文档对应的完整 `/api/v1/services/aigc/multimodal-generation/generation` 地址，保存后回 Agent 页刷新并测试。不要把所有百炼生图模型都当成同一协议；异步接口、视频接口和其他不同请求契约不在当前接入范围。
+
+本次只用模拟供应商自动验证，没有读取实际账号密钥或发送真实付费测试；实际账号是否可用，以配置后的测试和供应商开通状态为准。
+
 ### 数据、权限与费用保护
 
 - 前后端字段：`agent_apps.mediaModels = { vision: {providerId,model} | null, imageGeneration: {providerId,model} | null }`。模型账号新增 `imageGenerationModels`、`imageGenerationProtocol`、`imageGenerationApiUrl`。原账号密钥不复制到 Agent 配置、消息或执行记录。

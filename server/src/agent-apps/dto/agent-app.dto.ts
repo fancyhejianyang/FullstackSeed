@@ -291,6 +291,21 @@ export class QueryAgentSessionDto {
   keyword?: string;
 }
 
+export class ProbeAgentMediaModelDto {
+  @IsInt()
+  @Min(1)
+  providerId: number;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  @Matches(/\S/)
+  model: string;
+
+  @IsIn(['vision', 'imageGeneration'])
+  kind: 'vision' | 'imageGeneration';
+}
+
 export class SendAgentMessageDto {
   // 仅兼容旧客户端入参；实际执行由服务端意图识别决定，不信任此字段。
   @IsOptional()

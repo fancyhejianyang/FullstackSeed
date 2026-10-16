@@ -1,5 +1,19 @@
 # CHANGELOG
 
+### 2026-10-16 Agent 图片模型切换自动测试与无效候选移除
+
+- 需求与原因：能力目录是管理员登记信息，不能证明模型真的能识图/生图；普通文本测试的 OK 或 HTTP 200 也不能验证图片能力。本次在手动切换媒体模型时发起对应协议的真实能力测试，并说明生图候选的配置来源。
+- 新增文件（4）：`server/src/agent-apps/agent-media-probe.ts`、`server/src/agent-apps/agent-media-probe.service.ts`、`server/src/agent-apps/agent-media-probe.service.spec.ts`；`web/src/views/agent-app/mediaModelProbe.test.mjs`。
+- 修改后端（4）：`server/src/agent-apps/agent-apps.controller.ts`、`server/src/agent-apps/agent-apps.module.ts`、`server/src/agent-apps/agent-media.service.ts`、`server/src/agent-apps/dto/agent-app.dto.ts`。修改前端（2）：`web/src/api/agentApp.ts`、`web/src/views/agent-app/Edit.vue`。修改文档（3）：`.design-spec.md`、`MD/Agent业务模块接入说明.md`、本文件。删除文件：无；共新增 4、修改 9，无依赖/实体/数据库迁移变化。
+- 契约与权限：新增 `POST /agent-apps/probe-media-model`，入参 `providerId/model/kind`；结果前后端统一 `valid/invalid/inconclusive`、安全原因码/说明、检查时间及缓存标识。要求登录、AgentApp.read，并有 create 或 update 权限；服务端只从保存的启用账号、密钥及专用模型目录解析目标，客户端不能传 URL/密钥。测试不修改账号、应用或聊天数据。
+- 识图验证：本地生成随机四色块 PNG，通过真正的 `image_url` 输入让模型返回颜色顺序，最多 256 输出 Token；答案必须与像素一致，文字 OK 或自称支持不算成功。无法正确核验仅标记无法确认，不能断言是非图片模型。
+- 生图验证：与工作台共用请求构造/结果解析，按 OpenAI Images 兼容或 DashScope 同步协议只生成单张；校验真实输出图片字节，复用图片格式/大小限制及 HTTPS 公网下载保护。不把文本、Markdown URL 或异步任务回执当成图片；测试图只在内存中处理，不持久化。
+- 失败区分：只有供应商明确表示模型不存在/ID 无效或不支持图片能力才移除当前窗口该候选并清空对应选择，原因保留供修正目录。401、权限、余额/额度、429、超时、5xx、未知接口或参数错误等保留候选；不自动删账号目录，不按模型名推断。生图候选来自所选账号的生图专用目录与完整端点，不从文本/视觉目录混入；配置位置与百炼来源见接入说明。
+- UI：复用 Form/Select/Button，模型字段就地显示真实测试状态，测试区位于媒体字段之后，提供刷新和重测。编辑回显/刷新不自动付费测试；选择后测试期间禁止重复操作及保存，保留关闭能力。切换账号/重新打开/选择变更后忽略迟到结果，旧配置加载响应也不能覆盖新表单；刷新失败不恢复已移除选项。
+- 调用保护：每员工单并发、每分钟最多 6 次实际测试；识图 30 秒、生图 90 秒上限。已尝试的结果（包括未知/超时）按员工、能力和账号配置缓存 60 秒，配置变更使旧缓存失效；限流、缓存均为有界进程内状态，多实例不共享。无自动重试/批量扫描，关闭/超时不保证供应商停止计费。
+- 验证：新增后端 26 项与前端真实 setup/watchers 8 项回归；后端全量 33 套件 / 314 项、前端共 19 项测试通过。后端生产构建、生产源码类型检查、Vue 类型检查、变更后端 ESLint、变更前端 Prettier、组件复用只读扫描（1 页面）、`git diff --check` 通过。完整后端测试类型检查仍仅有既有 `server/src/menus/menus.service.spec.ts:177` 的 `deletedAt: null` / `Date` 错误，未修改该文件。
+- 验证边界：测试全部模拟供应商，不读取真实密钥、不连接数据库、不发真实付费请求；未启动常驻服务、未做浏览器人工验收。更新前后端即可使用，真实账号的开通权限/余额/地域仍需管理员选择模型后测试确认。
+
 ### 2026-10-16 Agent 图片意图自动分流、输入框粘贴与账号内模型过滤
 
 - 需求与原因：手动选择对话/识图/生图模式不符合自然语言交互；媒体候选混入其他账号，容易配置错引用。本次去掉模式选择，以服务端意图识别决定实际能力，视觉与生图引用均限定当前所选账号。

@@ -21,6 +21,7 @@ import { AgentMessage } from './entities/agent-message.entity';
 import { AgentSession } from './entities/agent-session.entity';
 import { AgentImage } from './entities/agent-image.entity';
 import { AgentMediaService } from './agent-media.service';
+import { AgentMediaProbeService } from './agent-media-probe.service';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { AgentMediaService } from './agent-media.service';
     AgentBusinessService,
     AgentModelRouterService,
     AgentMediaService,
+    AgentMediaProbeService,
   ],
   exports: [AgentAppsService],
 })
