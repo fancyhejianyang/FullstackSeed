@@ -25,23 +25,35 @@ const submitting = ref(false);
 const formRef = ref<InstanceType<typeof Form>>();
 const options = ref<AgentConfigurationOptions>({
   providers: [],
-  workflows: [],
   businessTools: [],
 });
 const users = ref<UserItem[]>([]);
 
 type EditableForm = Omit<AgentAppForm, "allowedUserIds"> & {
-  knowledgeEnabled: boolean;
   allowedUserIds: Array<string | number>;
 };
+
+const DEFAULT_INSTRUCTION_MARKDOWN = `# 工作目标
+
+请在这里说明 Agent 要完成的业务目标和边界。
+
+## 处理流程
+
+1. 先识别用户意图并确认必要信息。
+2. 仅使用当前 Agent 已授权的业务工具。
+3. 写入操作先展示待确认内容，员工确认后再提交。
+4. 只有收到真实工具回执后才能说明操作成功。
+
+## 业务规则
+
+- 请在这里补充字段默认值、数量限制、异常处理等可调整规则。`;
 
 const form = reactive<EditableForm>({
   name: "",
   responsibility: "",
+  instructionMarkdown: DEFAULT_INSTRUCTION_MARKDOWN,
   providerId: null,
   models: [],
-  knowledgeEnabled: false,
-  workflowId: null,
   toolKeys: [],
   accessScope: "all",
   allowedUserIds: [],
@@ -65,6 +77,21 @@ const fields = computed<FormField[]>(() => [
     type: "textarea",
     rows: 3,
     placeholder: "说明该 Agent 可回答、查询和录入的业务边界",
+  },
+  {
+    prop: "instructionMarkdown",
+    label: "工作指令（Markdown）",
+    type: "textarea",
+    rows: 14,
+    labelPosition: "top",
+    placeholder: "使用 Markdown 编写工作目标、处理流程和可调整的业务规则",
+    componentProps: {
+      maxlength: 20000,
+      showWordLimit: true,
+      clearable: false,
+      resize: "vertical",
+    },
+    hint: "这里负责描述工作逻辑，不直接定义接口；Agent 只能调用下方已授权的业务工具，权限、确认和真实回执仍由平台强制校验。",
   },
   {
     prop: "providerId",
@@ -93,29 +120,6 @@ const fields = computed<FormField[]>(() => [
       visibleCount: 10,
     },
     hint: "按选择顺序调用：首个模型为主模型，失败时依次尝试后续模型，最多选择 5 个且受单轮工具上限约束。",
-  },
-  {
-    prop: "knowledgeEnabled",
-    label: "知识增强",
-    component: "Switch",
-    componentProps: {
-      activeText: "启用知识工作流",
-      inactiveText: "纯模型对话",
-    },
-    hint: "关闭时直接使用职责说明和模型进行对话；开启后才执行标准问答、术语校准和知识库检索。",
-  },
-  {
-    prop: "workflowId",
-    label: "知识工作流",
-    type: "select",
-    placeholder: form.knowledgeEnabled
-      ? "请选择知识工作流"
-      : "请先开启知识增强",
-    options: options.value.workflows.map((item) => ({
-      label: item.name,
-      value: item.id,
-    })),
-    componentProps: { disabled: !form.knowledgeEnabled },
   },
   {
     prop: "toolKeys",
@@ -185,6 +189,14 @@ const rules = computed<FormRules>(() => ({
   responsibility: [
     { required: true, message: "请输入职责说明", trigger: "blur" },
   ],
+  instructionMarkdown: [
+    { required: true, message: "请输入 Markdown 工作指令", trigger: "blur" },
+    {
+      max: 20000,
+      message: "工作指令不能超过 20000 个字符",
+      trigger: "blur",
+    },
+  ],
   providerId: [
     { required: true, message: "请选择模型账号", trigger: "change" },
   ],
@@ -197,26 +209,18 @@ const rules = computed<FormRules>(() => ({
       trigger: "change",
     },
   ],
-  workflowId: [
-    {
-      required: form.knowledgeEnabled,
-      message: "请选择知识工作流",
-      trigger: "change",
-    },
-  ],
 }));
 
 function resetForm() {
   Object.assign(form, {
     name: "",
     responsibility: "",
+    instructionMarkdown: DEFAULT_INSTRUCTION_MARKDOWN,
     providerId:
       options.value.providers.length === 1
         ? options.value.providers[0].id
         : null,
     models: [],
-    knowledgeEnabled: false,
-    workflowId: null,
     toolKeys: [] as AgentToolKey[],
     accessScope: "all" as AgentAccessScope,
     allowedUserIds: [],
@@ -232,10 +236,10 @@ function fillForm(data: AgentApp) {
   Object.assign(form, {
     name: data.name,
     responsibility: data.responsibility,
+    instructionMarkdown:
+      data.instructionMarkdown || DEFAULT_INSTRUCTION_MARKDOWN,
     providerId: data.providerId,
     models: [...data.models],
-    knowledgeEnabled: Boolean(data.workflowId),
-    workflowId: data.workflowId,
     toolKeys: [...data.toolKeys],
     accessScope: data.accessScope,
     allowedUserIds: [...(data.allowedUserIds ?? [])],
@@ -256,17 +260,6 @@ watch(
         ?.models.map((item) => item.value) ?? [],
     );
     form.models = form.models.filter((model) => available.has(model));
-  },
-);
-
-watch(
-  () => form.knowledgeEnabled,
-  (enabled) => {
-    if (!enabled) {
-      form.workflowId = null;
-    } else if (!form.workflowId && options.value.workflows.length === 1) {
-      form.workflowId = options.value.workflows[0].id;
-    }
   },
 );
 
@@ -329,10 +322,9 @@ function buildPayload(): AgentAppForm {
   return {
     name: form.name.trim(),
     responsibility: form.responsibility.trim(),
+    instructionMarkdown: form.instructionMarkdown.trim(),
     providerId: form.providerId ? Number(form.providerId) : null,
     models: [...form.models],
-    workflowId:
-      form.knowledgeEnabled && form.workflowId ? Number(form.workflowId) : null,
     toolKeys: [...form.toolKeys],
     accessScope: form.accessScope,
     allowedUserIds:

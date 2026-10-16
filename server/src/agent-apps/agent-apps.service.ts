@@ -8,7 +8,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Like, Repository } from 'typeorm';
 import { AiCommandDefinitionsService } from '../ai-command-definitions/ai-command-definitions.service';
 import { AI_BUSINESS_COMMAND_CATALOG } from '../ai-command-definitions/ai-command-definitions.constants';
-import { AiWorkflowsService } from '../ai-workflows/ai-workflows.service';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
 import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
 import {
@@ -25,7 +24,6 @@ export class AgentAppsService {
     @InjectRepository(AgentApp)
     private readonly repository: Repository<AgentApp>,
     private readonly providersService: KnowledgeAiProvidersService,
-    private readonly workflowsService: AiWorkflowsService,
     private readonly commandDefinitionsService: AiCommandDefinitionsService,
   ) {}
 
@@ -39,8 +37,8 @@ export class AgentAppsService {
       ? [
           { ...baseWhere, name: Like(`%${keyword}%`) },
           { ...baseWhere, responsibility: Like(`%${keyword}%`) },
+          { ...baseWhere, instructionMarkdown: Like(`%${keyword}%`) },
           { ...baseWhere, providerName: Like(`%${keyword}%`) },
-          { ...baseWhere, workflowName: Like(`%${keyword}%`) },
         ]
       : baseWhere;
     const [list, total] = await this.repository.findAndCount({
@@ -78,8 +76,6 @@ export class AgentAppsService {
           id: app.id,
           name: app.name,
           responsibility: app.responsibility,
-          knowledgeEnabled: Boolean(app.workflowId),
-          workflowName: app.workflowName,
           toolKeys,
           tools: toolKeys
             .map((key) => toolMap.get(key))
@@ -103,13 +99,8 @@ export class AgentAppsService {
   }
 
   async getConfigurationOptions() {
-    const [providers, workflows, businessTools] = await Promise.all([
+    const [providers, businessTools] = await Promise.all([
       this.providersService.findAll({
-        page: 1,
-        pageSize: 200,
-        isEnabled: true,
-      }),
-      this.workflowsService.findAll({
         page: 1,
         pageSize: 200,
         isEnabled: true,
@@ -126,10 +117,6 @@ export class AgentAppsService {
         }))
         .filter((item) => item.secretKeySet && item.models.length)
         .map(({ id, name, models }) => ({ id, name, models })),
-      workflows: workflows.list.map((item) => ({
-        id: item.id,
-        name: item.name,
-      })),
       businessTools,
     };
   }
@@ -180,6 +167,9 @@ export class AgentAppsService {
     if (dto.responsibility !== undefined) {
       payload.responsibility = dto.responsibility.trim();
     }
+    if (dto.instructionMarkdown !== undefined) {
+      payload.instructionMarkdown = dto.instructionMarkdown.trim();
+    }
     if (dto.providerId !== undefined || dto.models !== undefined || isCreate) {
       const providerId = dto.providerId ?? current?.providerId;
       const models = Array.from(
@@ -202,16 +192,9 @@ export class AgentAppsService {
       payload.providerName = providerName;
       payload.models = models;
     }
-    if (dto.workflowId !== undefined || isCreate) {
-      if (dto.workflowId) {
-        const workflow = await this.workflowsService.findUsable(dto.workflowId);
-        payload.workflowId = workflow.id;
-        payload.workflowName = workflow.name;
-      } else {
-        payload.workflowId = null;
-        payload.workflowName = null;
-      }
-    }
+    // Agent 已改用 Markdown 工作指令，不再从配置绑定知识工作流。
+    payload.workflowId = null;
+    payload.workflowName = null;
     if (dto.toolKeys !== undefined || isCreate) {
       const toolKeys = [...(dto.toolKeys ?? [])];
       const availableToolKeys = new Set(

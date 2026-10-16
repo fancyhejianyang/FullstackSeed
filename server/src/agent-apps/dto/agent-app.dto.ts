@@ -38,6 +38,11 @@ export class CreateAgentAppDto {
   @MaxLength(2000)
   responsibility: string;
 
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(20000)
+  instructionMarkdown: string;
+
   @Type(() => Number)
   @IsInt()
   @Min(1)
@@ -51,12 +56,6 @@ export class CreateAgentAppDto {
   @IsNotEmpty({ each: true })
   @MaxLength(120, { each: true })
   models: string[];
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @IsOptional()
-  workflowId?: number | null;
 
   @IsArray()
   @ArrayUnique()

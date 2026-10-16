@@ -3,7 +3,6 @@ import type { Repository } from 'typeorm';
 import { AI_BUSINESS_COMMAND_CATALOG } from '../ai-command-definitions/ai-command-definitions.constants';
 import type { AiCommandDefinitionsService } from '../ai-command-definitions/ai-command-definitions.service';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
-import type { AiWorkflowsService } from '../ai-workflows/ai-workflows.service';
 import type { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
 import { AgentAppsService } from './agent-apps.service';
 import { AgentApp } from './entities/agent-app.entity';
@@ -43,12 +42,6 @@ describe('AgentAppsService access and tool policy', () => {
       Promise.resolve({ providerId: id, providerName: '模型账号', model }),
     ),
   };
-  const workflows = {
-    findAll: jest.fn(() =>
-      Promise.resolve({ list: [{ id: 2, name: '知识工作流' }], total: 1 }),
-    ),
-    findUsable: jest.fn(() => Promise.resolve({ id: 2, name: '知识工作流' })),
-  };
   const commandDefinitions = {
     findAll: jest.fn(() =>
       Promise.resolve({
@@ -61,7 +54,6 @@ describe('AgentAppsService access and tool policy', () => {
   const service = new AgentAppsService(
     repository as unknown as Repository<AgentApp>,
     providers as unknown as KnowledgeAiProvidersService,
-    workflows as unknown as AiWorkflowsService,
     commandDefinitions as unknown as AiCommandDefinitionsService,
   );
 
@@ -104,7 +96,6 @@ describe('AgentAppsService access and tool policy', () => {
         ],
       },
     ]);
-    expect(result.workflows).toEqual([{ id: 2, name: '知识工作流' }]);
     expect(result.businessTools.map((item) => item.commandKey)).toEqual([
       'product.query',
       ...AI_BUSINESS_COMMAND_CATALOG.filter((item) => item.chatCallable).map(
@@ -130,11 +121,12 @@ describe('AgentAppsService access and tool policy', () => {
     });
   });
 
-  it('creates a pure model Agent without a workflow or business tools', async () => {
+  it('creates an Agent with Markdown instructions and no workflow', async () => {
     await expect(
       service.create({
         name: '通用助手',
         responsibility: '进行日常对话',
+        instructionMarkdown: '# 工作目标\n\n协助员工处理日常问题。',
         providerId: 1,
         models: ['qwen-plus'],
       }),
@@ -142,10 +134,10 @@ describe('AgentAppsService access and tool policy', () => {
       expect.objectContaining({
         workflowId: null,
         workflowName: null,
+        instructionMarkdown: '# 工作目标\n\n协助员工处理日常问题。',
         toolKeys: [],
       }),
     );
-    expect(workflows.findUsable).not.toHaveBeenCalled();
   });
 
   it('requires an explicit write tool whenever the write switch is enabled', async () => {
@@ -153,9 +145,9 @@ describe('AgentAppsService access and tool policy', () => {
       service.create({
         name: '录入助手',
         responsibility: '受控录入',
+        instructionMarkdown: '# 工作目标\n\n受控录入业务数据。',
         providerId: 1,
         models: ['qwen-plus'],
-        workflowId: 2,
         toolKeys: [],
         writeEnabled: true,
       }),

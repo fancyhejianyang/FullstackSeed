@@ -98,17 +98,26 @@ describe('AgentWorkspaceService ownership and state guards', () => {
     const resolveExecutionToolKey = Reflect.get(
       service,
       'resolveExecutionToolKey',
-    ) as (action: string, app: { workflowId: number | null }) => string;
+    ) as (action: string) => string;
 
     expect(resolveBusinessToolKey.call(service, 'answer')).toBeNull();
     expect(resolveBusinessToolKey.call(service, 'clarify')).toBeNull();
     expect(resolveBusinessToolKey.call(service, 'query')).toBe('product.query');
-    expect(
-      resolveExecutionToolKey.call(service, 'answer', { workflowId: null }),
-    ).toBe('model.chat');
-    expect(
-      resolveExecutionToolKey.call(service, 'answer', { workflowId: 3 }),
-    ).toBe('knowledge.answer');
+    expect(resolveExecutionToolKey.call(service, 'answer')).toBe('model.chat');
+
+    const buildAgentSystemPrompt = Reflect.get(
+      service,
+      'buildAgentSystemPrompt',
+    ) as (app: {
+      responsibility: string;
+      instructionMarkdown: string;
+    }) => string;
+    const systemPrompt = buildAgentSystemPrompt.call(service, {
+      responsibility: '产品助手',
+      instructionMarkdown: '# 工作目标\n\n回答产品问题。',
+    });
+    expect(systemPrompt).toContain('没有收到真实工具回执');
+    expect(systemPrompt).toContain('# 工作目标');
   });
 
   it('falls back through selected models in order until one succeeds', async () => {
@@ -160,8 +169,8 @@ describe('AgentWorkspaceService ownership and state guards', () => {
         providerId: number;
         models: string[];
         maxToolCalls: number;
-        workflowId: number | null;
         responsibility: string;
+        instructionMarkdown: string;
         toolKeys: string[];
       };
       execution: AgentExecution;
@@ -175,8 +184,8 @@ describe('AgentWorkspaceService ownership and state guards', () => {
         providerId: 3,
         models: ['primary-model', 'fallback-model'],
         maxToolCalls: 5,
-        workflowId: null,
         responsibility: '产品助手',
+        instructionMarkdown: '# 工作目标\n\n回答产品问题。',
         toolKeys: [],
       },
       execution,

@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-10-16 使用 Markdown 配置 Agent 工作逻辑并移除工作流绑定
+
+- 新增文件：`server/src/migrations/1792137600000-AddAgentInstructionMarkdown.ts`；删除文件：无。
+- 修改后端：`server/src/agent-apps/agent-apps.module.ts`、`agent-apps.service.ts`、`agent-apps.service.spec.ts`、`agent-workspace.service.ts`、`agent-workspace.service.spec.ts`、`dto/agent-app.dto.ts`、`entities/agent-app.entity.ts`；修改前端：`web/src/api/agentApp.ts`、`agentWorkspace.ts`、`web/src/views/agent-app/Edit.vue`、`Index.vue`、`View.vue`、`web/src/views/agent-workspace/Index.vue`；同步更新 `.design-spec.md`、`MD/内部Agent应用改造计划.md` 与本文件。
+- 配置契约：Agent 新增必填 `instructionMarkdown`，用于以 Markdown 维护工作目标、处理流程和业务规则；简短职责继续用于列表与工作台摘要。配置表单保持单列，增加 20000 字的大文本编辑区，列表搜索和详情展示同步支持工作指令。
+- 工作流解耦：Agent 配置选项、表单、工作台能力展示和模型调用链路均移除知识工作流；新建或编辑时清空历史 `workflowId/workflowName`，模型执行统一走 `model.chat`。旧列和历史 `knowledge.answer` 执行类型暂时保留兼容，不影响聊天管理下的其他知识工作流功能。
+- 执行边界：运行时将职责、Markdown 工作指令与平台固定安全指令组合为系统提示词；固定禁止虚构工具/接口/结果，没有真实工具回执不得声称成功，写入仍必须经过已授权业务工具、员工权限和人工确认。Markdown 不会新增接口或扩大权限。
+- 数据迁移：新增文本列并为既有 Agent 按职责回填基础 Markdown 模板，再收紧为非空；未自动执行目标数据库迁移。
+- 验证：TypeORM 实体列检查、后端变更 ESLint、相关 2 个测试套件 / 10 项测试、后端全量 24 个测试套件 / 153 项测试、NestJS 生产构建、前端 `vue-tsc` 与 Vite 生产构建、Agent 页面组件复用扫描及 `git diff --check` 通过；Vite 仅有既有第三方 Rollup 注释警告。未启动常驻服务、未执行数据库迁移、未连接真实模型或进行浏览器人工验收。
+
 ### 2026-10-15 支持 Agent 消息排队与动态业务工具配置
 
 - 新增文件 / 删除文件：无。

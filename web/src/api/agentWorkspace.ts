@@ -31,8 +31,6 @@ export interface AvailableAgentApp {
   id: number;
   name: string;
   responsibility: string;
-  knowledgeEnabled: boolean;
-  workflowName: string | null;
   toolKeys: AgentToolKey[];
   tools: AgentBusinessToolOption[];
   writeEnabled: boolean;

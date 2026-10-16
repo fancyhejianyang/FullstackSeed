@@ -29,7 +29,7 @@ import {
 import AgentMessageList from "./components/AgentMessageList.vue";
 
 interface AgentPromptSuggestion {
-  kind: "chat" | "knowledge" | "query" | "write";
+  kind: "chat" | "query" | "write";
   title: string;
   description: string;
   prompt: string;
@@ -110,9 +110,6 @@ const visibleMessages = computed<AgentMessage[]>(() => {
 });
 const capabilityLabels = computed(() => {
   const result = [{ key: "model", label: "模型对话", active: false }];
-  if (currentApp.value?.knowledgeEnabled) {
-    result.push({ key: "knowledge", label: "知识增强", active: true });
-  }
   for (const tool of currentApp.value?.tools ?? []) {
     result.push({
       key: tool.commandKey,
@@ -132,14 +129,6 @@ const promptSuggestions = computed<AgentPromptSuggestion[]>(() => {
       prompt: "请介绍一下你可以帮我完成哪些工作。",
     },
   ];
-  if (currentApp.value?.knowledgeEnabled) {
-    result.push({
-      kind: "knowledge",
-      title: "知识问答",
-      description: "从已配置的知识资料中寻找答案",
-      prompt: "请介绍一下当前知识库可以回答哪些问题。",
-    });
-  }
   if (currentApp.value?.toolKeys.includes("product.query")) {
     result.push({
       kind: "query",

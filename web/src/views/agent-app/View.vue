@@ -11,7 +11,7 @@ const loading = ref(false);
 const detail = ref<AgentApp | null>(null);
 
 function toolLabel(key: string) {
-  return key === "product.query" ? "产品/SKU 查询" : "受控新增 SKU";
+  return key === "product.query" ? "产品/SKU 查询" : key;
 }
 
 watch(visible, async (value) => {
@@ -43,17 +43,22 @@ watch(visible, async (value) => {
       <el-descriptions-item label="职责">{{
         detail?.responsibility || "-"
       }}</el-descriptions-item>
+      <el-descriptions-item label="工作指令（Markdown）">
+        <pre class="agent-app-view__instruction">{{
+          detail?.instructionMarkdown || "-"
+        }}</pre>
+      </el-descriptions-item>
       <el-descriptions-item label="模型账号">{{
         detail?.providerName || "-"
       }}</el-descriptions-item>
       <el-descriptions-item label="模型列表">
-        <el-tag v-for="model in detail?.models || []" :key="model" type="info">{{
-          model
-        }}</el-tag>
+        <el-tag
+          v-for="model in detail?.models || []"
+          :key="model"
+          type="info"
+          >{{ model }}</el-tag
+        >
       </el-descriptions-item>
-      <el-descriptions-item label="知识增强">{{
-        detail?.workflowName || "关闭（纯模型对话）"
-      }}</el-descriptions-item>
       <el-descriptions-item label="业务工具">
         <template v-if="detail?.toolKeys.length">
           <el-tag v-for="key in detail.toolKeys" :key="key" type="info">{{
@@ -91,5 +96,15 @@ watch(visible, async (value) => {
 <style scoped>
 .el-tag + .el-tag {
   margin-left: 6px;
+}
+.agent-app-view__instruction {
+  max-height: 360px;
+  margin: 0;
+  overflow: auto;
+  color: #303133;
+  font-family: inherit;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 </style>

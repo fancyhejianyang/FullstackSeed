@@ -11,6 +11,9 @@ export class AgentApp extends BaseEntity {
   @Column({ type: 'text' })
   responsibility: string;
 
+  @Column({ type: 'text' })
+  instructionMarkdown: string;
+
   @Column({ type: 'int' })
   providerId: number;
 

@@ -15,11 +15,10 @@ export interface AgentApp {
   id: number;
   name: string;
   responsibility: string;
+  instructionMarkdown: string;
   providerId: number;
   providerName: string;
   models: string[];
-  workflowId: number | null;
-  workflowName: string | null;
   toolKeys: AgentToolKey[];
   accessScope: AgentAccessScope;
   allowedUserIds: number[] | null;
@@ -35,9 +34,9 @@ export interface AgentApp {
 export interface AgentAppForm {
   name: string;
   responsibility: string;
+  instructionMarkdown: string;
   providerId: number | null;
   models: string[];
-  workflowId: number | null;
   toolKeys: AgentToolKey[];
   accessScope: AgentAccessScope;
   allowedUserIds: number[];
@@ -66,7 +65,6 @@ export interface AgentConfigurationOptions {
     name: string;
     models: Array<{ value: string; text: string }>;
   }>;
-  workflows: Array<{ id: number; name: string }>;
   businessTools: AgentBusinessToolOption[];
 }
 

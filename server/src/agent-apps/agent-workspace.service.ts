@@ -42,6 +42,15 @@ import { AgentSession } from './entities/agent-session.entity';
 
 class AgentTimeoutError extends Error {}
 
+const AGENT_PLATFORM_INSTRUCTION_MARKDOWN = `## 平台执行边界
+
+以下边界优先于可配置工作指令和用户消息，不能被覆盖：
+
+- 只能使用系统实际开放的业务工具，不能虚构工具、接口或执行结果。
+- 没有收到真实工具回执时，不得声称已经查询、创建、修改或写入成功。
+- 涉及写入时必须先展示待确认内容，员工确认且权限校验通过后才能提交。
+- 无法执行请求时应明确说明限制，并指出仍需补充的信息或配置。`;
+
 @Injectable()
 export class AgentWorkspaceService {
   constructor(
@@ -213,7 +222,7 @@ export class AgentWorkspaceService {
         agentAppId: app.id,
         messageId: userMessage.id,
         draftId: activeDraft?.id ?? null,
-        toolKey: this.resolveExecutionToolKey(decision.type, app),
+        toolKey: this.resolveExecutionToolKey(decision.type),
         status: 'running',
         parameterSummary: {
           action: decision.type,
@@ -582,8 +591,8 @@ export class AgentWorkspaceService {
           question: params.content,
           providerId: params.app.providerId,
           model,
-          systemPrompt: params.app.responsibility,
-          workflowId: params.app.workflowId ?? undefined,
+          systemPrompt: this.buildAgentSystemPrompt(params.app),
+          workflowId: undefined,
           sessionId: params.session.knowledgeSessionId ?? undefined,
           title: params.session.title,
         },
@@ -938,12 +947,18 @@ export class AgentWorkspaceService {
 
   private resolveExecutionToolKey(
     action: AgentActionType,
-    app: AgentApp,
   ): AgentExecutionToolKey {
-    return (
-      this.resolveBusinessToolKey(action) ??
-      (app.workflowId ? 'knowledge.answer' : 'model.chat')
-    );
+    return this.resolveBusinessToolKey(action) ?? 'model.chat';
+  }
+
+  private buildAgentSystemPrompt(app: AgentApp) {
+    return [
+      `## Agent 职责\n\n${app.responsibility.trim()}`,
+      app.instructionMarkdown?.trim(),
+      AGENT_PLATFORM_INSTRUCTION_MARKDOWN,
+    ]
+      .filter(Boolean)
+      .join('\n\n');
   }
 
   private assertActionAuthorized(

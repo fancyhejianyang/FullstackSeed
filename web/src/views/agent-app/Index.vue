@@ -28,7 +28,6 @@ const columns: TableColumn[] = [
   { prop: "responsibility", label: "职责", minWidth: 240 },
   { prop: "providerName", label: "模型账号", minWidth: 160 },
   { prop: "models", label: "模型列表", minWidth: 240, slot: true },
-  { prop: "workflowName", label: "知识增强", minWidth: 180, slot: true },
   { prop: "toolKeys", label: "业务工具", minWidth: 260, slot: true },
   { prop: "accessScope", label: "使用范围", width: 130, slot: true },
   { prop: "writeEnabled", label: "写入", width: 90, slot: true },
@@ -51,7 +50,7 @@ const searchFields: FormField[] = [
     prop: "keyword",
     label: "关键词",
     type: "input",
-    placeholder: "名称/职责/模型账号/工作流",
+    placeholder: "名称/职责/工作指令/模型账号",
   },
 ];
 
@@ -78,7 +77,7 @@ function batchDeleteRequest(payload: { ids: Array<string | number> }) {
 }
 
 function toolLabel(key: string) {
-  return key === "product.query" ? "产品/SKU 查询" : "受控新增 SKU";
+  return key === "product.query" ? "产品/SKU 查询" : key;
 }
 </script>
 
@@ -112,11 +111,6 @@ function toolLabel(key: string) {
           }}</el-tag>
         </template>
         <span v-else>无</span>
-      </template>
-      <template #column-workflowName="{ row }">
-        <el-tag :type="row.workflowId ? 'success' : 'info'">
-          {{ row.workflowName || "纯模型对话" }}
-        </el-tag>
       </template>
       <template #column-models="{ row }">
         <el-tag v-for="model in row.models" :key="model" type="info">{{
