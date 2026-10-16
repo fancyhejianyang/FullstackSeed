@@ -3,6 +3,7 @@ import PageContainer from "@/components/PageContainer.vue";
 import Table, { type TableColumn } from "@/components/Table.vue";
 import type { FormField } from "@/components/Form.vue";
 import { formatDateTime } from "@/utils/format";
+import AgentExecutionStatusTag from "@/views/agent-workspace/components/AgentExecutionStatus.vue";
 import {
   getAgentExecutionRecords,
   type AgentExecution,
@@ -35,7 +36,7 @@ const searchFields: FormField[] = [
       { label: "待确认", value: "waiting_confirmation" },
       { label: "提交中", value: "submitting" },
       { label: "核实中", value: "verifying" },
-      { label: "成功", value: "succeeded" },
+      { label: "处理完成", value: "succeeded" },
       { label: "失败", value: "failed" },
       { label: "已停止", value: "cancelled" },
     ],
@@ -57,15 +58,6 @@ function request(params: Record<string, unknown>) {
       keyword?: string;
     },
   );
-}
-
-function statusType(status: AgentExecution["status"]) {
-  if (status === "succeeded") return "success";
-  if (status === "failed") return "danger";
-  if (["waiting_input", "waiting_confirmation", "verifying"].includes(status))
-    return "warning";
-  if (["running", "submitting"].includes(status)) return "primary";
-  return "info";
 }
 
 function toolLabel(toolKey: AgentExecution["toolKey"]) {
@@ -92,7 +84,11 @@ function toolLabel(toolKey: AgentExecution["toolKey"]) {
         {{ toolLabel(row.toolKey) }}
       </template>
       <template #column-status="{ row }">
-        <el-tag :type="statusType(row.status)">{{ row.status }}</el-tag>
+        <AgentExecutionStatusTag
+          :status="row.status"
+          :tool-key="row.toolKey"
+          :result="row.result"
+        />
       </template>
       <template #column-parameterSummary="{ row }">
         <code>{{ JSON.stringify(row.parameterSummary) }}</code>

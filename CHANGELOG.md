@@ -1,5 +1,18 @@
 # CHANGELOG
 
+### 2026-10-16 修复 Agent 写入确认分流与真实能力反馈
+
+- 新增文件 / 删除文件：无。
+- 修改后端：`server/src/agent-apps/agent-action.ts`、`agent-action.spec.ts`、`agent-apps.constants.ts`、`agent-apps.service.ts`、`agent-apps.service.spec.ts`、`agent-workspace.service.ts`、`agent-workspace.service.spec.ts`。
+- 修改前端：`web/src/api/agentApp.ts`、`web/src/api/agentWorkspace.ts`、`web/src/views/agent-app/Edit.vue`、`Records.vue`、`web/src/views/agent-workspace/Index.vue`、`components/AgentExecutionStatus.vue`、`components/AgentMessageList.vue`；同步修改 `.design-spec.md` 与本文件，共 16 个文件。
+- 原因：确认语句“符合，可以入库”未被原关键词分流识别，落入普通模型回答；模型没有当前真实工具、权限和草稿状态，因此可能错误声称系统未开放写入 API。配置目录同时展示了尚未接通的工具，统一“已完成”又容易被误认为入库成功。
+- 确认衔接：识别确认表达及有真实草稿时的简短确认，按当前用户和会话重新读取草稿；仅返回待补充/待确认卡片，不改草稿内容或版本、不直接提交。没有草稿、草稿失效或请求未接通业务时，平台返回明确的未执行原因与下一步，不调用模型猜测写入状态。否定、疑问和假设表达不触发准备录入；其他对象的新增请求不误改既有 SKU 草稿。
+- 能力校验：新增执行器可用白名单和 `getExecutableToolKeys`，SKU 草稿编辑、准备及最终确认校验应用授权、写入开关、指令启用/聊天调用状态和员工权限；权限失败保存为明确失败消息，而非显示消息发送失败。模型系统上下文加入实际能力及真实草稿状态。`product.query` 保留原有独立内置聚合查询语义，仍受应用授权及员工读取权限控制，不改为目录 `product.sku.lookup` 的别名。
+- 配置一致性：工具选项新增前后端同名 `runtimeAvailable/unavailableReason`，仅登记但未接通的工具展示原因并禁选，服务端也拒绝保存；旧不可用配置不自动清洗，编辑时提示手动移除。写入开关与工具选择不再双向自动修改，关闭写入保留已选配置但禁止执行，选择工具不自动授权写入。
+- UI 回执：用户消息不再重复展示回答状态，草稿卡前展示确认说明；工作台和执行记录统一区分“回答完成”“查询完成”“录入成功”。只有 SKU 真实记录类型及正整数记录 ID 回执才能显示录入成功（含提交提示），缺失回执提示待核实并保留幂等键，避免重复提交。
+- 范围：本次修复现有产品查询和受控 SKU 新增，不新增通用 CRUD 执行器、自然语言直接落库或数据库字段，不修改目标应用配置及业务数据；最终提交仍绑定真实草稿版本和幂等键。
+- 验证：前后端生产源码类型检查、三个变更后端测试文件的类型检查、变更后端 ESLint、前端组件复用只读扫描及 `git diff --check` 通过；补充确认/否定/疑问、草稿归属与失效、工具撤销和配置保留等回归测试源码。按修复规则只做静态检查，未执行测试、build、启动服务、数据库迁移、真实模型调用或浏览器验收。后端全量含测试类型检查仍有既存 `server/src/menus/menus.service.spec.ts:177` 的 `null` 赋给 `Date` 错误，已核对 HEAD 存在，未纳入本次修改。
+
 ### 2026-10-16 修复 Agent 输入区重复显示正在处理的消息
 
 - 新增文件 / 删除文件：无；修改文件：`web/src/views/agent-workspace/Index.vue`、`CHANGELOG.md`。

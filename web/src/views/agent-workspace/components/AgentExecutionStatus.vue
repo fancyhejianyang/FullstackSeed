@@ -1,29 +1,69 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { AgentExecutionStatus } from "@/api/agentWorkspace";
+import type { AgentExecution, AgentExecutionStatus } from "@/api/agentWorkspace";
+import { getPermissionActionColor } from "@/utils/permission";
 
 const props = defineProps<{
   status: AgentExecutionStatus;
+  toolKey?: AgentExecution["toolKey"];
+  result?: AgentExecution["result"];
   errorMessage?: string | null;
 }>();
 
 const statusMeta = computed(() => {
+  // Execution completion is not a write receipt: historical records may have
+  // succeeded without a confirmed business record and must remain conservative.
+  if (props.status === "succeeded") {
+    if (props.toolKey === "productSku.create") {
+      const recordId = props.result?.recordId;
+      const hasReceipt =
+        props.result?.recordType === "productSku" &&
+        typeof recordId === "number" &&
+        Number.isInteger(recordId) &&
+        recordId > 0;
+      return {
+        label: hasReceipt ? "录入成功" : "结果待核实",
+        type: getPermissionActionColor(hasReceipt ? "create" : "audit"),
+      };
+    }
+    if (["model.chat", "knowledge.answer"].includes(props.toolKey ?? "")) {
+      return { label: "回答完成", type: getPermissionActionColor("read") };
+    }
+    if (
+      [
+        "product.query",
+        "product.sku.lookup",
+        "qa.search",
+        "knowledge.retrieve",
+        "session.context.read",
+      ].includes(props.toolKey ?? "")
+    ) {
+      return { label: "查询完成", type: getPermissionActionColor("read") };
+    }
+    return { label: "处理完成", type: getPermissionActionColor("read") };
+  }
+
   const map: Record<
-    AgentExecutionStatus,
+    Exclude<AgentExecutionStatus, "succeeded">,
     {
       label: string;
       type: "info" | "primary" | "success" | "warning" | "danger";
     }
   > = {
-    queued: { label: "排队中", type: "info" },
-    running: { label: "执行中", type: "primary" },
-    waiting_input: { label: "待补充", type: "warning" },
-    waiting_confirmation: { label: "待确认", type: "warning" },
-    submitting: { label: "提交中", type: "primary" },
-    verifying: { label: "正在核实结果", type: "warning" },
-    succeeded: { label: "已完成", type: "success" },
-    failed: { label: "失败", type: "danger" },
-    cancelled: { label: "已停止", type: "info" },
+    queued: { label: "排队中", type: getPermissionActionColor("read") },
+    running: { label: "执行中", type: getPermissionActionColor("update") },
+    waiting_input: { label: "待补充", type: getPermissionActionColor("audit") },
+    waiting_confirmation: {
+      label: "待确认",
+      type: getPermissionActionColor("audit"),
+    },
+    submitting: { label: "提交中", type: getPermissionActionColor("update") },
+    verifying: {
+      label: "正在核实结果",
+      type: getPermissionActionColor("audit"),
+    },
+    failed: { label: "失败", type: getPermissionActionColor("reject") },
+    cancelled: { label: "已停止", type: getPermissionActionColor("read") },
   };
   return map[props.status];
 });

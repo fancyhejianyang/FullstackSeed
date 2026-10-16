@@ -126,15 +126,22 @@ watch(
           <div class="message-list__author">
             {{ message.role === "user" ? "我" : agentName }}
           </div>
-          <AgentDraftCard
-            v-if="showDraftCard(message) && draftFor(message)"
-            :draft="draftFor(message)!"
-            :products="products"
-            :busy="busy"
-            @update="forwardDraftUpdate"
-            @confirm="emit('confirmDraft', $event)"
-            @cancel="emit('cancelDraft', $event)"
-          />
+          <template v-if="showDraftCard(message) && draftFor(message)">
+            <div
+              v-if="message.messageType === 'draft' && message.content"
+              class="message-list__bubble"
+            >
+              {{ message.content }}
+            </div>
+            <AgentDraftCard
+              :draft="draftFor(message)!"
+              :products="products"
+              :busy="busy"
+              @update="forwardDraftUpdate"
+              @confirm="emit('confirmDraft', $event)"
+              @cancel="emit('cancelDraft', $event)"
+            />
+          </template>
           <AgentQueryCard
             v-else-if="message.messageType === 'query_result'"
             :context="message.structuredData?.context"
@@ -155,9 +162,11 @@ watch(
             </div>
           </div>
           <AgentExecutionStatus
-            v-if="executionFor(message)"
+            v-if="message.role !== 'user' && executionFor(message)"
             class="message-list__status"
             :status="executionFor(message)!.status"
+            :tool-key="executionFor(message)!.toolKey"
+            :result="executionFor(message)!.result"
             :error-message="executionFor(message)!.errorMessage"
           />
         </div>

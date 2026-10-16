@@ -9,6 +9,8 @@ export interface AgentBusinessToolOption {
   action: "read" | "create" | "update" | "delete" | "execute";
   requireApproval: boolean;
   description: string | null;
+  runtimeAvailable: boolean;
+  unavailableReason: string | null;
 }
 
 export interface AgentApp {

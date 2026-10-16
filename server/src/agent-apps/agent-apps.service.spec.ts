@@ -4,6 +4,7 @@ import { AI_BUSINESS_COMMAND_CATALOG } from '../ai-command-definitions/ai-comman
 import type { AiCommandDefinitionsService } from '../ai-command-definitions/ai-command-definitions.service';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
 import type { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
+import { AGENT_RUNTIME_TOOL_KEYS } from './agent-apps.constants';
 import { AgentAppsService } from './agent-apps.service';
 import { AgentApp } from './entities/agent-app.entity';
 
@@ -109,6 +110,8 @@ describe('AgentAppsService access and tool policy', () => {
       name: '创建示例数据',
       action: 'create',
       requireApproval: true,
+      runtimeAvailable: false,
+      unavailableReason: '仅登记了指令契约，尚未接入 Agent 执行器',
     });
     expect(
       result.businessTools.find((item) => item.commandKey === 'product.query'),
@@ -118,7 +121,14 @@ describe('AgentAppsService access and tool policy', () => {
       action: 'read',
       requireApproval: false,
       description: '兼容现有工作台的产品与 SKU 聚合事实查询。',
+      runtimeAvailable: true,
+      unavailableReason: null,
     });
+    expect(
+      result.businessTools
+        .filter((item) => item.runtimeAvailable)
+        .map((item) => item.commandKey),
+    ).toEqual(AGENT_RUNTIME_TOOL_KEYS);
   });
 
   it('creates an Agent with Markdown instructions and no workflow', async () => {
@@ -152,6 +162,135 @@ describe('AgentAppsService access and tool policy', () => {
         writeEnabled: true,
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects catalog entries that have no Agent runtime executor', async () => {
+    await expect(
+      service.create({
+        name: '录入助手',
+        responsibility: '受控录入',
+        instructionMarkdown: '# 业务录入',
+        providerId: 1,
+        models: ['qwen-plus'],
+        toolKeys: ['demo.create'],
+        writeEnabled: true,
+      }),
+    ).rejects.toThrow('尚未接入 Agent 执行器');
+    expect(repository.save).not.toHaveBeenCalled();
+  });
+
+  it('preserves configured write tools when the write switch is off', async () => {
+    await expect(
+      service.create({
+        name: '只读助手',
+        responsibility: '暂不写入',
+        instructionMarkdown: '# 业务查询',
+        providerId: 1,
+        models: ['qwen-plus'],
+        toolKeys: ['product.query', 'productSku.create'],
+        writeEnabled: false,
+      }),
+    ).resolves.toMatchObject({
+      toolKeys: ['product.query', 'productSku.create'],
+      writeEnabled: false,
+    });
+  });
+
+  it('exposes only executable tools without mutating legacy configuration', async () => {
+    const app = {
+      id: 1,
+      name: '历史应用',
+      accessScope: 'all',
+      allowedUserIds: [],
+      isEnabled: true,
+      toolKeys: ['product.query', 'demo.create', 'productSku.create'],
+      writeEnabled: true,
+    } as unknown as AgentApp;
+    repository.find.mockResolvedValue([app]);
+    await expect(service.getExecutableToolKeys(app)).resolves.toEqual([
+      'product.query',
+      'productSku.create',
+    ]);
+    await expect(service.findAvailable(user(10))).resolves.toEqual([
+      expect.objectContaining({
+        toolKeys: ['product.query', 'productSku.create'],
+        writeEnabled: true,
+      }),
+    ]);
+    expect(app.toolKeys).toEqual([
+      'product.query',
+      'demo.create',
+      'productSku.create',
+    ]);
+    app.writeEnabled = false;
+    await expect(service.getExecutableToolKeys(app)).resolves.toEqual([
+      'product.query',
+    ]);
+    await expect(service.findAvailable(user(10))).resolves.toEqual([
+      expect.objectContaining({
+        toolKeys: ['product.query'],
+        writeEnabled: false,
+      }),
+    ]);
+    expect(repository.save).not.toHaveBeenCalled();
+  });
+
+  it('rechecks enabled chat-callable commands on every capability lookup', async () => {
+    const app = {
+      toolKeys: ['product.query', 'productSku.create'],
+      writeEnabled: true,
+    } as AgentApp;
+    await expect(service.getExecutableToolKeys(app)).resolves.toEqual([
+      'product.query',
+      'productSku.create',
+    ]);
+    commandDefinitions.findAll.mockResolvedValueOnce({ list: [], total: 0 });
+    await expect(service.getExecutableToolKeys(app)).resolves.toEqual([
+      'product.query',
+    ]);
+    expect(commandDefinitions.findAll).toHaveBeenLastCalledWith({
+      page: 1,
+      pageSize: 200,
+      chatCallable: true,
+      isEnabled: true,
+    });
+  });
+
+  it('does not clean up old tool selections during an unrelated partial update', async () => {
+    const app = {
+      id: 1,
+      toolKeys: ['demo.create', 'productSku.create'],
+      writeEnabled: false,
+      accessScope: 'all',
+    } as AgentApp;
+    const findOne = jest.spyOn(service, 'findOne').mockResolvedValue(app);
+    try {
+      await expect(
+        service.update(1, { name: '修改名称' }),
+      ).resolves.toMatchObject({
+        name: '修改名称',
+        toolKeys: ['demo.create', 'productSku.create'],
+        writeEnabled: false,
+      });
+    } finally {
+      findOne.mockRestore();
+    }
+  });
+
+  it('rejects an executable tool after its command is disabled', async () => {
+    commandDefinitions.findAll.mockResolvedValueOnce({ list: [], total: 0 });
+    await expect(
+      service.create({
+        name: '录入助手',
+        responsibility: '受控录入',
+        instructionMarkdown: '# 业务录入',
+        providerId: 1,
+        models: ['qwen-plus'],
+        toolKeys: ['productSku.create'],
+        writeEnabled: true,
+      }),
+    ).rejects.toThrow('业务工具未启用或不允许聊天调用');
+    expect(repository.save).not.toHaveBeenCalled();
   });
 
   it('rejects users outside a restricted app even when they have workspace access', async () => {

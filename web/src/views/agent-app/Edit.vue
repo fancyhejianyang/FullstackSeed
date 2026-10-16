@@ -64,6 +64,52 @@ const form = reactive<EditableForm>({
   maxConcurrentRuns: 1,
 });
 
+const unavailableSelectedTools = computed(() => {
+  const toolMap = new Map(
+    options.value.businessTools.map((item) => [item.commandKey, item]),
+  );
+  return form.toolKeys.flatMap((key) => {
+    const tool = toolMap.get(key);
+    if (tool?.runtimeAvailable) return [];
+    return [
+      {
+        key,
+        reason: tool?.unavailableReason || "指令未启用或不允许聊天调用",
+      },
+    ];
+  });
+});
+
+const businessToolOptions = computed(() => {
+  const selected = new Set(form.toolKeys);
+  const knownKeys = new Set(
+    options.value.businessTools.map((item) => item.commandKey),
+  );
+  return [
+    ...options.value.businessTools.map((item) => ({
+      label: `${item.name}（${item.commandKey}）${item.requireApproval ? " · 需确认" : ""}${item.runtimeAvailable ? "" : ` · ${item.unavailableReason || "暂不可执行"}`}`,
+      value: item.commandKey,
+      // 已保存的不可用工具仍保留回显并允许取消；移除后不能再次选入。
+      disabled: !item.runtimeAvailable && !selected.has(item.commandKey),
+    })),
+    ...form.toolKeys
+      .filter((key) => !knownKeys.has(key))
+      .map((key) => ({
+        label: `${key} · 指令未启用或不允许聊天调用（请移除）`,
+        value: key,
+        disabled: false,
+      })),
+  ];
+});
+
+const businessToolHint = computed(() => {
+  const base =
+    "仅已接入 Agent 执行器的工具可选；写入工具须同时开启写入总开关，员工确认并通过业务权限校验后才可提交。";
+  const unavailable = unavailableSelectedTools.value;
+  if (!unavailable.length) return base;
+  return `${base} 当前保留了不可执行的历史配置，请手动移除后保存：${unavailable.map((item) => `${item.key}（${item.reason}）`).join("、")}。`;
+});
+
 const fields = computed<FormField[]>(() => [
   {
     prop: "name",
@@ -125,19 +171,16 @@ const fields = computed<FormField[]>(() => [
     prop: "toolKeys",
     label: "业务工具（可选）",
     type: "selectMultiple",
-    options: options.value.businessTools.map((item) => ({
-      label: `${item.name}（${item.commandKey}）${item.requireApproval ? " · 需确认" : ""}`,
-      value: item.commandKey,
-    })),
+    options: businessToolOptions.value,
     componentProps: { visibleCount: 10 },
-    hint: "选项来自已启用且允许聊天调用的指令集；带“需确认”的写入工具只生成草稿，员工确认并通过业务权限校验后才可提交。",
+    hint: businessToolHint.value,
   },
   {
     prop: "writeEnabled",
     label: "写入总开关",
     component: "Switch",
     componentProps: { activeText: "允许受控录入", inactiveText: "仅只读" },
-    hint: "开启时至少选择一个需确认的写入工具；关闭时会立即移除全部写入工具。",
+    hint: "开启时至少选择一个可执行的写入工具；关闭后不执行写入，保留已选工具配置。选择工具不会自动开启此开关。",
   },
   {
     prop: "accessScope",
@@ -264,37 +307,6 @@ watch(
 );
 
 watch(
-  () => form.writeEnabled,
-  (enabled) => {
-    const keys = new Set(form.toolKeys);
-    const writeKeys = options.value.businessTools
-      .filter((item) => item.requireApproval)
-      .map((item) => item.commandKey);
-    if (enabled && !writeKeys.some((key) => keys.has(key))) {
-      const defaultWriteKey = writeKeys.includes("productSku.create")
-        ? "productSku.create"
-        : writeKeys[0];
-      if (defaultWriteKey) keys.add(defaultWriteKey);
-    }
-    if (!enabled) writeKeys.forEach((key) => keys.delete(key));
-    form.toolKeys = Array.from(keys) as AgentToolKey[];
-  },
-);
-
-watch(
-  () => [...form.toolKeys],
-  (keys) => {
-    const writeKeys = new Set(
-      options.value.businessTools
-        .filter((item) => item.requireApproval)
-        .map((item) => item.commandKey),
-    );
-    const enabled = keys.some((key) => writeKeys.has(key));
-    if (form.writeEnabled !== enabled) form.writeEnabled = enabled;
-  },
-);
-
-watch(
   () => form.accessScope,
   (scope) => {
     if (scope === "all") form.allowedUserIds = [];
@@ -339,6 +351,22 @@ function buildPayload(): AgentAppForm {
 
 async function handleSubmit() {
   await formRef.value?.validate();
+  if (unavailableSelectedTools.value.length) {
+    ElMessage.warning("请先手动移除业务工具中标记为不可执行的历史选项");
+    return;
+  }
+  if (
+    form.writeEnabled &&
+    !options.value.businessTools.some(
+      (item) =>
+        item.runtimeAvailable &&
+        item.requireApproval &&
+        form.toolKeys.includes(item.commandKey),
+    )
+  ) {
+    ElMessage.warning("开启写入前，请至少选择一个已接入执行器的写入工具");
+    return;
+  }
   if (form.accessScope === "users" && !form.allowedUserIds.length) {
     ElMessage.warning("请至少选择一名可使用员工");
     return;

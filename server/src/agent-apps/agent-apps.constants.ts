@@ -13,6 +13,12 @@ export const AGENT_TOOL_KEYS = Array.from(
   ]),
 );
 
+/** 只有已经接入工作台执行器的工具才可以配置执行；指令目录登记不等于可调用。 */
+export const AGENT_RUNTIME_TOOL_KEYS: readonly string[] = [
+  'product.query',
+  'productSku.create',
+];
+
 export const AGENT_WRITE_TOOL_KEYS = AI_BUSINESS_COMMAND_CATALOG.filter(
   (item) => item.chatCallable && item.requireApproval,
 ).map((item) => item.commandKey);

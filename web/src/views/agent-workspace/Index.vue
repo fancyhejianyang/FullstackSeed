@@ -387,12 +387,21 @@ async function handleDraftConfirm(draft: AgentDraft) {
       version: draft.version,
       idempotencyKey: key,
     });
-    if (result.execution.status === "succeeded") {
+    const receipt = result.execution.result;
+    const hasReceipt =
+      receipt?.recordType === "productSku" &&
+      typeof receipt.recordId === "number" &&
+      Number.isInteger(receipt.recordId) &&
+      receipt.recordId > 0;
+    if (result.execution.status === "succeeded" && hasReceipt) {
       confirmationKeys.delete(draft.id);
       ElMessage.success("SKU 已成功录入");
     } else {
       ElMessage.warning(
-        result.execution.errorMessage || "录入未完成，请检查草稿",
+        result.execution.errorMessage ||
+          (result.execution.status === "succeeded"
+            ? "缺少真实录入回执，请先核实结果，不要重复提交"
+            : "录入未完成，请检查草稿"),
       );
     }
     await Promise.all([loadSession(activeSession.value.id), loadSessions()]);

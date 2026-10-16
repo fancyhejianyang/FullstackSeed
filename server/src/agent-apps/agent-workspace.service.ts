@@ -15,6 +15,7 @@ import type { ProductSkuChatContext } from '../product-catalog/product-catalog.s
 import { fallbackProductKeywords } from '../product-catalog/product-search';
 import {
   AGENT_EXECUTION_ACTIVE_STATUSES,
+  AGENT_RUNTIME_TOOL_KEYS,
   type AgentActionType,
   type AgentExecutionToolKey,
   type AgentSkuDraftData,
@@ -188,12 +189,6 @@ export class AgentWorkspaceService {
     const activeDraft = await this.findActiveDraft(sessionId, user.userId);
     const decision = classifyAgentAction(dto.content, Boolean(activeDraft));
     const businessToolKey = this.resolveBusinessToolKey(decision.type);
-    if (businessToolKey) {
-      this.assertActionAuthorized(app, businessToolKey, user);
-    }
-    if (decision.queryBeforeWrite) {
-      this.assertActionAuthorized(app, 'product.query', user);
-    }
     await this.assertConcurrencyAvailable(app, user.userId);
 
     const userMessage = await this.messageRepository.save(
@@ -242,6 +237,13 @@ export class AgentWorkspaceService {
     });
 
     try {
+      // 权限失败也应保存为本轮明确的失败回执，而不是伪装成消息未送达。
+      if (businessToolKey) {
+        await this.assertActionAuthorized(app, businessToolKey, user);
+      }
+      if (decision.queryBeforeWrite) {
+        await this.assertActionAuthorized(app, 'product.query', user);
+      }
       const actionResult = await this.withTimeout(
         this.processAction({
           decision,
@@ -303,7 +305,7 @@ export class AgentWorkspaceService {
     }
     const session = await this.findSessionEntity(draft.sessionId, user);
     const app = await this.appsService.findAvailableOne(draft.agentAppId, user);
-    this.assertActionAuthorized(app, 'productSku.create', user);
+    await this.assertActionAuthorized(app, 'productSku.create', user);
     const data = await this.sanitizeDraftData(dto.data);
     const validation = validateSkuDraft(data);
     draft.data = data;
@@ -356,7 +358,7 @@ export class AgentWorkspaceService {
       draftSnapshot.agentAppId,
       user,
     );
-    this.assertActionAuthorized(app, 'productSku.create', user);
+    await this.assertActionAuthorized(app, 'productSku.create', user);
     await this.assertConcurrencyAvailable(app, user.userId);
 
     const { execution, draft } = await this.dataSource.transaction(
@@ -543,6 +545,9 @@ export class AgentWorkspaceService {
     activeDraft: AgentDraft | null;
     user: AuthUser;
   }) {
+    if (params.decision.writeIntent) {
+      return this.processWriteReview(params);
+    }
     if (params.decision.type === 'clarify') {
       params.execution.status = 'waiting_input';
       params.execution.finishedAt = new Date();
@@ -566,16 +571,123 @@ export class AgentWorkspaceService {
     return this.processKnowledgeAnswer(params);
   }
 
+  private async processWriteReview(params: {
+    decision: ReturnType<typeof classifyAgentAction>;
+    session: AgentSession;
+    app: AgentApp;
+    execution: AgentExecution;
+    activeDraft: AgentDraft | null;
+    user: AuthUser;
+  }) {
+    // 重新读取当前员工、当前会话的草稿；聊天确认不新建、不修改、不提交草稿。
+    const draft = params.activeDraft
+      ? await this.draftRepository.findOne({
+          where: {
+            id: params.activeDraft.id,
+            sessionId: params.session.id,
+            userId: params.user.userId,
+          },
+        })
+      : null;
+    const availableDraft =
+      params.decision.writeIntent === 'review' &&
+      draft &&
+      ['collecting', 'pending_confirmation', 'failed'].includes(draft.status)
+        ? draft
+        : null;
+    let content: string;
+    if (availableDraft) {
+      await this.assertActionAuthorized(
+        params.app,
+        'productSku.create',
+        params.user,
+      );
+      const validation = validateSkuDraft(availableDraft.data);
+      const needsInput =
+        availableDraft.status === 'collecting' ||
+        validation.missingFields.length > 0 ||
+        validation.validationErrors.length > 0 ||
+        availableDraft.missingFields.length > 0 ||
+        availableDraft.validationErrors.length > 0;
+      params.execution.status = needsInput
+        ? 'waiting_input'
+        : 'waiting_confirmation';
+      params.execution.toolKey = 'productSku.create';
+      params.execution.draftId = availableDraft.id;
+      params.execution.result = {
+        draftId: availableDraft.id,
+        draftVersion: availableDraft.version,
+      };
+      content = needsInput
+        ? '当前 SKU 草稿仍有待补充或校验失败的信息，尚未入库。请修改草稿后再确认。'
+        : '已找到当前 SKU 草稿，尚未入库。请核对下方内容并点击“确认录入”；聊天确认不会自动提交。';
+    } else {
+      const unavailable = await this.getToolUnavailableReason(
+        params.app,
+        'productSku.create',
+        params.user,
+      );
+      params.execution.status = 'waiting_input';
+      params.execution.draftId = null;
+      params.execution.result = { reason: 'write_not_executed' };
+      content = [
+        params.decision.writeIntent === 'unsupported'
+          ? '本次未执行入库。目前已接通的受控新增能力仅支持产品 SKU，其他业务写入尚未接通。'
+          : '当前会话没有可确认的录入草稿，本次未执行入库。聊天文字中的整理结果不等于系统草稿。',
+        unavailable ||
+          '如需新增 SKU，请说明“新增 SKU”并提供所属产品与规格参数，生成真实草稿后点击“确认录入”。',
+      ].join('\n');
+    }
+    await this.assertExecutionRunning(params.execution.id);
+    params.execution.finishedAt = new Date();
+    await this.executionRepository.save(params.execution);
+    const assistantMessage = await this.appendAssistantMessage(
+      params.session,
+      params.user,
+      params.execution,
+      availableDraft ? 'draft' : 'text',
+      content,
+      availableDraft
+        ? {
+            action: 'prepare_write',
+            draftId: availableDraft.id,
+            draftVersion: availableDraft.version,
+          }
+        : { action: 'clarify', reason: 'write_not_executed' },
+    );
+    await this.sessionRepository.update(params.session.id, {
+      lastExecutionStatus: params.execution.status,
+    });
+    return {
+      assistantMessage,
+      execution: params.execution,
+      draft: availableDraft,
+    };
+  }
+
   private async processKnowledgeAnswer(params: {
     content: string;
     session: AgentSession;
     app: AgentApp;
     execution: AgentExecution;
+    activeDraft?: AgentDraft | null;
     user: AuthUser;
   }) {
-    const allowProductQuery =
-      params.app.toolKeys.includes('product.query') &&
-      this.hasAnyPermission(params.user, ['Product.read', 'ProductSku.read']);
+    const executableToolKeys = await this.appsService.getExecutableToolKeys(
+      params.app,
+    );
+    const allowProductQuery = !this.toolUnavailableReason(
+      params.app,
+      'product.query',
+      params.user,
+      executableToolKeys,
+    );
+    const systemPrompt = this.buildAgentSystemPrompt(
+      params.app,
+      params.user,
+      executableToolKeys,
+      params.activeDraft,
+    );
     const models = (params.app.models ?? []).slice(0, params.app.maxToolCalls);
     if (!params.app.providerId || !models.length) {
       throw new BadRequestException('该 Agent 尚未配置可用的模型账号和模型');
@@ -591,7 +703,7 @@ export class AgentWorkspaceService {
           question: params.content,
           providerId: params.app.providerId,
           model,
-          systemPrompt: this.buildAgentSystemPrompt(params.app),
+          systemPrompt,
           workflowId: undefined,
           sessionId: params.session.knowledgeSessionId ?? undefined,
           title: params.session.title,
@@ -951,33 +1063,84 @@ export class AgentWorkspaceService {
     return this.resolveBusinessToolKey(action) ?? 'model.chat';
   }
 
-  private buildAgentSystemPrompt(app: AgentApp) {
+  private buildAgentSystemPrompt(
+    app: AgentApp,
+    user: AuthUser,
+    executableToolKeys: string[],
+    activeDraft?: AgentDraft | null,
+  ) {
+    const capabilities = AGENT_RUNTIME_TOOL_KEYS.map((key) => {
+      const reason = this.toolUnavailableReason(
+        app,
+        key,
+        user,
+        executableToolKeys,
+      );
+      return `- ${key}：${reason || (key === 'productSku.create' ? '可生成 SKU 草稿，必须通过草稿卡片确认提交。' : '可查询产品/SKU 事实。')}`;
+    });
     return [
       `## Agent 职责\n\n${app.responsibility.trim()}`,
       app.instructionMarkdown?.trim(),
       AGENT_PLATFORM_INSTRUCTION_MARKDOWN,
+      [
+        '## 当前真实执行能力（平台提供）',
+        ...capabilities,
+        '除此之外的业务写入工具尚未接通，配置了工具名称或 Markdown 不代表已实现执行器。',
+        activeDraft
+          ? `当前会话存在真实 SKU 草稿：ID ${activeDraft.id}，版本 ${activeDraft.version}，状态 ${activeDraft.status}。`
+          : '当前会话没有待确认的真实录入草稿。',
+        '模型文本只负责回答，不能代替草稿或执行回执。用户确认时引导其操作真实草稿卡片，不要声称整个系统没有写入 API，也不要以本轮未提供模型 tools 参数推断平台没有执行能力。',
+        '回答生成完成不代表业务操作成功。写入是否成功仅以系统返回的记录回执为准。',
+      ].join('\n'),
     ]
       .filter(Boolean)
       .join('\n\n');
   }
 
-  private assertActionAuthorized(
+  private async assertActionAuthorized(
     app: AgentApp,
     toolKey: AgentToolKey,
     user: AuthUser,
   ) {
-    if (!app.toolKeys.includes(toolKey)) {
-      throw new ForbiddenException('当前 Agent 未开放该能力');
-    }
+    const reason = await this.getToolUnavailableReason(app, toolKey, user);
+    if (reason) throw new ForbiddenException(reason);
+  }
+
+  private async getToolUnavailableReason(
+    app: AgentApp,
+    toolKey: AgentToolKey,
+    user: AuthUser,
+  ) {
+    const executableToolKeys =
+      await this.appsService.getExecutableToolKeys(app);
+    return this.toolUnavailableReason(app, toolKey, user, executableToolKeys);
+  }
+
+  private toolUnavailableReason(
+    app: AgentApp,
+    toolKey: AgentToolKey,
+    user: AuthUser,
+    executableToolKeys: string[],
+  ) {
+    if (!AGENT_RUNTIME_TOOL_KEYS.includes(toolKey))
+      return '该业务工具仅登记了配置，尚未接通执行器。';
+    if (!(app.toolKeys ?? []).includes(toolKey))
+      return `当前 Agent 未授权 ${toolKey}，请管理员在业务工具中授权。`;
+    if (toolKey === 'productSku.create' && !app.writeEnabled)
+      return '当前 Agent 写入总开关已关闭。';
+    if (!executableToolKeys.includes(toolKey))
+      return `业务指令 ${toolKey} 已停用或不允许聊天调用。`;
     if (toolKey === 'product.query') {
-      this.assertAnyPermission(user, ['Product.read', 'ProductSku.read']);
+      if (!this.hasAnyPermission(user, ['Product.read', 'ProductSku.read']))
+        return '当前员工缺少业务权限：Product.read 或 ProductSku.read。';
     }
     if (toolKey === 'productSku.create') {
-      if (!app.writeEnabled)
-        throw new ForbiddenException('当前 Agent 已关闭写入能力');
-      this.assertAnyPermission(user, ['Product.read']);
-      this.assertAnyPermission(user, ['ProductSku.create']);
+      if (!this.hasAnyPermission(user, ['Product.read']))
+        return '当前员工缺少业务权限：Product.read。';
+      if (!this.hasAnyPermission(user, ['ProductSku.create']))
+        return '当前员工缺少业务权限：ProductSku.create。';
     }
+    return null;
   }
 
   private hasAnyPermission(user: AuthUser, permissions: string[]) {
@@ -985,12 +1148,6 @@ export class AgentWorkspaceService {
       user.isAdmin ||
       permissions.some((item) => user.permissions.includes(item))
     );
-  }
-
-  private assertAnyPermission(user: AuthUser, permissions: string[]) {
-    if (!this.hasAnyPermission(user, permissions)) {
-      throw new ForbiddenException(`缺少业务权限：${permissions.join(' 或 ')}`);
-    }
   }
 
   private async assertConcurrencyAvailable(app: AgentApp, userId: number) {

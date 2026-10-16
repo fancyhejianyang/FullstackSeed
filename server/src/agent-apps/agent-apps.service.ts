@@ -16,7 +16,10 @@ import {
   type UpdateAgentAppDto,
 } from './dto/agent-app.dto';
 import { AgentApp } from './entities/agent-app.entity';
-import { AGENT_WRITE_TOOL_KEYS } from './agent-apps.constants';
+import {
+  AGENT_RUNTIME_TOOL_KEYS,
+  AGENT_WRITE_TOOL_KEYS,
+} from './agent-apps.constants';
 
 @Injectable()
 export class AgentAppsService {
@@ -71,7 +74,7 @@ export class AgentAppsService {
     return apps
       .filter((app) => this.canUse(app, user))
       .map((app) => {
-        const toolKeys = (app.toolKeys ?? []).filter((key) => toolMap.has(key));
+        const toolKeys = this.filterExecutableToolKeys(app, businessTools);
         return {
           id: app.id,
           name: app.name,
@@ -87,6 +90,30 @@ export class AgentAppsService {
           timeoutSeconds: app.timeoutSeconds,
         };
       });
+  }
+
+  /** 实时能力交集；调用方还须校验当前员工的业务权限，不可只信任历史应用配置。 */
+  public async getExecutableToolKeys(app: AgentApp): Promise<string[]> {
+    return this.filterExecutableToolKeys(
+      app,
+      await this.getAvailableBusinessTools(),
+    );
+  }
+
+  private filterExecutableToolKeys(
+    app: AgentApp,
+    tools: Array<{ commandKey: string; runtimeAvailable: boolean }>,
+  ): string[] {
+    const availableKeys = new Set(
+      tools
+        .filter((tool) => tool.runtimeAvailable)
+        .map((tool) => tool.commandKey),
+    );
+    return Array.from(new Set(app.toolKeys ?? [])).filter(
+      (key) =>
+        availableKeys.has(key) &&
+        (app.writeEnabled || !AGENT_WRITE_TOOL_KEYS.includes(key)),
+    );
   }
 
   async findAvailableOne(id: number, user: AuthUser) {
@@ -196,9 +223,19 @@ export class AgentAppsService {
     payload.workflowId = null;
     payload.workflowName = null;
     if (dto.toolKeys !== undefined || isCreate) {
-      const toolKeys = [...(dto.toolKeys ?? [])];
+      const toolKeys = Array.from(new Set(dto.toolKeys ?? []));
+      const unsupportedToolKeys = toolKeys.filter(
+        (key) => !AGENT_RUNTIME_TOOL_KEYS.includes(key),
+      );
+      if (unsupportedToolKeys.length) {
+        throw new BadRequestException(
+          `业务工具尚未接入 Agent 执行器，请手动移除后保存：${unsupportedToolKeys.join('、')}`,
+        );
+      }
       const availableToolKeys = new Set(
-        (await this.getAvailableBusinessTools()).map((item) => item.commandKey),
+        (await this.getAvailableBusinessTools())
+          .filter((item) => item.runtimeAvailable)
+          .map((item) => item.commandKey),
       );
       const unavailableToolKeys = toolKeys.filter(
         (key) => !availableToolKeys.has(key),
@@ -234,15 +271,14 @@ export class AgentAppsService {
 
     const toolKeys = payload.toolKeys ?? current?.toolKeys ?? [];
     const writeEnabled = payload.writeEnabled ?? current?.writeEnabled ?? false;
-    const selectedWriteTools = toolKeys.filter((key) =>
-      AGENT_WRITE_TOOL_KEYS.includes(key),
+    const selectedWriteTools = toolKeys.filter(
+      (key) =>
+        AGENT_WRITE_TOOL_KEYS.includes(key) &&
+        AGENT_RUNTIME_TOOL_KEYS.includes(key),
     );
     if (writeEnabled && !selectedWriteTools.length) {
-      throw new BadRequestException('启用写入时必须至少选择一个写入工具');
-    }
-    if (!writeEnabled && selectedWriteTools.length) {
-      payload.toolKeys = toolKeys.filter(
-        (key) => !AGENT_WRITE_TOOL_KEYS.includes(key),
+      throw new BadRequestException(
+        '启用写入时必须至少选择一个已接入执行器的写入工具',
       );
     }
     const accessScope = payload.accessScope ?? current?.accessScope ?? 'all';
@@ -288,6 +324,8 @@ export class AgentAppsService {
         action: 'read' as const,
         requireApproval: false,
         description: '兼容现有工作台的产品与 SKU 聚合事实查询。',
+        runtimeAvailable: true,
+        unavailableReason: null as string | null,
       },
       ...definitions.list
         .filter((item) => businessCatalogKeys.has(item.commandKey))
@@ -297,6 +335,10 @@ export class AgentAppsService {
           action: item.action,
           requireApproval: item.requireApproval,
           description: item.description,
+          runtimeAvailable: AGENT_RUNTIME_TOOL_KEYS.includes(item.commandKey),
+          unavailableReason: AGENT_RUNTIME_TOOL_KEYS.includes(item.commandKey)
+            ? null
+            : '仅登记了指令契约，尚未接入 Agent 执行器',
         })),
     ];
   }

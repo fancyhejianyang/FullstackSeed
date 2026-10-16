@@ -55,6 +55,7 @@ export interface AgentSession {
 
 export interface AgentMessageStructuredData {
   action?: "answer" | "query" | "clarify" | "prepare_write";
+  reason?: "write_not_executed";
   queryStatus?: "matched" | "not_matched";
   context?: ProductSkuChatContext | null;
   businessContext?: ProductSkuChatContext | null;
