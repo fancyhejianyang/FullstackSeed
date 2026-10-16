@@ -40,6 +40,7 @@ function harness() {
     }),
   };
   const app: AgentApp = Object.assign(new AgentApp(), {
+    providerId: 2,
     timeoutSeconds: 60,
     mediaModels: {
       vision: { providerId: 2, model: 'configured-vision' },
@@ -66,6 +67,20 @@ function harness() {
 }
 
 describe('Agent private media boundaries and provider protocols', () => {
+  it('rejects historical cross-account references before any paid request', async () => {
+    const h = harness();
+    h.params.app.providerId = 99;
+    await expect(h.service.run(h.params)).rejects.toThrow('不属于当前');
+    expect(h.providers.resolveAgentMediaTarget).not.toHaveBeenCalled();
+  });
+
+  it('does not reset the total deadline after intent classification', async () => {
+    const h = harness();
+    await expect(
+      h.service.run({ ...h.params, deadline: Date.now() - 1 }),
+    ).rejects.toThrow('本轮处理已超时');
+    expect(h.providers.resolveAgentMediaTarget).not.toHaveBeenCalled();
+  });
   afterEach(() => {
     jest.restoreAllMocks();
     jest.useRealTimers();

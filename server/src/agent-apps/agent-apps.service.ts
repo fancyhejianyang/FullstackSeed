@@ -91,8 +91,12 @@ export class AgentAppsService {
           maxToolCalls: app.maxToolCalls,
           timeoutSeconds: app.timeoutSeconds,
           mediaCapabilities: {
-            vision: !!app.mediaModels?.vision,
-            imageGeneration: !!app.mediaModels?.imageGeneration,
+            vision:
+              !!app.mediaModels?.vision &&
+              app.mediaModels.vision.providerId === app.providerId,
+            imageGeneration:
+              !!app.mediaModels?.imageGeneration &&
+              app.mediaModels.imageGeneration.providerId === app.providerId,
           },
         };
       });
@@ -260,9 +264,14 @@ export class AgentAppsService {
     // Agent 已改用 Markdown 工作指令，不再从配置绑定知识工作流。
     payload.workflowId = null;
     payload.workflowName = null;
-    if (dto.mediaModels !== undefined || isCreate) {
+    if (
+      dto.mediaModels !== undefined ||
+      dto.providerId !== undefined ||
+      isCreate
+    ) {
       payload.mediaModels = await this.normalizeMediaModels(
         dto.mediaModels,
+        payload.providerId ?? current?.providerId,
         current?.mediaModels,
       );
     }
@@ -337,6 +346,7 @@ export class AgentAppsService {
 
   private async normalizeMediaModels(
     input: Partial<AgentMediaModels> | null | undefined,
+    providerId: number | null | undefined,
     current?: AgentMediaModels | null,
   ): Promise<AgentMediaModels> {
     const result: AgentMediaModels = {
@@ -357,6 +367,10 @@ export class AgentAppsService {
       const reference = result[key];
       if (!reference) continue;
       const label = key === 'vision' ? '图片识别' : '图片生成';
+      if (reference.providerId !== providerId)
+        throw new BadRequestException(
+          `${label}模型必须属于当前所选模型账号，请清除旧引用或重新选择`,
+        );
       if (
         !Number.isInteger(reference.providerId) ||
         reference.providerId < 1 ||

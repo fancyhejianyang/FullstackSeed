@@ -63,6 +63,38 @@ describe('AgentAppsService access and tool policy', () => {
 
   beforeEach(() => jest.clearAllMocks());
 
+  it('rejects foreign media references and a provider switch that retains old references', async () => {
+    const app = {
+      id: 1,
+      providerId: 1,
+      models: ['qwen-plus'],
+      toolKeys: [],
+      mediaModels: {
+        vision: { providerId: 1, model: 'vision' },
+        imageGeneration: null,
+      },
+    };
+    repository.findOne.mockResolvedValue(app);
+    await expect(
+      service.update(1, {
+        mediaModels: {
+          vision: { providerId: 2, model: 'vision' },
+          imageGeneration: null,
+        },
+      }),
+    ).rejects.toThrow('当前所选模型账号');
+    await expect(service.update(1, { providerId: 2 })).rejects.toThrow(
+      '当前所选模型账号',
+    );
+    expect(repository.save).not.toHaveBeenCalled();
+    const cleared = await service.update(1, {
+      providerId: 2,
+      mediaModels: { vision: null, imageGeneration: null },
+    });
+    expect(cleared.providerId).toBe(2);
+    expect(cleared.mediaModels?.vision).toBeNull();
+  });
+
   it('keeps vision and generation references separate and preserves omitted media settings', async () => {
     providers.findOne.mockResolvedValue({
       id: 2,
@@ -80,7 +112,7 @@ describe('AgentAppsService access and tool policy', () => {
       name: '助手',
       responsibility: '媒体',
       instructionMarkdown: '识图',
-      providerId: 1,
+      providerId: 2,
       models: ['qwen-plus'],
       mediaModels: references,
     });
@@ -124,6 +156,7 @@ describe('AgentAppsService access and tool policy', () => {
     });
     repository.findOne.mockResolvedValue({
       id: 1,
+      providerId: 2,
       models: ['qwen-plus'],
       toolKeys: [],
     });

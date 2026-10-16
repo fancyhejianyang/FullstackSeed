@@ -8,6 +8,7 @@ import Select from "@/components/Select.vue";
 import UploadImage from "@/components/UploadImage.vue";
 import { useUserStore } from "@/stores/user";
 import { formatDateTime } from "@/utils/format";
+import { getPermissionActionColor } from "@/utils/permission";
 import { getProductOptions, type ProductOption } from "@/api/productCatalog";
 import {
   cancelAgentDraft,
@@ -23,7 +24,6 @@ import {
   updateAgentDraft,
   uploadAgentImage,
   type AgentImageReference,
-  type AgentMessageMode,
   type AgentDraft,
   type AgentExecutionProgress,
   type AgentMessage,
@@ -33,6 +33,7 @@ import {
 } from "@/api/agentWorkspace";
 import AgentMessageList from "./components/AgentMessageList.vue";
 import { agentProgressText, createAgentProgressPoller } from "./agentProgress";
+import { clipboardImages, imageUploadError } from "./agentClipboard";
 
 interface AgentPromptSuggestion {
   kind: "chat" | "query" | "write";
@@ -44,7 +45,6 @@ interface AgentPromptSuggestion {
 type PendingMessageStatus = "queued" | "sending" | "failed";
 
 interface PendingAgentMessage {
-  mode: AgentMessageMode;
   image?: AgentImageReference;
   id: number;
   sessionId: number;
@@ -64,7 +64,7 @@ const activeSession = ref<AgentSessionDetail | null>(null);
 const products = ref<ProductOption[]>([]);
 const sessionKeyword = ref("");
 const inputText = ref("");
-const inputMode = ref<AgentMessageMode>("chat");
+const showImagePicker = ref(false);
 const uploadBusy = ref(false);
 const attachedImage = ref<AgentImageReference | null>(null);
 const imagePreview = ref<string | null>("");
@@ -98,44 +98,40 @@ const confirmationKeys = new Map<number, string>();
 const currentApp = computed(() =>
   apps.value.find((item) => item.id === Number(selectedAgentId.value)),
 );
-const modeOptions = computed(() => [
-  { value: "chat", text: "对话 / 业务" },
-  {
-    value: "vision",
-    text: currentApp.value?.mediaCapabilities?.vision
-      ? "识别图片"
-      : "识别图片（未配置）",
-    disabled: !currentApp.value?.mediaCapabilities?.vision,
-  },
-  {
-    value: "imageGeneration",
-    text: currentApp.value?.mediaCapabilities?.imageGeneration
-      ? "生成图片"
-      : "生成图片（未配置）",
-    disabled: !currentApp.value?.mediaCapabilities?.imageGeneration,
-  },
-]);
 const mediaHint = computed(() =>
-  inputMode.value === "vision"
-    ? "上传一张 PNG / JPEG / WebP（≤ 5 MB）并描述问题。只分析图片，不自动入库。"
-    : inputMode.value === "imageGeneration"
-      ? "描述画面内容，每次生成一张。可能产生费用；失败或停止不会自动重试。"
-      : "图片能力需在 Agent 应用中分别配置识别 / 生图模型。",
+  uploadBusy.value
+    ? "正在上传图片…"
+    : [
+        currentApp.value?.mediaCapabilities?.vision
+          ? "可直接粘贴一张图片（PNG / JPEG / WebP，≤ 5 MB）"
+          : "",
+        currentApp.value?.mediaCapabilities?.imageGeneration
+          ? "描述生图需求即可生成，可能产生费用，不自动重试"
+          : "",
+      ]
+        .filter(Boolean)
+        .join("；"),
 );
 function clearImage() {
   if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
   previewObjectUrl = "";
   imagePreview.value = "";
   attachedImage.value = null;
+  showImagePicker.value = false;
 }
 function resetMediaInput() {
   clearImage();
-  inputMode.value = "chat";
 }
-watch(inputMode, (mode) => {
-  if (mode !== "vision") clearImage();
-});
 async function uploadImage(file: File) {
+  const error = imageUploadError(file);
+  if (error) {
+    ElMessage.warning(error);
+    throw new Error(error);
+  }
+  if (uploadBusy.value || actionBusy.value)
+    throw new Error("请等待当前上传完成");
+  if (!currentApp.value?.mediaCapabilities?.vision)
+    throw new Error("当前 Agent 未配置图片识别模型");
   const sessionId = activeSession.value?.id;
   if (!sessionId) throw new Error("请先创建会话");
   uploadBusy.value = true;
@@ -146,6 +142,7 @@ async function uploadImage(file: File) {
     clearImage();
     attachedImage.value = image;
     previewObjectUrl = URL.createObjectURL(file);
+    imagePreview.value = previewObjectUrl;
     return {
       url: previewObjectUrl,
       fileName: String(image.id),
@@ -155,6 +152,32 @@ async function uploadImage(file: File) {
     };
   } finally {
     uploadBusy.value = false;
+  }
+}
+async function pasteImage(event: ClipboardEvent) {
+  const images = clipboardImages(event.clipboardData);
+  if (!images.length) return; // 普通文本粘贴保持原行为；混合图文也保留原生文字粘贴。
+  if (!event.clipboardData?.getData("text/plain")) event.preventDefault();
+  if (images.length > 1) {
+    ElMessage.warning("每条消息支持一张图片，请逐张粘贴");
+    return;
+  }
+  if (uploadBusy.value || actionBusy.value) {
+    ElMessage.warning("请等待当前动作完成后再粘贴图片");
+    return;
+  }
+  if (!currentApp.value?.mediaCapabilities?.vision) {
+    ElMessage.warning("请先在 Agent 应用中配置当前账号的图片识别模型");
+    return;
+  }
+  if (attachedImage.value) {
+    ElMessage.warning("已有待发送图片，请先移除再粘贴，避免覆盖附件");
+    return;
+  }
+  try {
+    await uploadImage(images[0]!);
+  } catch {
+    /* 请求层已提示，保留文字且不自动发送。 */
   }
 }
 const agentOptions = computed(() =>
@@ -215,7 +238,6 @@ const visibleMessages = computed<AgentMessage[]>(() => {
       messageType: "text",
       content: item.content,
       structuredData: {
-        mode: item.mode,
         ...(item.image ? { images: [item.image] } : {}),
       },
       executionId: null,
@@ -359,16 +381,11 @@ async function ensureSession() {
 }
 
 async function send() {
-  const content = inputText.value.trim();
+  const image = attachedImage.value ?? undefined;
+  const content =
+    inputText.value.trim() || (image ? "请识别并描述这张图片的内容。" : "");
   if (!content || actionBusy.value || isComposing.value || uploadBusy.value)
     return;
-  const mode = inputMode.value;
-  const image =
-    mode === "vision" ? (attachedImage.value ?? undefined) : undefined;
-  if (mode === "vision" && !image) {
-    ElMessage.warning("请先上传要识别的图片");
-    return;
-  }
   let sessionId: number;
   try {
     sessionId = await ensureSession();
@@ -382,7 +399,6 @@ async function send() {
     id: localMessageId--,
     sessionId,
     content,
-    mode,
     image,
     clientMessageId,
     requestId,
@@ -414,7 +430,6 @@ async function processMessageQueue() {
         const result = await sendAgentMessage(item.sessionId, {
           content: item.content,
           clientMessageId: item.clientMessageId,
-          mode: item.mode,
           imageId: item.image?.id,
         });
         if (disposed) return;
@@ -742,20 +757,23 @@ onUnmounted(() => {
 
         <footer class="agent-workspace__composer-shell">
           <div class="agent-workspace__composer">
-            <div class="agent-workspace__media-toolbar">
-              <Select
-                v-model="inputMode"
-                :options="modeOptions"
-                :clearable="false"
+            <div v-if="mediaHint" class="agent-workspace__media-toolbar">
+              <Button
+                v-if="currentApp?.mediaCapabilities?.vision"
+                :type="getPermissionActionColor('read')"
+                link
+                icon="Picture"
                 :disabled="uploadBusy || actionBusy"
-                aria-label="消息模式"
-              />
+                @click="showImagePicker = !showImagePicker"
+                >添加图片</Button
+              >
               <span>{{ mediaHint }}</span>
             </div>
             <UploadImage
-              v-if="inputMode === 'vision'"
+              v-if="showImagePicker || attachedImage"
               v-model="imagePreview"
               class="agent-workspace__image-upload"
+              :class="{ 'has-image': attachedImage }"
               accept="image/png,image/jpeg,image/webp"
               :max-size-mb="5"
               :disabled="uploadBusy || actionBusy || !activeSession"
@@ -809,13 +827,8 @@ onUnmounted(() => {
               :rows="3"
               :maxlength="8000"
               :disabled="actionBusy"
-              :placeholder="
-                inputMode === 'imageGeneration'
-                  ? '描述要生成的画面、风格和细节…'
-                  : inputMode === 'vision'
-                    ? '想了解图片中的什么？例如：提取商品信息…'
-                    : '给 Agent 发消息，或描述查询、录入需求…'
-              "
+              placeholder="给 Agent 发消息，描述需求或粘贴图片，由 AI 理解并处理…"
+              @paste="pasteImage"
               @compositionstart="isComposing = true"
               @compositionend="isComposing = false"
               @keydown.enter.exact.prevent="handleEnter"
@@ -842,10 +855,9 @@ onUnmounted(() => {
                 round
                 icon="Promotion"
                 :disabled="
-                  !inputText.trim() ||
+                  (!inputText.trim() && !attachedImage) ||
                   actionBusy ||
-                  uploadBusy ||
-                  (inputMode === 'vision' && !attachedImage)
+                  uploadBusy
                 "
                 @click="send"
                 >{{ sending ? "加入队列" : "发送" }}</Button
@@ -864,10 +876,9 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin: 0 0 8px;
+  padding: 10px 16px 0;
 }
-.agent-workspace__media-toolbar :deep(.select) {
-  width: 200px;
+.agent-workspace__media-toolbar :deep(.el-button) {
   flex-shrink: 0;
 }
 .agent-workspace__media-toolbar > span {
@@ -876,7 +887,10 @@ onUnmounted(() => {
   color: #909399;
 }
 .agent-workspace__image-upload {
-  margin-bottom: 8px;
+  margin: 8px 16px 0;
+}
+.agent-workspace__image-upload.has-image :deep(.el-upload--picture-card) {
+  display: none;
 }
 .agent-workspace__image-upload :deep(.el-upload--picture-card),
 .agent-workspace__image-upload :deep(.el-upload-list__item) {

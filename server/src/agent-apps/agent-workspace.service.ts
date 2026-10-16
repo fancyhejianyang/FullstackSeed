@@ -106,6 +106,10 @@ export class AgentWorkspaceService {
       throw new ConflictException('当前会话不可上传图片');
     if (!app.mediaModels?.vision)
       throw new BadRequestException('当前 Agent 未配置图片识别模型');
+    if (app.mediaModels.vision.providerId !== app.providerId)
+      throw new BadRequestException(
+        '图片模型不属于当前 Agent 所选账号，请重新配置',
+      );
     if (!data) throw new BadRequestException('请上传图片文件');
     return this.mediaService.upload(sessionId, user.userId, data);
   }
@@ -236,24 +240,21 @@ export class AgentWorkspaceService {
     });
     if (existing) return this.recoverMessageResult(session, existing, user);
 
-    const mediaMode =
-      dto.mode === 'vision' || dto.mode === 'imageGeneration' ? dto.mode : null;
+    let mediaMode: 'vision' | 'imageGeneration' | null = null;
     if (!dto.content.trim()) throw new BadRequestException('消息不能为空');
-    if (mediaMode === 'vision' && !dto.imageId)
-      throw new BadRequestException('请先上传要识别的图片');
-    if (mediaMode !== 'vision' && dto.imageId)
-      throw new BadRequestException('图片附件仅用于图片识别模式');
-    const attachedImage =
-      mediaMode === 'vision'
-        ? this.mediaService.reference(
-            await this.mediaService.read(dto.imageId!, sessionId, user.userId),
-          )
-        : null;
-    const activeDraft = mediaMode
-      ? null
-      : await this.findActiveDraft(sessionId, user.userId);
+    const attachedImage = dto.imageId
+      ? this.mediaService.reference(
+          await this.mediaService.read(dto.imageId, sessionId, user.userId),
+        )
+      : null;
+    const activeDraft = await this.findActiveDraft(sessionId, user.userId);
     const decision = classifyAgentAction(dto.content, Boolean(activeDraft));
     const businessToolKey = this.resolveBusinessToolKey(decision.type);
+    const shouldClassify = !!(
+      attachedImage ||
+      app.mediaModels?.vision ||
+      app.mediaModels?.imageGeneration
+    );
     await this.assertConcurrencyAvailable(app, user.userId);
 
     const userMessage = await this.messageRepository.save(
@@ -264,8 +265,8 @@ export class AgentWorkspaceService {
         messageType: 'text',
         content: dto.content.trim(),
         structuredData: {
-          action: mediaMode ? 'answer' : decision.type,
-          mode: dto.mode ?? 'chat',
+          action: decision.type,
+          mode: 'chat',
           ...(attachedImage ? { images: [attachedImage] } : {}),
         },
         executionId: null,
@@ -285,14 +286,15 @@ export class AgentWorkspaceService {
         userId: user.userId,
         agentAppId: app.id,
         messageId: userMessage.id,
-        draftId: activeDraft?.id ?? null,
-        toolKey: mediaMode
-          ? `media.${mediaMode}`
+        draftId: shouldClassify ? null : (activeDraft?.id ?? null),
+        toolKey: shouldClassify
+          ? 'model.chat'
           : this.resolveExecutionToolKey(decision.type),
         status: 'running',
         parameterSummary: {
-          action: mediaMode ? 'answer' : decision.type,
-          mode: dto.mode ?? 'chat',
+          action: decision.type,
+          mode: 'chat',
+          mediaIntentPending: shouldClassify,
           contentLength: dto.content.length,
           progressStage: 'understanding',
         },
@@ -310,40 +312,132 @@ export class AgentWorkspaceService {
     });
 
     try {
-      // 权限失败也应保存为本轮明确的失败回执，而不是伪装成消息未送达。
-      if (
-        !mediaMode &&
-        businessToolKey &&
-        !this.usesGenericBusiness(app, activeDraft)
-      ) {
-        await this.assertActionAuthorized(app, businessToolKey, user);
-      }
-      if (
-        !mediaMode &&
-        decision.queryBeforeWrite &&
-        !this.usesGenericBusiness(app, activeDraft)
-      ) {
-        await this.assertActionAuthorized(app, 'product.query', user);
-      }
       const actionResult = await this.withTimeout(
-        mediaMode
-          ? this.processMediaAction(
-              session,
+        (async () => {
+          // 没有任何媒体配置的旧应用保持原业务链；有能力时无论文本调度策略均先分流。
+          if (shouldClassify) {
+            const history = await this.messageRepository.find({
+              where: { sessionId, userId: user.userId },
+              order: { id: 'DESC' },
+              take: 6,
+            });
+            const intent = await this.modelRouter.classifyRequest({
               app,
               execution,
-              user,
-              dto,
-              mediaMode,
-            )
-          : this.processAction({
-              decision,
               content: dto.content.trim(),
-              session,
-              app,
-              execution,
-              activeDraft,
-              user,
-            }),
+              hasImage: !!attachedImage,
+              context: JSON.stringify(
+                history
+                  .filter((m) => m.id !== userMessage.id)
+                  .reverse()
+                  .map((m) => ({
+                    role: m.role,
+                    content: m.content.slice(0, 1000),
+                  })),
+              ),
+              assertRunning: () => this.assertExecutionRunning(execution.id),
+              persist: () => this.persistModelTrace(execution),
+            });
+            await this.assertExecutionRunning(execution.id);
+            if (
+              intent.mode === 'imageEdit' ||
+              (intent.mode === 'imageGeneration' && attachedImage)
+            )
+              return this.requestMediaClarification(
+                session,
+                execution,
+                '当前支持图片识别和文字生图，尚未接通参考图编辑；未调用生图模型。如需独立创作，请移除附件并说明画面。',
+              );
+            if (intent.mode === 'clarify')
+              return this.requestMediaClarification(
+                session,
+                execution,
+                '请明确是分析图片、生成新图片还是处理业务；生成图片时请补充画面主题。本轮未调用图片模型。',
+              );
+            if (intent.mode === 'vision' && !attachedImage)
+              return this.requestMediaClarification(
+                session,
+                execution,
+                '请先在输入框粘贴或上传要识别的图片，再发送问题',
+              );
+            if (intent.mode === 'vision' || intent.mode === 'imageGeneration') {
+              mediaMode = intent.mode;
+              execution.toolKey = `media.${mediaMode}`;
+              execution.draftId = null;
+              execution.parameterSummary = {
+                ...execution.parameterSummary,
+                action: 'answer',
+                mode: mediaMode,
+                mediaIntentPending: false,
+              };
+              const routed = await this.executionRepository.update(
+                { id: execution.id, status: 'running' },
+                {
+                  toolKey: execution.toolKey,
+                  draftId: null,
+                },
+              );
+              if (!routed.affected)
+                throw new ConflictException('执行已停止或失效');
+              await this.persistModelTrace(execution);
+              userMessage.structuredData = {
+                ...userMessage.structuredData,
+                action: 'answer',
+                mode: mediaMode,
+              };
+              await this.messageRepository.save(userMessage);
+              await this.assertExecutionRunning(execution.id);
+              return this.processMediaAction(
+                session,
+                app,
+                execution,
+                user,
+                { ...dto, content: intent.prompt ?? dto.content },
+                mediaMode,
+              );
+            }
+            execution.toolKey = this.resolveExecutionToolKey(decision.type);
+            execution.draftId = activeDraft?.id ?? null;
+            const routed = await this.executionRepository.update(
+              { id: execution.id, status: 'running' },
+              {
+                toolKey: execution.toolKey,
+                draftId: execution.draftId,
+              },
+            );
+            if (!routed.affected)
+              throw new ConflictException('执行已停止或失效');
+            execution.parameterSummary = {
+              ...execution.parameterSummary,
+              mediaIntentPending: false,
+            };
+            await this.persistModelTrace(execution);
+          }
+          // 权限失败也应保存为本轮明确的失败回执，而不是伪装成消息未送达。
+          if (
+            !mediaMode &&
+            businessToolKey &&
+            !this.usesGenericBusiness(app, activeDraft)
+          ) {
+            await this.assertActionAuthorized(app, businessToolKey, user);
+          }
+          if (
+            !mediaMode &&
+            decision.queryBeforeWrite &&
+            !this.usesGenericBusiness(app, activeDraft)
+          ) {
+            await this.assertActionAuthorized(app, 'product.query', user);
+          }
+          return this.processAction({
+            decision,
+            content: dto.content.trim(),
+            session,
+            app,
+            execution,
+            activeDraft,
+            user,
+          });
+        })(),
         app.timeoutSeconds,
       );
       return {
@@ -370,7 +464,7 @@ export class AgentWorkspaceService {
       execution.status = 'failed';
       execution.errorMessage = message;
       execution.finishedAt = new Date();
-      if (mediaMode) {
+      {
         const failed = await this.executionRepository.update(
           { id: execution.id, status: 'running' },
           {
@@ -381,7 +475,7 @@ export class AgentWorkspaceService {
         );
         if (!failed.affected)
           return this.recoverMessageResult(session, userMessage, user);
-      } else await this.executionRepository.save(execution);
+      }
       const assistantMessage = await this.appendAssistantMessage(
         session,
         user,
@@ -390,7 +484,7 @@ export class AgentWorkspaceService {
         message,
         {
           action: mediaMode ? 'answer' : decision.type,
-          mode: dto.mode ?? 'chat',
+          mode: mediaMode ?? 'chat',
         },
       );
       await this.sessionRepository.update(session.id, {
@@ -712,14 +806,17 @@ export class AgentWorkspaceService {
     if (['succeeded', 'failed', 'cancelled'].includes(execution.status)) {
       return execution;
     }
-    if (execution.toolKey.startsWith('media.')) {
+    if (
+      execution.toolKey.startsWith('media.') ||
+      execution.parameterSummary?.mediaIntentPending
+    ) {
       const stopped = await this.dataSource.transaction(async (manager) => {
         const result = await manager.getRepository(AgentExecution).update(
           { id, userId: user.userId, status: 'running' },
           {
             status: 'cancelled',
             errorMessage:
-              '用户已停止媒体任务；供应商可能仍在处理或计费，请核实后再发送',
+              '用户已停止请求；已发起的模型调用可能仍在处理或计费，请核实后再发送',
             finishedAt: new Date(),
           },
         );
@@ -752,6 +849,50 @@ export class AgentWorkspaceService {
     return execution;
   }
 
+  private async requestMediaClarification(
+    session: AgentSession,
+    execution: AgentExecution,
+    content: string,
+  ) {
+    return this.dataSource.transaction(async (manager) => {
+      const finishedAt = new Date();
+      const completed = await manager
+        .getRepository(AgentExecution)
+        .update(
+          { id: execution.id, status: 'running' },
+          { status: 'waiting_input', finishedAt, errorMessage: null },
+        );
+      if (!completed.affected) throw new ConflictException('执行已停止或失效');
+      const messages = manager.getRepository(AgentMessage);
+      const assistantMessage = await messages.save(
+        messages.create({
+          sessionId: session.id,
+          userId: execution.userId,
+          role: 'assistant',
+          messageType: 'text',
+          content,
+          structuredData: { action: 'clarify' },
+          executionId: execution.id,
+          clientMessageId: null,
+        }),
+      );
+      await manager
+        .getRepository(AgentSession)
+        .increment({ id: session.id }, 'messageCount', 1);
+      await manager.getRepository(AgentSession).update(session.id, {
+        lastMessage: content,
+        lastExecutionStatus: 'waiting_input',
+      });
+      return {
+        assistantMessage,
+        execution: Object.assign(execution, {
+          status: 'waiting_input' as const,
+          finishedAt,
+        }),
+      };
+    });
+  }
+
   private async processMediaAction(
     session: AgentSession,
     app: AgentApp,
@@ -765,6 +906,10 @@ export class AgentWorkspaceService {
       mode === 'vision' ? 'recognizing_image' : 'generating_image',
     );
     await this.assertExecutionRunning(execution.id);
+    const deadline =
+      (execution.startedAt?.getTime() ?? Date.now()) +
+      app.timeoutSeconds * 1000;
+    if (Date.now() >= deadline) throw new AgentTimeoutError();
     const result = await this.mediaService.run({
       app,
       executionId: execution.id,
@@ -773,6 +918,7 @@ export class AgentWorkspaceService {
       mode,
       content: dto.content.trim(),
       imageId: dto.imageId,
+      deadline,
     });
     // 结果与消息在同一事务中完成；与停止/超时竞争时仅一个 running 状态转换能成功。
     return this.dataSource.transaction(async (manager) => {

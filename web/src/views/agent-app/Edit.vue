@@ -138,14 +138,18 @@ function mediaReference(value: string): AgentModelReference | null {
   };
 }
 function mediaOptions(kind: "vision" | "imageGeneration", selected: string) {
-  const list = (options.value.mediaModels?.[kind] ?? []).map((item) => ({
-    value: mediaKey(item),
-    label: `${item.providerName} / ${item.text}`,
-  }));
+  const list = (options.value.mediaModels?.[kind] ?? [])
+    .filter((item) => item.providerId === Number(form.providerId))
+    .map((item) => ({
+      value: mediaKey(item),
+      label: item.text,
+      disabled: false,
+    }));
   if (selected && !list.some((item) => item.value === selected))
     list.push({
       value: selected,
       label: `${selected}（引用已失效，请清除或重新选择）`,
+      disabled: true,
     });
   return list;
 }
@@ -181,7 +185,7 @@ const fields = computed<FormField[]>(() => [
   },
   {
     prop: "providerId",
-    label: "文本模型账号",
+    label: "模型账号",
     type: "select",
     placeholder: "请选择已启用的模型账号",
     options: options.value.providers.map((item) => ({
@@ -259,16 +263,22 @@ const fields = computed<FormField[]>(() => [
     label: "图片识别模型",
     type: "select",
     options: mediaOptions("vision", form.visionModel),
-    placeholder: "可选：账号 / 视觉识别模型",
-    hint: "在‘大模型账号 → 视觉识别模型’登记后引用，使用兼容 Chat Completions 的图片输入。独立于文本模型组；未配置时工作台不开放识图。",
+    placeholder: form.providerId
+      ? "选择当前账号的视觉识别模型"
+      : "请先选择模型账号",
+    componentProps: { disabled: !form.providerId },
+    hint: "仅列出所选账号已登记的视觉识别模型，不按模型名称猜测能力。无选项时请到‘大模型账号 → 视觉识别模型’补充；工作台支持粘贴图片并自动识别意图。",
   },
   {
     prop: "imageGenerationModel",
     label: "图片生成模型",
     type: "select",
     options: mediaOptions("imageGeneration", form.imageGenerationModel),
-    placeholder: "可选：账号 / 生图模型",
-    hint: "先在‘大模型账号’配置生图模型、协议及完整接口地址。工作台每次生成一张，受本轮超时限制，不自动重试或切换模型；识图模型不等于生图模型。",
+    placeholder: form.providerId
+      ? "选择当前账号的生图模型"
+      : "请先选择模型账号",
+    componentProps: { disabled: !form.providerId },
+    hint: "仅列出所选账号的生图模型；无选项时请在该账号配置生图模型、协议和完整接口地址。根据明确创作意图生成一张，可能产生费用，不自动重试；识图模型不等于生图模型。",
   },
   {
     prop: "toolKeys",
@@ -440,7 +450,10 @@ function fillForm(data: AgentApp) {
 
 watch(
   () => form.providerId,
-  () => {
+  (providerId, previous) => {
+    if (loading.value || String(providerId) === String(previous)) return;
+    form.visionModel = "";
+    form.imageGenerationModel = "";
     const available = new Set(
       options.value.providers
         .find((item) => item.id === Number(form.providerId))
@@ -448,6 +461,7 @@ watch(
     );
     form.models = form.models.filter((model) => available.has(model));
   },
+  { flush: "sync" },
 );
 
 watch(

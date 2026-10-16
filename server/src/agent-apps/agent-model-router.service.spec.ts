@@ -65,6 +65,29 @@ const intentPolicy = {
 };
 
 describe('Agent model routing', () => {
+  it.each(['priority', 'balanced', 'intent'] as const)(
+    'classifies media in %s strategy and reuses the decision without another classification',
+    async (strategy) => {
+      const h = harness(strategy === 'intent' ? intentPolicy : { strategy });
+      h.providers.callChat.mockResolvedValue({
+        isSuccess: true,
+        answer: '{"intent":"analysis","complexity":"complex","mode":"vision"}',
+      });
+      const request = h.request();
+      const intent = await h.router.classifyRequest({
+        ...request,
+        hasImage: true,
+      });
+      expect(intent.mode).toBe('vision');
+      await h.router.call(request);
+      expect(h.providers.callChat).toHaveBeenCalledTimes(1);
+      expect(traceOf(request.execution).attempts.map((a) => a.purpose)).toEqual(
+        ['routing', 'planning'],
+      );
+      if (strategy === 'intent')
+        expect(request.invoke).toHaveBeenCalledWith('strong');
+    },
+  );
   afterEach(() => {
     jest.useRealTimers();
     jest.restoreAllMocks();

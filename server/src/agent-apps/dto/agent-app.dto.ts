@@ -292,6 +292,7 @@ export class QueryAgentSessionDto {
 }
 
 export class SendAgentMessageDto {
+  // 仅兼容旧客户端入参；实际执行由服务端意图识别决定，不信任此字段。
   @IsOptional()
   @IsIn(['chat', 'vision', 'imageGeneration'])
   mode?: 'chat' | 'vision' | 'imageGeneration';

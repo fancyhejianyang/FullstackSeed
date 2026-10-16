@@ -24,7 +24,9 @@ const user: AuthUser = {
 };
 
 /** 内存事务桩验证编排边界；不连接数据库、不调用真实模型。 */
-function harness() {
+function harness(
+  mediaIntent?: 'vision' | 'imageGeneration' | 'chat' | 'imageEdit' | 'clarify',
+) {
   let draft: AgentDraft = Object.assign(new AgentDraft(), {
     id: 4,
     sessionId: 2,
@@ -137,6 +139,14 @@ function harness() {
     models: ['test-model'],
     responsibility: '助手',
     instructionMarkdown: '处理业务',
+    ...(mediaIntent
+      ? {
+          mediaModels: {
+            vision: { providerId: 1, model: 'vision-model' },
+            imageGeneration: { providerId: 1, model: 'image-model' },
+          },
+        }
+      : {}),
   } as AgentApp;
   const apps = {
     findAvailableOne: jest.fn().mockResolvedValue(app),
@@ -162,7 +172,15 @@ function harness() {
     withExecutionSignal: jest.fn(
       (_signal: AbortSignal, run: () => Promise<unknown>) => run(),
     ),
-    callChat: jest.fn(),
+    callChat: jest.fn().mockResolvedValue({
+      isSuccess: true,
+      answer: JSON.stringify({
+        intent: 'chat',
+        complexity: 'simple',
+        mode: mediaIntent,
+        prompt: '商品宣传海报',
+      }),
+    }),
   };
   const media = {
     run: jest.fn().mockResolvedValue({
@@ -220,10 +238,122 @@ function harness() {
 }
 
 describe('generic Agent workflow and confirmation', () => {
+  it('routes an attached picture without a client mode and never writes business data', async () => {
+    const h = harness('vision');
+    const result = await h.service.sendMessage(
+      2,
+      { content: '识别这个图片', imageId: 9, clientMessageId: 'auto-vision' },
+      user,
+    );
+    expect(result.execution).toMatchObject({
+      status: 'succeeded',
+      toolKey: 'media.vision',
+    });
+    expect(h.media.run).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'vision', imageId: 9 }),
+    );
+    expect(h.business.create).not.toHaveBeenCalled();
+    expect(h.drafts.save).not.toHaveBeenCalled();
+  });
+
+  it.each(['如何生成图片？', '不要生图，查示例列表', '只写图片提示词'])(
+    'ignores a forged legacy mode when classified as ordinary conversation: %s',
+    async (content) => {
+      const h = harness('chat');
+      h.models.callChat
+        .mockResolvedValueOnce({
+          isSuccess: true,
+          answer: JSON.stringify({
+            intent: 'query',
+            complexity: 'simple',
+            mode: 'chat',
+          }),
+        })
+        .mockResolvedValueOnce({
+          isSuccess: true,
+          answer: JSON.stringify({
+            kind: 'tool',
+            toolKey: 'demo.list',
+            parameters: {},
+          }),
+        });
+      const result = await h.service.sendMessage(
+        2,
+        { content, mode: 'imageGeneration', clientMessageId: 'ordinary' },
+        user,
+      );
+      expect(result.execution?.status).toBe('succeeded');
+      expect(h.media.run).not.toHaveBeenCalled();
+      expect(h.business.query).toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['vision', undefined, '请先在输入框'],
+    ['imageEdit', 9, '尚未接通'],
+    ['imageGeneration', 9, '尚未接通'],
+    ['clarify', undefined, '请明确'],
+  ] as const)(
+    'does not execute images when %s is not executable',
+    async (mode, imageId, message) => {
+      const h = harness(mode);
+      const result = await h.service.sendMessage(
+        2,
+        { content: '处理一下', imageId, clientMessageId: 'guard' },
+        user,
+      );
+      expect(result.execution?.status).toBe('waiting_input');
+      expect(
+        'assistantMessage' in result && result.assistantMessage?.content,
+      ).toContain(message);
+      expect(h.media.run).not.toHaveBeenCalled();
+      expect(h.drafts.save).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not dispatch media or business tools on malformed classification', async () => {
+    const h = harness('imageGeneration');
+    h.models.callChat.mockResolvedValue({
+      isSuccess: true,
+      answer: 'not JSON',
+    });
+    const result = await h.service.sendMessage(
+      2,
+      { content: '生成海报', clientMessageId: 'bad-intent' },
+      user,
+    );
+    expect(result.execution?.status).toBe('failed');
+    expect(h.media.run).not.toHaveBeenCalled();
+    expect(h.business.query).not.toHaveBeenCalled();
+  });
+
+  it('does not call media or cancel an unrelated draft when stopped during classification', async () => {
+    const h = harness('imageGeneration');
+    h.models.callChat.mockImplementationOnce(async () => {
+      await h.service.stopExecution(h.runs[0].id, user);
+      return {
+        isSuccess: true,
+        answer: JSON.stringify({
+          intent: 'chat',
+          complexity: 'simple',
+          mode: 'imageGeneration',
+          prompt: '海报',
+        }),
+      };
+    });
+    const result = await h.service.sendMessage(
+      2,
+      { content: '生成海报', clientMessageId: 'stop-intent' },
+      user,
+    );
+    expect(result.execution?.status).toBe('cancelled');
+    expect(h.media.run).not.toHaveBeenCalled();
+    expect(h.draft.status).toBe('pending_confirmation');
+  });
+
   it('generates images once per message id without running business tools or touching an active draft', async () => {
-    const h = harness();
+    const h = harness('imageGeneration');
     const payload = {
-      mode: 'imageGeneration' as const,
       content: '生成商品海报',
       clientMessageId: 'image-1',
     };
@@ -241,12 +371,12 @@ describe('generic Agent workflow and confirmation', () => {
     await h.service.sendMessage(2, payload, user);
     expect(h.media.run).toHaveBeenCalledTimes(1);
     expect(h.business.create).not.toHaveBeenCalled();
-    expect(h.models.callChat).not.toHaveBeenCalled();
+    expect(h.models.callChat).toHaveBeenCalledTimes(1);
     expect(h.drafts.save).not.toHaveBeenCalled();
   });
 
   it('does not revive a stopped media execution when a provider returns late', async () => {
-    const h = harness();
+    const h = harness('imageGeneration');
     h.media.run.mockImplementationOnce(
       async (params: { executionId: number }) => {
         await h.service.stopExecution(params.executionId, user);

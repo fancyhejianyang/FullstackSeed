@@ -123,6 +123,7 @@ export class AgentMediaService {
     mode: 'vision' | 'imageGeneration';
     content: string;
     imageId?: number;
+    deadline?: number;
   }) {
     const { app, mode } = params;
     const reference = app.mediaModels?.[mode];
@@ -130,12 +131,19 @@ export class AgentMediaService {
       throw new BadRequestException(
         `请在 Agent 应用中配置${mode === 'vision' ? '图片识别' : '图片生成'}模型`,
       );
+    if (reference.providerId !== app.providerId)
+      throw new BadRequestException(
+        '图片模型不属于当前 Agent 所选账号，请重新配置',
+      );
     const controller = new AbortController();
-    this.controllers.set(params.executionId, controller);
-    const timer = setTimeout(
-      () => controller.abort(),
+    const remainingMilliseconds = Math.min(
       app.timeoutSeconds * 1000,
+      (params.deadline ?? Infinity) - Date.now(),
     );
+    if (remainingMilliseconds <= 0)
+      throw new BadRequestException('本轮处理已超时，未调用图片模型');
+    this.controllers.set(params.executionId, controller);
+    const timer = setTimeout(() => controller.abort(), remainingMilliseconds);
     try {
       // 每次调用重新核对账号状态/模型目录，不能只信保存时的校验。
       const target = await this.providers.resolveAgentMediaTarget(

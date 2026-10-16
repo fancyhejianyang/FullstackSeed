@@ -4,6 +4,10 @@ import type { KnowledgeAiTokenUsage } from '../knowledge-ai-providers/knowledge-
 import type { AgentApp } from './entities/agent-app.entity';
 import type { AgentExecution } from './entities/agent-execution.entity';
 import {
+  AGENT_REQUEST_INTENT_PROMPT,
+  parseAgentRequestIntent,
+} from './agent-request-intent';
+import {
   modelFailureReason,
   normalizeModelRouting,
   parseModelDecision,
@@ -40,6 +44,69 @@ export class AgentModelRouterService {
   private sequence = 0;
 
   constructor(private readonly providers: KnowledgeAiProvidersService) {}
+
+  /** 媒体能力分流独立于文本模型策略；复用同一轮的尝试预算、超时和轨迹。 */
+  async classifyRequest(request: RoutingRequest & { hasImage: boolean }) {
+    const policy = normalizeModelRouting(
+      request.app.modelRouting,
+      request.app.models,
+    );
+    const summary = request.execution.parameterSummary ?? {};
+    const trace = (summary.modelRouting as AgentModelTrace | undefined) ?? {
+      strategy: policy.strategy,
+      attempts: [],
+    };
+    request.execution.parameterSummary = { ...summary, modelRouting: trace };
+    const intent = await this.tryModels(
+      request,
+      policy,
+      trace,
+      'routing',
+      policy.strategy === 'intent' ? policy.simpleModels : request.app.models,
+      async (model) => {
+        const result = await this.providers.callChat({
+          id: request.app.providerId,
+          model,
+          temperature: 0,
+          systemPrompt: AGENT_REQUEST_INTENT_PROMPT,
+          question: JSON.stringify({
+            history: request.context?.slice(-6000) ?? '',
+            request: request.content,
+            hasImage: request.hasImage,
+          }),
+        });
+        try {
+          if (!result.isSuccess) throw new Error('classification_failed');
+          return {
+            value: parseAgentRequestIntent(result.answer),
+            isSuccess: true,
+            usage: result.usage,
+          };
+        } catch {
+          return {
+            value: undefined,
+            isSuccess: false,
+            errorMessage: result.isSuccess
+              ? 'invalid_model_output'
+              : result.errorMessage,
+            usage: result.usage,
+          };
+        }
+      },
+      2,
+    );
+    if (!intent)
+      throw new BadRequestException(
+        '未能确定本轮意图，请明确需求后重试；未调用图片模型',
+      );
+    trace.decision = {
+      intent: intent.intent,
+      complexity: intent.complexity,
+      source: 'classifier',
+    };
+    await request.persist();
+    return intent;
+  }
 
   async call<T>(
     request: RoutingRequest & {

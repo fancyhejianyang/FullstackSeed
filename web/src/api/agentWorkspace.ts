@@ -268,7 +268,6 @@ export function sendAgentMessage(
   data: {
     content: string;
     clientMessageId: string;
-    mode?: AgentMessageMode;
     imageId?: number;
   },
 ) {

@@ -215,6 +215,7 @@
 - `UploadFile`：v-model 为文件 URL，`v-model:name` 为文件名，已上传后隐藏拖拽区并显示可下载文件名
 - `uploadRequest(file)`：可覆盖默认上传实现，未来直传 OSS 或特殊业务上传时仍保持组件契约不变
 - Agent 私有图片复用 `UploadImage.uploadRequest` 对接会话鉴权上传：组件 v-model 仅用本地 Blob URL 预览，发送消息使用服务端图片 ID，不把公开上传 URL 当作权限凭据。页面负责切换/卸载时释放 Blob URL。
+- Agent 输入框通过 Input 透传的 `paste` 事件读取本次粘贴文件，复用同一私有上传函数与 UploadImage 预览；不主动读取系统剪贴板、不抓取 HTML 外链图片。业务页负责待发送附件、单图/大小校验和会话隔离，不在通用输入组件中加入 Agent 网络逻辑。
 - 后端本地存储默认暴露 `/uploads/...`；未来 OSS/CDN 只调整上传服务或 `UPLOAD_PUBLIC_BASE_URL`
 - 系统配置下的「OSS/CDN 配置」页面会保存上传存储开关和云厂商参数；上传接口读取该配置决定本地或 OSS 分支
 

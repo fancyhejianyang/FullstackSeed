@@ -1,5 +1,19 @@
 # CHANGELOG
 
+### 2026-10-16 Agent 图片意图自动分流、输入框粘贴与账号内模型过滤
+
+- 需求与原因：手动选择对话/识图/生图模式不符合自然语言交互；媒体候选混入其他账号，容易配置错引用。本次去掉模式选择，以服务端意图识别决定实际能力，视觉与生图引用均限定当前所选账号。
+- 新增文件（4）：`server/src/agent-apps/agent-request-intent.ts`、`server/src/agent-apps/agent-request-intent.spec.ts`；`web/src/views/agent-workspace/agentClipboard.ts`、`web/src/views/agent-workspace/agentClipboard.test.mjs`。
+- 修改后端（9）：`server/src/agent-apps/agent-apps.service.ts`、`agent-apps.service.spec.ts`、`agent-business-workspace.spec.ts`、`agent-media.service.ts`、`agent-media.service.spec.ts`、`agent-model-router.service.ts`、`agent-model-router.service.spec.ts`、`agent-workspace.service.ts`、`dto/agent-app.dto.ts`。
+- 修改前端（3）：`web/src/api/agentWorkspace.ts`、`web/src/views/agent-app/Edit.vue`、`web/src/views/agent-workspace/Index.vue`。修改文档（4）：`.design-spec.md`、`AGENTS-COMPONENTS.md`、`MD/Agent业务模块接入说明.md`、本文件。删除文件：无；共新增 4、修改 16。
+- 输入体验：复用 Input 的粘贴事件、UploadImage 私有上传与预览、Button 添加附件入口。只处理本次剪贴板图片文件，不主动读取剪贴板或下载 HTML 图片；支持 PNG/JPEG/WebP 单图 ≤ 5 MB。粘贴不自动发送，不覆盖已有附件，多图提示逐张发送；普通文字/混合图文保留原生文字粘贴。只有附件直接发送时补默认识图问题，保留中文输入法、消息排队、幂等重试、会话归属和 Blob URL 释放。
+- 前后端契约：发送仍为 `content/clientMessageId/imageId?`，前端删除 `mode` 入参；后端保留旧字段校验但忽略其执行指示，实际模式只由受约束的服务端分类结果决定。拥有媒体引用或带图片的请求先分类，文本-only 旧应用保持原业务链；不新增数据库字段或迁移。
+- 意图与执行：分类结合本轮内容、图片存在性及限定长度的最近对话，区分普通对话/业务、图片理解、明确文生图、参考图编辑、待澄清；生图提示词只接受非空且限长文本。分类器不能选择账号、URL、业务工具或权限；询问方法、否定/取消及仅写提示词不应触发生图。分类失败不猜测执行；歧义、缺图、尚未接通的参考图编辑返回真实 `waiting_input` 及说明，不展示执行失败或伪成功。媒体仍不会自动业务写入。
+- 调度与停止：无论 priority/balanced/intent 都支持媒体分流，复用现有授权文本模型、尝试预算、冷却和单次/总超时；正常增加一次分类阶段，意图策略后续复用复杂度结果。真正媒体调用只有一次，不自动重试；使用本轮剩余时间，不重置总超时。分类阶段不绑定/取消已有业务草稿，停止与终态采用条件更新，晚到结果不能继续执行或复活状态；同消息 ID 不重复分类或生图。
+- 模型候选与防错：两个媒体候选仅显示所选账号对应能力目录；手动换账号清空旧媒体引用，编辑初始化不清空；失效/跨账号历史引用保留禁用说明，可清除或重选。保存/换账号/上传/运行阶段校验归属，当前应用能力摘要不开放跨账号历史引用；运行时继续核对账号启用、密钥和目录。未配置能力给出设置位置说明。
+- 验证：后端 32 套件 / 288 项测试、前端剪贴板及进度 11 项测试、生产源码类型检查、Vue 类型检查、变更后端 ESLint、变更前端 Prettier、组件复用只读扫描（2 页面）、`git diff --check` 通过。完整后端测试类型检查仅剩既有 `server/src/menus/menus.service.spec.ts:177` 的 `deletedAt: null` / `Date` 错误，本次变更无新增类型错误。
+- 范围与待验收：本次未构建、启动服务、修改真实数据库或调用付费模型。意图测试使用模拟输出验证分流边界，不能替代实际模型语义准确性评估；需部署后验收粘贴/预览、切换账号回显及真实识图/生图。仍不支持图片编辑、多图或异步生图，供应商已处理请求可能计费；配置和人工验收见接入说明。
+
 ### 2026-10-16 Agent 识图与生图端到端接入
 
 - 需求与现象：优先顺序策略下轻量/复杂组禁用容易被误认为异常；现有视觉目录仅用于 OCR，缺少 Agent 视觉引用与真实生图链路。本次按用户确认同时接通工作台上传识图和文生图，不只保存配置。
