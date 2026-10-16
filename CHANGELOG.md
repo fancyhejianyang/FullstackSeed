@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-10-16 Agent 执行状态渲染空值兜底
+
+- 现象：执行记录页曾出现 `Cannot read properties of undefined (reading 'type')`，用户刷新后恢复，并要求仅做兜底判断。代码中状态组件直接返回 `map[status]`，缺失或未知状态会使模板读取 `statusMeta.type` 时抛错；未取得现场堆栈，不将具体历史记录或表格预扫描认定为已复现的现场原因。
+- 修复：展示组件允许缺失/未知状态，只读取状态映射自有键，未命中显示中性的“未知状态”；悬浮可查看原始状态或缺失说明。已知状态、真实录入/生图回执判断及配色保持不变，不把异常值当成成功。按用户最新要求不改公共 Table、后端接口、业务状态或数据库。
+- 新增文件（1）：`web/src/views/agent-workspace/components/agentExecutionStatus.test.mjs`，覆盖未知/空值/原型键、已知状态、真实回执及响应式状态切换四类回归用例。
+- 修改文件（3）：`web/src/views/agent-workspace/components/AgentExecutionStatus.vue`、`.design-spec.md`、本文件。删除文件：无。
+- 验证：Vue 类型检查、组件及用例 Prettier 检查、用例 `node --check` 语法检查、组件复用只读扫描及 `git diff --check` 通过。按修复类改动规则仅执行静态检查，未运行新增测试、未 build、未启动/重启服务，也未进行浏览器现场复现。
+
 ### 2026-10-16 Agent 图片模型切换自动测试与无效候选移除
 
 - 需求与原因：能力目录是管理员登记信息，不能证明模型真的能识图/生图；普通文本测试的 OK 或 HTTP 200 也不能验证图片能力。本次在手动切换媒体模型时发起对应协议的真实能力测试，并说明生图候选的配置来源。

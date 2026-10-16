@@ -7,7 +7,8 @@ import type {
 import { getPermissionActionColor } from "@/utils/permission";
 
 const props = defineProps<{
-  status: AgentExecutionStatus;
+  // API 类型不能约束历史数据或运行时传参；展示层必须容忍缺失/未知状态。
+  status?: string | null;
   toolKey?: AgentExecution["toolKey"];
   result?: AgentExecution["result"];
   errorMessage?: string | null;
@@ -81,13 +82,27 @@ const statusMeta = computed(() => {
     failed: { label: "失败", type: getPermissionActionColor("reject") },
     cancelled: { label: "已停止", type: getPermissionActionColor("read") },
   };
-  return map[props.status];
+  if (
+    typeof props.status === "string" &&
+    Object.prototype.hasOwnProperty.call(map, props.status)
+  ) {
+    return map[props.status as Exclude<AgentExecutionStatus, "succeeded">];
+  }
+  return { label: "未知状态", type: getPermissionActionColor("read") };
 });
+
+const statusTitle = computed(() =>
+  typeof props.status === "string" && props.status.trim()
+    ? `原始执行状态：${props.status}`
+    : "执行状态缺失",
+);
 </script>
 
 <template>
   <div class="execution-status">
-    <el-tag :type="statusMeta.type">{{ statusMeta.label }}</el-tag>
+    <el-tag :type="statusMeta.type" :title="statusTitle">{{
+      statusMeta.label
+    }}</el-tag>
     <span v-if="errorMessage" class="execution-status__error">{{
       errorMessage
     }}</span>
