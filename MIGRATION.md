@@ -98,7 +98,7 @@ eslint prettier 等工具链
 
 ## 七、应用并发、排队与人工客服（2026-10-09）
 
-本次为增量接待能力：保留原知识库、SKU 查询、工作流与 AI 问答记录，新增 `customer-service/` 调度模块及工作台。关联 H5 的正式入口和配置见 `D:\AllProjects\H5\ai-customer-service\RECEPTION.md`。
+本次为增量接待能力：保留原知识库、SKU 查询、工作流与 AI 问答记录，新增 `customer-service/` 调度模块及工作台。客服 H5 已纳入主仓库，正式入口和配置见 [`customer-service-h5/RECEPTION.md`](customer-service-h5/RECEPTION.md)。
 
 ### 部署顺序与兼容性
 

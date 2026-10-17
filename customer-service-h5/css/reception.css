@@ -1,0 +1,79 @@
+/* 正式客服接待增量样式：沿用原有深色设计令牌及消息气泡。 */
+[hidden] { display: none !important; }
+.message-list { min-height: 0; }
+.service-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px 12px;
+  padding-bottom: 9px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+.service-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.service-button {
+  min-height: 32px;
+  padding: 4px 9px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-primary);
+  background: var(--color-surface);
+}
+.service-button:hover { border-color: var(--color-primary); }
+.service-button:disabled { opacity: .45; cursor: not-allowed; }
+.service-error {
+  margin-bottom: 9px;
+  padding: 8px 10px;
+  border: 1px solid rgba(248, 113, 113, .3);
+  border-radius: var(--radius-sm);
+  color: #fca5a5;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.msg-system {
+  align-self: center;
+  max-width: 90%;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  text-align: center;
+  white-space: pre-wrap;
+}
+.msg-agent .msg-avatar { color: #34D399; }
+.msg-agent .ai-bubble { border-color: rgba(52, 211, 153, .3); }
+.msg-pending { opacity: .65; }
+.message-list .msg-restored { animation: none; }
+.load-earlier { align-self: center; margin-bottom: 6px; }
+.brand-status.is-disconnected .status-dot { background: #fbbf24; box-shadow: none; }
+#chat-input:disabled { opacity: .65; }
+/* 正式入口独立提供图片与回答摘要样式，不依赖旧入口尚未提交的增量。 */
+.message-list .knowledge-image {
+  display: block;
+  width: 100%;
+  margin: 10px 0 2px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, .03);
+}
+.message-list .knowledge-image img {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  background: var(--color-bg);
+}
+.message-list .knowledge-image figcaption { padding: 6px 9px; color: var(--color-text-secondary); font-size: 12px; }
+.message-list .knowledge-link { color: var(--color-primary); text-decoration: underline; text-underline-offset: 2px; }
+.message-list .thinking-panel {
+  overflow: hidden;
+  border: 1px solid rgba(56, 189, 248, .22);
+  border-radius: var(--radius-sm);
+  background: rgba(56, 189, 248, .05);
+  color: var(--color-text-secondary);
+}
+.message-list .thinking-panel summary { padding: 7px 10px; color: var(--color-primary); font-size: 12px; cursor: pointer; }
+.message-list .thinking-content { max-height: 220px; overflow-y: auto; padding: 0 10px 10px; font-size: 12px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (min-width: 800px) {
+  .header-inner, .message-list, .input-bar { width: 100%; max-width: 1100px; margin-inline: auto; }
+}

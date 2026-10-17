@@ -5,12 +5,13 @@
 
 ## 项目概览
 
-FullstackSeed 是一个全栈项目种子（模板），采用前后端分离结构：
+FullstackSeed 是一个全栈项目开发框架 / 平台基座，采用管理后台、API 服务与客服访客端分离结构：
 
-| 目录        | 职责           | 状态                       | 专属文档 |
-| ----------- | -------------- | -------------------------- | -------- |
-| `server/`   | 后端服务       | NestJS + 登录鉴权模块已就绪 | [`AGENTS-BACKEND.md`](AGENTS-BACKEND.md) |
-| `web/`      | 前端 Web 应用  | Vue 3 + 登录/主布局已就绪   | [`AGENTS-FRONTEND.md`](AGENTS-FRONTEND.md) |
+| 目录 | 职责 | 状态 | 专属文档 |
+| --- | --- | --- | --- |
+| `server/` | 后端服务 | NestJS + 鉴权、知识库、AI 客服与 Agent 业务 | [`AGENTS-BACKEND.md`](AGENTS-BACKEND.md) |
+| `web/` | 管理后台 | Vue 3 + 中后台业务与客服 / Agent 工作台 | [`AGENTS-FRONTEND.md`](AGENTS-FRONTEND.md) |
+| `customer-service-h5/` | 客服访客端 | 原生 H5 + 正式客服接待链路 | [`customer-service-h5/AGENTS.md`](customer-service-h5/AGENTS.md) |
 
 > 已打通登录鉴权（JWT + bcrypt）与中后台主布局。开发默认超级管理员 `root/root123`（首启自动创建，生产环境必须通过 `ADMIN_PASSWORD` 显式配置，`isAdmin=true` 放行一切）。新业务模块/页面由开发者按示例模块扩展。项目迁移见 `MIGRATION.md`。
 
@@ -30,6 +31,7 @@ FullstackSeed 是一个全栈项目种子（模板），采用前后端分离结
 - `AGENTS-BACKEND.md` — 后端专属规则（以 `demo/` 为 demo；新模块 6 步/易踩坑）
 - `AGENTS-FRONTEND.md` — 前端专属规则（以 `views/demo/` 为 demo；新页面 5 步/功能清单）
 - `AGENTS-COMPONENTS.md` — 通用组件与工具契约（Table/Form/Dialog/PageContainer/MenuTree/utils）
+- `customer-service-h5/` — 客服访客 H5；作为主仓库子目录维护，不保留独立 `.git`
 - `.design-spec.md` — 设计规范（配色/字体/图标/操作按钮 & Tag 配色标准）
 - `MIGRATION.md` — 后端标准模块迁移文档（项目复刻参考）
 - `CHANGELOG.md` — 项目变更快照归档（最新在上）

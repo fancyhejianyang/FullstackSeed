@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-10-17 客服 H5 并入主仓库并重建项目 README
+
+- 仓库整理：将原独立客服 H5 完整迁入 `customer-service-h5/`，保留源码、样式、测试和说明文档，删除其嵌套 `.git` 元数据；后续分支、提交和版本历史统一由 FullstackSeed 根仓库管理。
+- 项目说明：重写根 `README.md`，将项目定位明确为面向中后台与 AI 业务的全栈项目开发框架 / 平台基座；补充三端架构、已有能力、技术栈、目录结构、快速启动、配置、检查命令、文档导航和生产部署提示。
+- 导航约束：根 `AGENTS.md` 增加客服 H5 子项目及专属文档入口；`MIGRATION.md` 的旧绝对路径改为仓库内链接；H5 的 `AGENTS.md` 与 `REQUIREMENTS.md` 补充主仓库归属、禁止嵌套 Git 及正式协议优先级说明。不修改后端接口、前端字段或客服运行逻辑。
+- 清理文件：删除仅属于其他项目的 `artifacts/wechat-mini-program-ppt/`，包括 `AI微信小程序极速开发流程_v2.pptx` 与 `assets/cover-hero.png`。
+- 新增文件：`customer-service-h5/` 下迁入的 HTML、CSS、JavaScript、测试与 Markdown 文件。修改文件：`README.md`、`AGENTS.md`、`MIGRATION.md`、`customer-service-h5/AGENTS.md`、`customer-service-h5/REQUIREMENTS.md`、本文件。删除文件：`artifacts/wechat-mini-program-ppt/` 下 2 个已跟踪文件；嵌套 `.git` 不纳入主仓库。
+- 验证：确认旧 H5 独立目录已移走、目标目录存在且不含 `.git`；客服正式 JavaScript 语法检查、README 相对链接检查及 `git diff --check` 通过。按文档与仓库整理范围未 build、未启动服务、未连接数据库或调用外部接口。
+
 ### 2026-10-16 公共数字输入组件取消实时范围强制修正
 
 - 现象与原因：Agent 应用的超时秒数字段设置 `min: 10`，输入 `1` 立即变为 `10`，干扰继续输入 `180`。公共 InputNumber 在每次 input 中执行 min/max 截断，随后 model watcher 又将数值格式化回填；同一回填也可能打断负号、小数点和尾随小数零的编辑。
