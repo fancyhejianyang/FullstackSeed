@@ -190,17 +190,12 @@ const agentOptions = computed(() =>
   apps.value.map((item) => ({ value: String(item.id), text: item.name })),
 );
 const textModelOptions = computed(() => [
-  { value: AUTO_TEXT_MODEL, text: "Auto · 智能调度" },
+  { value: AUTO_TEXT_MODEL, text: "Auto" },
   ...(currentApp.value?.models ?? []).map((model) => ({
     value: model,
     text: model,
   })),
 ]);
-const textModelHint = computed(() =>
-  selectedTextModel.value === AUTO_TEXT_MODEL
-    ? "根据当前 Agent 的调度策略、内容与意图自动选择文本模型；识图和生图仍使用专用模型"
-    : `本轮文本理解、规划和回答固定使用 ${selectedTextModel.value}；识图和生图仍使用专用模型`,
-);
 const currentAppInitial = computed(
   () => currentApp.value?.name.trim().slice(0, 1).toUpperCase() || "A",
 );
@@ -890,18 +885,14 @@ onUnmounted(() => {
               @keydown.enter.exact.prevent="handleEnter"
             />
             <div class="agent-workspace__composer-actions">
-              <div class="agent-workspace__model-mode" :title="textModelHint">
-                <span>文本模型</span>
-                <Select
-                  v-model="selectedTextModel"
-                  class="agent-workspace__model-select"
-                  :options="textModelOptions"
-                  :clearable="false"
-                  :filterable="false"
-                  :disabled="actionBusy || !activeSession"
-                />
-                <small>仅控制文本</small>
-              </div>
+              <Select
+                v-model="selectedTextModel"
+                class="agent-workspace__model-select"
+                :options="textModelOptions"
+                :clearable="false"
+                :filterable="false"
+                :disabled="actionBusy || !activeSession"
+              />
               <span class="agent-workspace__composer-hint">
                 <template v-if="sending">
                   Agent 正在处理，可继续输入并排队
@@ -1298,27 +1289,9 @@ onUnmounted(() => {
   border-radius: 0 0 18px 18px;
   background: #f8fafc;
 }
-.agent-workspace__model-mode {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 7px;
-  margin-right: auto;
-  color: #4b5563;
-  font-size: 12px;
-  font-weight: 600;
-}
-.agent-workspace__model-mode > span,
-.agent-workspace__model-mode > small {
-  flex: 0 0 auto;
-}
-.agent-workspace__model-mode > small {
-  color: #6f7885;
-  font-size: 10px;
-  font-weight: 400;
-}
 .agent-workspace__model-select {
   width: 172px;
+  margin-right: auto;
   font-weight: 500;
 }
 .agent-workspace__model-select :deep(.select__control) {
@@ -1391,9 +1364,6 @@ onUnmounted(() => {
     padding-left: 14px;
   }
   .agent-workspace__composer-hint {
-    display: none;
-  }
-  .agent-workspace__model-mode > small {
     display: none;
   }
   .agent-workspace__model-select {
