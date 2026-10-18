@@ -325,6 +325,7 @@
 - Props：`items: MenuNode[]`（结构见 `web/src/api/menu.ts`）
 - 无 emits；点击菜单由 `el-menu` 自身 router 属性驱动跳转
 - 一般业务页面**不直接使用**
+- 主布局搜索只切换同一个 `el-menu` 内的 `items`，不可用 `v-show` 隐藏完整菜单：Element Plus 的折叠过渡会在隐藏时写入 `64px` 内联宽度并可能在恢复后残留。菜单根节点须始终挂载且宽度跟随侧栏，搜索结果的祖先目录通过菜单实例 `open()` 展开。
 
 ---
 

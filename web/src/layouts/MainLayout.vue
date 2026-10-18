@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { ElMessageBox } from 'element-plus';
 import { useUserStore } from '@/stores/user';
@@ -10,7 +10,12 @@ const router = useRouter();
 const route = useRoute();
 const userStore = useUserStore();
 
+interface MenuExpose {
+  open: (index: string) => void;
+}
+
 const isCollapse = ref(false);
+const menuRef = ref<MenuExpose | null>(null);
 const activeMenu = computed(() => route.path);
 const pageTitle = computed(() => String(route.meta.title || ''));
 
@@ -31,6 +36,21 @@ const searchResult = computed(() => {
   }
   return { items: searchKeyword.value ? filter(menus.value) : [], opened };
 });
+const visibleMenus = computed(() =>
+  searchKeyword.value ? searchResult.value.items : menus.value,
+);
+
+watch(
+  searchResult,
+  async ({ opened }) => {
+    const keyword = searchKeyword.value;
+    if (!keyword || isCollapse.value) return;
+    await nextTick();
+    if (searchKeyword.value !== keyword) return;
+    opened.forEach((index) => menuRef.value?.open(index));
+  },
+  { flush: 'post' },
+);
 
 watch(isCollapse, (collapsed) => {
   if (collapsed) menuSearch.value = '';
@@ -58,28 +78,24 @@ async function handleLogout() {
           <template #prefix><el-icon><Search /></el-icon></template>
         </el-input>
       </div>
-      <!-- 保留完整菜单实例，清空搜索后恢复原来的展开和滚动状态。 -->
-      <el-menu
-        v-show="!searchKeyword"
-        class="layout__menu"
-        :default-active="activeMenu"
-        :collapse="isCollapse"
-        router
-      >
-        <MenuTree :items="menus" />
-      </el-menu>
-      <el-menu
-        v-if="searchKeyword && searchResult.items.length"
-        :key="searchKeyword"
-        class="layout__menu"
-        :default-active="activeMenu"
-        :default-openeds="searchResult.opened"
-        router
-      >
-        <MenuTree :items="searchResult.items" />
-      </el-menu>
-      <div v-if="searchKeyword && !searchResult.items.length" class="layout__menu-empty" role="status">
-        未找到匹配菜单
+      <!-- 菜单根节点始终挂载，避免 v-show 触发 el-menu 折叠过渡并残留 64px 宽度。 -->
+      <div class="layout__menu-area">
+        <el-menu
+          ref="menuRef"
+          class="layout__menu"
+          :default-active="activeMenu"
+          :collapse="isCollapse"
+          router
+        >
+          <MenuTree :items="visibleMenus" />
+        </el-menu>
+        <div
+          v-if="searchKeyword && !searchResult.items.length"
+          class="layout__menu-empty"
+          role="status"
+        >
+          未找到匹配菜单
+        </div>
       </div>
     </el-aside>
 
@@ -145,18 +161,29 @@ async function handleLogout() {
   --el-input-focus-border-color: #409eff;
 }
 .layout__menu-empty {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
   padding: 20px 12px;
   color: #bfcbd9;
   font-size: 14px;
   text-align: center;
+  background: #304156;
+  pointer-events: none;
 }
 .layout__aside :deep(.el-menu) {
   border-right: none;
   background: #304156;
 }
-.layout__menu {
-  flex: 1 1 auto;
+.layout__menu-area {
+  position: relative;
   min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+.layout__menu {
+  width: 100%;
+  height: 100%;
   overflow-x: hidden;
   overflow-y: auto;
 }
