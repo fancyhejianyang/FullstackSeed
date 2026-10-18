@@ -240,6 +240,10 @@ export class AgentWorkspaceService {
     });
     if (existing) return this.recoverMessageResult(session, existing, user);
 
+    const textModel = dto.textModel?.trim() || undefined;
+    if (textModel && !(app.models ?? []).includes(textModel)) {
+      throw new BadRequestException('指定文本模型不在当前 Agent 已授权模型中');
+    }
     let mediaMode: 'vision' | 'imageGeneration' | null = null;
     if (!dto.content.trim()) throw new BadRequestException('消息不能为空');
     const attachedImage = dto.imageId
@@ -296,6 +300,8 @@ export class AgentWorkspaceService {
           mode: 'chat',
           mediaIntentPending: shouldClassify,
           contentLength: dto.content.length,
+          textModelMode: textModel ? 'fixed' : 'auto',
+          ...(textModel ? { requestedTextModel: textModel } : {}),
           progressStage: 'understanding',
         },
         result: null,
@@ -326,6 +332,7 @@ export class AgentWorkspaceService {
               execution,
               content: dto.content.trim(),
               hasImage: !!attachedImage,
+              textModel,
               context: JSON.stringify(
                 history
                   .filter((m) => m.id !== userMessage.id)
@@ -436,6 +443,7 @@ export class AgentWorkspaceService {
             execution,
             activeDraft,
             user,
+            textModel,
           });
         })(),
         app.timeoutSeconds,
@@ -977,6 +985,7 @@ export class AgentWorkspaceService {
     execution: AgentExecution;
     activeDraft: AgentDraft | null;
     user: AuthUser;
+    textModel?: string;
   }) {
     if (params.decision.writeIntent === 'review') {
       return this.processWriteReview(params);
@@ -1124,6 +1133,7 @@ export class AgentWorkspaceService {
     execution: AgentExecution;
     activeDraft?: AgentDraft | null;
     user: AuthUser;
+    textModel?: string;
   }) {
     const executableToolKeys = await this.appsService.getExecutableToolKeys(
       params.app,
@@ -1155,6 +1165,7 @@ export class AgentWorkspaceService {
       app: params.app,
       execution: params.execution,
       content: params.content,
+      textModel: params.textModel,
       context: JSON.stringify(
         history
           .reverse()
@@ -1437,6 +1448,7 @@ export class AgentWorkspaceService {
     execution: AgentExecution;
     activeDraft: AgentDraft | null;
     user: AuthUser;
+    textModel?: string;
   }) {
     const { app, execution, user, session } = params;
     await this.reportProgress(execution, 'understanding');
@@ -1524,6 +1536,7 @@ export class AgentWorkspaceService {
       app,
       execution,
       content: params.content,
+      textModel: params.textModel,
       context: JSON.stringify(context),
       purpose: 'planning',
       assertRunning: () => this.assertExecutionRunning(execution.id),

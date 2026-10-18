@@ -118,6 +118,53 @@ describe('Agent model routing', () => {
     ).toThrow('无效');
   });
 
+  it('pins every text stage to the requested authorized model without fallback', async () => {
+    const h = harness(intentPolicy);
+    const request = { ...h.request(), textModel: 'strong' };
+    expect(await h.router.call(request)).toBe('strong');
+    expect(request.invoke).toHaveBeenCalledTimes(1);
+    expect(request.invoke).toHaveBeenCalledWith('strong');
+    expect(h.providers.callChat).not.toHaveBeenCalled();
+    expect(traceOf(request.execution)).toMatchObject({
+      strategy: 'fixed',
+      selectedModel: 'strong',
+      attempts: [{ purpose: 'planning', model: 'strong' }],
+    });
+
+    const failed = { ...h.request(), textModel: 'light' };
+    failed.invoke.mockRejectedValueOnce(new Error('404 model not found'));
+    await expect(h.router.call(failed)).rejects.toThrow('暂不可用');
+    expect(failed.invoke.mock.calls.map(([model]) => model)).toEqual(['light']);
+  });
+
+  it('uses the requested text model for media intent classification but leaves media execution separate', async () => {
+    const h = harness();
+    h.providers.callChat.mockResolvedValue({
+      isSuccess: true,
+      answer: '{"intent":"analysis","complexity":"complex","mode":"vision"}',
+    });
+    const request = { ...h.request(), textModel: 'strong' };
+    const intent = await h.router.classifyRequest({
+      ...request,
+      hasImage: true,
+    });
+    expect(intent.mode).toBe('vision');
+    expect(h.providers.callChat).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'strong' }),
+    );
+    expect(traceOf(request.execution)).toMatchObject({
+      strategy: 'fixed',
+      selectedModel: 'strong',
+    });
+  });
+
+  it('rejects a requested model outside the Agent authorization list', async () => {
+    const h = harness();
+    const request = { ...h.request(), textModel: 'foreign-model' };
+    await expect(h.router.call(request)).rejects.toThrow('已授权模型');
+    expect(request.invoke).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['401 invalid API key', 'account_auth'],
     ['403 model not authorized', 'model_unavailable'],

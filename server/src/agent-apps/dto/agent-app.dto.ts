@@ -317,6 +317,13 @@ export class SendAgentMessageDto {
   @Min(1)
   imageId?: number;
 
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(120)
+  @Matches(/\S/)
+  textModel?: string;
+
   @IsString()
   @IsNotEmpty()
   @MaxLength(8000)

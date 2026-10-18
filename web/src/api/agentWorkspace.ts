@@ -51,6 +51,7 @@ export interface AvailableAgentApp {
   id: number;
   name: string;
   responsibility: string;
+  models: string[];
   toolKeys: AgentToolKey[];
   tools: AgentBusinessToolOption[];
   writeEnabled: boolean;
@@ -197,7 +198,8 @@ export interface AgentExecution {
 }
 
 export interface AgentModelTrace {
-  strategy: "priority" | "balanced" | "intent";
+  strategy: "priority" | "balanced" | "intent" | "fixed";
+  selectedModel?: string;
   decision?: {
     intent: "chat" | "query" | "write" | "analysis";
     complexity: "simple" | "complex";
@@ -269,6 +271,7 @@ export function sendAgentMessage(
     content: string;
     clientMessageId: string;
     imageId?: number;
+    textModel?: string;
   },
 ) {
   return request.post<unknown, AgentActionResult>(

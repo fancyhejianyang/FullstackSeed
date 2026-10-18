@@ -81,6 +81,7 @@ export class AgentAppsService {
           id: app.id,
           name: app.name,
           responsibility: app.responsibility,
+          models: [...(app.models ?? [])],
           toolKeys,
           tools: toolKeys
             .map((key) => toolMap.get(key))

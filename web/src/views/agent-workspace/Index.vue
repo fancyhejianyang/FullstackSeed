@@ -46,6 +46,7 @@ type PendingMessageStatus = "queued" | "sending" | "failed";
 
 interface PendingAgentMessage {
   image?: AgentImageReference;
+  textModel?: string;
   id: number;
   sessionId: number;
   content: string;
@@ -56,9 +57,12 @@ interface PendingAgentMessage {
   createdAt: string;
 }
 
+const AUTO_TEXT_MODEL = "__agent_auto__";
+
 const userStore = useUserStore();
 const apps = ref<AvailableAgentApp[]>([]);
 const selectedAgentId = ref<string | null>(null);
+const selectedTextModel = ref(AUTO_TEXT_MODEL);
 const sessions = ref<AgentSession[]>([]);
 const activeSession = ref<AgentSessionDetail | null>(null);
 const products = ref<ProductOption[]>([]);
@@ -71,6 +75,7 @@ const imagePreview = ref<string | null>("");
 let previewObjectUrl = "";
 const loadingSessions = ref(false);
 const loadingDetail = ref(false);
+const switchingAgent = ref(false);
 const sending = ref(false);
 const actionBusy = ref(false);
 const isComposing = ref(false);
@@ -93,6 +98,7 @@ const progressPoller = createAgentProgressPoller({
 let requestVersion = 0;
 let localMessageId = -1;
 let queueProcessing = false;
+let lastReadyAgentId = "";
 const confirmationKeys = new Map<number, string>();
 
 const currentApp = computed(() =>
@@ -182,6 +188,18 @@ async function pasteImage(event: ClipboardEvent) {
 }
 const agentOptions = computed(() =>
   apps.value.map((item) => ({ value: String(item.id), text: item.name })),
+);
+const textModelOptions = computed(() => [
+  { value: AUTO_TEXT_MODEL, text: "Auto · 智能调度" },
+  ...(currentApp.value?.models ?? []).map((model) => ({
+    value: model,
+    text: model,
+  })),
+]);
+const textModelHint = computed(() =>
+  selectedTextModel.value === AUTO_TEXT_MODEL
+    ? "根据当前 Agent 的调度策略、内容与意图自动选择文本模型；识图和生图仍使用专用模型"
+    : `本轮文本理解、规划和回答固定使用 ${selectedTextModel.value}；识图和生图仍使用专用模型`,
 );
 const currentAppInitial = computed(
   () => currentApp.value?.name.trim().slice(0, 1).toUpperCase() || "A",
@@ -349,16 +367,44 @@ async function newSession() {
 }
 
 async function switchAgent() {
+  const nextAgentId = selectedAgentId.value ?? "";
+  if (!nextAgentId || nextAgentId === lastReadyAgentId) return;
+  const previousAgentId = lastReadyAgentId;
+  const previousSessions = sessions.value;
+  const previousActiveSession = activeSession.value;
+  const previousTextModel = selectedTextModel.value;
+  switchingAgent.value = true;
   resetMediaInput();
+  selectedTextModel.value = AUTO_TEXT_MODEL;
   requestVersion += 1;
   activeSession.value = null;
+  sessions.value = [];
   sessionKeyword.value = "";
-  await loadSessions();
-  await newSession();
+  try {
+    await loadSessions();
+    if (sessions.value.length) await loadSession(sessions.value[0].id);
+    else await newSession();
+    lastReadyAgentId = nextAgentId;
+    ElMessage.success(`已切换至 ${currentApp.value?.name || "目标 Agent"}`);
+  } catch {
+    selectedAgentId.value = previousAgentId;
+    sessions.value = previousSessions;
+    activeSession.value = previousActiveSession;
+    selectedTextModel.value = previousTextModel;
+    requestVersion += 1;
+    ElMessage.warning("Agent 切换未完成，已恢复原会话");
+  } finally {
+    switchingAgent.value = false;
+  }
 }
 
 async function selectSession(session: AgentSession) {
-  if (hasPendingMessages.value || actionBusy.value || uploadBusy.value) {
+  if (
+    hasPendingMessages.value ||
+    actionBusy.value ||
+    uploadBusy.value ||
+    switchingAgent.value
+  ) {
     ElMessage.warning("请先处理待发送消息或等待当前动作完成");
     return;
   }
@@ -394,12 +440,17 @@ async function send() {
   }
   const clientMessageId = makeKey();
   const requestId = `message:${sessionId}:${clientMessageId}`;
+  const textModel =
+    selectedTextModel.value === AUTO_TEXT_MODEL
+      ? undefined
+      : selectedTextModel.value;
   inputText.value = "";
   pendingMessages.value.push({
     id: localMessageId--,
     sessionId,
     content,
     image,
+    textModel,
     clientMessageId,
     requestId,
     status: "queued",
@@ -431,6 +482,7 @@ async function processMessageQueue() {
           content: item.content,
           clientMessageId: item.clientMessageId,
           imageId: item.image?.id,
+          textModel: item.textModel,
         });
         if (disposed) return;
         progressPoller.stop();
@@ -631,6 +683,7 @@ onMounted(async () => {
   }
   if (!apps.value.length) return;
   selectedAgentId.value = String(apps.value[0].id);
+  lastReadyAgentId = selectedAgentId.value;
   await loadSessions();
   if (sessions.value.length) await loadSession(sessions.value[0].id);
   else await newSession();
@@ -650,7 +703,10 @@ onUnmounted(() => {
       <el-empty description="当前没有可使用的 Agent 应用" />
     </div>
     <div v-else class="agent-workspace">
-      <aside class="agent-workspace__sidebar" v-loading="loadingSessions">
+      <aside
+        class="agent-workspace__sidebar"
+        v-loading="loadingSessions || switchingAgent"
+      >
         <div class="agent-workspace__agent-picker">
           <div class="agent-workspace__avatar is-sidebar">
             {{ currentAppInitial }}
@@ -662,9 +718,15 @@ onUnmounted(() => {
               class="agent-workspace__selector"
               :options="agentOptions"
               :clearable="false"
-              :disabled="hasPendingMessages || actionBusy || uploadBusy"
+              :filterable="false"
+              :disabled="
+                hasPendingMessages || actionBusy || uploadBusy || switchingAgent
+              "
               @change="switchAgent"
             />
+            <small :title="currentApp?.responsibility">
+              {{ currentApp?.responsibility }}
+            </small>
           </div>
         </div>
 
@@ -673,7 +735,9 @@ onUnmounted(() => {
             class="agent-workspace__new-chat"
             type="primary"
             icon="Plus"
-            :disabled="hasPendingMessages || actionBusy || uploadBusy"
+            :disabled="
+              hasPendingMessages || actionBusy || uploadBusy || switchingAgent
+            "
             @click="newSession"
             >开启新对话</Button
           >
@@ -681,6 +745,7 @@ onUnmounted(() => {
             v-model="sessionKeyword"
             mode="search"
             placeholder="搜索历史对话"
+            :disabled="switchingAgent"
             @search="loadSessions"
           />
         </div>
@@ -825,6 +890,18 @@ onUnmounted(() => {
               @keydown.enter.exact.prevent="handleEnter"
             />
             <div class="agent-workspace__composer-actions">
+              <div class="agent-workspace__model-mode" :title="textModelHint">
+                <span>文本模型</span>
+                <Select
+                  v-model="selectedTextModel"
+                  class="agent-workspace__model-select"
+                  :options="textModelOptions"
+                  :clearable="false"
+                  :filterable="false"
+                  :disabled="actionBusy || !activeSession"
+                />
+                <small>仅控制文本</small>
+              </div>
               <span class="agent-workspace__composer-hint">
                 <template v-if="sending">
                   Agent 正在处理，可继续输入并排队
@@ -875,7 +952,7 @@ onUnmounted(() => {
 .agent-workspace__media-toolbar > span {
   font-size: 12px;
   line-height: 1.5;
-  color: #909399;
+  color: #606975;
 }
 .agent-workspace__image-upload {
   margin: 8px 16px 0;
@@ -915,9 +992,21 @@ onUnmounted(() => {
 }
 .agent-workspace__agent-picker {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
-  padding: 22px 18px 16px;
+  margin: 14px 12px 12px;
+  padding: 12px;
+  border: 1px solid #dde5ef;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 4px 14px rgb(31 35 41 / 5%);
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+.agent-workspace__agent-picker:focus-within {
+  border-color: #8cc5ff;
+  box-shadow: 0 6px 18px rgb(64 158 255 / 12%);
 }
 .agent-workspace__avatar {
   display: grid;
@@ -935,6 +1024,7 @@ onUnmounted(() => {
 .agent-workspace__avatar.is-sidebar {
   width: 42px;
   height: 42px;
+  margin-top: 3px;
   flex-basis: 42px;
 }
 .agent-workspace__agent-select {
@@ -944,21 +1034,38 @@ onUnmounted(() => {
 .agent-workspace__agent-select > span {
   display: block;
   margin-bottom: 3px;
-  color: #909399;
+  color: #697386;
   font-size: 11px;
+  font-weight: 500;
+}
+.agent-workspace__agent-select > small {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  color: #7c8592;
+  font-size: 11px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .agent-workspace__selector {
   width: 100%;
   font-weight: 600;
 }
 .agent-workspace__selector :deep(.select__control) {
-  min-height: 28px;
-  border: 0;
-  background: transparent;
+  min-height: 30px;
+  border: 1px solid #e1e7ef;
+  border-radius: 8px;
+  background: #f7faff;
+}
+.agent-workspace__selector.is-opened :deep(.select__control) {
+  border-color: #79bbff;
+  background: #fff;
 }
 .agent-workspace__selector :deep(.select__input) {
   height: 28px;
-  padding-left: 0;
+  padding-left: 9px;
+  color: #1f2937;
   font-size: 15px;
 }
 .agent-workspace__session-actions {
@@ -1103,24 +1210,24 @@ onUnmounted(() => {
   position: relative;
   z-index: 2;
   padding: 12px 28px 13px;
-  background: linear-gradient(180deg, rgb(255 255 255 / 70%), #fff 24%);
+  background: linear-gradient(180deg, rgb(246 248 251 / 60%), #f6f8fb 24%);
 }
 .agent-workspace__composer {
   display: grid;
   max-width: 880px;
   margin: 0 auto;
-  overflow: hidden;
-  border: 1px solid #dfe3eb;
+  overflow: visible;
+  border: 1px solid #cbd5e1;
   border-radius: 18px;
-  background: #fff;
-  box-shadow: 0 8px 26px rgb(31 35 41 / 10%);
+  background: #fbfcfe;
+  box-shadow: 0 10px 30px rgb(31 35 41 / 13%);
   transition:
     border-color 0.2s,
     box-shadow 0.2s;
 }
 .agent-workspace__composer:focus-within {
-  border-color: #9acbff;
-  box-shadow: 0 10px 30px rgb(64 158 255 / 14%);
+  border-color: #409eff;
+  box-shadow: 0 12px 32px rgb(64 158 255 / 18%);
 }
 .agent-workspace__queue {
   display: grid;
@@ -1165,11 +1272,20 @@ onUnmounted(() => {
 }
 .agent-workspace__composer
   :deep(.agent-workspace__composer-input .el-textarea__inner) {
-  min-height: 68px !important;
+  min-height: 78px !important;
   padding: 15px 17px 7px;
+  color: #252b35;
+  font-size: 14px;
+  line-height: 1.65;
   resize: none;
   border: 0;
+  background: transparent;
   box-shadow: none;
+}
+.agent-workspace__composer
+  :deep(.agent-workspace__composer-input .el-textarea__inner::placeholder) {
+  color: #747e8c;
+  opacity: 1;
 }
 .agent-workspace__composer-actions {
   display: flex;
@@ -1177,11 +1293,53 @@ onUnmounted(() => {
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  padding: 4px 10px 9px 16px;
+  padding: 7px 10px 9px 16px;
+  border-top: 1px solid #e8edf3;
+  border-radius: 0 0 18px 18px;
+  background: #f8fafc;
+}
+.agent-workspace__model-mode {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  margin-right: auto;
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 600;
+}
+.agent-workspace__model-mode > span,
+.agent-workspace__model-mode > small {
+  flex: 0 0 auto;
+}
+.agent-workspace__model-mode > small {
+  color: #6f7885;
+  font-size: 10px;
+  font-weight: 400;
+}
+.agent-workspace__model-select {
+  width: 172px;
+  font-weight: 500;
+}
+.agent-workspace__model-select :deep(.select__control) {
+  min-height: 30px;
+  border-color: #cfd8e5;
+  border-radius: 8px;
+  background: #fff;
+}
+.agent-workspace__model-select :deep(.select__input) {
+  height: 28px;
+  color: #303744;
+  font-size: 12px;
+}
+.agent-workspace__model-select :deep(.select__dropdown) {
+  top: auto;
+  bottom: calc(100% + 6px);
+  border-color: #d7deea;
+  border-radius: 9px;
 }
 .agent-workspace__composer-hint {
-  margin-right: auto;
-  color: #a8abb2;
+  color: #687280;
   font-size: 11px;
 }
 .agent-workspace__composer-actions :deep(.agent-workspace__send) {
@@ -1189,7 +1347,7 @@ onUnmounted(() => {
 }
 .agent-workspace__composer-shell > p {
   margin: 7px 0 0;
-  color: #b0b3b8;
+  color: #7d8692;
   font-size: 11px;
   text-align: center;
 }
@@ -1210,7 +1368,7 @@ onUnmounted(() => {
     border-bottom: 1px solid #ebeef5;
   }
   .agent-workspace__agent-picker {
-    padding-bottom: 10px;
+    margin-bottom: 10px;
   }
   .agent-workspace__session-actions {
     grid-template-columns: 1fr 1fr;
@@ -1234,6 +1392,12 @@ onUnmounted(() => {
   }
   .agent-workspace__composer-hint {
     display: none;
+  }
+  .agent-workspace__model-mode > small {
+    display: none;
+  }
+  .agent-workspace__model-select {
+    width: 154px;
   }
 }
 </style>

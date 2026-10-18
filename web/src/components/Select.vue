@@ -20,6 +20,7 @@ import {
   watch,
 } from 'vue';
 import { useFormItem } from 'element-plus';
+import { resolveSelectDisplayValue } from './selectDisplay';
 
 defineOptions({ inheritAttrs: false });
 
@@ -98,7 +99,14 @@ const selectedText = computed(() => {
   return selectedOption.value?.text ?? `#${normalizedValue.value}`;
 });
 
-const displayValue = computed(() => (opened.value ? searchInput.value : selectedText.value));
+const displayValue = computed(() =>
+  resolveSelectDisplayValue(
+    opened.value,
+    props.filterable,
+    searchInput.value,
+    selectedText.value,
+  ),
+);
 
 const filteredOptions = computed(() => {
   const text = keyword.value.trim().toLowerCase();

@@ -337,6 +337,7 @@ describe('AgentAppsService access and tool policy', () => {
     const app = {
       id: 1,
       name: '历史应用',
+      models: ['qwen-plus'],
       accessScope: 'all',
       allowedUserIds: [],
       isEnabled: true,
@@ -351,6 +352,7 @@ describe('AgentAppsService access and tool policy', () => {
     ]);
     await expect(service.findAvailable(user(10))).resolves.toEqual([
       expect.objectContaining({
+        models: ['qwen-plus'],
         toolKeys: ['product.query', 'demo.create', 'productSku.create'],
         writeEnabled: true,
       }),

@@ -27,7 +27,8 @@ export interface AgentModelAttempt {
   totalTokens: number | null;
 }
 export interface AgentModelTrace {
-  strategy: AgentModelRouting['strategy'];
+  strategy: AgentModelRouting['strategy'] | 'fixed';
+  selectedModel?: string;
   decision?: AgentModelDecision;
   attempts: AgentModelAttempt[];
 }

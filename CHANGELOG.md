@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-10-18 Agent 切换、文本模型模式与输入区可读性优化
+
+- Agent 切换体验：左侧当前智能体改为带边框、职责摘要和聚焦态的轻卡片；Agent 下拉使用非搜索模式，展开后继续显示当前名称。切换时显示加载态，成功后优先恢复目标 Agent 最近会话、无历史才新建；失败回滚原 Agent、历史列表、会话和文本模型选择，不再每次切换都额外创建空会话。
+- 文本模型模式：输入区新增 `Auto · 智能调度` 与当前 Agent 已授权文本模型选择。队列按消息入队时保存选择；新增可选请求字段 `textModel`，省略表示 Auto，指定值经 DTO 和服务端授权列表双重校验。固定模式用于本轮媒体意图识别、业务规划和文本回答，失败不切换其它文本模型；Auto 继续结合内容、意图与 Agent 保存的调度策略执行。
+- 媒体与审计边界：指定文本模型只控制文本阶段，识图和生图仍调用 Agent 独立配置的视觉/生图模型。执行摘要记录 `textModelMode/requestedTextModel`，模型轨迹新增 `fixed/selectedModel`，执行记录页可明确显示指定模型；未新增数据库字段、实体或迁移。
+- 输入区视觉：加深输入正文、占位符、附件说明、快捷键提示和免责声明颜色，增强输入框边框、底色、阴影与聚焦态；模型选择器向上展开，窄屏隐藏次要说明。公共 Select 补齐非搜索模式展开仍显示当前值的行为，并增加纯函数回归测试。
+- 新增文件（2）：`web/src/components/selectDisplay.ts`、`web/src/components/selectDisplay.test.mjs`。修改文件（16）：`server/src/agent-apps/` 下模型路由、工作台服务、DTO、应用能力输出及 3 个测试文件；`web/src/api/agentWorkspace.ts`、`web/src/components/Select.vue`、`web/src/views/agent-workspace/Index.vue`、`web/src/views/agent-app/Records.vue`；`AGENTS-COMPONENTS.md`、`.design-spec.md`、`MD/Agent业务模块接入说明.md`、本文件。删除文件：无。
+- 验证：后端全量 33 套件 / 319 项测试、Select 2 项同进程测试、TypeORM 实体列检查、后端变更文件 ESLint、Vue 类型检查、主要变更代码 Prettier、组件复用只读扫描、前后端生产构建及 `git diff --check` 通过。前端构建首次因沙箱禁止 esbuild 子进程失败，授权后通过，仅有既有第三方 Rollup 注释警告。未启动服务、连接数据库、调用真实模型或进行浏览器人工验收。
+
 ### 2026-10-18 Agent 工作台移除重复智能体名称
 
 - 现象：系统主菜单已占用一部分横向空间，而 Agent 工作台左侧会话栏和右侧对话头部同时展示当前智能体名称、头像等身份信息，造成重复并挤占能力标签区域。

@@ -84,6 +84,7 @@ function routingSummary(row: AgentExecution) {
     priority: "优先顺序",
     balanced: "均衡使用",
     intent: "意图调度",
+    fixed: "指定模型",
   };
   const intents = {
     chat: "问答",
@@ -104,7 +105,7 @@ function routingSummary(row: AgentExecution) {
     invalid_output: "识别格式无效",
   };
   return [
-    strategies[trace.strategy],
+    `${strategies[trace.strategy]}${trace.selectedModel ? ` · ${trace.selectedModel}` : ""}`,
     trace.decision
       ? `${intents[trace.decision.intent]} · ${trace.decision.complexity === "complex" ? "复杂" : "简单"}${trace.decision.source === "fallback" ? "（保守回退）" : ""}`
       : "",

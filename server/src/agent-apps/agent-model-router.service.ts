@@ -27,6 +27,7 @@ interface RoutingRequest {
   execution: AgentExecution;
   content: string;
   context?: string;
+  textModel?: string;
   assertRunning: () => Promise<void>;
   persist: () => Promise<void>;
 }
@@ -45,15 +46,17 @@ export class AgentModelRouterService {
 
   constructor(private readonly providers: KnowledgeAiProvidersService) {}
 
-  /** 媒体能力分流独立于文本模型策略；复用同一轮的尝试预算、超时和轨迹。 */
+  /** 媒体意图识别遵循本轮文本模型选择；真正的识图/生图执行仍使用独立媒体模型。 */
   async classifyRequest(request: RoutingRequest & { hasImage: boolean }) {
     const policy = normalizeModelRouting(
       request.app.modelRouting,
       request.app.models,
     );
+    const textModel = this.resolveTextModel(request);
     const summary = request.execution.parameterSummary ?? {};
     const trace = (summary.modelRouting as AgentModelTrace | undefined) ?? {
-      strategy: policy.strategy,
+      strategy: textModel ? 'fixed' : policy.strategy,
+      ...(textModel ? { selectedModel: textModel } : {}),
       attempts: [],
     };
     request.execution.parameterSummary = { ...summary, modelRouting: trace };
@@ -62,7 +65,11 @@ export class AgentModelRouterService {
       policy,
       trace,
       'routing',
-      policy.strategy === 'intent' ? policy.simpleModels : request.app.models,
+      textModel
+        ? [textModel]
+        : policy.strategy === 'intent'
+          ? policy.simpleModels
+          : request.app.models,
       async (model) => {
         const result = await this.providers.callChat({
           id: request.app.providerId,
@@ -118,13 +125,15 @@ export class AgentModelRouterService {
       request.app.modelRouting,
       request.app.models,
     );
+    const textModel = this.resolveTextModel(request);
     const summary = request.execution.parameterSummary ?? {};
     const trace = (summary.modelRouting as AgentModelTrace | undefined) ?? {
-      strategy: policy.strategy,
+      strategy: textModel ? 'fixed' : policy.strategy,
+      ...(textModel ? { selectedModel: textModel } : {}),
       attempts: [],
     };
     request.execution.parameterSummary = { ...summary, modelRouting: trace };
-    if (policy.strategy === 'intent' && !trace.decision) {
+    if (!textModel && policy.strategy === 'intent' && !trace.decision) {
       try {
         trace.decision = await this.tryModels(
           request,
@@ -177,8 +186,9 @@ export class AgentModelRouterService {
       }
       await request.persist();
     }
-    const preferred =
-      policy.strategy !== 'intent'
+    const preferred = textModel
+      ? [textModel]
+      : policy.strategy !== 'intent'
         ? request.app.models
         : trace.decision?.complexity === 'complex' ||
             trace.decision?.intent === 'analysis'
@@ -204,9 +214,11 @@ export class AgentModelRouterService {
     callLimit = policy.maxAttempts,
   ): Promise<T> {
     const attempted = new Set<string>();
-    const models = [...new Set([...preferred, ...request.app.models])].filter(
-      (m) => request.app.models.includes(m),
-    );
+    const models = request.textModel
+      ? [this.resolveTextModel(request)!]
+      : [...new Set([...preferred, ...request.app.models])].filter((m) =>
+          request.app.models.includes(m),
+        );
     const deadline =
       (request.execution.startedAt?.getTime() ?? Date.now()) +
       request.app.timeoutSeconds * 1000;
@@ -333,5 +345,14 @@ export class AgentModelRouterService {
       this.health.set(key, value);
     }
     return value;
+  }
+
+  private resolveTextModel(request: RoutingRequest) {
+    const textModel = request.textModel?.trim();
+    if (!textModel) return undefined;
+    if (!(request.app.models ?? []).includes(textModel)) {
+      throw new BadRequestException('指定文本模型不在当前 Agent 已授权模型中');
+    }
+    return textModel;
   }
 }

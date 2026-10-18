@@ -256,6 +256,57 @@ describe('generic Agent workflow and confirmation', () => {
     expect(h.drafts.save).not.toHaveBeenCalled();
   });
 
+  it('uses a fixed text model for intent classification while keeping vision on its dedicated model', async () => {
+    const h = harness('vision');
+    h.app.models = ['test-model', 'chosen-text-model'];
+    h.media.run.mockResolvedValueOnce({
+      content: '图片识别完成',
+      images: [],
+      providerId: 1,
+      model: 'vision-model',
+    });
+    const result = await h.service.sendMessage(
+      2,
+      {
+        content: '识别这个图片',
+        imageId: 9,
+        textModel: 'chosen-text-model',
+        clientMessageId: 'fixed-text-vision',
+      },
+      user,
+    );
+    expect(h.models.callChat).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'chosen-text-model' }),
+    );
+    expect(h.media.run).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'vision', imageId: 9 }),
+    );
+    expect(result.execution?.result).toMatchObject({ model: 'vision-model' });
+    expect(result.execution?.parameterSummary?.modelRouting).toMatchObject({
+      strategy: 'fixed',
+      selectedModel: 'chosen-text-model',
+    });
+  });
+
+  it('rejects a fixed text model outside the current Agent before creating an execution', async () => {
+    const h = harness('vision');
+    await expect(
+      h.service.sendMessage(
+        2,
+        {
+          content: '识别这个图片',
+          imageId: 9,
+          textModel: 'foreign-model',
+          clientMessageId: 'foreign-text-model',
+        },
+        user,
+      ),
+    ).rejects.toThrow('已授权模型');
+    expect(h.runs).toHaveLength(0);
+    expect(h.models.callChat).not.toHaveBeenCalled();
+    expect(h.media.run).not.toHaveBeenCalled();
+  });
+
   it.each(['如何生成图片？', '不要生图，查示例列表', '只写图片提示词'])(
     'ignores a forged legacy mode when classified as ordinary conversation: %s',
     async (content) => {
