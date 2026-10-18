@@ -715,15 +715,6 @@ onUnmounted(() => {
 
       <section class="agent-workspace__main" v-loading="loadingDetail">
         <header class="agent-workspace__header">
-          <div class="agent-workspace__identity">
-            <div class="agent-workspace__avatar">
-              {{ currentAppInitial }}
-            </div>
-            <div>
-              <strong>{{ currentApp?.name }}</strong>
-              <span> <i />在线 · {{ currentApp?.responsibility }} </span>
-            </div>
-          </div>
           <div class="agent-workspace__capabilities">
             <span
               v-for="item in capabilityLabels"
@@ -1080,48 +1071,16 @@ onUnmounted(() => {
   display: flex;
   min-width: 0;
   align-items: center;
-  justify-content: space-between;
-  gap: 20px;
+  justify-content: flex-start;
   min-height: 72px;
   padding: 12px 24px;
   border-bottom: 1px solid #f0f1f4;
 }
-.agent-workspace__identity {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 12px;
-}
-.agent-workspace__identity > div:last-child {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 3px;
-}
-.agent-workspace__identity strong {
-  color: #1f2329;
-  font-size: 16px;
-}
-.agent-workspace__identity span {
-  overflow: hidden;
-  color: #8f959e;
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.agent-workspace__identity i {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  margin-right: 5px;
-  border-radius: 50%;
-  background: #67c23a;
-  vertical-align: 1px;
-}
 .agent-workspace__capabilities {
   display: flex;
+  width: 100%;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 6px;
 }
 .agent-workspace__capabilities span {
@@ -1268,14 +1227,6 @@ onUnmounted(() => {
   .agent-workspace__session {
     width: 220px;
     flex: 0 0 220px;
-  }
-  .agent-workspace__header {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .agent-workspace__capabilities {
-    justify-content: flex-start;
   }
   .agent-workspace__composer-shell {
     padding-right: 14px;
