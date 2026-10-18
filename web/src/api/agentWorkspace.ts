@@ -79,7 +79,7 @@ export interface AgentMessageStructuredData {
   images?: AgentImageReference[];
   businessResult?: AgentBusinessQueryResult;
   action?: "answer" | "query" | "clarify" | "prepare_write";
-  reason?: "write_not_executed";
+  reason?: "write_not_executed" | "stale_lease";
   queryStatus?: "matched" | "not_matched";
   context?: ProductSkuChatContext | null;
   businessContext?: ProductSkuChatContext | null;
@@ -188,9 +188,19 @@ export interface AgentExecution {
     | (Record<string, unknown> & { modelRouting?: AgentModelTrace })
     | null;
   result: Record<string, unknown> | null;
+  configSnapshot: Record<string, unknown> | null;
+  configVersion: string | null;
   errorMessage: string | null;
+  statusReason: string | null;
+  failureStage: string | null;
   toolCallCount: number;
+  promptTokens: number | null;
+  completionTokens: number | null;
+  totalTokens: number | null;
+  modelCallDurationMs: number | null;
   startedAt: string | null;
+  heartbeatAt: string | null;
+  leaseExpiresAt: string | null;
   finishedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -211,18 +221,26 @@ export interface AgentModelTrace {
     status: "succeeded" | "failed";
     reason: string | null;
     elapsedMilliseconds: number;
+    promptTokens: number | null;
+    completionTokens: number | null;
     totalTokens: number | null;
   }>;
 }
 
 export interface AgentSessionDetail extends AgentSession {
   messages: AgentMessage[];
+  messageTotal: number;
   drafts: AgentDraft[];
   executions: AgentExecution[];
 }
 
 export interface AgentSessionListResult {
   list: AgentSession[];
+  total: number;
+}
+
+export interface AgentMessageListResult {
+  list: AgentMessage[];
   total: number;
 }
 
@@ -262,6 +280,16 @@ export function createAgentSession(data: {
 export function getAgentSession(id: number) {
   return request.get<unknown, AgentSessionDetail>(
     `/agent-workspace/sessions/${id}`,
+  );
+}
+
+export function getAgentSessionMessages(
+  id: number,
+  params: { beforeId?: number; pageSize?: number },
+) {
+  return request.get<unknown, AgentMessageListResult>(
+    `/agent-workspace/sessions/${id}/messages`,
+    { params },
   );
 }
 

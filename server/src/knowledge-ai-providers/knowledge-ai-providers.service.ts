@@ -154,7 +154,11 @@ export class KnowledgeAiProvidersService {
     signal: AbortSignal,
     run: () => Promise<T>,
   ): Promise<T> {
-    return this.executionSignal.run(signal, run);
+    const parentSignal = this.executionSignal.getStore();
+    const composedSignal = parentSignal
+      ? AbortSignal.any([parentSignal, signal])
+      : signal;
+    return this.executionSignal.run(composedSignal, run);
   }
 
   private fetchWithExecution(

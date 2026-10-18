@@ -300,6 +300,8 @@ export class AgentModelRouterService {
         status: reason ? 'failed' : 'succeeded',
         reason,
         elapsedMilliseconds: Date.now() - now,
+        promptTokens: outcome?.usage?.promptTokens ?? null,
+        completionTokens: outcome?.usage?.completionTokens ?? null,
         totalTokens: outcome?.usage?.totalTokens ?? null,
       });
       await request.persist();

@@ -19,6 +19,7 @@ import { AgentApp } from './entities/agent-app.entity';
 import { classifyAgentAction } from './agent-action';
 import type { AgentBusinessService } from './agent-business.service';
 import type { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
+import type { AgentExecutionRuntimeService } from './agent-execution-runtime.service';
 import {
   knowledgeStageToAgentProgress,
   type AgentProgressStage,
@@ -40,6 +41,7 @@ describe('AgentWorkspaceService ownership and state guards', () => {
   };
   const messageRepository = {
     find: jest.fn(),
+    count: jest.fn(),
     create: jest.fn((value: Partial<AgentMessage>) => value),
     save: jest.fn((value: AgentMessage) =>
       Promise.resolve({ ...value, id: 88 }),
@@ -51,6 +53,7 @@ describe('AgentWorkspaceService ownership and state guards', () => {
   };
   const executionRepository = {
     findOne: jest.fn(),
+    count: jest.fn(),
     save: jest.fn(),
     update: jest.fn().mockResolvedValue({ affected: 1 }),
   };
@@ -77,11 +80,17 @@ describe('AgentWorkspaceService ownership and state guards', () => {
       ) => run(),
     } as KnowledgeAiProvidersService),
     {} as AgentMediaService,
+    {
+      run: (_id: number, _seconds: number, task: () => Promise<unknown>) =>
+        task(),
+      cancel: jest.fn(),
+    } as unknown as AgentExecutionRuntimeService,
   );
 
   beforeEach(() => {
     jest.clearAllMocks();
     executionRepository.update.mockResolvedValue({ affected: 1 });
+    executionRepository.count.mockResolvedValue(0);
     appsService.getExecutableToolKeys.mockResolvedValue([
       'product.query',
       'productSku.create',
@@ -160,8 +169,11 @@ describe('AgentWorkspaceService ownership and state guards', () => {
     await reportProgress.call(service, execution, 'querying');
     expect(executionRepository.update).toHaveBeenCalledWith(
       { id: 7, userId: 10, status: 'running' },
-      { parameterSummary: { action: 'query', progressStage: 'querying' } },
+      expect.objectContaining({
+        parameterSummary: { action: 'query', progressStage: 'querying' },
+      }),
     );
+    expect(execution.heartbeatAt).toBeInstanceOf(Date);
     await reportProgress.call(service, execution, 'querying');
     expect(executionRepository.update).toHaveBeenCalledTimes(1);
     executionRepository.update.mockResolvedValueOnce({ affected: 0 });
@@ -169,6 +181,27 @@ describe('AgentWorkspaceService ownership and state guards', () => {
       reportProgress.call(service, execution, 'generating'),
     ).rejects.toBeInstanceOf(ConflictException);
     expect(execution.parameterSummary?.progressStage).toBe('querying');
+    expect(executionRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('never revives an execution that was stopped during final persistence', async () => {
+    const complete = Reflect.get(service, 'completeRunningExecution') as (
+      execution: AgentExecution,
+    ) => Promise<void>;
+    executionRepository.update.mockResolvedValueOnce({ affected: 0 });
+    await expect(
+      complete.call(
+        service,
+        Object.assign(new AgentExecution(), {
+          id: 7,
+          userId: currentUser.userId,
+          status: 'succeeded',
+          toolKey: 'model.chat',
+          parameterSummary: {},
+          result: {},
+        }),
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
     expect(executionRepository.save).not.toHaveBeenCalled();
   });
 
@@ -190,6 +223,25 @@ describe('AgentWorkspaceService ownership and state guards', () => {
     expect(sessionRepository.findOne).toHaveBeenCalledWith({
       where: { id: 99, userId: currentUser.userId },
     });
+  });
+
+  it('returns older messages in display order with a stable total', async () => {
+    messageRepository.find.mockResolvedValue([{ id: 8 }, { id: 7 }]);
+    messageRepository.count.mockResolvedValue(12);
+    await expect(
+      service.findSessionMessages(
+        3,
+        { beforeId: 9, pageSize: 2 },
+        currentUser,
+        true,
+      ),
+    ).resolves.toEqual({ list: [{ id: 7 }, { id: 8 }], total: 12 });
+    expect(messageRepository.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        order: { id: 'DESC' },
+        take: 2,
+      }),
+    );
   });
 
   it('invalidates confirmation when the draft version has changed', async () => {
@@ -215,6 +267,58 @@ describe('AgentWorkspaceService ownership and state guards', () => {
       execution,
     );
     expect(executionRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('counts only live leased executions before reserving concurrency', async () => {
+    executionRepository.count.mockResolvedValue(1);
+    const assertCapacity = Reflect.get(
+      service,
+      'assertConcurrencyAvailable',
+    ) as (app: AgentApp, userId: number) => Promise<void>;
+    await expect(
+      assertCapacity.call(
+        service,
+        { id: 2, maxConcurrentRuns: 1 } as AgentApp,
+        currentUser.userId,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(executionRepository.count).toHaveBeenCalledTimes(1);
+  });
+
+  it('snapshots executable configuration by version without exposing raw instructions', () => {
+    const metadata = Reflect.get(service, 'executionMetadata') as (
+      app: AgentApp,
+      startedAt: Date,
+    ) => {
+      configSnapshot: Record<string, unknown>;
+      configVersion: string;
+      leaseExpiresAt: Date;
+    };
+    const startedAt = new Date('2026-10-18T00:00:00.000Z');
+    const result = metadata.call(
+      service,
+      {
+        id: 2,
+        name: '测试 Agent',
+        responsibility: '处理测试任务',
+        instructionMarkdown: '内部工作要求',
+        providerId: 3,
+        providerName: '测试账号',
+        models: ['model-a'],
+        modelRouting: null,
+        mediaModels: null,
+        toolKeys: [],
+        writeEnabled: false,
+        maxToolCalls: 5,
+        timeoutSeconds: 60,
+        maxConcurrentRuns: 1,
+      } as AgentApp,
+      startedAt,
+    );
+    expect(result.configVersion).toHaveLength(64);
+    expect(result.configSnapshot.instructionMarkdown).toBeUndefined();
+    expect(result.configSnapshot.instructionVersion).toMatch(/^[a-f0-9]{64}$/);
+    expect(result.leaseExpiresAt.getTime()).toBe(startedAt.getTime() + 90_000);
   });
 
   it('treats normal answers as baseline model capability instead of a tool', () => {

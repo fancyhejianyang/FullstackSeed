@@ -9,6 +9,7 @@ import type { AgentBusinessService } from './agent-business.service';
 import { AgentWorkspaceService } from './agent-workspace.service';
 import { AgentModelRouterService } from './agent-model-router.service';
 import type { AgentMediaService } from './agent-media.service';
+import type { AgentExecutionRuntimeService } from './agent-execution-runtime.service';
 import { AgentDraft } from './entities/agent-draft.entity';
 import { AgentExecution } from './entities/agent-execution.entity';
 import { AgentMessage } from './entities/agent-message.entity';
@@ -43,9 +44,16 @@ function harness(
   let runs: AgentExecution[] = [];
   let messages: AgentMessage[] = [];
   const matches = (row: object, query: { where: Record<string, unknown> }) =>
-    Object.entries(query.where).every(
-      ([key, value]) => Reflect.get(row, key) === value,
-    );
+    Object.entries(query.where).every(([key, value]) => {
+      const actual = (row as Record<string, unknown>)[key];
+      if (value && typeof value === 'object' && '_type' in value) {
+        const operator = value as { _type: string; _value: unknown };
+        if (operator._type === 'in' && Array.isArray(operator._value)) {
+          return operator._value.includes(actual);
+        }
+      }
+      return actual === value;
+    });
   const drafts = {
     findOne: jest.fn((query: { where: Record<string, unknown> }) =>
       Promise.resolve(matches(draft, query) ? structuredClone(draft) : null),
@@ -92,7 +100,10 @@ function harness(
       id: messages.length + 1,
     })),
     save: jest.fn((value: AgentMessage) => {
-      messages.push(value);
+      messages = [
+        ...messages.filter((message) => message.id !== value.id),
+        value,
+      ];
       return Promise.resolve(value);
     }),
   };
@@ -107,15 +118,20 @@ function harness(
     increment: jest.fn(),
     update: jest.fn(),
   };
+  const appRepository = {
+    findOne: jest.fn(() => Promise.resolve(app)),
+  };
   const manager = {
     getRepository: (entity: unknown) =>
-      entity === AgentDraft
-        ? drafts
-        : entity === AgentExecution
-          ? executions
-          : entity === AgentMessage
-            ? chats
-            : sessions,
+      entity === AgentApp
+        ? appRepository
+        : entity === AgentDraft
+          ? drafts
+          : entity === AgentExecution
+            ? executions
+            : entity === AgentMessage
+              ? chats
+              : sessions,
   } as unknown as EntityManager;
   const transaction = jest.fn(
     async (run: (manager: EntityManager) => Promise<unknown>) => {
@@ -130,6 +146,9 @@ function harness(
   );
   const app = {
     id: 1,
+    name: '示例 Agent',
+    providerName: '测试账号',
+    isEnabled: true,
     toolKeys: ['demo.create', 'demo.list'],
     writeEnabled: true,
     maxConcurrentRuns: 1,
@@ -215,6 +234,11 @@ function harness(
       models as unknown as KnowledgeAiProvidersService,
     ),
     media as unknown as AgentMediaService,
+    {
+      run: (_id: number, _seconds: number, task: () => Promise<unknown>) =>
+        task(),
+      cancel: jest.fn(),
+    } as unknown as AgentExecutionRuntimeService,
   );
   return {
     service,
@@ -228,6 +252,7 @@ function harness(
     executions,
     drafts,
     transaction,
+    appRepository,
     get draft() {
       return draft;
     },
@@ -248,6 +273,10 @@ describe('generic Agent workflow and confirmation', () => {
     expect(result.execution).toMatchObject({
       status: 'succeeded',
       toolKey: 'media.vision',
+    });
+    expect(h.appRepository.findOne).toHaveBeenCalledWith({
+      where: { id: h.app.id },
+      lock: { mode: 'pessimistic_write' },
     });
     expect(h.media.run).toHaveBeenCalledWith(
       expect.objectContaining({ mode: 'vision', imageId: 9 }),

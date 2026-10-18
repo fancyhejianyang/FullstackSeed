@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
+import Button from "@/components/Button.vue";
 import type { ProductOption } from "@/api/productCatalog";
 import type {
   AgentDraft,
@@ -27,6 +28,8 @@ const props = defineProps<{
   executions: AgentExecution[];
   products: ProductOption[];
   busy?: boolean;
+  hasMore?: boolean;
+  loadingOlder?: boolean;
   processing?: {
     clientMessageId: string;
     text: string;
@@ -38,6 +41,7 @@ const emit = defineEmits<{
   confirmDraft: [draft: AgentDraft];
   cancelDraft: [draft: AgentDraft];
   prompt: [prompt: string];
+  loadOlder: [];
 }>();
 const scroller = ref<HTMLElement>();
 
@@ -121,6 +125,16 @@ watch(
       </div>
     </div>
     <div v-else class="message-list__content">
+      <div v-if="hasMore" class="message-list__load-older">
+        <Button
+          type="info"
+          size="small"
+          plain
+          :loading="loadingOlder"
+          @click="emit('loadOlder')"
+          >加载更早消息</Button
+        >
+      </div>
       <template v-for="message in messages" :key="message.id">
         <div class="message-list__item" :class="`is-${message.role}`">
           <div class="message-list__role">
@@ -323,6 +337,11 @@ watch(
   width: min(880px, calc(100% - 48px));
   margin: 0 auto;
   padding: 32px 0 120px;
+}
+.message-list__load-older {
+  display: flex;
+  justify-content: center;
+  margin: -12px 0 28px;
 }
 .message-list__item {
   display: flex;

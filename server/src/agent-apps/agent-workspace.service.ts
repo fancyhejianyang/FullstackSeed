@@ -6,7 +6,17 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Like, Repository } from 'typeorm';
+import { createHash } from 'node:crypto';
+import {
+  DataSource,
+  EntityManager,
+  In,
+  IsNull,
+  LessThan,
+  Like,
+  MoreThan,
+  Repository,
+} from 'typeorm';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
 import { KNOWLEDGE_AI_CHAT_COMMANDS } from '../knowledge-ai-chat/knowledge-ai-chat-command.service';
 import { KnowledgeAiChatService } from '../knowledge-ai-chat/knowledge-ai-chat.service';
@@ -39,6 +49,7 @@ import {
 import type {
   ConfirmAgentDraftDto,
   CreateAgentSessionDto,
+  QueryAgentMessageDto,
   QueryAgentSessionDto,
   QueryAgentExecutionDto,
   SendAgentMessageDto,
@@ -55,8 +66,12 @@ import {
   type AgentExecutionProgress,
   type AgentProgressStage,
 } from './agent-progress';
-
-class AgentTimeoutError extends Error {}
+import {
+  AGENT_EXECUTION_LEASE_GRACE_MS,
+  AGENT_LEGACY_STALE_MS,
+  AgentExecutionRuntimeService,
+  AgentTimeoutError,
+} from './agent-execution-runtime.service';
 
 const AGENT_PLATFORM_INSTRUCTION_MARKDOWN = `## 平台执行边界
 
@@ -86,6 +101,7 @@ export class AgentWorkspaceService {
     private readonly providersService: KnowledgeAiProvidersService,
     private readonly modelRouter: AgentModelRouterService,
     private readonly mediaService: AgentMediaService,
+    private readonly executionRuntime: AgentExecutionRuntimeService,
   ) {}
 
   findAvailableApps(user: AuthUser) {
@@ -197,11 +213,8 @@ export class AgentWorkspaceService {
   async findSession(id: number, user: AuthUser) {
     const session = await this.findSessionEntity(id, user);
     await this.appsService.findAvailableOne(session.agentAppId, user);
-    const [messages, drafts, executions] = await Promise.all([
-      this.messageRepository.find({
-        where: { sessionId: id, userId: user.userId },
-        order: { id: 'ASC' },
-      }),
+    const [messagePage, drafts, executions] = await Promise.all([
+      this.findSessionMessages(id, { pageSize: 50 }, user, true),
       this.draftRepository.find({
         where: { sessionId: id, userId: user.userId },
         order: { id: 'DESC' },
@@ -214,12 +227,38 @@ export class AgentWorkspaceService {
     ]);
     return {
       ...session,
-      messages,
+      messages: messagePage.list,
+      messageTotal: messagePage.total,
       drafts: await Promise.all(
         drafts.map((draft) => this.decorateDraft(draft, user)),
       ),
       executions,
     };
+  }
+
+  async findSessionMessages(
+    id: number,
+    query: QueryAgentMessageDto,
+    user: AuthUser,
+    sessionChecked = false,
+  ) {
+    if (!sessionChecked) {
+      const session = await this.findSessionEntity(id, user);
+      await this.appsService.findAvailableOne(session.agentAppId, user);
+    }
+    const pageSize = query.pageSize ?? 50;
+    const baseWhere = { sessionId: id, userId: user.userId };
+    const [items, total] = await Promise.all([
+      this.messageRepository.find({
+        where: query.beforeId
+          ? { ...baseWhere, id: LessThan(query.beforeId) }
+          : baseWhere,
+        order: { id: 'DESC' },
+        take: pageSize,
+      }),
+      this.messageRepository.count({ where: baseWhere }),
+    ]);
+    return { list: items.reverse(), total };
   }
 
   async sendMessage(
@@ -231,10 +270,7 @@ export class AgentWorkspaceService {
     if (session.status !== 'active') {
       throw new ConflictException('当前会话已停止或关闭，请新建会话');
     }
-    const app = await this.appsService.findAvailableOne(
-      session.agentAppId,
-      user,
-    );
+    let app = await this.appsService.findAvailableOne(session.agentAppId, user);
     const existing = await this.messageRepository.findOne({
       where: { sessionId, clientMessageId: dto.clientMessageId },
     });
@@ -254,72 +290,37 @@ export class AgentWorkspaceService {
     const activeDraft = await this.findActiveDraft(sessionId, user.userId);
     const decision = classifyAgentAction(dto.content, Boolean(activeDraft));
     const businessToolKey = this.resolveBusinessToolKey(decision.type);
-    const shouldClassify = !!(
-      attachedImage ||
-      app.mediaModels?.vision ||
-      app.mediaModels?.imageGeneration
-    );
-    await this.assertConcurrencyAvailable(app, user.userId);
-
-    const userMessage = await this.messageRepository.save(
-      this.messageRepository.create({
-        sessionId,
-        userId: user.userId,
-        role: 'user',
-        messageType: 'text',
-        content: dto.content.trim(),
-        structuredData: {
-          action: decision.type,
-          mode: 'chat',
-          ...(attachedImage ? { images: [attachedImage] } : {}),
-        },
-        executionId: null,
-        clientMessageId: dto.clientMessageId,
-      }),
-    );
-    await this.touchSession(session, dto.content.trim(), 1);
+    const reservation = await this.reserveMessageExecution({
+      session,
+      app,
+      user,
+      dto,
+      decision,
+      attachedImage,
+      activeDraft,
+      textModel,
+    });
+    if (reservation.kind === 'existing') {
+      return this.recoverMessageResult(
+        session,
+        reservation.existingMessage,
+        user,
+      );
+    }
+    const { userMessage, execution, shouldClassify, lockedApp } = reservation;
+    app = lockedApp;
+    session.messageCount += 1;
+    session.lastMessage = dto.content.trim().slice(0, 2000);
     if (session.messageCount === 1 && session.title === '新会话') {
       session.title = dto.content.trim().slice(0, 50);
-      await this.sessionRepository.update(session.id, { title: session.title });
     }
 
-    const execution = await this.executionRepository.save(
-      this.executionRepository.create({
-        requestId: `message:${session.id}:${dto.clientMessageId}`,
-        sessionId,
-        userId: user.userId,
-        agentAppId: app.id,
-        messageId: userMessage.id,
-        draftId: shouldClassify ? null : (activeDraft?.id ?? null),
-        toolKey: shouldClassify
-          ? 'model.chat'
-          : this.resolveExecutionToolKey(decision.type),
-        status: 'running',
-        parameterSummary: {
-          action: decision.type,
-          mode: 'chat',
-          mediaIntentPending: shouldClassify,
-          contentLength: dto.content.length,
-          textModelMode: textModel ? 'fixed' : 'auto',
-          ...(textModel ? { requestedTextModel: textModel } : {}),
-          progressStage: 'understanding',
-        },
-        result: null,
-        errorMessage: null,
-        toolCallCount: 0,
-        startedAt: new Date(),
-        finishedAt: null,
-      }),
-    );
-    userMessage.executionId = execution.id;
-    await this.messageRepository.save(userMessage);
-    await this.sessionRepository.update(session.id, {
-      lastExecutionStatus: 'running',
-    });
-
     try {
-      const actionResult = await this.withTimeout(
-        (async () => {
+      const actionResult = await this.executionRuntime.run(
+        execution.id,
+        app.timeoutSeconds,
+        async () => {
+          await this.assertExecutionRunning(execution.id);
           // 没有任何媒体配置的旧应用保持原业务链；有能力时无论文本调度策略均先分流。
           if (shouldClassify) {
             const history = await this.messageRepository.find({
@@ -445,9 +446,9 @@ export class AgentWorkspaceService {
             user,
             textModel,
           });
-        })(),
-        app.timeoutSeconds,
+        },
       );
+      await this.finalizeExecutionObservability(actionResult.execution);
       return {
         session: await this.findSessionEntity(session.id, user),
         userMessage,
@@ -471,14 +472,26 @@ export class AgentWorkspaceService {
             : 'Agent 执行失败';
       execution.status = 'failed';
       execution.errorMessage = message;
+      execution.statusReason =
+        error instanceof AgentTimeoutError
+          ? 'execution_timeout'
+          : 'provider_or_runtime_error';
+      execution.failureStage =
+        typeof execution.parameterSummary?.progressStage === 'string'
+          ? execution.parameterSummary.progressStage
+          : null;
       execution.finishedAt = new Date();
+      execution.heartbeatAt = execution.finishedAt;
       {
         const failed = await this.executionRepository.update(
           { id: execution.id, status: 'running' },
           {
             status: 'failed',
             errorMessage: message,
+            statusReason: execution.statusReason,
+            failureStage: execution.failureStage,
             finishedAt: execution.finishedAt,
+            heartbeatAt: execution.heartbeatAt,
           },
         );
         if (!failed.affected)
@@ -605,10 +618,17 @@ export class AgentWorkspaceService {
       user,
     );
     await this.assertActionAuthorized(app, 'productSku.create', user);
-    await this.assertConcurrencyAvailable(app, user.userId);
 
     const { execution, draft } = await this.dataSource.transaction(
       async (manager) => {
+        const lockedApp = await manager.getRepository(AgentApp).findOne({
+          where: { id: app.id },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!lockedApp?.isEnabled) {
+          throw new ConflictException('该 Agent 应用已停用或不存在');
+        }
+        await this.assertConcurrencyAvailable(lockedApp, user.userId, manager);
         const draftRepository = manager.getRepository(AgentDraft);
         const executionRepository = manager.getRepository(AgentExecution);
         const locked = await draftRepository.findOne({
@@ -636,6 +656,7 @@ export class AgentWorkspaceService {
             ),
           );
         }
+        const startedAt = new Date();
         const created = await executionRepository.save(
           executionRepository.create({
             requestId,
@@ -657,8 +678,7 @@ export class AgentWorkspaceService {
             result: null,
             errorMessage: null,
             toolCallCount: 1,
-            startedAt: new Date(),
-            finishedAt: null,
+            ...this.executionMetadata(lockedApp, startedAt),
           }),
         );
         locked.status = 'submitting';
@@ -688,14 +708,30 @@ export class AgentWorkspaceService {
         requestId,
       );
       execution.status = 'succeeded';
-      execution.result = {
+      execution.statusReason = 'completed';
+      const receipt = {
         recordType: 'productSku',
         recordId: sku.id,
         recordCode: sku.skuCode,
         detailPath: '/business-data/product-skus',
       };
+      execution.result = receipt;
       execution.finishedAt = new Date();
-      await this.executionRepository.save(execution);
+      execution.heartbeatAt = execution.finishedAt;
+      const completed = await this.executionRepository.update(
+        { id: execution.id, status: 'submitting' },
+        {
+          status: execution.status,
+          statusReason: execution.statusReason,
+          result: receipt,
+          finishedAt: execution.finishedAt,
+          heartbeatAt: execution.heartbeatAt,
+        },
+      );
+      if (!completed.affected) {
+        const current = await this.findExecution(execution.id, user);
+        return this.confirmResult(current, user);
+      }
       draft.status = 'submitted';
       draft.submittedRecordId = sku.id;
       await this.draftRepository.save(draft);
@@ -722,8 +758,25 @@ export class AgentWorkspaceService {
         error instanceof Error ? error.message : 'SKU 录入失败';
       execution.status = 'failed';
       execution.errorMessage = errorMessage;
+      execution.statusReason = 'business_write_failed';
+      execution.failureStage = 'submitting';
       execution.finishedAt = new Date();
-      await this.executionRepository.save(execution);
+      execution.heartbeatAt = execution.finishedAt;
+      const failed = await this.executionRepository.update(
+        { id: execution.id, status: 'submitting' },
+        {
+          status: execution.status,
+          statusReason: execution.statusReason,
+          failureStage: execution.failureStage,
+          errorMessage: execution.errorMessage,
+          finishedAt: execution.finishedAt,
+          heartbeatAt: execution.heartbeatAt,
+        },
+      );
+      if (!failed.affected) {
+        const current = await this.findExecution(execution.id, user);
+        return this.confirmResult(current, user);
+      }
       draft.status = 'failed';
       draft.validationErrors = [errorMessage];
       await this.draftRepository.save(draft);
@@ -800,13 +853,15 @@ export class AgentWorkspaceService {
       ...execution.parameterSummary,
       progressStage: stage,
     };
+    const heartbeatAt = new Date();
     // 仅更新仍在运行的阶段信息，不能用内存中的旧实体复活已取消/超时的执行。
     const result = await this.executionRepository.update(
       { id: execution.id, userId: execution.userId, status: 'running' },
-      { parameterSummary },
+      { parameterSummary, heartbeatAt },
     );
     if (!result.affected) throw new ConflictException('执行已停止或失效');
     execution.parameterSummary = parameterSummary;
+    execution.heartbeatAt = heartbeatAt;
   }
 
   async stopExecution(id: number, user: AuthUser) {
@@ -814,47 +869,54 @@ export class AgentWorkspaceService {
     if (['succeeded', 'failed', 'cancelled'].includes(execution.status)) {
       return execution;
     }
-    if (
-      execution.toolKey.startsWith('media.') ||
-      execution.parameterSummary?.mediaIntentPending
-    ) {
-      const stopped = await this.dataSource.transaction(async (manager) => {
-        const result = await manager.getRepository(AgentExecution).update(
-          { id, userId: user.userId, status: 'running' },
-          {
-            status: 'cancelled',
-            errorMessage:
-              '用户已停止请求；已发起的模型调用可能仍在处理或计费，请核实后再发送',
-            finishedAt: new Date(),
-          },
-        );
-        if (result.affected)
-          await manager
-            .getRepository(AgentSession)
-            .update(execution.sessionId, { lastExecutionStatus: 'cancelled' });
-        return !!result.affected;
-      });
-      if (stopped) this.mediaService.cancel(id);
-      return this.findExecution(id, user);
-    }
-    execution.status = 'cancelled';
-    execution.errorMessage = '用户已停止尚未完成的动作';
-    execution.finishedAt = new Date();
-    await this.executionRepository.save(execution);
-    if (execution.draftId) {
-      const draft = await this.draftRepository.findOne({
-        where: { id: execution.draftId, userId: user.userId },
-      });
-      if (draft && !['submitted', 'cancelled'].includes(draft.status)) {
-        draft.status = 'cancelled';
-        draft.version += 1;
-        await this.draftRepository.save(draft);
+    const finishedAt = new Date();
+    const stopped = await this.dataSource.transaction(async (manager) => {
+      const result = await manager.getRepository(AgentExecution).update(
+        {
+          id,
+          userId: user.userId,
+          status: In([
+            ...AGENT_EXECUTION_ACTIVE_STATUSES,
+            'waiting_input',
+            'waiting_confirmation',
+          ]),
+        },
+        {
+          status: 'cancelled',
+          statusReason: 'user_cancelled',
+          failureStage:
+            typeof execution.parameterSummary?.progressStage === 'string'
+              ? execution.parameterSummary.progressStage
+              : null,
+          errorMessage:
+            '用户已停止请求；已发起的模型调用可能仍在处理或计费，请核实后再发送',
+          finishedAt,
+          heartbeatAt: finishedAt,
+        },
+      );
+      if (!result.affected) return false;
+      if (execution.draftId) {
+        const drafts = manager.getRepository(AgentDraft);
+        const draft = await drafts.findOne({
+          where: { id: execution.draftId, userId: user.userId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (draft && !['submitted', 'cancelled'].includes(draft.status)) {
+          draft.status = 'cancelled';
+          draft.version += 1;
+          await drafts.save(draft);
+        }
       }
-    }
-    await this.sessionRepository.update(execution.sessionId, {
-      lastExecutionStatus: 'cancelled',
+      await manager.getRepository(AgentSession).update(execution.sessionId, {
+        lastExecutionStatus: 'cancelled',
+      });
+      return true;
     });
-    return execution;
+    if (stopped) {
+      this.executionRuntime.cancel(id);
+      this.mediaService.cancel(id);
+    }
+    return this.findExecution(id, user);
   }
 
   private async requestMediaClarification(
@@ -997,7 +1059,7 @@ export class AgentWorkspaceService {
     if (params.decision.type === 'clarify') {
       params.execution.status = 'waiting_input';
       params.execution.finishedAt = new Date();
-      await this.executionRepository.save(params.execution);
+      await this.completeRunningExecution(params.execution);
       const assistantMessage = await this.appendAssistantMessage(
         params.session,
         params.user,
@@ -1099,7 +1161,7 @@ export class AgentWorkspaceService {
     }
     await this.assertExecutionRunning(params.execution.id);
     params.execution.finishedAt = new Date();
-    await this.executionRepository.save(params.execution);
+    await this.completeRunningExecution(params.execution);
     const assistantMessage = await this.appendAssistantMessage(
       params.session,
       params.user,
@@ -1228,7 +1290,7 @@ export class AgentWorkspaceService {
     };
     params.execution.errorMessage = result.message.errorMessage;
     params.execution.finishedAt = new Date();
-    await this.executionRepository.save(params.execution);
+    await this.completeRunningExecution(params.execution);
     const assistantMessage = await this.appendAssistantMessage(
       params.session,
       params.user,
@@ -1284,7 +1346,7 @@ export class AgentWorkspaceService {
       detailPath: this.queryDetailPath(context),
     };
     params.execution.finishedAt = new Date();
-    await this.executionRepository.save(params.execution);
+    await this.completeRunningExecution(params.execution);
     const assistantMessage = await this.appendAssistantMessage(
       params.session,
       params.user,
@@ -1392,7 +1454,7 @@ export class AgentWorkspaceService {
       candidateContext: context,
     };
     params.execution.finishedAt = new Date();
-    await this.executionRepository.save(params.execution);
+    await this.completeRunningExecution(params.execution);
     const assistantMessage = await this.appendAssistantMessage(
       params.session,
       params.user,
@@ -1564,7 +1626,7 @@ export class AgentWorkspaceService {
     if (plan.kind === 'clarify') {
       execution.status = 'waiting_input';
       execution.finishedAt = new Date();
-      await this.executionRepository.save(execution);
+      await this.completeRunningExecution(execution);
       const assistantMessage = await this.appendAssistantMessage(
         session,
         user,
@@ -1609,7 +1671,7 @@ export class AgentWorkspaceService {
       execution.status = 'succeeded';
       execution.result = { businessResult };
       execution.finishedAt = new Date();
-      await this.executionRepository.save(execution);
+      await this.completeRunningExecution(execution);
       const assistantMessage = await this.appendAssistantMessage(
         session,
         user,
@@ -1727,11 +1789,18 @@ export class AgentWorkspaceService {
     );
     await this.findSessionEntity(snapshot.sessionId, user);
     await this.assertActionAuthorized(app, snapshot.toolKey, user);
-    await this.assertConcurrencyAvailable(app, user.userId);
     // 业务记录、执行回执、草稿状态和聊天回执同一事务提交。中断只能全部成功或全部回滚。
     let attemptedWrite = false;
     const result = await this.dataSource
       .transaction(async (manager) => {
+        const lockedApp = await manager.getRepository(AgentApp).findOne({
+          where: { id: app.id },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!lockedApp?.isEnabled) {
+          throw new ConflictException('该 Agent 应用已停用或不存在');
+        }
+        await this.assertConcurrencyAvailable(lockedApp, user.userId, manager);
         const drafts = manager.getRepository(AgentDraft);
         const runs = manager.getRepository(AgentExecution);
         const messages = manager.getRepository(AgentMessage);
@@ -1759,6 +1828,7 @@ export class AgentWorkspaceService {
             '草稿已提交、已取消或版本变化，请刷新后确认',
           );
         const tool = getAgentBusinessTool(draft.toolKey)!;
+        const startedAt = new Date();
         const run = await runs.save(
           runs.create({
             requestId,
@@ -1776,8 +1846,7 @@ export class AgentWorkspaceService {
             result: null,
             errorMessage: null,
             toolCallCount: 1,
-            startedAt: new Date(),
-            finishedAt: null,
+            ...this.executionMetadata(lockedApp, startedAt),
           }),
         );
         attemptedWrite = true;
@@ -1792,7 +1861,9 @@ export class AgentWorkspaceService {
             '业务服务未返回有效记录 ID，事务已回滚',
           );
         run.status = 'succeeded';
+        run.statusReason = 'completed';
         run.finishedAt = new Date();
+        run.heartbeatAt = run.finishedAt;
         run.result = {
           recordType: tool.moduleKey,
           recordId: record.id,
@@ -1863,6 +1934,7 @@ export class AgentWorkspaceService {
             error instanceof NotFoundException
               ? error.message
               : '业务保存失败，本次事务已回滚；请核对后重试';
+          const startedAt = new Date();
           const execution = await runs.save(
             runs.create({
               requestId,
@@ -1877,7 +1949,9 @@ export class AgentWorkspaceService {
               result: null,
               errorMessage,
               toolCallCount: 1,
-              startedAt: new Date(),
+              ...this.executionMetadata(app, startedAt),
+              statusReason: 'business_write_failed',
+              failureStage: 'submitting',
               finishedAt: new Date(),
             }),
           );
@@ -2161,17 +2235,202 @@ export class AgentWorkspaceService {
     );
   }
 
-  private async assertConcurrencyAvailable(app: AgentApp, userId: number) {
-    const running = await this.executionRepository.count({
-      where: {
-        agentAppId: app.id,
-        userId,
-        status: In(AGENT_EXECUTION_ACTIVE_STATUSES),
-      },
+  private async reserveMessageExecution(params: {
+    session: AgentSession;
+    app: AgentApp;
+    user: AuthUser;
+    dto: SendAgentMessageDto;
+    decision: ReturnType<typeof classifyAgentAction>;
+    attachedImage: ReturnType<AgentMediaService['reference']> | null;
+    activeDraft: AgentDraft | null;
+    textModel?: string;
+  }) {
+    return this.dataSource.transaction(async (manager) => {
+      const lockedApp = await manager.getRepository(AgentApp).findOne({
+        where: { id: params.app.id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!lockedApp?.isEnabled) {
+        throw new ConflictException('该 Agent 应用已停用或不存在');
+      }
+      if (
+        params.textModel &&
+        !(lockedApp.models ?? []).includes(params.textModel)
+      ) {
+        throw new BadRequestException(
+          '指定文本模型不在当前 Agent 已授权模型中',
+        );
+      }
+      const messages = manager.getRepository(AgentMessage);
+      const existingMessage = await messages.findOne({
+        where: {
+          sessionId: params.session.id,
+          clientMessageId: params.dto.clientMessageId,
+        },
+      });
+      if (existingMessage)
+        return { kind: 'existing' as const, existingMessage };
+
+      await this.assertConcurrencyAvailable(
+        lockedApp,
+        params.user.userId,
+        manager,
+      );
+      const sessions = manager.getRepository(AgentSession);
+      const lockedSession = await sessions.findOne({
+        where: { id: params.session.id, userId: params.user.userId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!lockedSession || lockedSession.status !== 'active') {
+        throw new ConflictException('当前会话已停止或关闭，请新建会话');
+      }
+      const shouldClassify = !!(
+        params.attachedImage ||
+        lockedApp.mediaModels?.vision ||
+        lockedApp.mediaModels?.imageGeneration
+      );
+      const content = params.dto.content.trim();
+      const userMessage = await messages.save(
+        messages.create({
+          sessionId: lockedSession.id,
+          userId: params.user.userId,
+          role: 'user',
+          messageType: 'text',
+          content,
+          structuredData: {
+            action: params.decision.type,
+            mode: 'chat',
+            ...(params.attachedImage ? { images: [params.attachedImage] } : {}),
+          },
+          executionId: null,
+          clientMessageId: params.dto.clientMessageId,
+        }),
+      );
+      const startedAt = new Date();
+      const executions = manager.getRepository(AgentExecution);
+      const execution = await executions.save(
+        executions.create({
+          requestId: `message:${lockedSession.id}:${params.dto.clientMessageId}`,
+          sessionId: lockedSession.id,
+          userId: params.user.userId,
+          agentAppId: lockedApp.id,
+          messageId: userMessage.id,
+          draftId: shouldClassify ? null : (params.activeDraft?.id ?? null),
+          toolKey: shouldClassify
+            ? 'model.chat'
+            : this.resolveExecutionToolKey(params.decision.type),
+          status: 'running',
+          parameterSummary: {
+            action: params.decision.type,
+            mode: 'chat',
+            mediaIntentPending: shouldClassify,
+            contentLength: params.dto.content.length,
+            textModelMode: params.textModel ? 'fixed' : 'auto',
+            ...(params.textModel
+              ? { requestedTextModel: params.textModel }
+              : {}),
+            progressStage: 'understanding',
+          },
+          result: null,
+          errorMessage: null,
+          toolCallCount: 0,
+          ...this.executionMetadata(lockedApp, startedAt),
+        }),
+      );
+      userMessage.executionId = execution.id;
+      await messages.save(userMessage);
+      const title =
+        lockedSession.messageCount === 0 && lockedSession.title === '新会话'
+          ? content.slice(0, 50)
+          : lockedSession.title;
+      await sessions.increment({ id: lockedSession.id }, 'messageCount', 1);
+      await sessions.update(lockedSession.id, {
+        title,
+        lastMessage: content.slice(0, 2000),
+        lastExecutionStatus: 'running',
+      });
+      return {
+        kind: 'created' as const,
+        userMessage,
+        execution,
+        shouldClassify,
+        lockedApp,
+      };
+    });
+  }
+
+  private async assertConcurrencyAvailable(
+    app: AgentApp,
+    userId: number,
+    manager?: EntityManager,
+  ) {
+    const repository = manager
+      ? manager.getRepository(AgentExecution)
+      : this.executionRepository;
+    const now = new Date();
+    const legacyCutoff = new Date(now.getTime() - AGENT_LEGACY_STALE_MS);
+    const running = await repository.count({
+      where: [
+        {
+          agentAppId: app.id,
+          userId,
+          status: In(AGENT_EXECUTION_ACTIVE_STATUSES),
+          leaseExpiresAt: MoreThan(now),
+        },
+        {
+          agentAppId: app.id,
+          userId,
+          status: In(AGENT_EXECUTION_ACTIVE_STATUSES),
+          leaseExpiresAt: IsNull(),
+          startedAt: MoreThan(legacyCutoff),
+        },
+      ],
     });
     if (running >= app.maxConcurrentRuns) {
       throw new ConflictException('当前 Agent 并发任务已达上限，请稍后再试');
     }
+  }
+
+  private executionMetadata(app: AgentApp, startedAt: Date) {
+    const instructionVersion = createHash('sha256')
+      .update(app.instructionMarkdown)
+      .digest('hex');
+    const configSnapshot: Record<string, unknown> = {
+      agentAppId: app.id,
+      name: app.name,
+      responsibility: app.responsibility,
+      instructionVersion,
+      providerId: app.providerId,
+      providerName: app.providerName,
+      models: [...(app.models ?? [])],
+      modelRouting: app.modelRouting,
+      mediaModels: app.mediaModels,
+      toolKeys: [...(app.toolKeys ?? [])],
+      writeEnabled: app.writeEnabled,
+      maxToolCalls: app.maxToolCalls,
+      timeoutSeconds: app.timeoutSeconds,
+      maxConcurrentRuns: app.maxConcurrentRuns,
+    };
+    return {
+      configSnapshot,
+      configVersion: createHash('sha256')
+        .update(JSON.stringify(configSnapshot))
+        .digest('hex'),
+      statusReason: null,
+      failureStage: null,
+      promptTokens: null,
+      completionTokens: null,
+      totalTokens: null,
+      modelCallDurationMs: null,
+      startedAt,
+      heartbeatAt: startedAt,
+      leaseExpiresAt: new Date(
+        startedAt.getTime() +
+          app.timeoutSeconds * 1000 +
+          AGENT_EXECUTION_LEASE_GRACE_MS,
+      ),
+      finishedAt: null,
+    };
   }
 
   private assertToolLimit(app: AgentApp, count: number) {
@@ -2187,7 +2446,56 @@ export class AgentWorkspaceService {
     }
   }
 
+  private async completeRunningExecution(execution: AgentExecution) {
+    const heartbeatAt = new Date();
+    const result = await this.executionRepository.update(
+      { id: execution.id, userId: execution.userId, status: 'running' },
+      {
+        toolKey: execution.toolKey,
+        draftId: execution.draftId,
+        status: execution.status,
+        parameterSummary: execution.parameterSummary as never,
+        result: execution.result as never,
+        errorMessage: execution.errorMessage,
+        statusReason: execution.statusReason,
+        failureStage: execution.failureStage,
+        toolCallCount: execution.toolCallCount,
+        promptTokens: execution.promptTokens,
+        completionTokens: execution.completionTokens,
+        totalTokens: execution.totalTokens,
+        modelCallDurationMs: execution.modelCallDurationMs,
+        finishedAt: execution.finishedAt,
+        heartbeatAt,
+      },
+    );
+    if (!result.affected) throw new ConflictException('执行已停止或失效');
+    execution.heartbeatAt = heartbeatAt;
+  }
+
   private async persistModelTrace(execution: AgentExecution) {
+    const trace = execution.parameterSummary
+      ?.modelRouting as import('./agent-model-routing').AgentModelTrace;
+    const attempts = trace?.attempts ?? [];
+    const sumNullable = (
+      field: 'promptTokens' | 'completionTokens' | 'totalTokens',
+    ) => {
+      const values = attempts
+        .map((attempt) => attempt[field])
+        .filter(
+          (value): value is number =>
+            typeof value === 'number' && Number.isFinite(value),
+        );
+      return values.length
+        ? values.reduce((sum, value) => sum + value, 0)
+        : null;
+    };
+    execution.promptTokens = sumNullable('promptTokens');
+    execution.completionTokens = sumNullable('completionTokens');
+    execution.totalTokens = sumNullable('totalTokens');
+    execution.modelCallDurationMs = attempts.length
+      ? attempts.reduce((sum, attempt) => sum + attempt.elapsedMilliseconds, 0)
+      : null;
+    execution.heartbeatAt = new Date();
     const result = await this.executionRepository.update(
       { id: execution.id, userId: execution.userId, status: 'running' },
       {
@@ -2196,9 +2504,44 @@ export class AgentWorkspaceService {
           modelRouting: execution.parameterSummary
             ?.modelRouting as import('./agent-model-routing').AgentModelTrace,
         },
+        promptTokens: execution.promptTokens,
+        completionTokens: execution.completionTokens,
+        totalTokens: execution.totalTokens,
+        modelCallDurationMs: execution.modelCallDurationMs,
+        heartbeatAt: execution.heartbeatAt,
       },
     );
     if (!result.affected) throw new ConflictException('执行已停止或失效');
+  }
+
+  private async finalizeExecutionObservability(execution: AgentExecution) {
+    if (AGENT_EXECUTION_ACTIVE_STATUSES.includes(execution.status)) return;
+    const statusReason =
+      execution.statusReason ??
+      (
+        {
+          succeeded: 'completed',
+          waiting_input: 'waiting_input',
+          waiting_confirmation: 'waiting_confirmation',
+          failed: 'execution_failed',
+          cancelled: 'user_cancelled',
+        } as Partial<Record<AgentExecution['status'], string>>
+      )[execution.status] ??
+      null;
+    const failureStage =
+      execution.status === 'failed' &&
+      typeof execution.parameterSummary?.progressStage === 'string'
+        ? execution.parameterSummary.progressStage
+        : execution.failureStage;
+    const heartbeatAt = new Date();
+    const result = await this.executionRepository.update(
+      { id: execution.id, userId: execution.userId, status: execution.status },
+      { statusReason, failureStage, heartbeatAt },
+    );
+    if (!result.affected) return;
+    execution.statusReason = statusReason;
+    execution.failureStage = failureStage;
+    execution.heartbeatAt = heartbeatAt;
   }
 
   private async findSessionEntity(id: number, user: AuthUser) {
@@ -2342,22 +2685,5 @@ export class AgentWorkspaceService {
         }
       });
     return result;
-  }
-
-  private async withTimeout<T>(promise: Promise<T>, timeoutSeconds: number) {
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-    try {
-      return await Promise.race([
-        promise,
-        new Promise<T>((_resolve, reject) => {
-          timeout = setTimeout(
-            () => reject(new AgentTimeoutError('Agent execution timed out')),
-            timeoutSeconds * 1000,
-          );
-        }),
-      ]);
-    } finally {
-      if (timeout) clearTimeout(timeout);
-    }
   }
 }

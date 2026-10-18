@@ -28,6 +28,9 @@ const columns: TableColumn[] = [
   { prop: "parameterSummary", label: "参数摘要", minWidth: 260, slot: true },
   { prop: "result", label: "结果摘要", minWidth: 260, slot: true },
   { prop: "elapsedMilliseconds", label: "耗时", width: 110, slot: true },
+  { prop: "tokenUsage", label: "Token", width: 150, slot: true },
+  { prop: "statusReason", label: "状态原因", width: 150, slot: true },
+  { prop: "configVersion", label: "配置版本", width: 130, slot: true },
   { prop: "createdAt", label: "开始时间", width: 180, slot: true },
 ];
 
@@ -117,6 +120,22 @@ function routingSummary(row: AgentExecution) {
     .filter(Boolean)
     .join("\n");
 }
+
+function statusReasonLabel(reason: string | null) {
+  if (!reason) return "-";
+  const labels: Record<string, string> = {
+    completed: "处理完成",
+    waiting_input: "等待补充",
+    waiting_confirmation: "等待确认",
+    user_cancelled: "用户停止",
+    execution_timeout: "执行超时",
+    provider_or_runtime_error: "模型或运行失败",
+    execution_failed: "执行失败",
+    business_write_failed: "业务写入失败",
+    stale_lease: "进程中断回收",
+  };
+  return labels[reason] || reason;
+}
 </script>
 
 <template>
@@ -153,6 +172,18 @@ function routingSummary(row: AgentExecution) {
             ? "-"
             : `${row.elapsedMilliseconds} ms`
         }}
+      </template>
+      <template #column-tokenUsage="{ row }">
+        {{ row.totalTokens == null ? "-" : row.totalTokens }}
+        <small v-if="row.modelCallDurationMs != null">
+          / {{ row.modelCallDurationMs }} ms
+        </small>
+      </template>
+      <template #column-statusReason="{ row }">
+        {{ statusReasonLabel(row.statusReason) }}
+      </template>
+      <template #column-configVersion="{ row }">
+        <code>{{ row.configVersion?.slice(0, 10) || "-" }}</code>
       </template>
       <template #column-createdAt="{ row }">{{
         formatDateTime(row.createdAt)

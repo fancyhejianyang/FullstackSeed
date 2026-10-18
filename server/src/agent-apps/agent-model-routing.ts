@@ -24,6 +24,8 @@ export interface AgentModelAttempt {
   status: 'succeeded' | 'failed';
   reason: string | null;
   elapsedMilliseconds: number;
+  promptTokens: number | null;
+  completionTokens: number | null;
   totalTokens: number | null;
 }
 export interface AgentModelTrace {

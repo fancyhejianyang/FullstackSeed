@@ -17,6 +17,7 @@ import {
   getAgentExecutionByRequest,
   getAgentExecutionProgress,
   getAgentSession,
+  getAgentSessionMessages,
   getAgentSessions,
   getAvailableAgentApps,
   sendAgentMessage,
@@ -75,6 +76,7 @@ const imagePreview = ref<string | null>("");
 let previewObjectUrl = "";
 const loadingSessions = ref(false);
 const loadingDetail = ref(false);
+const loadingOlderMessages = ref(false);
 const switchingAgent = ref(false);
 const sending = ref(false);
 const actionBusy = ref(false);
@@ -260,6 +262,11 @@ const visibleMessages = computed<AgentMessage[]>(() => {
     }));
   return [...serverMessages, ...optimisticMessages];
 });
+const hasOlderMessages = computed(
+  () =>
+    Boolean(activeSession.value) &&
+    activeSession.value!.messages.length < activeSession.value!.messageTotal,
+);
 const capabilityLabels = computed(() => {
   const result = [{ key: "model", label: "模型对话", active: false }];
   if (currentApp.value?.mediaCapabilities?.vision)
@@ -346,6 +353,36 @@ async function loadSession(id: number, silent = false) {
     activeSession.value = detail;
   } finally {
     if (!silent && version === requestVersion) loadingDetail.value = false;
+  }
+}
+
+async function loadOlderMessages() {
+  const session = activeSession.value;
+  const beforeId = session?.messages[0]?.id;
+  if (
+    !session ||
+    !beforeId ||
+    loadingOlderMessages.value ||
+    !hasOlderMessages.value
+  )
+    return;
+  loadingOlderMessages.value = true;
+  try {
+    const result = await getAgentSessionMessages(session.id, {
+      beforeId,
+      pageSize: 50,
+    });
+    if (activeSession.value?.id !== session.id) return;
+    const knownIds = new Set(
+      activeSession.value.messages.map((item) => item.id),
+    );
+    activeSession.value.messages = [
+      ...result.list.filter((item) => !knownIds.has(item.id)),
+      ...activeSession.value.messages,
+    ];
+    activeSession.value.messageTotal = result.total;
+  } finally {
+    loadingOlderMessages.value = false;
   }
 }
 
@@ -798,10 +835,13 @@ onUnmounted(() => {
             :products="products"
             :busy="hasPendingMessages || actionBusy"
             :processing="processingMessage"
+            :has-more="hasOlderMessages"
+            :loading-older="loadingOlderMessages"
             @update-draft="handleDraftUpdate"
             @confirm-draft="handleDraftConfirm"
             @cancel-draft="handleDraftCancel"
             @prompt="sendPrompt"
+            @load-older="loadOlderMessages"
           />
           <el-empty v-else description="请选择或新建会话" />
         </main>

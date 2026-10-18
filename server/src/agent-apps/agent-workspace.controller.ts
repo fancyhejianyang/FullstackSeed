@@ -23,6 +23,7 @@ import { RequirePermissions } from '../common/decorators/require-permissions.dec
 import {
   ConfirmAgentDraftDto,
   CreateAgentSessionDto,
+  QueryAgentMessageDto,
   QueryAgentSessionDto,
   SendAgentMessageDto,
   UpdateAgentDraftDto,
@@ -67,6 +68,16 @@ export class AgentWorkspaceController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.service.findSession(id, user);
+  }
+
+  @Get('sessions/:id/messages')
+  @ApiOperation({ summary: '游标分页读取本人 Agent 会话消息' })
+  findSessionMessages(
+    @Param('id', ParseIntPipe) id: number,
+    @Query() query: QueryAgentMessageDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.findSessionMessages(id, query, user);
   }
 
   @Post('sessions/:id/messages')

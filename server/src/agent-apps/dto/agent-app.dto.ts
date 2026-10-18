@@ -291,6 +291,21 @@ export class QueryAgentSessionDto {
   keyword?: string;
 }
 
+export class QueryAgentMessageDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  beforeId?: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  @IsOptional()
+  pageSize?: number = 50;
+}
+
 export class ProbeAgentMediaModelDto {
   @IsInt()
   @Min(1)
