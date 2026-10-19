@@ -19,6 +19,9 @@ export function previewWidget(widget: WidgetConfig): DashboardWidget {
           { key: 'pendingApprovals', label: '待审批', value: 3 },
           { key: 'productTotal', label: '产品总数', value: 86 },
           { key: 'skuTotal', label: 'SKU 总数', value: 412 },
+          { key: 'contentTotal', label: '内容创作数', value: 24 },
+          { key: 'materialTotal', label: 'AI 素材数', value: 38 },
+          { key: 'generationTotal', label: '生成记录数', value: 67 },
         ].filter((x) => (widget.params.metrics as string[]).includes(x.key)),
       };
       break;
@@ -82,6 +85,46 @@ export function previewWidget(widget: WidgetConfig): DashboardWidget {
         ],
       };
       break;
+    case 'content.generationTrend':
+      data = {
+        labels,
+        metrics: [
+          {
+            key: 'generationTotal',
+            label: '生成记录',
+            value: count === 30 ? 186 : 47,
+            unit: '次',
+            hint: `${count} 天内`,
+          },
+          {
+            key: 'generationRate',
+            label: '生成成功率',
+            value: 94.1,
+            unit: '%',
+            hint: '成功 32 · 已终止 2',
+          },
+          {
+            key: 'generationWaiting',
+            label: '待处理任务',
+            value: 3,
+            unit: '个',
+            hint: '含待补充素材',
+          },
+        ],
+        series: [
+          {
+            name: '文章生成',
+            values: samples([3, 5, 4, 8, 6, 7, 9]),
+            kind: 'bar',
+          },
+          {
+            name: '素材生成',
+            values: samples([2, 4, 3, 5, 4, 6, 7]),
+            kind: 'bar',
+          },
+        ],
+      };
+      break;
     case 'knowledge.health':
       data = {
         labels: ['可用', '处理中', '待处理 / 停用', '异常', '未识别'],
@@ -134,6 +177,13 @@ export function previewWidget(widget: WidgetConfig): DashboardWidget {
           { id: 'product', title: '产品库', detail: '进入模块' },
           { id: 'sku', title: 'SKU 库', detail: '进入模块' },
           { id: 'approvals', title: '审批管理', detail: '进入模块' },
+          { id: 'articles', title: '文章创作', detail: '进入模块' },
+          {
+            id: 'contentGeneration',
+            title: '生成记录',
+            detail: '进入模块',
+          },
+          { id: 'materials', title: '素材管理', detail: '进入模块' },
         ].filter((x) => (widget.params.links as string[]).includes(x.id)),
       };
   }

@@ -1,5 +1,29 @@
 # CHANGELOG
 
+### 2026-10-19 首页补充内容创作与素材生成统计
+
+- 首页核心数据由六项扩展为九项，新增当前用户的内容创作数、AI 素材数和生成记录数；按 `ContentArticle.read` / `AiMaterial.read` 独立裁剪，生成记录在同时授权时汇总文章与素材任务，并提供文章创作、生成记录、素材管理三个快捷入口。
+- 新增受控板块“内容与素材生成趋势”，支持近 7/30 天，按任务创建日展示文章生成与素材生成两条序列，并给出区间生成量、终态成功率和待处理任务数。排队、运行、存储及待补充不进入成功率分母，全部查询只统计当前登录用户。
+- 核心指标和快捷入口注册版本升级，旧配置安全补齐新版参数；新趋势板块在旧配置中以关闭状态追加，由管理员预览后发布，不擅自改变既有首页布局。全新配置默认包含该板块，仍受最多 12 块、固定数据源和权限边界约束。
+- 验证：后端变更文件 ESLint、TypeORM 实体检查、3 套 / 25 项 Dashboard Jest 与 Nest 生产构建通过；前端 6 项 ECharts/静态预览/契约测试、`vue-tsc --noEmit`、组件复用扫描及 Vite 生产打包通过。Vite 打包使用不写自动声明文件的临时配置完成并已删除，避免覆盖用户已有 `web/components.d.ts` 差异；未连接数据库、启动服务或修改线上首页配置。
+
+新增文件：无。
+
+修改文件（10）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `MD/首页改版设计方案.md`
+- `server/src/dashboard/dashboard-config.service.spec.ts`
+- `server/src/dashboard/dashboard.registry.spec.ts`
+- `server/src/dashboard/dashboard.registry.ts`
+- `server/src/dashboard/dashboard.service.spec.ts`
+- `server/src/dashboard/dashboard.service.ts`
+- `web/src/views/home/dashboard.test.mjs`
+- `web/src/views/home/dashboardPreview.ts`
+
+删除文件：无。
+
 ### 2026-10-19 素材管理接入可控图生图
 
 - 图片生成类型的 AI 功能配置新增“图生图能力”开关，新建图片配置默认开启，非图片配置强制关闭；素材配置选项只额外返回能力标记。素材新增文生图 / 图生图单选模式，图生图要求一张 PNG、JPEG 或 WebP 参考图（不超过 5MB），只允许选择已开启能力的配置；列表显示生成模式，详情回显参考图。

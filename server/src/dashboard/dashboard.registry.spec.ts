@@ -69,10 +69,18 @@ describe('dashboard registry boundary', () => {
       canViewWidget(user(['Product.read', 'ProductSku.read']), definition),
     ).toBe(true);
   });
-  it('skips removed definitions and safely upgrades parameters without enabling hidden widgets', () => {
+  it('skips removed definitions, upgrades parameters and appends new widgets as disabled', () => {
     const w = { ...defaultWidgets()[1], enabled: false, params: { days: 999 } };
     const result = resolveWidgets([null, { widgetKey: 'removed' }, w]);
-    expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({ enabled: false, params: { days: 7 } });
+    expect(result).toHaveLength(DASHBOARD_WIDGETS.length);
+    expect(result.find((x) => x.widgetKey === w.widgetKey)).toMatchObject({
+      enabled: false,
+      params: { days: 7 },
+    });
+    expect(
+      result
+        .filter((x) => x.widgetKey !== w.widgetKey)
+        .every((x) => x.enabled === false),
+    ).toBe(true);
   });
 });

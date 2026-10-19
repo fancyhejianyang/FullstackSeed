@@ -41,6 +41,7 @@ test('installed ECharts renders all registered chart shapes', () => {
     'agent.executionTrend',
     'catalog.distribution',
     'customer.taskTrend',
+    'content.generationTrend',
     'knowledge.health',
   ]) {
     const data = previewWidget({
@@ -141,6 +142,9 @@ test('every selectable quick action has a preview without navigating', () => {
     'product',
     'sku',
     'approvals',
+    'articles',
+    'contentGeneration',
+    'materials',
   ];
   for (const key of keys) {
     const items = previewWidget(widget('quick.actions', { links: [key] })).data

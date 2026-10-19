@@ -22,11 +22,13 @@ function fixture() {
     select: jest.fn().mockReturnThis(),
     addSelect: jest.fn().mockReturnThis(),
     where: jest.fn().mockReturnThis(),
+    andWhere: jest.fn().mockReturnThis(),
     groupBy: jest.fn().mockReturnThis(),
     addGroupBy: jest.fn().mockReturnThis(),
     orderBy: jest.fn().mockReturnThis(),
     getRawMany: jest.fn().mockResolvedValue([]),
     getRawOne: jest.fn().mockResolvedValue({ total: '12', enabled: '8' }),
+    getCount: jest.fn().mockResolvedValue(0),
   };
   const db = {
     getRepository: jest.fn(() => ({ createQueryBuilder: () => qb })),
@@ -129,6 +131,30 @@ describe('homepage data boundaries', () => {
         ),
       }),
     );
+  });
+  it('aggregates only the current user content and material generation tasks', async () => {
+    const { service, qb } = fixture();
+    const date = shanghaiRange(7, new Date('2026-10-19T03:00:00Z')).dates.at(
+      -1,
+    );
+    qb.getRawMany.mockResolvedValue([
+      { date, status: 'succeeded', count: '3' },
+      { date, status: 'failed', count: '1' },
+      { date, status: 'running', count: '1' },
+    ]);
+    const data = await service.contentGeneration(
+      user(['ContentArticle.read', 'AiMaterial.read']),
+      7,
+      new Date('2026-10-19T03:00:00Z'),
+    );
+    expect(data.series?.map((series) => series.values.at(-1))).toEqual([5, 5]);
+    expect(data.metrics?.find((m) => m.key === 'generationTotal')?.value).toBe(
+      10,
+    );
+    expect(data.metrics?.find((m) => m.key === 'generationRate')?.value).toBe(
+      75,
+    );
+    expect(qb.where).toHaveBeenCalledWith('r.userId = :userId', { userId: 1 });
   });
   it('isolates failing widgets', async () => {
     const logger = jest

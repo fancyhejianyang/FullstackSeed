@@ -10,6 +10,10 @@ import { KnowledgeBase } from '../knowledge-bases/entities/knowledge-base.entity
 import { KnowledgeAiChatSession } from '../knowledge-ai-chat/entities/knowledge-ai-chat-session.entity';
 import { CustomerChatTask } from '../customer-service/entities/customer-chat-task.entity';
 import { LogRecord } from '../log-records/entities/log-record.entity';
+import { ContentArticle } from '../content-articles/entities/content-article.entity';
+import { ContentGenerationTask } from '../content-articles/entities/content-generation-task.entity';
+import { AiMaterial } from '../ai-materials/entities/ai-material.entity';
+import { MaterialGenerationTask } from '../ai-materials/entities/material-generation-task.entity';
 import { DashboardConfigService } from './dashboard-config.service';
 import {
   DASHBOARD_LINKS,
@@ -143,6 +147,13 @@ export class DashboardService {
             break;
           case 'customer.taskTrend':
             data = await this.customer(Number(w.params.days), now);
+            break;
+          case 'content.generationTrend':
+            data = await this.contentGeneration(
+              user,
+              Number(w.params.days),
+              now,
+            );
             break;
           case 'knowledge.health':
             data = await load('knowledge', () => this.knowledge());
@@ -278,6 +289,55 @@ export class DashboardService {
           path,
         });
       }
+    }
+    const contentAccess = allowed(user, 'ContentArticle.read');
+    const materialAccess = allowed(user, 'AiMaterial.read');
+    if (!all && contentAccess && need('contentTotal')) {
+      metrics.push({
+        key: 'contentTotal',
+        label: '内容创作数',
+        value: await this.query(ContentArticle)
+          .where('r.userId = :userId', { userId: user.userId })
+          .getCount(),
+        unit: '篇',
+        hint: '仅当前用户',
+        path: '/content-articles',
+      });
+    }
+    if (!all && materialAccess && need('materialTotal')) {
+      metrics.push({
+        key: 'materialTotal',
+        label: 'AI 素材数',
+        value: await this.query(AiMaterial)
+          .where('r.userId = :userId', { userId: user.userId })
+          .getCount(),
+        unit: '份',
+        hint: '仅当前用户',
+        path: '/ai-materials',
+      });
+    }
+    if (!all && (contentAccess || materialAccess) && need('generationTotal')) {
+      const articleTasks = contentAccess
+        ? await this.query(ContentGenerationTask)
+            .where('r.userId = :userId', { userId: user.userId })
+            .getCount()
+        : 0;
+      const materialTasks = materialAccess
+        ? await this.query(MaterialGenerationTask)
+            .where('r.userId = :userId', { userId: user.userId })
+            .getCount()
+        : 0;
+      metrics.push({
+        key: 'generationTotal',
+        label: '生成记录数',
+        value: articleTasks + materialTasks,
+        unit: '次',
+        hint:
+          (contentAccess ? '文章 ' + articleTasks : '') +
+          (contentAccess && materialAccess ? ' · ' : '') +
+          (materialAccess ? '素材 ' + materialTasks : ''),
+        path: contentAccess ? '/content-generation' : '/ai-materials',
+      });
     }
     if (all && allowed(user, 'KnowledgeBase.read')) {
       const data = await load('knowledge', () => this.knowledge());
@@ -491,6 +551,116 @@ export class DashboardService {
         ),
       })),
       note: '按任务创建日统计当前状态，不代表历史转人工率。',
+    };
+  }
+  async contentGeneration(
+    user: AuthUser,
+    days: number,
+    now: Date,
+  ): Promise<WidgetData> {
+    const range = shanghaiRange(days, now);
+    const contentAccess = allowed(user, 'ContentArticle.read');
+    const materialAccess = allowed(user, 'AiMaterial.read');
+    const rows: Array<{
+      source: 'content' | 'material';
+      date: string;
+      status: string;
+      count: string;
+    }> = [];
+    const load = async (
+      entity: EntityTarget<ObjectLiteral>,
+      source: 'content' | 'material',
+    ) => {
+      const day = this.dayExpression('r');
+      const result = await this.query(entity)
+        .select(day, 'date')
+        .addSelect('r.status', 'status')
+        .addSelect('COUNT(*)', 'count')
+        .where('r.userId = :userId', { userId: user.userId })
+        .andWhere(
+          'r.createdAt >= FROM_UNIXTIME(:startEpoch) AND r.createdAt <= FROM_UNIXTIME(:endEpoch)',
+          {
+            startEpoch: range.start.getTime() / 1000,
+            endEpoch: range.end.getTime() / 1000,
+          },
+        )
+        .groupBy(day)
+        .addGroupBy('r.status')
+        .getRawMany<{ date: string; status: string; count: string }>();
+      rows.push(...result.map((row) => ({ ...row, source })));
+    };
+    if (contentAccess) await load(ContentGenerationTask, 'content');
+    if (materialAccess) await load(MaterialGenerationTask, 'material');
+    const count = (source: 'content' | 'material', date?: string) =>
+      rows
+        .filter((row) => row.source === source && (!date || row.date === date))
+        .reduce((total, row) => total + n(row.count), 0);
+    const successStatuses = new Set(['succeeded', 'adopted']);
+    const terminalStatuses = new Set([
+      'succeeded',
+      'adopted',
+      'failed',
+      'interrupted',
+      'unknown',
+    ]);
+    const waitingStatuses = new Set([
+      'pending',
+      'running',
+      'storing',
+      'needs_input',
+    ]);
+    const succeeded = rows
+      .filter((row) => successStatuses.has(row.status))
+      .reduce((total, row) => total + n(row.count), 0);
+    const terminal = rows
+      .filter((row) => terminalStatuses.has(row.status))
+      .reduce((total, row) => total + n(row.count), 0);
+    const waiting = rows
+      .filter((row) => waitingStatuses.has(row.status))
+      .reduce((total, row) => total + n(row.count), 0);
+    const articleTasks = count('content');
+    const materialTasks = count('material');
+    const series = [];
+    if (contentAccess)
+      series.push({
+        name: '文章生成',
+        values: range.dates.map((date) => count('content', date)),
+        kind: 'bar' as const,
+      });
+    if (materialAccess)
+      series.push({
+        name: '素材生成',
+        values: range.dates.map((date) => count('material', date)),
+        kind: 'bar' as const,
+      });
+    return {
+      labels: range.dates,
+      series,
+      metrics: [
+        {
+          key: 'generationTotal',
+          label: '生成记录',
+          value: articleTasks + materialTasks,
+          unit: '次',
+          hint: `${days} 天内`,
+          path: contentAccess ? '/content-generation' : '/ai-materials',
+        },
+        {
+          key: 'generationRate',
+          label: '生成成功率',
+          value: terminal ? successRate(succeeded, terminal - succeeded) : null,
+          unit: '%',
+          hint: '成功 ' + succeeded + ' · 已终止 ' + (terminal - succeeded),
+        },
+        {
+          key: 'generationWaiting',
+          label: '待处理任务',
+          value: waiting,
+          unit: '个',
+          hint: '含待补充素材',
+        },
+      ],
+      note: '仅统计当前用户按任务创建日产生的记录；成功率不包含运行中、排队中、存储中和待补充任务。',
     };
   }
   private async knowledge(): Promise<WidgetData> {

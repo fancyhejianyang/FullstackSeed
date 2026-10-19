@@ -75,7 +75,7 @@ describe('dashboard draft, publication and rollback', () => {
       expect.objectContaining({
         action: 'rollback',
         operatorId: 1,
-        afterData: { revision: 3, publishedVersion: 2, enabledWidgets: 9 },
+        afterData: { revision: 3, publishedVersion: 2, enabledWidgets: 10 },
       }),
     );
   });

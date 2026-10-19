@@ -24,13 +24,18 @@ const limit: WidgetParameter = {
   min: 5,
   max: 10,
 };
-const permissions = [
+const businessPermissions = [
   'AgentApp.read',
   'CustomerService.read',
   'ApprovalRequest.read',
   'Product.read',
   'ProductSku.read',
   'KnowledgeBase.read',
+];
+const corePermissions = [
+  ...businessPermissions,
+  'ContentArticle.read',
+  'AiMaterial.read',
 ];
 export const DASHBOARD_LINKS = [
   {
@@ -75,6 +80,24 @@ export const DASHBOARD_LINKS = [
     path: '/collaboration-center/approvals',
     permission: 'ApprovalRequest.read',
   },
+  {
+    key: 'articles',
+    label: '文章创作',
+    path: '/content-articles',
+    permission: 'ContentArticle.read',
+  },
+  {
+    key: 'contentGeneration',
+    label: '生成记录',
+    path: '/content-generation',
+    permission: 'ContentArticle.read',
+  },
+  {
+    key: 'materials',
+    label: '素材管理',
+    path: '/ai-materials',
+    permission: 'AiMaterial.read',
+  },
 ];
 const metricOptions = [
   { label: '今日执行', value: 'agentTotal' },
@@ -83,17 +106,20 @@ const metricOptions = [
   { label: '待审批', value: 'pendingApprovals' },
   { label: '产品总数', value: 'productTotal' },
   { label: 'SKU 总数', value: 'skuTotal' },
+  { label: '内容创作数', value: 'contentTotal' },
+  { label: 'AI 素材数', value: 'materialTotal' },
+  { label: '生成记录数', value: 'generationTotal' },
 ];
 export const DASHBOARD_WIDGETS: WidgetDefinition[] = [
   {
     key: 'core.metrics',
     name: '核心数据',
-    description: '执行、客服、审批与商品记录概览',
+    description: '执行、客服、审批、商品与内容资产概览',
     category: 'metric',
-    permissionCodes: permissions,
+    permissionCodes: corePermissions,
     allowedSpans: [12],
     defaultSpan: 12,
-    schemaVersion: 1,
+    schemaVersion: 2,
     parameters: [
       {
         key: 'metrics',
@@ -134,7 +160,7 @@ export const DASHBOARD_WIDGETS: WidgetDefinition[] = [
     name: '业务健康概览',
     description: '应用启用、知识资产与接待状态',
     category: 'metric',
-    permissionCodes: permissions,
+    permissionCodes: businessPermissions,
     allowedSpans: [4, 6, 12],
     defaultSpan: 4,
     schemaVersion: 1,
@@ -181,6 +207,17 @@ export const DASHBOARD_WIDGETS: WidgetDefinition[] = [
     parameters: [days],
   },
   {
+    key: 'content.generationTrend',
+    name: '内容与素材生成趋势',
+    description: '当前用户的文章与素材生成任务趋势及完成情况',
+    category: 'chart',
+    permissionCodes: ['ContentArticle.read', 'AiMaterial.read'],
+    allowedSpans: [6, 8, 12],
+    defaultSpan: 6,
+    schemaVersion: 1,
+    parameters: [days],
+  },
+  {
     key: 'knowledge.health',
     name: '知识库健康度',
     description: '知识库记录的处理状态与可用性',
@@ -221,12 +258,12 @@ export const DASHBOARD_WIDGETS: WidgetDefinition[] = [
   {
     key: 'quick.actions',
     name: '快捷入口',
-    description: '进入常用业务模块',
+    description: '进入常用业务与内容创作模块',
     category: 'navigation',
     permissionCodes: DASHBOARD_LINKS.map((x) => x.permission),
     allowedSpans: [4, 6, 12],
     defaultSpan: 4,
-    schemaVersion: 1,
+    schemaVersion: 2,
     parameters: [
       {
         key: 'links',
@@ -361,10 +398,10 @@ export function validateWidgets(input: unknown): WidgetConfig[] {
   if (!result.some((x) => x.enabled)) return fail('请至少启用一个板块');
   return result.sort((a, b) => a.layout.order - b.layout.order);
 }
-/** 运行时兼容：未知板块跳过；参数升级仅回退该板块，已隐藏状态不丢失。 */
+/** 运行时兼容：未知板块跳过；参数升级回退该板块；新增板块以关闭状态加入旧配置。 */
 export function resolveWidgets(input: unknown): WidgetConfig[] {
   if (!Array.isArray(input)) return defaultWidgets();
-  return input
+  const resolved = input
     .flatMap((x: WidgetConfig) => {
       const fallback = defaultWidgets().find(
         (d) => d.widgetKey === x?.widgetKey,
@@ -380,4 +417,19 @@ export function resolveWidgets(input: unknown): WidgetConfig[] {
       }
     })
     .sort((a, b) => a.layout.order - b.layout.order);
+  const present = new Set(resolved.map((x) => x.widgetKey));
+  const maxOrder = resolved.reduce(
+    (highest, widget) => Math.max(highest, widget.layout.order),
+    -10,
+  );
+  return [
+    ...resolved,
+    ...defaultWidgets()
+      .filter((widget) => !present.has(widget.widgetKey))
+      .map((widget, index) => ({
+        ...widget,
+        enabled: false,
+        layout: { ...widget.layout, order: maxOrder + (index + 1) * 10 },
+      })),
+  ].sort((a, b) => a.layout.order - b.layout.order);
 }
