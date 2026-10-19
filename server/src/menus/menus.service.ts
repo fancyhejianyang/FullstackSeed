@@ -20,18 +20,55 @@ type SeedMenu = Partial<Menu> & {
   legacyPaths?: string[];
   reconcile?: boolean;
   preserveVisibility?: boolean;
+  matchByName?: boolean;
 };
 
 // 内置菜单种子（path 对应前端路由）
 // isSystem=true 为系统固定菜单：仅超管可见、不可分配给角色；业务菜单 isSystem=false 可分配。
 const BASE_SEED_MENUS: SeedMenu[] = [
   {
+    name: 'AI 功能配置',
+    path: '/ai-config',
+    icon: 'Cpu',
+    sort: 74,
+    permissionCode: 'Menu.read,AiCommandDefinition.read,AiWorkflow.read',
+    isSystem: false,
+    reconcile: true,
+    preserveVisibility: true,
+    matchByName: false,
+  },
+  {
     name: '内容创作',
-    path: '/content-articles',
+    path: '/content-creation',
     icon: 'EditPen',
     sort: 73,
+    permissionCode: 'ContentArticle.read,ContentTemplate.read',
+    isSystem: false,
+    reconcile: true,
+    preserveVisibility: true,
+    matchByName: false,
+  },
+  {
+    name: '写作模板',
+    path: '/content-templates',
+    icon: '',
+    sort: 20,
+    permissionCode: 'ContentTemplate.read',
+    isSystem: false,
+    parentPath: '/content-creation',
+    reconcile: true,
+    preserveVisibility: true,
+  },
+  {
+    name: '文章创作',
+    path: '/content-articles',
+    icon: '',
+    sort: 10,
     permissionCode: 'ContentArticle.read',
     isSystem: false,
+    parentPath: '/content-creation',
+    reconcile: true,
+    preserveVisibility: true,
   },
   {
     name: 'Agent 管理',
@@ -264,24 +301,28 @@ const BASE_SEED_MENUS: SeedMenu[] = [
     parentPath: '/chat-management',
   },
   {
-    name: 'AI 功能配置',
-    path: '/chat-management/ai-configs',
+    name: '功能配置',
+    path: '/ai-config/features',
     icon: '',
-    sort: 30,
+    sort: 10,
     permissionCode: 'Menu.read',
     isSystem: true,
-    parentPath: '/chat-management',
+    parentPath: '/ai-config',
+    legacyPaths: ['/chat-management/ai-configs'],
+    reconcile: true,
+    preserveVisibility: true,
   },
   {
     name: 'AI 指令集',
-    path: '/agent-management/commands',
+    path: '/ai-config/commands',
     icon: '',
     sort: 50,
     permissionCode: 'AiCommandDefinition.read',
     isSystem: true,
-    parentPath: '/agent-management',
-    legacyPaths: ['/chat-management/commands'],
+    parentPath: '/ai-config',
+    legacyPaths: ['/agent-management/commands', '/chat-management/commands'],
     reconcile: true,
+    preserveVisibility: true,
   },
   {
     name: '知识库检索配置',
@@ -294,14 +335,15 @@ const BASE_SEED_MENUS: SeedMenu[] = [
   },
   {
     name: 'AI 工作流',
-    path: '/agent-management/workflows',
+    path: '/ai-config/workflows',
     icon: '',
     sort: 60,
     permissionCode: 'AiWorkflow.read',
     isSystem: true,
-    parentPath: '/agent-management',
-    legacyPaths: ['/chat-management/workflows'],
+    parentPath: '/ai-config',
+    legacyPaths: ['/agent-management/workflows', '/chat-management/workflows'],
     reconcile: true,
+    preserveVisibility: true,
   },
   {
     name: '知识库路由规则',
@@ -408,6 +450,8 @@ const SEED_MENUS = reorganizeSystemMenus(BASE_SEED_MENUS);
 
 // 锁定菜单路径：前端不限制操作，后端 API 对此类菜单统一做管理员身份校验
 const PROTECTED_MENU_PATHS = [
+  '/ai-config',
+  '/content-creation',
   '/menus',
   '/system-config',
   '/access-control',
@@ -436,6 +480,7 @@ export class MenusService implements OnModuleInit {
         reconcile = false,
         preserveVisibility = false,
         retired = false,
+        matchByName = true,
         ...menuSeed
       } = seed;
       const parent = parentPath
@@ -453,7 +498,7 @@ export class MenusService implements OnModuleInit {
           where: legacyPaths.map((path) => ({ path })),
         });
       }
-      if (!exist && menuSeed.name) {
+      if (!exist && matchByName && menuSeed.name) {
         exist = await this.menuRepository.findOne({
           where: { name: menuSeed.name },
         });
@@ -546,9 +591,13 @@ export class MenusService implements OnModuleInit {
     });
     return this.buildTree(visible).filter(
       (node) =>
-        !['/system-config', '/access-control', '/third-party-config'].includes(
-          node.path,
-        ) || node.children.length > 0,
+        ![
+          '/system-config',
+          '/access-control',
+          '/third-party-config',
+          '/ai-config',
+          '/content-creation',
+        ].includes(node.path) || node.children.length > 0,
     );
   }
 

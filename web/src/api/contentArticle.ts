@@ -15,7 +15,7 @@ export interface ContentArticle extends ContentArticleForm {
 export type ContentArticleSummary = Pick<
   ContentArticle,
   'id' | 'title' | 'coverUrl' | 'version' | 'createdAt' | 'updatedAt'
->;
+> & { latestTask: ContentTask | null };
 
 export function getContentArticles(params: {
   page?: number;
@@ -50,15 +50,69 @@ export function batchDeleteContentArticles(ids: Array<string | number>) {
     ids: ids.map(Number),
   });
 }
+export type ContentTaskStatus =
+  | 'pending'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'interrupted'
+  | 'adopted';
+export interface ContentTask {
+  id: number;
+  articleId: number;
+  articleVersion: number;
+  status: ContentTaskStatus;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  errorMessage: string | null;
+  totalTokens: number | null;
+}
+export interface ContentTaskDetail extends ContentTask {
+  snapshot: {
+    title: string;
+    idea: string;
+    template: { id: number | null; name: string; instruction: string };
+    config: {
+      id: number;
+      name: string;
+      providerId: number;
+      providerName: string;
+      model: string;
+      temperature: number;
+      thinkingParameters: Record<string, unknown> | null;
+      systemPrompt: string;
+    };
+  };
+  result: string | null;
+}
 export function generateContentArticle(
-  data: Pick<ContentArticleForm, 'title' | 'idea'>,
-  id?: number,
+  id: number,
+  data: { version: number; requestId: string; templateId?: number },
 ) {
-  return request.post<unknown, { content: string }>(
-    id === undefined
-      ? '/content-articles/generate'
-      : `/content-articles/${id}/generate`,
+  return request.post<unknown, ContentTask>(
+    `/content-articles/${id}/generate`,
     data,
-    { timeout: 130000 },
+  );
+}
+export function getContentTasks(
+  id: number,
+  params: { page?: number; pageSize?: number },
+  silentError = false,
+) {
+  return request.get<unknown, { list: ContentTask[]; total: number }>(
+    `/content-articles/${id}/tasks`,
+    { params, silentError },
+  );
+}
+export function getContentTask(id: number) {
+  return request.get<unknown, ContentTaskDetail>(
+    `/content-articles/tasks/${id}`,
+  );
+}
+export function adoptContentTask(id: number, version: number) {
+  return request.post<unknown, ContentArticle>(
+    `/content-articles/tasks/${id}/adopt`,
+    { version },
   );
 }

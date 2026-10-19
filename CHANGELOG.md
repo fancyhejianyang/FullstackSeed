@@ -1,5 +1,71 @@
 # CHANGELOG
 
+### 2026-10-19 内容创作配置、写作模板与持久化后台任务
+
+- AI 指令集、AI 工作流迁入统一“AI 功能配置”分组与页签，按原有 Menu / AiCommandDefinition / AiWorkflow 权限分别展示和挂载；旧聊天/Agent 地址保持重定向，原菜单 ID 与人工启停/超管可见性保留。新分组按路径匹配，避免同名父级占用旧配置菜单 ID。
+- 新增 AI 功能类型 `contentCreation`（内容创作），独立选择账号、文本模型、温度、Think 参数与写作提示词，固定 Markdown 输出，不回退聊天配置、不执行客服工作流。服务端校验和 MySQL 生成列唯一索引共同保证同时至多一个启用配置；文章生成必须恰好有一个可用配置。
+- 内容创作分为“文章创作 / 写作模板”。模板按 demo 结构提供本人范围 CRUD，仅名称与写作要求两项，使用独立 `ContentTemplate.*` 权限；生成选模板另需 read 权限。文章仍只有标题、封面、想法、正文四个字段；模板选择位于生成操作区，不写入文章字段，未选择时使用通用写作。
+- 原同步生成改为“保存并生成”：先保存文章，再 POST `/content-articles/:id/generate`，携带隐藏 version、UUID requestId 和可选 templateId，快速返回任务概要。移除旧的新稿同步 `POST /content-articles/generate`；前后端需一并部署。创建文章用 create 权限，提交任务与采用正文用 update 权限；只具备 create 的角色仍可保存想法，但不能发起付费生成。
+- 新表 `content_generation_tasks` 持久化标题/想法、配置/模板快照、状态、候选正文、错误、时间和可用 Token 用量。配置快照不保存密钥、端点或内部推理，不回传供应商原始错误。列表仅查询任务标量概要，大字段按任务详情读取；文章与模板数据均按当前用户隔离（超管也不绕过归属）。
+- 数据库唯一约束防止请求号重复及同用户/同文章并发任务，事务内锁定并重新核对文章版本。后台每 2 秒检查，单实例串行消费，多实例条件抢占；模型请求 120 秒期限、运行租约 150 秒。重启后 pending 可继续，过期 running 只标记 interrupted，不自动重试可能已计费调用；迟到响应不得写回已中断任务。通用内存任务队列及知识任务不改。
+- 文章列表显示最新生成状态，编辑和详情页提供分页“生成记录”，可查看真实状态、耗时、模型/模板、素材与结果。活跃任务轮询，关闭页面停止前端查询但后台继续；读取失败提示手动刷新，不伪造百分比。任务完成只存候选稿，不自动覆盖文章。
+- “采用并保存”需二次确认，服务端事务检查成功状态、任务提交版本与当前文章版本一致；文章已修改或编辑框有未保存内容时禁止覆盖，仍可复制候选稿手动合并。正文安全转义展示，不执行 HTML。提交请求失败保留草稿 ID 和请求号，重试不重复创建文章或任务；保存、上传、提交、采用期间防误关闭。
+- 使用方式：部署后在“AI 功能配置 → 功能配置”新增并启用一个“内容创作”配置；如需模板，在“内容创作 → 写作模板”维护；文章点击“保存并生成”，在该文章编辑/查看页的“生成记录”查看进度与候选正文。普通角色需按职责授予 ContentArticle / ContentTemplate 对应权限。
+- 数据库：新增幂等迁移 `1792371600000-AddContentGenerationTasks`，创建模板、任务表和启用创作配置唯一约束。开发环境下次正常启动按现有 synchronize 策略应用；生产环境须先在维护流程中执行迁移，再启动新版服务。未修改环境变量、连接真实数据库或执行迁移，未自动启动/重启服务、未调用真实模型。
+- 验证：后端 43 套 / 410 项 Jest、前端 93 项 Node 回归全部通过；后端及 Vue 类型检查、全部本次变更后端文件 ESLint、TypeORM 实体列检查、离线 MySQL 元数据构建、Vue 模板/scoped CSS 编译、组件复用核对与 diff 空白检查通过。后端生产 build 与前端等效 Vite 生产构建通过（前端禁用 d.ts 写入）；依赖 PURE 注释和大 chunk 警告保留。未进行真实供应商、MySQL 集成及浏览器视觉验收。
+
+新增文件（18）：
+
+- `server/src/content-articles/content-generation.service.spec.ts`
+- `server/src/content-articles/content-generation.service.ts`
+- `server/src/content-articles/entities/content-generation-task.entity.ts`
+- `server/src/content-templates/content-templates.controller.ts`
+- `server/src/content-templates/content-templates.module.ts`
+- `server/src/content-templates/content-templates.service.spec.ts`
+- `server/src/content-templates/content-templates.service.ts`
+- `server/src/content-templates/dto/content-template.dto.ts`
+- `server/src/content-templates/entities/content-template.entity.ts`
+- `server/src/migrations/1792371600000-AddContentGenerationTasks.ts`
+- `web/src/api/contentTemplate.ts`
+- `web/src/views/ai-config/Index.vue`
+- `web/src/views/content-article/Tasks.vue`
+- `web/src/views/content-article/taskState.ts`
+- `web/src/views/content-article/tasks.test.mjs`
+- `web/src/views/content-template/Edit.vue`
+- `web/src/views/content-template/Index.vue`
+- `web/src/views/content-template/View.vue`
+
+修改文件（26）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/ai-feature-configs/ai-feature-config.constants.ts`
+- `server/src/ai-feature-configs/ai-feature-configs.service.spec.ts`
+- `server/src/ai-feature-configs/ai-feature-configs.service.ts`
+- `server/src/ai-feature-configs/entities/ai-feature-config.entity.ts`
+- `server/src/content-articles/content-articles.controller.ts`
+- `server/src/content-articles/content-articles.module.ts`
+- `server/src/content-articles/content-articles.service.spec.ts`
+- `server/src/content-articles/content-articles.service.ts`
+- `server/src/content-articles/dto/content-article.dto.ts`
+- `server/src/menus/menu-structure.ts`
+- `server/src/menus/menus.service.spec.ts`
+- `server/src/menus/menus.service.ts`
+- `server/src/users/users.service.ts`
+- `web/src/api/aiFeatureConfig.ts`
+- `web/src/api/contentArticle.ts`
+- `web/src/api/knowledgeAiProvider.ts`
+- `web/src/router/index.ts`
+- `web/src/router/systemNavigation.test.mjs`
+- `web/src/views/ai-feature-config/Edit.vue`
+- `web/src/views/ai-feature-config/Index.vue`
+- `web/src/views/content-article/Edit.vue`
+- `web/src/views/content-article/Index.vue`
+- `web/src/views/content-article/View.vue`
+- `web/src/views/content-article/contentArticle.test.mjs`
+
+删除文件：无。用户已有 `web/components.d.ts` 改动保留且不纳入提交；构建前后 SHA256 相同。
+
 ### 2026-10-19 新增四字段内容创作与 AI 正文生成
 
 - 新增独立“内容创作”业务菜单，按前后端 demo 五件套与列表/编辑/详情结构扩展。表单仅标题 `title`、封面 `coverUrl`、想法 `idea`、正文 `content` 四项，标题必填，其余可空；支持先记录想法、之后继续编辑、封面上传、正文复制及软删除/批量软删除。不增加平台、模板、状态或模型选择表单。

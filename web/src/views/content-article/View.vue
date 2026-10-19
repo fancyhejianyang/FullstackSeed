@@ -2,6 +2,7 @@
 import { onBeforeUnmount, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import Button from '@/components/Button.vue';
+import Tasks from './Tasks.vue';
 import Dialog from '@/components/Dialog.vue';
 import {
   getContentArticle,
@@ -10,6 +11,7 @@ import {
 } from '@/api/contentArticle';
 
 const props = defineProps<{ row?: ContentArticleSummary | null }>();
+const emit = defineEmits<{ success: [] }>();
 const visible = defineModel<boolean>('visible', { required: true });
 const loading = ref(false);
 const detail = ref<ContentArticle | null>(null);
@@ -71,6 +73,17 @@ async function copyContent() {
         <pre class="article-view__content">{{
           detail.content || '尚未生成正文'
         }}</pre>
+        <Tasks
+          v-if="visible"
+          :key="detail.id"
+          :article-id="detail.id"
+          :version="detail.version"
+          can-adopt
+          @adopted="
+            detail = $event;
+            emit('success');
+          "
+        />
       </template>
       <el-empty v-else-if="!loading" description="内容读取失败" />
     </div>

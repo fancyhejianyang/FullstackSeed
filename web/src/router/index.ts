@@ -43,10 +43,21 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '示例管理', permission: 'Demo.read' },
       },
       {
+        path: 'content-creation',
+        component: { render: () => null },
+        meta: { title: '内容创作' },
+      },
+      {
+        path: 'content-templates',
+        name: 'content-templates',
+        component: () => import('@/views/content-template/Index.vue'),
+        meta: { title: '写作模板', permission: 'ContentTemplate.read' },
+      },
+      {
         path: 'content-articles',
         name: 'content-articles',
         component: () => import('@/views/content-article/Index.vue'),
-        meta: { title: '内容创作', permission: 'ContentArticle.read' },
+        meta: { title: '文章创作', permission: 'ContentArticle.read' },
       },
       {
         path: 'knowledge-bases',
@@ -242,31 +253,48 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '客服工作台', permission: 'CustomerService.read' },
       },
       {
+        path: 'ai-config',
+        component: { render: () => null },
+        meta: { title: 'AI 功能配置' },
+      },
+      {
+        path: 'ai-config/features',
+        name: 'ai-config-features',
+        component: () => import('@/views/ai-config/Index.vue'),
+        props: { section: 'features' },
+        meta: { title: 'AI 功能配置', permission: 'Menu.read' },
+      },
+      {
+        path: 'ai-config/commands',
+        name: 'ai-config-commands',
+        component: () => import('@/views/ai-config/Index.vue'),
+        props: { section: 'commands' },
+        meta: { title: 'AI 指令集', permission: 'AiCommandDefinition.read' },
+      },
+      {
+        path: 'ai-config/workflows',
+        name: 'ai-config-workflows',
+        component: () => import('@/views/ai-config/Index.vue'),
+        props: { section: 'workflows' },
+        meta: { title: 'AI 工作流', permission: 'AiWorkflow.read' },
+      },
+      {
         path: 'chat-management/ai-configs',
         name: 'chat-management-ai-configs',
-        component: () => import('@/views/ai-feature-config/Index.vue'),
-        meta: { title: 'AI 功能配置', permission: 'Menu.read' },
+        redirect: '/ai-config/features',
       },
       {
         path: 'agent-management/commands',
         name: 'agent-management-commands',
-        component: () => import('@/views/ai-command-definition/Index.vue'),
-        meta: { title: 'AI 指令集', permission: 'AiCommandDefinition.read' },
+        redirect: '/ai-config/commands',
       },
-      {
-        path: 'chat-management/commands',
-        redirect: '/agent-management/commands',
-      },
+      { path: 'chat-management/commands', redirect: '/ai-config/commands' },
       {
         path: 'agent-management/workflows',
         name: 'agent-management-workflows',
-        component: () => import('@/views/ai-workflow/Index.vue'),
-        meta: { title: 'AI 工作流', permission: 'AiWorkflow.read' },
+        redirect: '/ai-config/workflows',
       },
-      {
-        path: 'chat-management/workflows',
-        redirect: '/agent-management/workflows',
-      },
+      { path: 'chat-management/workflows', redirect: '/ai-config/workflows' },
       {
         path: 'chat-management/retrieval-configs',
         name: 'chat-management-retrieval-configs',
@@ -400,6 +428,24 @@ router.beforeEach(async (to) => {
       userStore.logout();
       return { path: '/login', query: { redirect: to.fullPath } };
     }
+  }
+  if (to.path === '/ai-config' || to.path === '/content-creation') {
+    const entries =
+      to.path === '/ai-config'
+        ? [
+            ['/ai-config/features', 'Menu.read'],
+            ['/ai-config/commands', 'AiCommandDefinition.read'],
+            ['/ai-config/workflows', 'AiWorkflow.read'],
+          ]
+        : [
+            ['/content-articles', 'ContentArticle.read'],
+            ['/content-templates', 'ContentTemplate.read'],
+          ];
+    return (
+      entries.find(([, permission]) =>
+        userStore.hasPermission(permission),
+      )?.[0] ?? '/'
+    );
   }
   const permission = to.meta.permission;
   if (typeof permission === 'string' && !userStore.hasPermission(permission)) {

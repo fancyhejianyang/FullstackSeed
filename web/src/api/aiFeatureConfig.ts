@@ -1,6 +1,11 @@
 import request from '@/utils/request';
 
-export type AiFeatureType = 'chat' | 'documentParse' | 'ocr' | 'rerank';
+export type AiFeatureType =
+  | 'chat'
+  | 'contentCreation'
+  | 'documentParse'
+  | 'ocr'
+  | 'rerank';
 export type AiResponseFormat = 'text' | 'json' | 'markdown';
 
 export interface AiFeatureConfig {
@@ -55,9 +60,12 @@ export interface AiFeatureConfigForm {
 }
 
 export function getAiFeatureConfigs(params: QueryAiFeatureConfigParams) {
-  return request.get<unknown, AiFeatureConfigListResult>('/ai-feature-configs', {
-    params,
-  });
+  return request.get<unknown, AiFeatureConfigListResult>(
+    '/ai-feature-configs',
+    {
+      params,
+    },
+  );
 }
 
 export function getAiFeatureConfig(id: number) {
@@ -69,7 +77,10 @@ export function createAiFeatureConfig(data: AiFeatureConfigForm) {
 }
 
 export function updateAiFeatureConfig(id: number, data: AiFeatureConfigForm) {
-  return request.patch<unknown, AiFeatureConfig>(`/ai-feature-configs/${id}`, data);
+  return request.patch<unknown, AiFeatureConfig>(
+    `/ai-feature-configs/${id}`,
+    data,
+  );
 }
 
 export function deleteAiFeatureConfig(id: number) {

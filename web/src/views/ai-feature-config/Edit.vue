@@ -60,6 +60,7 @@ const form = reactive<AiFeatureConfigEditForm>({
 
 const featureTypeOptions = [
   { label: '聊天', value: 'chat' },
+  { label: '内容创作', value: 'contentCreation' },
   { label: '文档解析', value: 'documentParse' },
   { label: 'OCR', value: 'ocr' },
   { label: 'LLM 重排', value: 'rerank' },
@@ -90,9 +91,15 @@ const isOcrFeature = computed(() => form.featureType === 'ocr');
 const isMineruOcrFeature = computed(
   () => isOcrFeature.value && !!form.useMineru,
 );
-const isChatFeature = computed(() => form.featureType === 'chat');
+const isWritingFeature = computed(() => form.featureType === 'contentCreation');
+const isTextFeature = computed(() =>
+  ['chat', 'contentCreation'].includes(form.featureType),
+);
 const isRerankFeature = computed(() => form.featureType === 'rerank');
 const isStructuredParseFeature = computed(() => isParseFeature.value);
+const isMarkdownFeature = computed(
+  () => isParseFeature.value || isWritingFeature.value,
+);
 const usesTemperature = computed(() => !isRerankFeature.value);
 const usesPromptSettings = computed(() => !isRerankFeature.value);
 
@@ -126,11 +133,13 @@ const fields = computed<FormField[]>(() => {
       hint:
         form.featureType === 'chat'
           ? '当前为聊天：所选模型负责生成对话与知识库问答的最终回复。'
-          : form.featureType === 'rerank'
-            ? '当前为 LLM 重排：模型只给召回的知识片段评分和排序，不参与最终回答。'
-            : form.featureType === 'ocr'
-              ? '当前为 OCR：仅处理图片或 PDF，可使用视觉模型或 MinerU 引擎。'
-              : '当前为文档解析：仅处理文本/TXT/Word，由大模型按提示词整理为结构化 Markdown。',
+          : form.featureType === 'contentCreation'
+            ? '用于文章后台生成；同一时间只允许启用一个内容创作配置。'
+            : form.featureType === 'rerank'
+              ? '当前为 LLM 重排：模型只给召回的知识片段评分和排序，不参与最终回答。'
+              : form.featureType === 'ocr'
+                ? '当前为 OCR：仅处理图片或 PDF，可使用视觉模型或 MinerU 引擎。'
+                : '当前为文档解析：仅处理文本/TXT/Word，由大模型按提示词整理为结构化 Markdown。',
     },
   ];
 
@@ -197,7 +206,7 @@ const fields = computed<FormField[]>(() => {
     }
   }
 
-  if (isChatFeature.value) {
+  if (isTextFeature.value) {
     baseFields.push({
       prop: 'enableThinking',
       label: 'Think 模式',
@@ -245,23 +254,25 @@ const fields = computed<FormField[]>(() => {
         prop: 'responseFormat',
         label: '返回格式',
         type: 'select',
-        options: isStructuredParseFeature.value
+        options: isMarkdownFeature.value
           ? [{ label: 'Markdown（固定）', value: 'markdown' }]
           : [
               { label: '文本', value: 'text' },
               { label: 'JSON', value: 'json' },
               { label: 'Markdown', value: 'markdown' },
             ],
-        componentProps: isStructuredParseFeature.value
+        componentProps: isMarkdownFeature.value
           ? { disabled: true }
           : undefined,
-        hint: isStructuredParseFeature.value
-          ? '文档解析固定输出 Markdown，以保留标题、列表、表格等结构并支持章节分片。'
-          : form.responseFormat === 'json'
-            ? '当前要求 JSON：适合被程序解析，提示词中应明确字段结构并避免附加说明。'
-            : form.responseFormat === 'markdown'
-              ? '当前要求 Markdown：适合保留标题、列表、表格等富文本结构。'
-              : '当前返回普通文本：兼容性最好，适合一般对话和简短结果。',
+        hint: isWritingFeature.value
+          ? '文章正文固定输出 Markdown，使用此配置及所选写作模板。'
+          : isStructuredParseFeature.value
+            ? '文档解析固定输出 Markdown，以保留标题、列表、表格等结构并支持章节分片。'
+            : form.responseFormat === 'json'
+              ? '当前要求 JSON：适合被程序解析，提示词中应明确字段结构并避免附加说明。'
+              : form.responseFormat === 'markdown'
+                ? '当前要求 Markdown：适合保留标题、列表、表格等富文本结构。'
+                : '当前返回普通文本：兼容性最好，适合一般对话和简短结果。',
       },
     );
   }
@@ -343,7 +354,7 @@ watch(
       form.useMineru = false;
       form.mineruConfigId = '';
     }
-    if (!isChatFeature.value) {
+    if (!isTextFeature.value) {
       form.enableThinking = false;
       form.thinkingParametersText = '';
     }
@@ -352,7 +363,7 @@ watch(
       form.temperature = 0;
       form.responseFormat = 'json';
     }
-    if (isStructuredParseFeature.value) {
+    if (isMarkdownFeature.value) {
       form.responseFormat = 'markdown';
     }
     if (isMineruOcrFeature.value) {
@@ -426,7 +437,7 @@ function buildPayload(): AiFeatureConfigForm {
     featureType: form.featureType,
     providerId: Number(form.providerId),
     model: form.model?.trim(),
-    enableThinking: isChatFeature.value && !!form.enableThinking,
+    enableThinking: isTextFeature.value && !!form.enableThinking,
     thinkingParameters: resolveThinkingParameters(),
     useMineru: isMineruOcrFeature.value,
     mineruConfigId: isMineruOcrFeature.value
@@ -436,7 +447,7 @@ function buildPayload(): AiFeatureConfigForm {
     temperature: isRerankFeature.value ? 0 : Number(form.temperature),
     responseFormat: isRerankFeature.value
       ? 'json'
-      : isStructuredParseFeature.value
+      : isMarkdownFeature.value
         ? 'markdown'
         : form.responseFormat,
     isEnabled: form.isEnabled,
@@ -445,7 +456,7 @@ function buildPayload(): AiFeatureConfigForm {
 }
 
 function resolveThinkingParameters() {
-  if (!isChatFeature.value || !form.enableThinking) return null;
+  if (!isTextFeature.value || !form.enableThinking) return null;
   const text = form.thinkingParametersText.trim();
   if (!text) {
     throw new Error('启用 Think 模式时，请填写 Think 参数 JSON 对象');
@@ -500,6 +511,7 @@ function getModelText(
   if (!provider) return '';
   if (
     featureType === 'chat' ||
+    featureType === 'contentCreation' ||
     featureType === 'documentParse' ||
     featureType === 'rerank'
   ) {

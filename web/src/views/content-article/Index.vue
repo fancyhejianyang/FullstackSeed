@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { onBeforeUnmount, ref } from 'vue';
+import { taskColor, taskLabel, isActiveTask } from './taskState';
 import PageContainer from '@/components/PageContainer.vue';
 import Button from '@/components/Button.vue';
 import Table, { type TableColumn } from '@/components/Table.vue';
@@ -27,8 +28,36 @@ const columns: TableColumn[] = [
     showOverflowTooltip: false,
   },
   { prop: 'title', label: '标题', minWidth: 240 },
+  { prop: 'latestTask', label: '生成状态', width: 110, slot: true },
   { prop: 'updatedAt', label: '更新时间', width: 180, slot: true },
 ];
+let timer: ReturnType<typeof setTimeout> | undefined;
+let alive = true;
+let requestSequence = 0;
+async function fetchArticles(params: {
+  page?: number;
+  pageSize?: number;
+  keyword?: string;
+}) {
+  clearTimeout(timer);
+  const sequence = ++requestSequence;
+  const result = await getContentArticles(params);
+  if (
+    alive &&
+    sequence === requestSequence &&
+    result.list.some((row) => isActiveTask(row.latestTask))
+  ) {
+    timer = setTimeout(() => {
+      void tableRef.value?.refresh().catch(() => undefined);
+    }, 4000);
+  }
+  return result;
+}
+onBeforeUnmount(() => {
+  alive = false;
+  ++requestSequence;
+  clearTimeout(timer);
+});
 const searchFields: FormField[] = [
   { prop: 'keyword', label: '标题', type: 'input', placeholder: '搜索标题' },
 ];
@@ -57,12 +86,12 @@ function batchDeleteRequest({ ids }: { ids: Array<string | number> }) {
 </script>
 
 <template>
-  <PageContainer title="内容创作">
+  <PageContainer title="文章创作">
     <Table
       ref="tableRef"
       :columns="columns"
       :search-fields="searchFields"
-      :request="getContentArticles"
+      :request="fetchArticles"
       :check-able="true"
       :delete-request="deleteRequest"
       :batch-delete-request="batchDeleteRequest"
@@ -71,6 +100,12 @@ function batchDeleteRequest({ ids }: { ids: Array<string | number> }) {
       @edit="handleEdit"
     >
       <template #toolbar>
+        <Button
+          perm="ContentArticle.read"
+          icon="Refresh"
+          @click="tableRef?.refresh()"
+          >刷新</Button
+        >
         <Button perm="ContentArticle.create" @click="openCreate"
           >记录想法</Button
         >
@@ -81,6 +116,13 @@ function batchDeleteRequest({ ids }: { ids: Array<string | number> }) {
           >批量删除</Button
         >
       </template>
+      <template #column-latestTask="{ row }"
+        ><el-tag
+          v-if="row.latestTask"
+          :type="taskColor(row.latestTask.status)"
+          >{{ taskLabel(row.latestTask.status) }}</el-tag
+        ><span v-else>未生成</span></template
+      >
       <template #column-coverUrl="{ row }">
         <el-image
           v-if="row.coverUrl"
@@ -99,7 +141,11 @@ function batchDeleteRequest({ ids }: { ids: Array<string | number> }) {
       :row="editingRow"
       @success="tableRef?.refresh()"
     />
-    <View v-model:visible="viewVisible" :row="viewingRow" />
+    <View
+      v-model:visible="viewVisible"
+      :row="viewingRow"
+      @success="tableRef?.refresh()"
+    />
   </PageContainer>
 </template>
 

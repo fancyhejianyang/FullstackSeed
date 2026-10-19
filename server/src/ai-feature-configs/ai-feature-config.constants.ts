@@ -1,6 +1,7 @@
 /** 可在“AI 功能配置”中创建的业务能力。 */
 export const AI_FEATURE_CONFIG_TYPES = [
   'chat',
+  'contentCreation',
   'documentParse',
   'ocr',
   'rerank',

@@ -13,6 +13,11 @@ import Form, { type FormField } from '@/components/Form.vue';
 import Dialog from '@/components/Dialog.vue';
 import Button from '@/components/Button.vue';
 import Input from '@/components/Input.vue';
+import Select, { type SelectOption } from '@/components/Select.vue';
+import Tasks from './Tasks.vue';
+import { useUserStore } from '@/stores/user';
+import { getContentTemplates } from '@/api/contentTemplate';
+import { isActiveTask } from './taskState';
 import UploadImage from '@/components/UploadImage.vue';
 import { uploadFile } from '@/api/upload';
 import {
@@ -20,6 +25,7 @@ import {
   getContentArticle,
   updateContentArticle,
   generateContentArticle,
+  type ContentArticle,
   type ContentArticleForm,
   type ContentArticleSummary,
 } from '@/api/contentArticle';
@@ -34,23 +40,34 @@ const form = reactive<ContentArticleForm>({
   idea: '',
   content: '',
 });
+const user = useUserStore();
 const version = ref(1);
+const savedId = ref<number | null>(null);
+const templateId = ref<string | null>('');
+const templateOptions = ref<SelectOption[]>([]);
+const templatesTruncated = ref(false);
+const revision = ref(0);
+const activeTask = ref(false);
+const adopting = ref(false);
+let templateSequence = 0;
+let pendingRequest: { key: string; id: string } | null = null;
 const loading = ref(false);
 const loadFailed = ref(false);
 const submitting = ref(false);
 const generating = ref(false);
 const uploading = ref(false);
-const candidate = ref('');
 const baseline = ref(JSON.stringify(form));
-const dirty = computed(
-  () => JSON.stringify(form) !== baseline.value || !!candidate.value,
-);
+const dirty = computed(() => JSON.stringify(form) !== baseline.value);
 const busy = computed(
   () =>
-    loading.value || submitting.value || generating.value || uploading.value,
+    loading.value ||
+    submitting.value ||
+    generating.value ||
+    uploading.value ||
+    adopting.value,
 );
 const editPermission = computed(() =>
-  props.row ? 'ContentArticle.update' : 'ContentArticle.create',
+  savedId.value ? 'ContentArticle.update' : 'ContentArticle.create',
 );
 let epoch = 0;
 let closing = false;
@@ -91,11 +108,16 @@ watch(
   () => [visible.value, props.row?.id] as const,
   async ([open, id]) => {
     const current = ++epoch;
-    candidate.value = '';
+    savedId.value = id ?? null;
+    templateId.value = '';
+    templateOptions.value = [];
+    activeTask.value = false;
+    pendingRequest = null;
     loadFailed.value = false;
     loading.value = false;
     generating.value = false;
     if (!open) return;
+    void fetchTemplates();
     Object.assign(form, { title: '', coverUrl: '', idea: '', content: '' });
     baseline.value = JSON.stringify(form);
     version.value = 1;
@@ -104,14 +126,7 @@ watch(
     try {
       const data = await getContentArticle(id);
       if (current !== epoch) return;
-      Object.assign(form, {
-        title: data.title,
-        coverUrl: data.coverUrl,
-        idea: data.idea,
-        content: data.content,
-      });
-      version.value = data.version;
-      baseline.value = JSON.stringify(form);
+      fillSaved(data);
     } catch {
       if (current === epoch) loadFailed.value = true;
     } finally {
@@ -120,8 +135,77 @@ watch(
   },
 );
 
+function fillSaved(data: ContentArticle) {
+  Object.assign(form, {
+    title: data.title,
+    coverUrl: data.coverUrl,
+    idea: data.idea,
+    content: data.content,
+  });
+  savedId.value = data.id;
+  version.value = data.version;
+  baseline.value = JSON.stringify(form);
+}
+async function fetchTemplates(keyword = '') {
+  if (!user.hasPermission('ContentTemplate.read') || !visible.value) return;
+  const sequence = ++templateSequence;
+  const current = epoch;
+  try {
+    const result = await getContentTemplates({ pageSize: 100, keyword });
+    if (sequence !== templateSequence || current !== epoch) return;
+    const selected = templateOptions.value.find(
+      (option) => option.value === templateId.value,
+    );
+    templateOptions.value = result.list.map((row) => ({
+      value: String(row.id),
+      text: row.name,
+    }));
+    if (
+      selected &&
+      !templateOptions.value.some((option) => option.value === selected.value)
+    )
+      templateOptions.value.unshift(selected);
+    templatesTruncated.value = result.total > result.list.length;
+  } catch {
+    /* 模板读取失败不影响通用写作。 */
+  }
+}
+function requestId() {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) =>
+    byte.toString(16).padStart(2, '0'),
+  ).join('');
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    hex.slice(12, 16),
+    hex.slice(16, 20),
+    hex.slice(20),
+  ].join('-');
+}
+async function saveDraft() {
+  if (savedId.value && !dirty.value) return;
+  const current = epoch;
+  const saved = savedId.value
+    ? await updateContentArticle(savedId.value, {
+        ...form,
+        version: version.value,
+      })
+    : await createContentArticle({ ...form });
+  if (current !== epoch) return;
+  fillSaved(saved);
+  emit('success');
+}
 async function generate() {
-  if (busy.value || loadFailed.value || candidate.value) return;
+  if (
+    busy.value ||
+    loadFailed.value ||
+    activeTask.value ||
+    !user.hasPermission('ContentArticle.update')
+  )
+    return;
   await formRef.value?.validate();
   if (busy.value || loadFailed.value || !visible.value) return;
   if (!form.idea.trim()) {
@@ -131,48 +215,49 @@ async function generate() {
   generating.value = true;
   const current = epoch;
   try {
-    const result = await generateContentArticle(
-      { title: form.title, idea: form.idea },
-      props.row?.id,
-    );
-    if (current === epoch) candidate.value = result.content;
+    await saveDraft();
+    if (current !== epoch || !savedId.value) return;
+    const key = JSON.stringify([
+      savedId.value,
+      version.value,
+      templateId.value,
+    ]);
+    if (!pendingRequest || pendingRequest.key !== key)
+      pendingRequest = { key, id: requestId() };
+    const result = await generateContentArticle(savedId.value, {
+      version: version.value,
+      requestId: pendingRequest.id,
+      ...(templateId.value ? { templateId: Number(templateId.value) } : {}),
+    });
+    if (current !== epoch) return;
+    pendingRequest = null;
+    activeTask.value = isActiveTask(result);
+    revision.value++;
+    emit('success');
+    ElMessage.success('已提交，可在生成记录中查看进度');
   } catch {
-    // 统一请求层提示错误；已有正文与候选稿保持不变。
+    /* 保留已保存的文章和请求号，网络失败重试不重复创建任务。 */
   } finally {
     if (current === epoch) generating.value = false;
   }
 }
-
-function adopt() {
-  if (!candidate.value || busy.value) return;
-  form.content = candidate.value;
-  candidate.value = '';
+function adopted(article: ContentArticle) {
+  fillSaved(article);
+  emit('success');
 }
-
 async function handleSubmit() {
   if (busy.value || loadFailed.value) return;
-  if (candidate.value) {
-    ElMessage.warning('请先采用或放弃生成结果，再保存');
-    return;
-  }
   await formRef.value?.validate();
   if (busy.value || loadFailed.value || !visible.value) return;
   submitting.value = true;
   const current = epoch;
   try {
-    if (props.row)
-      await updateContentArticle(props.row.id, {
-        ...form,
-        version: version.value,
-      });
-    else await createContentArticle({ ...form });
+    await saveDraft();
     if (current !== epoch) return;
-    baseline.value = JSON.stringify(form);
     ElMessage.success('保存成功');
     visible.value = false;
-    emit('success');
   } catch {
-    // 失败保留编辑内容（包含版本冲突），不关闭窗口。
+    /* 保存失败保留编辑内容，不关闭窗口。 */
   } finally {
     submitting.value = false;
   }
@@ -272,18 +357,6 @@ onBeforeUnmount(() => {
         </template>
         <template #field-content>
           <div class="article-editor__body">
-            <div class="article-editor__toolbar">
-              <Button
-                :perm="editPermission"
-                icon="MagicStick"
-                title="使用最新创建的已启用聊天 AI 配置；会发送当前标题和想法，调用可能计费"
-                :loading="generating"
-                :disabled="busy || !!candidate"
-                @click="generate"
-                >生成正文</Button
-              >
-              <span v-if="generating" role="status">正在生成，请稍候…</span>
-            </div>
             <Input
               v-model="form.content"
               mode="textarea"
@@ -293,31 +366,56 @@ onBeforeUnmount(() => {
               :trim="false"
               placeholder="可先保存想法，之后生成正文；也可直接编辑"
             />
-            <section v-if="candidate" class="article-editor__candidate">
-              <div class="article-editor__toolbar">
-                <strong>生成结果 · 未采用</strong>
-                <Button
-                  :perm="editPermission"
-                  :disabled="busy"
-                  :confirm="!!form.content.trim()"
-                  confirm-text="采用后将替换编辑框中的正文，保存后才会写入记录。确认采用？"
-                  @click="adopt"
-                  >采用正文</Button
-                >
-                <Button :disabled="busy" @click="candidate = ''">放弃</Button>
-              </div>
-              <pre>{{ candidate }}</pre>
-            </section>
           </div>
         </template>
       </Form>
+      <div v-if="!loadFailed && !loading" class="article-editor__generation">
+        <Select
+          v-if="user.hasPermission('ContentTemplate.read')"
+          v-model="templateId"
+          :options="templateOptions"
+          :disabled="busy"
+          placeholder="通用写作 · 可选模板"
+          aria-label="写作模板"
+          @search="fetchTemplates"
+        />
+        <Button
+          v-if="user.hasPermission(editPermission)"
+          perm="ContentArticle.update"
+          icon="MagicStick"
+          :loading="generating"
+          :disabled="busy || activeTask"
+          title="保存当前文章并提交后台生成任务，调用可能计费"
+          @click="generate"
+        >
+          {{ activeTask ? '任务进行中' : '保存并生成' }}
+        </Button>
+        <span v-if="templatesTruncated">匹配项较多，请输入模板名称筛选</span>
+      </div>
+      <Tasks
+        v-if="
+          visible &&
+          savedId &&
+          !loading &&
+          !loadFailed &&
+          user.hasPermission('ContentArticle.read')
+        "
+        :key="savedId"
+        :article-id="savedId"
+        :version="version"
+        :revision="revision"
+        :can-adopt="!dirty && !busy"
+        @active="activeTask = $event"
+        @busy="adopting = $event"
+        @adopted="adopted"
+      />
     </div>
     <template #footer>
       <Button :disabled="busy" @click="requestClose">取消</Button>
       <Button
         :perm="editPermission"
         :loading="submitting"
-        :disabled="busy || loadFailed || !!candidate"
+        :disabled="busy || loadFailed"
         @click="handleSubmit"
         >保存</Button
       >
@@ -334,28 +432,14 @@ onBeforeUnmount(() => {
   width: 100%;
   min-width: 0;
 }
-.article-editor__toolbar {
+.article-editor__generation {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-  color: #606266;
-}
-.article-editor__candidate {
+  gap: 12px;
   margin-top: 16px;
-  padding: 16px;
-  border: 1px solid #b3d8ff;
-  border-radius: 8px;
-  background: #f5f9ff;
 }
-.article-editor__candidate pre {
-  margin: 0;
-  max-height: 360px;
-  overflow: auto;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  font: inherit;
-  line-height: 1.8;
+.article-editor__generation :deep(.select) {
+  max-width: 280px;
 }
 </style>

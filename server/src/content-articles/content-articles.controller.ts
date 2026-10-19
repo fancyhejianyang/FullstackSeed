@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  ForbiddenException,
   Param,
   ParseIntPipe,
   Patch,
@@ -12,11 +13,14 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator';
+import type { AuthUser } from '../common/decorators/current-user.decorator';
+import { ContentGenerationService } from './content-generation.service';
 import { ContentArticlesService } from './content-articles.service';
 import {
   BatchDeleteContentArticleDto,
   CreateContentArticleDto,
-  GenerateContentArticleDto,
+  GenerateContentTaskDto,
+  AdoptContentTaskDto,
   QueryContentArticleDto,
   UpdateContentArticleDto,
 } from './dto/content-article.dto';
@@ -25,7 +29,10 @@ import {
 @ApiBearerAuth()
 @Controller('content-articles')
 export class ContentArticlesController {
-  constructor(private readonly service: ContentArticlesService) {}
+  constructor(
+    private readonly service: ContentArticlesService,
+    private readonly generation: ContentGenerationService,
+  ) {}
 
   @Get()
   @RequirePermissions('ContentArticle.read')
@@ -88,24 +95,50 @@ export class ContentArticlesController {
     return this.service.batchRemove(dto.ids, userId);
   }
 
-  @Post('generate')
-  @RequirePermissions('ContentArticle.create')
-  @ApiOperation({ summary: '为新内容生成候选正文（不保存）' })
-  generate(
-    @Body() dto: GenerateContentArticleDto,
-    @CurrentUser('userId') userId: number,
-  ) {
-    return this.service.generate(dto, userId);
-  }
-
   @Post(':id/generate')
   @RequirePermissions('ContentArticle.update')
-  @ApiOperation({ summary: '为本人已有内容生成候选正文（不保存）' })
+  @ApiOperation({ summary: '提交持久化正文生成任务' })
   regenerate(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: GenerateContentArticleDto,
+    @Body() dto: GenerateContentTaskDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    if (
+      dto.templateId &&
+      !user.isAdmin &&
+      !user.permissions.includes('ContentTemplate.read')
+    ) {
+      throw new ForbiddenException('无权使用写作模板');
+    }
+    return this.generation.submit(id, dto, user.userId);
+  }
+
+  @Get(':id/tasks')
+  @RequirePermissions('ContentArticle.read')
+  tasks(
+    @Param('id', ParseIntPipe) id: number,
+    @Query() query: QueryContentArticleDto,
     @CurrentUser('userId') userId: number,
   ) {
-    return this.service.generate(dto, userId, id);
+    return this.generation.list(id, query, userId);
+  }
+
+  @Get('tasks/:taskId')
+  @RequirePermissions('ContentArticle.read')
+  task(
+    @Param('taskId', ParseIntPipe) id: number,
+    @CurrentUser('userId') userId: number,
+  ) {
+    return this.generation.detail(id, userId);
+  }
+
+  @Post('tasks/:taskId/adopt')
+  @RequirePermissions('ContentArticle.update')
+  adopt(
+    @Param('taskId', ParseIntPipe) id: number,
+    @Body() dto: AdoptContentTaskDto,
+    @CurrentUser('userId') userId: number,
+  ) {
+    return this.generation.adopt(id, dto.version, userId);
   }
 }

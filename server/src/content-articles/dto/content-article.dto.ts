@@ -7,6 +7,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   Max,
   MaxLength,
@@ -48,16 +49,19 @@ export class UpdateContentArticleDto extends CreateContentArticleDto {
   version: number;
 }
 
-export class GenerateContentArticleDto {
-  @IsString()
-  @MaxLength(160)
-  @Matches(/\S/, { message: '请输入标题' })
-  title: string;
+export class AdoptContentTaskDto {
+  @IsInt()
+  @Min(1)
+  version: number;
+}
+export class GenerateContentTaskDto extends AdoptContentTaskDto {
+  @IsUUID()
+  requestId: string;
 
-  @IsString()
-  @MaxLength(20000)
-  @Matches(/\S/, { message: '请先填写想法' })
-  idea: string;
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  templateId?: number;
 }
 
 export class QueryContentArticleDto {

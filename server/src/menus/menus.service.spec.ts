@@ -127,10 +127,8 @@ describe('MenusService Agent menu reconciliation', () => {
     ).toEqual(
       [
         '/agent-management/apps',
-        '/agent-management/commands',
         '/agent-management/debug',
         '/agent-management/executions',
-        '/agent-management/workflows',
         '/agent-management/workspace',
       ].sort(),
     );
@@ -165,21 +163,77 @@ describe('MenusService Agent menu reconciliation', () => {
     const entries = rows.filter((item) => item.path === '/content-articles');
     expect(entries).toHaveLength(1);
     expect(entries[0]).toMatchObject({
-      name: '内容创作',
+      name: '文章创作',
       permissionCode: 'ContentArticle.read',
       isSystem: false,
     });
     const authorized = await service.findMine(false, ['ContentArticle.read']);
-    expect(authorized.some((item) => item.path === '/content-articles')).toBe(
-      true,
-    );
+    expect(
+      authorized
+        .flatMap((item) => item.children)
+        .some((item) => item.path === '/content-articles'),
+    ).toBe(true);
     const unauthorized = await service.findMine(false, [
       'AgentWorkspace.read',
       'Menu.read',
     ]);
-    expect(unauthorized.some((item) => item.path === '/content-articles')).toBe(
-      false,
+    expect(
+      unauthorized
+        .flatMap((item) => item.children)
+        .some((item) => item.path === '/content-articles'),
+    ).toBe(false);
+  });
+
+  it('AI 入口迁移保留功能、指令和工作流 ID 与人工可见性', async () => {
+    rows.push(
+      menu({
+        id: 8,
+        name: 'AI 功能配置',
+        path: '/chat-management/ai-configs',
+        isSystem: true,
+        isActive: false,
+      }),
     );
+    rows.push(
+      menu({
+        id: 9,
+        name: '内容创作',
+        path: '/content-articles',
+        isSystem: false,
+      }),
+    );
+    rows.find((row) => row.id === 6)!.isSystem = false;
+    await service.onModuleInit();
+    const count = rows.length;
+    await service.onModuleInit();
+    expect(rows).toHaveLength(count);
+    const root = rows.find((row) => row.path === '/ai-config')!;
+    expect(root.id).not.toBe(8);
+    expect(rows.find((row) => row.id === 8)).toMatchObject({
+      path: '/ai-config/features',
+      parentId: root.id,
+      isSystem: true,
+      isActive: false,
+    });
+    expect(rows.find((row) => row.id === 6)).toMatchObject({
+      path: '/ai-config/commands',
+      parentId: root.id,
+      isSystem: false,
+    });
+    expect(rows.find((row) => row.id === 7)).toMatchObject({
+      path: '/ai-config/workflows',
+      parentId: root.id,
+    });
+    expect(rows.find((row) => row.id === 9)).toMatchObject({
+      path: '/content-articles',
+      name: '文章创作',
+    });
+    const tree = await service.findMine(false, ['AiCommandDefinition.read']);
+    expect(
+      tree
+        .find((row) => row.path === '/ai-config')!
+        .children.map((row) => row.path),
+    ).toEqual(['/ai-config/commands']);
   });
 
   it('reconciles debug to AgentApp.read with a stable id and the existing admin-only default', async () => {

@@ -37,7 +37,10 @@ function routerHarness(permissions = [], isAdmin = false) {
   // 运行真实路由和守卫，只替换历史实现和懒加载视图，避免启动浏览器/服务。
   const code = source
     .replace(/import\.meta\.env\.BASE_URL/g, "'/'")
-    .replace(/\(\) => import\('[^']+'\)/g, '{ render() { return null; } }');
+    .replace(
+      /\(\)\s*=>\s*import\(['"][^'"]+['"]\)/g,
+      '{ render() { return null; } }',
+    );
   new Function('require', 'exports', compile(code))((name) => {
     if (name === 'vue-router')
       return { ...vueRouter, createWebHistory: vueRouter.createMemoryHistory };
@@ -232,4 +235,79 @@ test('Agent debug and old aliases require AgentApp.read instead of Menu.read', a
       '/agent-management/debug',
     );
   }
+});
+
+test('AI 配置中心与内容分组在 bootstrap 后选择有权限的页签', async () => {
+  for (const [permissions, path, expected] of [
+    [['AiCommandDefinition.read'], '/ai-config', '/ai-config/commands'],
+    [['AiWorkflow.read'], '/ai-config', '/ai-config/workflows'],
+    [['Menu.read'], '/ai-config', '/ai-config/features'],
+    [[], '/ai-config', '/'],
+    [['ContentTemplate.read'], '/content-creation', '/content-templates'],
+    [['ContentArticle.read'], '/content-creation', '/content-articles'],
+    [['Menu.read'], '/content-creation', '/'],
+  ]) {
+    const h = routerHarness(permissions);
+    await h.router.push(path);
+    assert.equal(h.router.currentRoute.value.path, expected);
+    assert.equal(h.calls.filter((call) => call === 'bootstrap').length, 1);
+  }
+});
+
+test('旧 AI 地址仍可访问，跨页签不能扩大权限', async () => {
+  for (const [path, permission, expected] of [
+    ['/chat-management/ai-configs', 'Menu.read', '/ai-config/features'],
+    [
+      '/agent-management/commands',
+      'AiCommandDefinition.read',
+      '/ai-config/commands',
+    ],
+    [
+      '/chat-management/commands',
+      'AiCommandDefinition.read',
+      '/ai-config/commands',
+    ],
+    ['/agent-management/workflows', 'AiWorkflow.read', '/ai-config/workflows'],
+    ['/chat-management/workflows', 'AiWorkflow.read', '/ai-config/workflows'],
+  ]) {
+    const allowed = routerHarness([permission]);
+    await allowed.router.push(path);
+    assert.equal(allowed.router.currentRoute.value.path, expected);
+    const denied = routerHarness([
+      'AgentWorkspace.read',
+      'ContentArticle.read',
+    ]);
+    await denied.router.push(path);
+    assert.equal(denied.router.currentRoute.value.path, '/');
+  }
+});
+
+test('AI 页签只挂载当前有权页面，模板不能继承文章权限', async () => {
+  const source = await read('../views/ai-config/Index.vue');
+  const exports = {};
+  const props = vue.reactive({ section: 'features' });
+  const user = { hasPermission: (code) => code === 'AiCommandDefinition.read' };
+  const script =
+    parse(source).descriptor.scriptSetup.content +
+    '\nexport { visibleTabs, current };';
+  new Function('require', 'exports', 'defineProps', compile(script))(
+    (name) => {
+      if (name === 'vue') return vue;
+      if (name === 'vue-router') return { useRouter: () => ({ push() {} }) };
+      if (name === '@/stores/user') return { useUserStore: () => user };
+      throw Error(name);
+    },
+    exports,
+    () => props,
+  );
+  assert.deepEqual(
+    exports.visibleTabs.value.map((tab) => tab.key),
+    ['commands'],
+  );
+  assert.equal(exports.current.value, undefined);
+  props.section = 'commands';
+  assert.equal(exports.current.value.key, 'commands');
+  const h = routerHarness(['ContentArticle.read']);
+  await h.router.push('/content-templates');
+  assert.equal(h.router.currentRoute.value.path, '/');
 });

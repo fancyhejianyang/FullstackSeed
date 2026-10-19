@@ -22,6 +22,7 @@ const tableRef = ref<{
 
 const featureTypeOptions = [
   { label: '聊天', value: 'chat' },
+  { label: '内容创作', value: 'contentCreation' },
   { label: '文档解析', value: 'documentParse' },
   { label: 'OCR', value: 'ocr' },
   { label: 'LLM 重排', value: 'rerank' },
@@ -65,7 +66,12 @@ const searchFields: FormField[] = [
       { label: '停用', value: false },
     ],
   },
-  { prop: 'keyword', label: '关键词', type: 'input', placeholder: '配置/账号/模型' },
+  {
+    prop: 'keyword',
+    label: '关键词',
+    type: 'input',
+    placeholder: '配置/账号/模型',
+  },
 ];
 
 const editVisible = ref(false);
@@ -94,7 +100,9 @@ async function batchDeleteRequest(payload: { ids: Array<string | number> }) {
 }
 
 function getFeatureLabel(value: AiFeatureType) {
-  return featureTypeOptions.find((item) => item.value === value)?.label || value;
+  return (
+    featureTypeOptions.find((item) => item.value === value)?.label || value
+  );
 }
 </script>
 
@@ -132,7 +140,8 @@ function getFeatureLabel(value: AiFeatureType) {
         {{
           row.featureType === 'rerank'
             ? 'LLM 评分'
-            : ['ocr', 'documentParse'].includes(row.featureType) && row.useMineru
+            : ['ocr', 'documentParse'].includes(row.featureType) &&
+                row.useMineru
               ? 'MinerU'
               : '模型'
         }}
@@ -155,13 +164,31 @@ function getFeatureLabel(value: AiFeatureType) {
       </template>
 
       <template #column-enableThinking="{ row }">
-        <el-tag :type="row.featureType === 'rerank' ? 'info' : row.enableThinking ? 'success' : 'info'">
-          {{ row.featureType === 'rerank' ? '不适用' : row.enableThinking ? '开启' : '关闭' }}
+        <el-tag
+          :type="
+            row.featureType === 'rerank'
+              ? 'info'
+              : row.enableThinking
+                ? 'success'
+                : 'info'
+          "
+        >
+          {{
+            row.featureType === 'rerank'
+              ? '不适用'
+              : row.enableThinking
+                ? '开启'
+                : '关闭'
+          }}
         </el-tag>
       </template>
 
       <template #column-responseFormat="{ row }">
-        {{ row.featureType === 'rerank' ? 'JSON（固定）' : responseFormatMap[row.responseFormat] || row.responseFormat }}
+        {{
+          row.featureType === 'rerank'
+            ? 'JSON（固定）'
+            : responseFormatMap[row.responseFormat] || row.responseFormat
+        }}
       </template>
 
       <template #column-isEnabled="{ row }">

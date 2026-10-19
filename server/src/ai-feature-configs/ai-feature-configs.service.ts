@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -109,7 +110,7 @@ export class AiFeatureConfigsService {
     const entity = this.configRepository.create(payload);
     this.normalizeFeatureSpecificSettings(entity);
     await this.assertExecutableConfig(entity);
-    const saved = await this.configRepository.save(entity);
+    const saved = await this.saveConfig(entity);
     return saved;
   }
 
@@ -118,7 +119,41 @@ export class AiFeatureConfigsService {
     Object.assign(config, await this.toEntityPayload(dto, false));
     this.normalizeFeatureSpecificSettings(config);
     await this.assertExecutableConfig(config);
-    return this.configRepository.save(config);
+    return this.saveConfig(config);
+  }
+
+  async findContentCreationConfig() {
+    const rows = await this.configRepository.find({
+      where: { featureType: 'contentCreation', isEnabled: true },
+      take: 2,
+    });
+    if (rows.length !== 1 || !rows[0].providerId || !rows[0].model) {
+      throw new BadRequestException(
+        '请在 AI 功能配置中启用且仅启用一个“内容创作”配置',
+      );
+    }
+    return rows[0];
+  }
+
+  private async saveConfig(config: AiFeatureConfig) {
+    if (config.featureType === 'contentCreation' && config.isEnabled) {
+      const enabled = await this.configRepository.find({
+        where: { featureType: 'contentCreation', isEnabled: true },
+      });
+      if (enabled.some((item) => item.id !== config.id))
+        throw new ConflictException('已有启用的内容创作配置，请先停用原配置');
+    }
+    try {
+      return await this.configRepository.save(config);
+    } catch (error) {
+      if (
+        (error as { code?: string }).code === 'ER_DUP_ENTRY' &&
+        config.featureType === 'contentCreation'
+      ) {
+        throw new ConflictException('已有启用的内容创作配置，请先停用原配置');
+      }
+      throw error;
+    }
   }
 
   async remove(id: number) {
@@ -202,7 +237,14 @@ export class AiFeatureConfigsService {
   }
 
   private normalizeFeatureSpecificSettings(config: Partial<AiFeatureConfig>) {
-    if (config.useMineru && config.featureType === 'ocr') config.responseFormat = 'markdown';
+    if (config.featureType === 'contentCreation') {
+      config.useMineru = false;
+      config.mineruConfigId = null;
+      config.mineruConfigName = null;
+      config.responseFormat = 'markdown';
+    }
+    if (config.useMineru && config.featureType === 'ocr')
+      config.responseFormat = 'markdown';
     if (config.featureType === 'rerank') {
       config.enableThinking = false;
       config.thinkingParameters = null;
@@ -214,7 +256,7 @@ export class AiFeatureConfigsService {
       config.responseFormat = 'json';
       return;
     }
-    if (config.featureType !== 'chat') {
+    if (!['chat', 'contentCreation'].includes(config.featureType ?? '')) {
       config.enableThinking = false;
       config.thinkingParameters = null;
       return;
@@ -254,7 +296,9 @@ export class AiFeatureConfigsService {
     await this.providersService.assertModelSupported({
       id: config.providerId,
       model: config.model,
-      featureType: config.useMineru ? 'documentParse' : config.featureType ?? 'chat',
+      featureType: config.useMineru
+        ? 'documentParse'
+        : (config.featureType ?? 'chat'),
     });
   }
 
@@ -269,9 +313,7 @@ export class AiFeatureConfigsService {
     return Math.min(2, Math.max(0, temperature));
   }
 
-  private isNonEmptyObject(
-    value: unknown,
-  ): value is Record<string, unknown> {
+  private isNonEmptyObject(value: unknown): value is Record<string, unknown> {
     return (
       !!value &&
       typeof value === 'object' &&

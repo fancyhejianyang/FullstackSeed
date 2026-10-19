@@ -7,6 +7,21 @@ import type {
 
 @Entity('ai_feature_configs')
 export class AiFeatureConfig extends BaseEntity {
+  // MySQL 唯一索引允许多个 NULL；仅内容创作的启用记录占用固定键。
+  @Index('UQ_ai_feature_active_content', { unique: true })
+  @Column({
+    type: 'varchar',
+    length: 40,
+    nullable: true,
+    select: false,
+    insert: false,
+    update: false,
+    asExpression:
+      "CASE WHEN featureType = 'contentCreation' AND isEnabled = 1 AND deletedAt IS NULL THEN 'contentCreation' ELSE NULL END",
+    generatedType: 'STORED',
+  })
+  activeContentKey: string | null;
+
   @Column({ length: 120 })
   name: string;
 
@@ -24,7 +39,7 @@ export class AiFeatureConfig extends BaseEntity {
   model: string | null;
 
   /**
-   * 项目侧 Think 总开关。仅聊天配置生效，避免把供应商特有参数误用于 OCR、解析或重排调用。
+   * 项目侧 Think 总开关。仅聊天与内容创作配置生效，避免把供应商特有参数误用于 OCR、解析或重排调用。
    */
   @Column({ type: 'tinyint', default: false })
   enableThinking: boolean;

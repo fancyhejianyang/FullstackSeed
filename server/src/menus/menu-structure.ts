@@ -5,6 +5,7 @@ export type StructuredMenuSeed = Partial<Menu> & {
   reconcile?: boolean;
   preserveVisibility?: boolean;
   retired?: boolean;
+  matchByName?: boolean;
 };
 export const THIRD_PARTY_MENUS = [
   { key: 'ai', name: 'AI 大模型账号', permission: 'KnowledgeAiProvider' },

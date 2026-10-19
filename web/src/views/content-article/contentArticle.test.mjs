@@ -32,7 +32,7 @@ function harness() {
       coverUrl: '',
       version: 4,
     },
-    result: { content: 'AI 正文' },
+    result: { id: 20, status: 'pending', articleId: 1, articleVersion: 4 },
     confirm: true,
     saveError: false,
   };
@@ -41,17 +41,19 @@ function harness() {
       calls.push(['detail', id]);
       return await state.detail;
     },
-    generateContentArticle: async (data, id) => {
-      calls.push(['generate', data, id]);
+    generateContentArticle: async (id, data) => {
+      calls.push(['generate', id, data]);
       return await state.result;
     },
     createContentArticle: async (data) => {
       calls.push(['create', data]);
       if (state.saveError) throw Error('save failed');
+      return { id: 1, version: 1, ...data };
     },
     updateContentArticle: async (id, data) => {
       calls.push(['update', id, data]);
       if (state.saveError) throw Error('conflict');
+      return { ...data, id, version: data.version + 1 };
     },
   };
   const scope = vue.effectScope();
@@ -59,7 +61,7 @@ function harness() {
   const exports = {};
   const script =
     parse(editor).descriptor.scriptSetup.content +
-    '\nexport { form, formRef, fields, version, candidate, generating, busy, loadFailed, generate, adopt, handleSubmit, canLeave, beforeClose, requestClose };';
+    '\nexport { form, formRef, fields, version, savedId, revision, activeTask, generating, busy, loadFailed, generate, handleSubmit, canLeave, beforeClose, requestClose, adopted, templateId };';
   scope.run(() =>
     new Function(
       'require',
@@ -92,6 +94,15 @@ function harness() {
             },
           };
         if (name === '@/api/contentArticle') return api;
+        if (name === '@/api/contentTemplate')
+          return { getContentTemplates: async () => ({ list: [], total: 0 }) };
+        if (name === '@/stores/user')
+          return { useUserStore: () => ({ hasPermission: () => true }) };
+        if (name === './taskState')
+          return {
+            isActiveTask: (task) =>
+              ['pending', 'running'].includes(task?.status),
+          };
         if (name === '@/api/upload')
           return { uploadFile: async () => ({ url: '/uploads/test.png' }) };
         if (name.endsWith('.vue')) return {};
@@ -140,45 +151,65 @@ test('表单仅四字段，打开新记录不调用模型，正文可空保存',
   h.close();
 });
 
-test('生成只发送当前标题和想法，采用前原文不变、不自动保存', async () => {
+test('保存后提交后台任务，原文不被覆盖，任务运行不阻止关闭', async () => {
   const h = harness();
   h.props.row = { id: 1 };
   h.visible.value = true;
   await flush();
+  h.form.idea = '新想法';
+  h.templateId.value = '8';
   await h.generate();
   assert.equal(h.form.content, '原文');
-  assert.equal(h.candidate.value, 'AI 正文');
-  assert.deepEqual(
-    h.calls.find((call) => call[0] === 'generate'),
-    ['generate', { title: '旧标题', idea: '原始想法' }, 1],
-  );
-  await h.handleSubmit();
-  assert.equal(
-    h.calls.some((call) => call[0] === 'update'),
-    false,
-  );
-  h.adopt();
-  assert.equal(h.form.content, 'AI 正文');
-  await h.handleSubmit();
-  assert.equal(h.calls.find((call) => call[0] === 'update')[2].version, 4);
-  assert.match(editor, /:confirm="!!form.content.trim\(\)"/);
+  const update = h.calls.find((call) => call[0] === 'update');
+  const generate = h.calls.find((call) => call[0] === 'generate');
+  assert.equal(update[2].idea, '新想法');
+  assert.equal(generate[1], 1);
+  assert.equal(generate[2].version, 5);
+  assert.equal(generate[2].templateId, 8);
+  assert.match(generate[2].requestId, /^[0-9a-f-]{36}$/);
+  assert.ok(h.calls.indexOf(update) < h.calls.indexOf(generate));
+  assert.equal(h.activeTask.value, true);
+  assert.equal(await h.canLeave(), true);
+  assert.equal(h.generating.value, false);
+  await h.requestClose();
+  assert.equal(h.visible.value, false);
   h.close();
 });
 
-test('生成失败、保存冲突都保留现有正文与窗口', async () => {
+test('提交响应失败后保留草稿 ID 与请求号，重试不会重复创建文章', async () => {
+  const h = harness();
+  h.visible.value = true;
+  await flush();
+  h.form.title = '标题';
+  h.form.idea = '想法';
+  h.state.result = Promise.reject(Error('network'));
+  await h.generate();
+  const first = h.calls.find((call) => call[0] === 'generate');
+  assert.equal(h.savedId.value, 1);
+  h.state.result = { id: 20, status: 'pending' };
+  await h.generate();
+  assert.equal(h.calls.filter((call) => call[0] === 'create').length, 1);
+  const requests = h.calls.filter((call) => call[0] === 'generate');
+  assert.equal(requests.length, 2);
+  assert.equal(requests[1][2].requestId, first[2].requestId);
+  h.close();
+});
+
+test('保存冲突时不提交任务，仍保留窗口和编辑正文', async () => {
   const h = harness();
   h.props.row = { id: 1 };
   h.visible.value = true;
   await flush();
-  h.state.result = Promise.reject(Error('failed'));
-  await h.generate();
-  assert.equal(h.form.content, '原文');
-  assert.equal(h.candidate.value, '');
-  assert.equal(h.generating.value, false);
+  h.form.content = '手改正文';
   h.state.saveError = true;
-  await h.handleSubmit();
+  await h.generate();
+  assert.equal(h.form.content, '手改正文');
+  assert.equal(
+    h.calls.some((call) => call[0] === 'generate'),
+    false,
+  );
   assert.equal(h.visible.value, true);
-  assert.equal(h.form.content, '原文');
+  assert.equal(h.generating.value, false);
   h.close();
 });
 
@@ -204,7 +235,7 @@ test('空想法不触发模型；进行中禁重复调用与关闭', async () =>
   await h.generate();
   assert.equal(h.calls.filter((call) => call[0] === 'generate').length, 1);
   assert.equal(await h.canLeave(), false);
-  resolve({ content: '完成' });
+  resolve({ id: 20, status: 'pending' });
   await pending;
   h.close();
 });
@@ -286,13 +317,22 @@ test('卸载后的生成响应不会写入表单', async () => {
   const pending = h.generate();
   await flush();
   h.close();
-  resolve({ content: '迟到结果' });
+  resolve({ id: 20, status: 'pending' });
   await pending;
-  assert.equal(h.candidate.value, '');
+  assert.equal(h.revision.value, 0);
 });
 
 test('三个页面模板与样式可编译，不执行生成 HTML', async () => {
-  for (const filename of ['Index.vue', 'Edit.vue', 'View.vue']) {
+  for (const filename of [
+    'Index.vue',
+    'Edit.vue',
+    'View.vue',
+    'Tasks.vue',
+    '../content-template/Index.vue',
+    '../content-template/Edit.vue',
+    '../content-template/View.vue',
+    '../ai-config/Index.vue',
+  ]) {
     const source = await read(`./${filename}`);
     const parsed = parse(source);
     assert.deepEqual(parsed.errors, []);

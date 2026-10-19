@@ -8,7 +8,7 @@ import { ContentArticlesService } from './content-articles.service';
 import {
   BatchDeleteContentArticleDto,
   CreateContentArticleDto,
-  GenerateContentArticleDto,
+  GenerateContentTaskDto,
   QueryContentArticleDto,
   UpdateContentArticleDto,
 } from './dto/content-article.dto';
@@ -33,32 +33,12 @@ function setup() {
     count: jest.fn().mockResolvedValue(2),
     softDelete: jest.fn().mockResolvedValue({ affected: 1 }),
   };
-  const configs = {
-    findEnabledByFeature: jest.fn().mockResolvedValue({
-      providerId: 5,
-      model: 'configured-text-model',
-      temperature: 0.4,
-      enableThinking: true,
-      thinkingParameters: { enable_thinking: true },
-      systemPrompt: '无关客服提示词',
-    }),
-  };
-  const providers = {
-    withExecutionSignal: jest.fn(
-      (_signal: AbortSignal, run: () => Promise<unknown>) => run(),
-    ),
-    callChat: jest.fn().mockResolvedValue({
-      isSuccess: true,
-      answer: '  新正文  ',
-      usage: null,
-    }),
-  };
+  const generation = { latest: jest.fn().mockResolvedValue([]) };
   const service = new ContentArticlesService(
     repository as never,
-    configs as never,
-    providers as never,
+    generation as never,
   );
-  return { service, repository, providers, configs, article };
+  return { service, repository, generation, article };
 }
 
 describe('内容创作 CRUD 与 AI 生成', () => {
@@ -110,15 +90,11 @@ describe('内容创作 CRUD 与 AI 生成', () => {
       h.service.update(3, { title: 'x', version: 2 }, 8),
     ).rejects.toThrow('内容不存在');
     await expect(h.service.remove(3, 8)).rejects.toThrow('内容不存在');
-    await expect(
-      h.service.generate({ title: 'x', idea: 'y' }, 8, 3),
-    ).rejects.toThrow('内容不存在');
     expect(h.repository.findOne).toHaveBeenCalledWith({
       where: { id: 3, userId: 8 },
     });
     expect(h.repository.update).not.toHaveBeenCalled();
     expect(h.repository.softDelete).not.toHaveBeenCalled();
-    expect(h.providers.callChat).not.toHaveBeenCalled();
   });
 
   it('保存使用原子版本条件，冲突不覆盖已有文章', async () => {
@@ -178,87 +154,20 @@ describe('内容创作 CRUD 与 AI 生成', () => {
     );
   });
 
-  it('使用现有聊天配置，生成只返回候选正文、不保存也不发送其它记录', async () => {
+  it('列表关联最新任务概要，不把正文和快照带到列表', async () => {
     const h = setup();
-    await expect(
-      h.service.generate({ title: ' 标题 ', idea: ' 想法 ' }, 7, 3),
-    ).resolves.toEqual({ content: '新正文' });
-    expect(h.configs.findEnabledByFeature).toHaveBeenCalledWith('chat');
-    const call = h.providers.callChat.mock.calls[0] as unknown as [
-      Record<string, unknown>,
-    ];
-    expect(call[0]).toMatchObject({
-      id: 5,
-      model: 'configured-text-model',
-      question: JSON.stringify({ title: '标题', idea: '想法' }),
-      temperature: 0.4,
-      thinkingParameters: { enable_thinking: true },
+    h.repository.findAndCount.mockResolvedValue([
+      [{ id: 3, title: '标题' }],
+      1,
+    ]);
+    h.generation.latest.mockResolvedValue([
+      { id: 20, articleId: 3, status: 'running' },
+    ]);
+    const result = await h.service.findAll({}, 7);
+    expect(h.generation.latest).toHaveBeenCalledWith([3], 7);
+    expect(result.list[0]).toMatchObject({
+      latestTask: { id: 20, status: 'running' },
     });
-    expect(call[0].systemPrompt).toContain('不得编造');
-    expect(call[0].systemPrompt).not.toContain('无关客服提示词');
-    expect(h.repository.save).not.toHaveBeenCalled();
-    expect(h.repository.update).not.toHaveBeenCalled();
-  });
-
-  it('无配置时不调用模型，释放生成锁后允许再试', async () => {
-    const h = setup();
-    h.configs.findEnabledByFeature.mockResolvedValueOnce(null);
-    await expect(
-      h.service.generate({ title: '标题', idea: '想法' }, 7),
-    ).rejects.toThrow('启用聊天配置');
-    expect(h.providers.callChat).not.toHaveBeenCalled();
-    await expect(
-      h.service.generate({ title: '标题', idea: '想法' }, 7),
-    ).resolves.toEqual({ content: '新正文' });
-  });
-
-  it('失败不回传原始供应商信息、不自动重试、不清空原文', async () => {
-    const h = setup();
-    h.providers.callChat.mockResolvedValueOnce({
-      isSuccess: false,
-      answer: '',
-      errorMessage: 'secret internal endpoint',
-    });
-    await expect(
-      h.service.generate({ title: '标题', idea: '想法' }, 7),
-    ).rejects.toThrow('正文生成失败或超时');
-    expect(h.providers.callChat).toHaveBeenCalledTimes(1);
-    expect(h.repository.save).not.toHaveBeenCalled();
-    expect(h.article.content).toBe('原文');
-    await expect(
-      h.service.generate({ title: '标题', idea: '想法' }, 7),
-    ).resolves.toEqual({ content: '新正文' });
-  });
-
-  it.each(['', '   ', 'x'.repeat(50001)])(
-    '拒绝空白或过长的生成结果 (%#)',
-    async (answer) => {
-      const h = setup();
-      h.providers.callChat.mockResolvedValue({ isSuccess: true, answer });
-      await expect(
-        h.service.generate({ title: '标题', idea: '想法' }, 7),
-      ).rejects.toThrow();
-      expect(h.repository.save).not.toHaveBeenCalled();
-    },
-  );
-
-  it('同一用户不能并发重复生成，其他用户不受阻塞', async () => {
-    const h = setup();
-    let release!: (value: unknown) => void;
-    h.providers.callChat.mockReturnValueOnce(
-      new Promise((resolve) => {
-        release = resolve;
-      }),
-    );
-    const pending = h.service.generate({ title: '标题', idea: '想法' }, 7);
-    await expect(
-      h.service.generate({ title: '标题', idea: '想法' }, 7),
-    ).rejects.toThrow('已有正文正在生成');
-    await expect(
-      h.service.generate({ title: '标题', idea: '想法' }, 8),
-    ).resolves.toEqual({ content: '新正文' });
-    release({ isSuccess: true, answer: '完成' });
-    await expect(pending).resolves.toEqual({ content: '完成' });
   });
 
   it('每个接口有独立权限，读取权限不能用于生成', () => {
@@ -269,7 +178,9 @@ describe('内容创作 CRUD 与 AI 生成', () => {
       update: 'update',
       remove: 'delete',
       batchRemove: 'batchDelete',
-      generate: 'create',
+      tasks: 'read',
+      task: 'read',
+      adopt: 'update',
       regenerate: 'update',
     })) {
       const handler =
@@ -297,7 +208,7 @@ describe('内容创作 CRUD 与 AI 生成', () => {
     expect(
       (
         await validate(
-          plainToInstance(GenerateContentArticleDto, { title: 'a', idea: ' ' }),
+          plainToInstance(GenerateContentTaskDto, { title: 'a', idea: ' ' }),
         )
       ).length,
     ).toBeGreaterThan(0);

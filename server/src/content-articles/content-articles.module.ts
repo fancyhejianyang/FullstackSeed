@@ -1,3 +1,6 @@
+import { ContentTemplatesModule } from '../content-templates/content-templates.module';
+import { ContentGenerationTask } from './entities/content-generation-task.entity';
+import { ContentGenerationService } from './content-generation.service';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AiFeatureConfigsModule } from '../ai-feature-configs/ai-feature-configs.module';
@@ -8,11 +11,12 @@ import { ContentArticlesService } from './content-articles.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ContentArticle]),
+    TypeOrmModule.forFeature([ContentArticle, ContentGenerationTask]),
+    ContentTemplatesModule,
     AiFeatureConfigsModule,
     KnowledgeAiProvidersModule,
   ],
   controllers: [ContentArticlesController],
-  providers: [ContentArticlesService],
+  providers: [ContentArticlesService, ContentGenerationService],
 })
 export class ContentArticlesModule {}
