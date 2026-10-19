@@ -2,6 +2,8 @@
 
 > 状态：待确认方案，未实现业务代码。日期：2026-10-19。
 >
+> 已确认部署：ComfyUI 与 NestJS 后端在同一台电脑，本期采用后端直连，不建设本机连接器或设备配对。
+>
 > 目标：在 FullstackSeed 中选择经过验证的 ComfyUI 工作流，生成图片或视频，查看真实任务进度，并将结果归档到受管存储。
 
 ## 1. 建议结论
@@ -10,23 +12,22 @@
 
 采用三个相互独立的管理对象：连接配置、工作流模板、运行任务。业务端以异步提交和查询为主；后端通过 HTTP 提交与取结果，通过 WebSocket 接收节点事件，再把统一进度提供给前端。
 
-首期支持一个连接、一份已验证的文生图工作流；第二阶段增加一份明确的视频工作流及视频归档。不要一开始承诺执行任意网上下载的工作流、自动安装插件或在系统里重造 ComfyUI 画布。
+首期支持一个本机直连配置、一份已验证的文生图工作流；图片闭环完成后增加一份明确的视频工作流及视频归档。连接器、设备配对和公网接入不属于本期范围。不要一开始承诺执行任意网上下载的工作流、自动安装插件或在系统里重造 ComfyUI 画布。
 
 文件归档复用 [AI 素材方案](./AI素材生成与存储清理设计方案.md)的文件登记与清理机制，但使用 `comfyui` 专用 scope。ComfyUI 运行任务保留各次结果，不自动覆盖其它任务；将来从“素材重新生成”调用它时，才遵循素材版本替换规则。
 
-## 2. 首先确认后端在哪里运行
+## 2. 已确认采用同机直连
 
-`127.0.0.1` 指发出请求的进程所在机器，不是打开网页的用户电脑。
+ComfyUI 与 NestJS 已确认部署在同一台电脑。后端直接访问管理员配置的 ComfyUI 地址；两者均为宿主机进程时，可以使用本机回环地址。若 NestJS 运行在 Docker/WSL 中，还需核对网络模式和宿主机可达地址，不能仅凭同一台电脑就假定 `127.0.0.1` 可达。
 
-| 部署方式                                         | 建议连接方式                                 | 关键边界                                                              |
-| ------------------------------------------------ | -------------------------------------------- | --------------------------------------------------------------------- |
-| NestJS 与 ComfyUI 在同一台电脑、同一网络命名空间 | NestJS 直接访问管理员配置的本机地址          | 最小落地方案，ComfyUI 默认端口常见为 8188，但应以实际安装为准         |
-| NestJS 在 Docker/WSL，ComfyUI 在 Windows 主机    | 显式配置宿主机可达地址并做防火墙限制         | 容器的 localhost 不是 Windows 主机，不自动放行任意内网地址            |
-| NestJS 在服务器，ComfyUI 在个人电脑              | 本机连接器主动连接服务器，或已有受控专用网络 | 服务器不能直接通过自身 localhost 找到用户电脑；不要把 8188 裸露到公网 |
+| 部署方式                                         | 建议连接方式                         | 关键边界                                                      |
+| ------------------------------------------------ | ------------------------------------ | ------------------------------------------------------------- |
+| NestJS 与 ComfyUI 在同一台电脑、同一网络命名空间 | NestJS 直接访问管理员配置的本机地址  | 最小落地方案，ComfyUI 默认端口常见为 8188，但应以实际安装为准 |
+| NestJS 在 Docker/WSL，ComfyUI 在 Windows 主机    | 显式配置宿主机可达地址并做防火墙限制 | 容器的 localhost 不是 Windows 主机，不自动放行任意内网地址    |
 
 官方自托管服务说明了本机 HTTP 服务及可配置端口，适合作为直连基线。[ComfyUI Server Overview](https://docs.comfy.org/development/comfyui-server/comms_overview)
 
-当前仓库没有 ComfyUI 连接配置或执行适配器。本方案不假定用户已安装哪个版本、插件或视频模型；落地前须确认部署位置、ComfyUI 版本、GPU/显存、两份可正常执行的工作流及模型依赖。若后端在远端，本机连接器是前置需求，不应在后期才补。
+当前仓库没有 ComfyUI 连接配置或执行适配器。落地前仍需确认实际地址、进程是否经过 Docker/WSL、ComfyUI 版本、GPU/显存、可正常执行的工作流及模型依赖；不再将同机或远端部署作为待选方案。
 
 ### 2.1 同机直连结构
 
@@ -41,9 +42,9 @@
 
 浏览器不直接访问 ComfyUI。这样不需要把 ComfyUI 的端口、文件目录或全局任务队列暴露给普通用户，也避免浏览器跨域、本地网络访问限制和页面关闭后断掉业务处理。
 
-### 2.2 远端后端与本机连接器
+### 2.2 后续远端部署的扩展边界
 
-若采用远端部署，连接器仅负责执行已经授权的任务，不是任意命令执行工具：
+本节不属于本期实施范围。只有将来把 NestJS 迁到另一台服务器时，才重新评估受控专用网络或本机连接器；服务器自身的 localhost 不能访问个人电脑，也不应把 ComfyUI 端口直接暴露到公网。若届时采用连接器，它仅负责执行已经授权的任务，不是任意命令执行工具：
 
 - 首次配对使用短期配对码，换取可撤销、绑定用户和设备的凭据；持续使用 HTTPS/WSS 出站连接。
 - 服务端持久化 `deviceId/jobId/attemptId`，分发任务时领取租约；连接器将接单记录和 `promptId` 写入本地持久日志，回执丢失后先对账，不直接重投。
@@ -73,7 +74,7 @@
 
 ### 4.1 第三方配置中的 ComfyUI 连接
 
-新增“第三方配置 → ComfyUI”，权限前缀 `ComfyConnection`。常用字段仅名称、连接方式、地址或已配对设备、启用状态；高级项放在折叠区。
+新增“第三方配置 → ComfyUI”，权限前缀 `ComfyConnection`。常用字段仅名称、服务地址、启用状态；连接方式固定为同机直连，不提供设备配对或连接器选项。高级项放在折叠区。
 
 高级配置包括：允许的用户/角色、最大并发、排队时限、执行时限、归档时限、代理鉴权引用、工作流白名单和输出限制。普通使用者不需要输入任何端口或 Token。
 
@@ -261,15 +262,15 @@ ComfyUI 可能把工作流和提示词写进图片/视频元数据。归档到�
 
 ## 10. 拟议数据模型和接口
 
-| 实体与表名                                         | 主要字段                                                                                                                                                                                                                                              | 说明                                                       |
-| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `ComfyConnection` / `comfy_connections`            | `name, mode, baseUrl/deviceId, credentialRef, isEnabled, allowedRoles, capabilities, limits`                                                                                                                                                          | 地址仅管理员配置；记录版本及能力验证，不向业务选项返回凭据 |
-| `ComfyWorkflow` / `comfy_workflows`                | `name, connectionId, outputKind, currentVersionId, isEnabled`                                                                                                                                                                                         | 工作流目录                                                 |
-| `ComfyWorkflowVersion` / `comfy_workflow_versions` | `workflowId, revision, apiGraph, parameterSchema, inputBindings, outputBindings, dependencyManifest, digest`                                                                                                                                          | 已发布内容不可原地修改，任务可追溯                         |
-| `ComfyTask` / `comfy_tasks`                        | `userId, connectionId, workflowVersionId, requestId, attemptId, clientId, promptId, status, connectivity, archiveStatus, parameterSnapshot, progressValue, progressMax, currentNodeId, workerId, leaseExpiresAt, fencingToken, timestamps, errorCode` | 幂等、对账和真实进度；列表不读取图 JSON 与参数快照         |
-| `ComfyTaskOutput` / `comfy_task_outputs`           | `taskId, nodeId, ordinal, remoteDescriptor, fileId, thumbnailFileId, kind, archiveStatus`                                                                                                                                                             | 一个任务多个输出；记录每个文件归档结果，支持断点恢复       |
+| 实体与表名                                         | 主要字段                                                                                                                                                                                                                                              | 说明                                                                              |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `ComfyConnection` / `comfy_connections`            | `name, mode, baseUrl, credentialRef, isEnabled, allowedRoles, capabilities, limits`                                                                                                                                                                   | 本期 mode 固定 direct；地址仅管理员配置，记录版本及能力验证，不向业务选项返回凭据 |
+| `ComfyWorkflow` / `comfy_workflows`                | `name, connectionId, outputKind, currentVersionId, isEnabled`                                                                                                                                                                                         | 工作流目录                                                                        |
+| `ComfyWorkflowVersion` / `comfy_workflow_versions` | `workflowId, revision, apiGraph, parameterSchema, inputBindings, outputBindings, dependencyManifest, digest`                                                                                                                                          | 已发布内容不可原地修改，任务可追溯                                                |
+| `ComfyTask` / `comfy_tasks`                        | `userId, connectionId, workflowVersionId, requestId, attemptId, clientId, promptId, status, connectivity, archiveStatus, parameterSnapshot, progressValue, progressMax, currentNodeId, workerId, leaseExpiresAt, fencingToken, timestamps, errorCode` | 幂等、对账和真实进度；列表不读取图 JSON 与参数快照                                |
+| `ComfyTaskOutput` / `comfy_task_outputs`           | `taskId, nodeId, ordinal, remoteDescriptor, fileId, thumbnailFileId, kind, archiveStatus`                                                                                                                                                             | 一个任务多个输出；记录每个文件归档结果，支持断点恢复                              |
 
-复用 `managed_files/managed_file_references`。连接器部署才增加设备、配对凭据和本地执行日志，不把远端设备管理强加给同机最小版。
+复用 `managed_files/managed_file_references`。本期不增加 `deviceId`、设备表、配对凭据或连接器执行日志；这些仅在后续明确采用连接器时再设计迁移。
 
 统一 camelCase，API 层把上游 `prompt_id` 映射为 `promptId`，向上游请求时仍使用其准确字段名。建议唯一约束包括 `userId+requestId`、非空 `connectionId+promptId`、`taskId+nodeId+ordinal`；worker 领取和结果写回都带代次条件。
 
@@ -296,7 +297,7 @@ ComfyUI 可能把工作流和提示词写进图片/视频元数据。归档到�
 
 ### 阶段一 接入准备
 
-确认同机/远端、ComfyUI 版本及依赖，获取一份文生图和一份视频的 API 工作流，先在 ComfyUI 本身验证可运行。定义允许的节点与模型、路径前缀、资源上限，明确输出归档到本地还是 OSS。
+基于已确认的同机部署，核对实际服务地址、Docker/WSL 网络边界、ComfyUI 版本及依赖。先获取并验证一份文生图 API 工作流；视频阶段开始前再验证一份视频 API 工作流，不让视频模型准备阻塞图片接入。定义允许的节点与模型、路径前缀、资源上限，明确输出归档到本地还是 OSS。
 
 只读探测不得自动执行工作流。实际验证会占 GPU 或可能调用付费 API，安排明确的测试任务。
 
@@ -314,7 +315,7 @@ ComfyUI 可能把工作流和提示词写进图片/视频元数据。归档到�
 
 ### 阶段四 体验和扩展
 
-按需要增加 SSE、受控实时预览、更多模板/输出节点、素材生成引擎选择。若后端在远端，本机连接器应提前到阶段二之前完成；它不是同机最小版的必选复杂度。
+按需要增加 SSE、受控实时预览、更多模板/输出节点、素材生成引擎选择。本期所有阶段均采用同机直连；若后续改变部署拓扑，再单独立项处理连接器或专网接入，不作为当前实施依赖。
 
 后续可让素材模块通过统一接口选择云端生图或某份 ComfyUI 图片模板，但保持不同配置和执行适配器。文章自动封面仍按用户既定规则走同账号云端模型，不擅自切到本机 GPU。
 
@@ -339,10 +340,10 @@ ComfyUI 可能把工作流和提示词写进图片/视频元数据。归档到�
 
 ## 13. 开工前最少确认项
 
-1. ComfyUI 与 NestJS 是否同机，是否经过 Docker/WSL；远端时选择连接器还是既有专网。
+1. 已确认同机；仅需核对 NestJS 是否经过 Docker/WSL，以及对应网络模式。
 2. 本机 ComfyUI 版本和可访问地址，是否为共享实例。
 3. GPU/显存及可实际运行的图片、视频 API 工作流文件；尤其视频使用原生 SaveVideo 还是自定义输出节点。
 4. 生成结果默认公开还是私有；沿用当前公开 OSS 时不放私密素材。
 5. 本机与云端的保留期、磁盘/存储配额，以及是否允许管理员执行真实清理。
 
-推荐顺序是先完成素材方案中的受管文件基础，再完成同机 ComfyUI 图片闭环，随后加视频。若确定后端远端部署，则先把设备连接与断线恢复设计落地，再接工作流执行。
+推荐顺序是先完成素材方案中的受管文件基础，再完成同机 ComfyUI 图片闭环，随后加视频。整个过程无需建设连接器、设备配对或开放公网端口。
