@@ -30,6 +30,7 @@ const columns: TableColumn[] = [
     slot: true,
     showOverflowTooltip: false,
   },
+  { prop: "generationMode", label: "模式", width: 90, slot: true },
   { prop: "promptPreview", label: "提示词", minWidth: 280 },
   { prop: "styleKey", label: "风格", width: 120, slot: true },
   { prop: "generationStatus", label: "状态", width: 110, slot: true },
@@ -66,6 +67,15 @@ const styleLabels: Record<string, string> = {
   cinematic: "电影质感",
   custom: "自定义风格",
 };
+const modeLabels = {
+  textToImage: "文生图",
+  imageToImage: "图生图",
+} as const;
+function modeLabel(mode: unknown) {
+  return (
+    modeLabels[mode as keyof typeof modeLabels] ?? String(mode || "-")
+  );
+}
 const statusLabels: Record<AiMaterialStatus, string> = {
   idle: "待生成",
   pending: "排队中",
@@ -211,6 +221,11 @@ function statusLabel(status: unknown) {
       <template #column-styleKey="{ row }">{{
         styleLabels[row.styleKey] || row.styleKey
       }}</template>
+      <template #column-generationMode="{ row }">
+        <el-tag :type="row.generationMode === 'imageToImage' ? 'primary' : 'info'">
+          {{ modeLabel(row.generationMode) }}
+        </el-tag>
+      </template>
       <template #column-generationStatus="{ row }">
         <el-tooltip v-if="row.generationError" :content="row.generationError">
           <el-tag :type="statusType(row.generationStatus)">{{

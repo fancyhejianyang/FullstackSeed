@@ -1,6 +1,9 @@
 import { Column, Entity, Index } from 'typeorm';
 import { BaseEntity } from '../../common/entities/base.entity';
-import type { AiMaterialStyleKey } from '../ai-material.constants';
+import type {
+  AiMaterialGenerationMode,
+  AiMaterialStyleKey,
+} from '../ai-material.constants';
 
 export type MaterialTaskStatus =
   | 'pending'
@@ -19,6 +22,8 @@ export interface MaterialGenerationSnapshot {
   styleVersion: number;
   customStyle: string | null;
   finalPrompt: string;
+  generationMode: AiMaterialGenerationMode;
+  referenceFileId: number | null;
   config: {
     id: number;
     name: string;

@@ -81,6 +81,10 @@ export class CreateAiFeatureConfigDto {
 
   @IsBoolean()
   @IsOptional()
+  supportsImageToImage?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
   useMineru?: boolean;
 
   @ValidateIf(

@@ -53,6 +53,10 @@ export class AiFeatureConfig extends BaseEntity {
   @Column({ type: 'varchar', length: 40, default: 'text' })
   responseFormat: AiResponseFormat;
 
+  /** 图片生成配置是否允许参考图编辑；文生图始终可用。 */
+  @Column({ type: 'tinyint', default: false })
+  supportsImageToImage: boolean;
+
   @Column({ type: 'tinyint', default: true })
   isEnabled: boolean;
 

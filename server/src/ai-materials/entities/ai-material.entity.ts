@@ -1,6 +1,9 @@
 import { Column, Entity, Index } from 'typeorm';
 import { BaseEntity } from '../../common/entities/base.entity';
-import type { AiMaterialStyleKey } from '../ai-material.constants';
+import type {
+  AiMaterialGenerationMode,
+  AiMaterialStyleKey,
+} from '../ai-material.constants';
 
 export type AiMaterialGenerationStatus =
   | 'idle'
@@ -20,6 +23,11 @@ export class AiMaterial extends BaseEntity {
   styleKey: AiMaterialStyleKey;
   @Column({ type: 'text', nullable: true }) customStyle: string | null;
   @Column({ type: 'int' }) aiConfigId: number;
+  @Column({ type: 'varchar', length: 24, default: 'textToImage' })
+  generationMode: AiMaterialGenerationMode;
+  @Column({ type: 'int', nullable: true }) referenceFileId: number | null;
+  @Column({ type: 'varchar', length: 2048, nullable: true })
+  referenceImageUrl: string | null;
   @Column({ type: 'int', nullable: true }) currentFileId: number | null;
   @Column({ type: 'varchar', length: 2048, nullable: true })
   currentImageUrl: string | null;

@@ -9,10 +9,14 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator';
+import type { UploadedStorageFile } from '../uploads/uploads.service';
 import { AiMaterialsService } from './ai-materials.service';
 import {
   BatchDeleteAiMaterialDto,
@@ -66,21 +70,33 @@ export class AiMaterialsController {
 
   @Post()
   @RequirePermissions('AiMaterial.create')
+  @UseInterceptors(
+    FileInterceptor('referenceImage', {
+      limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+    }),
+  )
   create(
     @Body() dto: CreateAiMaterialDto,
     @CurrentUser('userId') userId: number,
+    @UploadedFile() referenceImage?: UploadedStorageFile,
   ) {
-    return this.service.create(dto, userId);
+    return this.service.create(dto, userId, referenceImage);
   }
 
   @Patch(':id')
   @RequirePermissions('AiMaterial.update')
+  @UseInterceptors(
+    FileInterceptor('referenceImage', {
+      limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+    }),
+  )
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateAiMaterialDto,
     @CurrentUser('userId') userId: number,
+    @UploadedFile() referenceImage?: UploadedStorageFile,
   ) {
-    return this.service.update(id, dto, userId);
+    return this.service.update(id, dto, userId, referenceImage);
   }
 
   @Delete(':id')

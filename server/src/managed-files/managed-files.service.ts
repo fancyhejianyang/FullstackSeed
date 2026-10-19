@@ -1,11 +1,14 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  In,
   IsNull,
   LessThanOrEqual,
   Repository,
   type EntityManager,
 } from 'typeorm';
+import { imageMime } from '../common/ai/image-utils';
+import { StoredFilesService } from '../stored-files/stored-files.service';
 import {
   UploadsService,
   type UploadedStorageFile,
@@ -14,6 +17,7 @@ import { ManagedFile } from './entities/managed-file.entity';
 import { ManagedFileReference } from './entities/managed-file-reference.entity';
 
 const RETENTION_MS = 24 * 60 * 60 * 1000;
+const MAX_REFERENCE_IMAGE_SIZE = 5 * 1024 * 1024;
 
 @Injectable()
 export class ManagedFilesService {
@@ -23,6 +27,7 @@ export class ManagedFilesService {
     @InjectRepository(ManagedFileReference)
     private readonly references: Repository<ManagedFileReference>,
     private readonly uploads: UploadsService,
+    private readonly storedFiles: StoredFilesService,
   ) {}
 
   async stageAndStore(
@@ -78,6 +83,37 @@ export class ManagedFilesService {
       oldFileId: number | null;
     },
   ) {
+    return this.replaceMaterialRoleReference(manager, {
+      ...payload,
+      role: 'current',
+    });
+  }
+
+  async replaceMaterialSourceReference(
+    manager: EntityManager,
+    payload: {
+      ownerId: number;
+      materialId: number;
+      newFileId: number;
+      oldFileId: number | null;
+    },
+  ) {
+    return this.replaceMaterialRoleReference(manager, {
+      ...payload,
+      role: 'source',
+    });
+  }
+
+  private async replaceMaterialRoleReference(
+    manager: EntityManager,
+    payload: {
+      ownerId: number;
+      materialId: number;
+      newFileId: number;
+      oldFileId: number | null;
+      role: 'current' | 'source';
+    },
+  ) {
     const files = manager.getRepository(ManagedFile);
     const refs = manager.getRepository(ManagedFileReference);
     const next = await files.findOne({
@@ -95,20 +131,24 @@ export class ManagedFilesService {
         ownerId: payload.ownerId,
         businessType: 'ai-material',
         businessId: payload.materialId,
-        role: 'current',
+        role: payload.role,
       },
+      withDeleted: true,
       lock: { mode: 'pessimistic_write' },
     });
     const previousFileId = currentReference?.fileId ?? payload.oldFileId;
     await refs.save(
       currentReference
-        ? Object.assign(currentReference, { fileId: next.id })
+        ? Object.assign(currentReference, {
+            fileId: next.id,
+            deletedAt: null,
+          })
         : refs.create({
             fileId: next.id,
             ownerId: payload.ownerId,
             businessType: 'ai-material',
             businessId: payload.materialId,
-            role: 'current',
+            role: payload.role,
           }),
     );
     await files.update(next.id, {
@@ -128,15 +168,67 @@ export class ManagedFilesService {
     materialId: number,
     fileId: number | null,
   ) {
+    return this.releaseMaterialRoleReference(
+      manager,
+      ownerId,
+      materialId,
+      fileId,
+      'current',
+    );
+  }
+
+  async releaseMaterialSourceReference(
+    manager: EntityManager,
+    ownerId: number,
+    materialId: number,
+    fileId: number | null,
+  ) {
+    return this.releaseMaterialRoleReference(
+      manager,
+      ownerId,
+      materialId,
+      fileId,
+      'source',
+    );
+  }
+
+  private async releaseMaterialRoleReference(
+    manager: EntityManager,
+    ownerId: number,
+    materialId: number,
+    fileId: number | null,
+    role: 'current' | 'source',
+  ) {
     if (!fileId) return;
     await manager.getRepository(ManagedFileReference).softDelete({
       fileId,
       ownerId,
       businessType: 'ai-material',
       businessId: materialId,
-      role: 'current',
+      role,
     });
     await this.markUnreferenced(manager, fileId);
+  }
+
+  async readMaterialImage(fileId: number, ownerId: number) {
+    const file = await this.files.findOne({
+      where: {
+        id: fileId,
+        ownerId,
+        scope: 'ai-materials',
+        status: In(['ready', 'pending_delete']),
+      },
+    });
+    if (!file) throw new BadRequestException('图生图参考图片不存在或不可用');
+    if (Number(file.size) > MAX_REFERENCE_IMAGE_SIZE)
+      throw new BadRequestException('图生图参考图片不能超过 5MB');
+    const content = await this.storedFiles.read(file.publicUrl, file.fileName);
+    if (content.buffer.length > MAX_REFERENCE_IMAGE_SIZE)
+      throw new BadRequestException('图生图参考图片不能超过 5MB');
+    return {
+      buffer: content.buffer,
+      mimeType: imageMime(content.buffer, MAX_REFERENCE_IMAGE_SIZE),
+    };
   }
 
   async cleanupPreview(scope = 'ai-materials', limit = 100) {

@@ -7,6 +7,7 @@ export type AiMaterialStyleKey =
   | "flatIllustration"
   | "cinematic"
   | "custom";
+export type AiMaterialGenerationMode = "textToImage" | "imageToImage";
 export type AiMaterialStatus =
   | "idle"
   | "pending"
@@ -30,12 +31,15 @@ export interface MaterialTaskSummary {
 
 export interface AiMaterialSummary {
   id: number;
+  generationMode: AiMaterialGenerationMode;
   styleKey: AiMaterialStyleKey;
   aiConfigId: number;
   aiConfigName: string;
   aiModel: string;
   currentFileId: number | null;
   currentImageUrl: string | null;
+  referenceFileId: number | null;
+  referenceImageUrl: string | null;
   version: number;
   generationRevision: number;
   generationStatus: AiMaterialStatus;
@@ -54,9 +58,12 @@ export interface AiMaterial extends Omit<AiMaterialSummary, "promptPreview"> {
 
 export interface AiMaterialForm {
   prompt: string;
+  generationMode: AiMaterialGenerationMode;
   styleKey: AiMaterialStyleKey;
   customStyle?: string | null;
   aiConfigId: number | "";
+  referenceImageUrl?: string | null;
+  referenceImageFile?: File | null;
 }
 
 export interface AiMaterialListResult {
@@ -68,6 +75,7 @@ export interface AiMaterialConfigOption {
   id: number;
   name: string;
   model: string;
+  supportsImageToImage: boolean;
 }
 
 export function getAiMaterials(params: {
@@ -93,11 +101,30 @@ export function getAiMaterialConfigOptions() {
 }
 
 export function createAiMaterial(data: AiMaterialForm) {
-  return request.post<unknown, AiMaterial>("/ai-materials", data);
+  return request.post<unknown, AiMaterial>(
+    "/ai-materials",
+    toMaterialFormData(data),
+  );
 }
 
 export function updateAiMaterial(id: number, data: AiMaterialForm) {
-  return request.patch<unknown, AiMaterial>(`/ai-materials/${id}`, data);
+  return request.patch<unknown, AiMaterial>(
+    `/ai-materials/${id}`,
+    toMaterialFormData(data),
+  );
+}
+
+function toMaterialFormData(data: AiMaterialForm) {
+  const body = new FormData();
+  body.append("prompt", data.prompt);
+  body.append("generationMode", data.generationMode);
+  body.append("styleKey", data.styleKey);
+  body.append("aiConfigId", String(data.aiConfigId));
+  if (data.customStyle) body.append("customStyle", data.customStyle);
+  if (data.generationMode === "imageToImage" && data.referenceImageFile) {
+    body.append("referenceImage", data.referenceImageFile);
+  }
+  return body;
 }
 
 export function deleteAiMaterial(id: number) {

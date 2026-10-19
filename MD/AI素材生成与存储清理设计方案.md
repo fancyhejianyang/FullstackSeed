@@ -6,7 +6,7 @@
 
 ## 1. 建议结论
 
-新增“内容创作 → 素材生成”，首期只做单张图片：填写提示词、选择风格和生图配置，生成后预览、下载、重新生成或删除。风格先提供受控预设，不增加分类、标签、复杂模板管理或批量计费生成。
+“内容创作 → 素材管理”支持单张文生图和图生图：选择生成模式，填写提示词、选择风格和生图配置，图生图再上传一张参考图；生成后可预览、下载、重新生成或删除。风格先提供受控预设，不增加分类、标签、复杂模板管理或批量计费生成。
 
 “覆盖”应当覆盖素材记录的当前结果，不原地覆盖同一个 OSS 文件：先生成并保存新文件，成功后切换记录指向，再把无引用的旧文件加入延迟清理。失败时旧图仍可使用。
 
@@ -33,11 +33,12 @@
 
 ### 3.1 素材页面
 
-编辑区只保留三个主要输入：
+编辑区保留生成模式和三个主要输入：
 
+- 生成模式：文生图 / 图生图二选一；图生图必须上传一张 PNG、JPEG 或 WebP 参考图，最大 5MB。
 - 提示词：必填，描述主体、场景和构图。
 - 风格：原始描述、写实摄影、水彩、扁平插画、电影质感等受控预设；可选“自定义风格”后填写一段文字。
-- 生图配置：记住上次选择，必须是启用且可用的图片生成功能配置。
+- 生图配置：必须是启用且可用的图片生成功能配置；图生图只允许选择明确启用该能力的配置。
 
 不强制填写标题。列表显示 40×40 缩略图、提示词单行摘要、风格、状态、更新时间；完整描述、实际参数和错误放在详情。操作为查看、编辑、生成或重新生成、下载、删除，不再设计“采纳标题/正文”等文章操作。
 
@@ -47,7 +48,7 @@
 
 ### 3.2 AI 功能配置
 
-建议在现有“AI 功能配置”增加 `imageGeneration` 类型：账号、该账号生图模型、默认画面要求。生图不展示温度、Think、Markdown/纯文本格式或客服工作流。
+现有“AI 功能配置”的 `imageGeneration` 类型提供账号、该账号生图模型、默认画面要求和“图生图能力”开关。新建图片生成配置默认开启图生图，非图片类型强制关闭；生图不展示温度、Think、Markdown/纯文本格式或客服工作流。
 
 现有 `AiFeatureConfig` 的 `providerId/model/systemPrompt` 可复用，其中 `systemPrompt` 在该类型下表示画面默认要求，只拼接为生图提示词，不调用聊天接口；旧类型含义不变。仅在需要可配置尺寸时增加严格校验的 `imageParameters` 字段，不接受自由请求 JSON。
 
@@ -55,7 +56,7 @@
 
 执行时使用已有 `resolveMediaTarget(providerId, model, 'imageGeneration')`，由后端再次验证账号启用、密钥、模型归属及完整端点。新增素材专用只读配置选项接口，只返回配置名称、ID 和模型，不借此授予第三方配置读取权限或泄露凭据。
 
-首期沿用已实现协议：OpenAI 兼容路径固定单张 1024×1024，DashScope 使用已实现的单图请求及模型默认尺寸。只有某个协议、模型的参数经过验证后，才显示它支持的尺寸或负向提示词；不凭模型名称推测能力。缺配置时阻止提交，不能像文章可选封面一样静默跳过整个功能。
+文生图沿用已实现协议：OpenAI 兼容路径固定单张 1024×1024，DashScope 使用模型默认尺寸。图生图当前只走 DashScope 多模态生图协议，把受管参考图转换为 Data URL 后与提示词一起发送并开启 `prompt_extend`；配置能力或实际协议不匹配时明确失败，不静默退回文生图。只有某个协议、模型的参数经过验证后，才显示它支持的尺寸或负向提示词；不凭模型名称推测能力。缺配置时阻止提交，不能像文章可选封面一样静默跳过整个功能。
 
 ## 4. 独立存储路径
 
@@ -166,8 +167,8 @@ OSS 生命周期可以按前缀/标签处理对象，但不理解数据库引用
 
 | 实体与表名                                             | 核心字段                                                                                                                                                  | 用途                                                                                            |
 | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `AiMaterial` / `ai_materials`                          | `userId, prompt, styleKey, customStyle, aiConfigId, currentFileId, version, generationRevision`                                                           | 用户只编辑提示词、风格和配置；技术字段不增加表单负担                                            |
-| `MaterialGenerationTask` / `material_generation_tasks` | `userId, materialId, materialVersion, requestId, status, snapshot, resultFileId, workerId, leaseExpiresAt, startedAt, finishedAt, errorMessage`           | 快照含实际模型、风格版本、最终提示词，不含密钥；`userId+requestId` 唯一，同素材至多一个活跃任务 |
+| `AiMaterial` / `ai_materials`                          | `userId, prompt, generationMode, referenceFileId, referenceImageUrl, styleKey, customStyle, aiConfigId, currentFileId, version, generationRevision`         | 用户编辑模式、参考图、提示词、风格和配置；源图与结果图引用分离                                  |
+| `MaterialGenerationTask` / `material_generation_tasks` | `userId, materialId, materialVersion, requestId, status, snapshot, resultFileId, workerId, leaseExpiresAt, startedAt, finishedAt, errorMessage`             | 快照含模式、参考文件 ID、实际模型、风格版本和最终提示词，不含密钥或 Base64；同素材至多一个活跃任务 |
 | `ManagedFile` / `managed_files`                        | `ownerId, scope, environment, storageLocationId, storageIdentity, objectKey, objectVersionId, mimeType, size, status, deleteAfter, retryAt, errorMessage` | 文件身份、归档与删除状态；状态拟为 `staged/ready/pending_delete/deleting/deleted/delete_failed` |
 | `ManagedFileReference` / `managed_file_references`     | `fileId, ownerId, businessType, businessId, role`                                                                                                         | 当前素材、输出任务或正式发布的有效引用，按业务引用唯一约束                                      |
 
@@ -224,6 +225,6 @@ OSS 生命周期可以按前缀/标签处理对象，但不理解数据库引用
 
 建议直接做：提示词与风格、单图异步生成、成功覆盖、独立路径、文件登记、延迟清理、清理预览、生成状态。
 
-后续再做：自定义风格管理、批量生成、图生图、供应商异步协议、自动 CDN 刷新、多个独立存储账号，以及与旧业务的素材选择器整合。
+后续再做：自定义风格管理、批量生成、OpenAI 兼容图生图、供应商异步协议、自动 CDN 刷新、多个独立存储账号，以及与旧业务的素材选择器整合。
 
 该方案优先解决“能生成、不会误覆盖、垃圾文件可定位和可清理”。ComfyUI 的视频与工作流调度另见第二份方案，不把它塞入当前云端单图接口。

@@ -99,6 +99,63 @@ describe('AiFeatureConfigsService', () => {
     expect(config.thinkingParameters).toBeNull();
   });
 
+  it('图片生成默认启用图生图能力，其它配置强制关闭', () => {
+    const imageConfig: Partial<AiFeatureConfig> = {
+      featureType: 'imageGeneration',
+    };
+    internals.normalizeFeatureSpecificSettings(imageConfig);
+    expect(imageConfig.supportsImageToImage).toBe(true);
+
+    const chatConfig: Partial<AiFeatureConfig> = {
+      featureType: 'chat',
+      supportsImageToImage: true,
+    };
+    internals.normalizeFeatureSpecificSettings(chatConfig);
+    expect(chatConfig.supportsImageToImage).toBe(false);
+  });
+
+  it('素材配置选项包含图生图能力但不暴露账号和提示词', async () => {
+    const repository = {
+      findAndCount: jest.fn().mockResolvedValue([
+        [
+          {
+            id: 7,
+            name: '生图',
+            model: 'qwen-image',
+            supportsImageToImage: true,
+          },
+        ],
+        1,
+      ]),
+    };
+    const imageService = new AiFeatureConfigsService(
+      repository as never,
+      {} as never,
+      {} as never,
+    );
+    await expect(imageService.imageGenerationOptions({})).resolves.toEqual({
+      list: [
+        {
+          id: 7,
+          name: '生图',
+          model: 'qwen-image',
+          supportsImageToImage: true,
+        },
+      ],
+      total: 1,
+    });
+    expect(repository.findAndCount).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: {
+          id: true,
+          name: true,
+          model: true,
+          supportsImageToImage: true,
+        },
+      }),
+    );
+  });
+
   it('locks LLM rerank configurations to the internal deterministic JSON scorer', () => {
     const config: Partial<AiFeatureConfig> = {
       featureType: 'rerank',

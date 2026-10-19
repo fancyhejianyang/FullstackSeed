@@ -13,7 +13,9 @@ import {
   ValidateIf,
 } from 'class-validator';
 import {
+  AI_MATERIAL_GENERATION_MODES,
   AI_MATERIAL_STYLE_KEYS,
+  type AiMaterialGenerationMode,
   type AiMaterialStyleKey,
 } from '../ai-material.constants';
 import type { MaterialTaskStatus } from '../entities/material-generation-task.entity';
@@ -38,6 +40,10 @@ export class CreateAiMaterialDto {
   @IsInt()
   @Min(1)
   aiConfigId: number;
+
+  @IsIn(AI_MATERIAL_GENERATION_MODES)
+  @IsOptional()
+  generationMode?: AiMaterialGenerationMode;
 }
 
 export class UpdateAiMaterialDto extends PartialType(CreateAiMaterialDto) {}

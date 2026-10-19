@@ -54,6 +54,7 @@ const form = reactive<AiFeatureConfigEditForm>({
   systemPrompt: "",
   temperature: 0.2,
   responseFormat: "text",
+  supportsImageToImage: false,
   isEnabled: true,
   description: "",
 });
@@ -305,6 +306,18 @@ const fields = computed<FormField[]>(() => {
     }
   }
 
+  if (isImageGenerationFeature.value) {
+    baseFields.push({
+      prop: "supportsImageToImage",
+      label: "图生图能力",
+      component: "Switch",
+      componentProps: { activeText: "支持", inactiveText: "不支持" },
+      hint: form.supportsImageToImage
+        ? "素材任务可上传参考图；当前仅在 DashScope 多模态生图协议下执行，不支持时会明确报错。"
+        : "素材任务仅允许文生图，不显示为可用的图生图配置。",
+    });
+  }
+
   return [
     ...baseFields,
     {
@@ -369,10 +382,14 @@ watch(visible, async (value) => {
 
 watch(
   () => form.featureType,
-  (type) => {
+  (type, previousType) => {
     // 用户切换为内容创作时默认纯文本；编辑回显保留已有格式。
     if (type === "contentCreation" && formReadyForModelValidation.value)
       form.responseFormat = "text";
+    if (!formReadyForModelValidation.value) return;
+    if (type === "imageGeneration" && previousType !== "imageGeneration")
+      form.supportsImageToImage = true;
+    if (type !== "imageGeneration") form.supportsImageToImage = false;
   },
 );
 
@@ -451,6 +468,7 @@ function resetForm() {
   form.systemPrompt = "";
   form.temperature = 0.2;
   form.responseFormat = "text";
+  form.supportsImageToImage = false;
   form.isEnabled = true;
   form.description = "";
 }
@@ -469,6 +487,7 @@ function fillForm(data: AiFeatureConfig) {
   form.systemPrompt = data.systemPrompt ?? "";
   form.temperature = Number(data.temperature ?? 0.2);
   form.responseFormat = data.responseFormat ?? "text";
+  form.supportsImageToImage = !!data.supportsImageToImage;
   form.isEnabled = !!data.isEnabled;
   form.description = data.description ?? "";
 }
@@ -497,6 +516,8 @@ function buildPayload(): AiFeatureConfigForm {
         : isMarkdownFeature.value
           ? "markdown"
           : form.responseFormat,
+    supportsImageToImage:
+      isImageGenerationFeature.value && !!form.supportsImageToImage,
     isEnabled: form.isEnabled,
     description: form.description?.trim(),
   };

@@ -1,5 +1,46 @@
 # CHANGELOG
 
+### 2026-10-19 素材管理接入可控图生图
+
+- 图片生成类型的 AI 功能配置新增“图生图能力”开关，新建图片配置默认开启，非图片配置强制关闭；素材配置选项只额外返回能力标记。素材新增文生图 / 图生图单选模式，图生图要求一张 PNG、JPEG 或 WebP 参考图（不超过 5MB），只允许选择已开启能力的配置；列表显示生成模式，详情回显参考图。
+- 素材新增 `generationMode/referenceFileId/referenceImageUrl` 字段，创建和编辑接口改为兼容参考图的 multipart 表单。参考图进入 `ai-materials/{environment}/objects/...` 受管路径并使用独立 `source` 引用，替换、切回文生图或删除素材时进入既有 24 小时延迟清理；生成图继续使用 `current` 引用，两类文件互不覆盖。
+- 后台任务快照固定生成模式和参考文件 ID；执行图生图时重新校验文件归属、状态、大小与真实图片格式，再以内联 Data URL 调用 DashScope 多模态生图并开启 `prompt_extend`。配置能力关闭或实际协议不是 DashScope 时明确失败，不自动降级为文生图；编辑冲突、失败和中断仍保留旧生成图，未调用 Agent、识图模型或文本润色。
+- 新增增量迁移 `1792400400000-AddImageToImageMaterials`，为历史图片生成配置安全回填图生图能力，历史素材默认为文生图；存在图生图素材、参考图或显式关闭能力的配置时拒绝破坏性回退。同步更新素材设计方案与界面规范。
+- 验证：后端变更文件 ESLint、Prettier、TypeORM 实体检查、3 套 / 20 项 Jest 及 Nest 生产构建通过；前端 `vue-tsc`、组件复用扫描和 Vite 生产构建通过，diff 空白检查通过。未连接数据库、执行迁移、启动服务、调用真实生图服务或写入 OSS；`web/components.d.ts` 的用户既有未提交差异保持不纳入提交。
+
+新增文件（3）：
+
+- `server/src/common/ai/image-generation.spec.ts`
+- `server/src/migrations/1792400400000-AddImageToImageMaterials.spec.ts`
+- `server/src/migrations/1792400400000-AddImageToImageMaterials.ts`
+
+修改文件（22）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `MD/AI素材生成与存储清理设计方案.md`
+- `server/src/ai-feature-configs/ai-feature-configs.service.spec.ts`
+- `server/src/ai-feature-configs/ai-feature-configs.service.ts`
+- `server/src/ai-feature-configs/dto/ai-feature-config.dto.ts`
+- `server/src/ai-feature-configs/entities/ai-feature-config.entity.ts`
+- `server/src/ai-materials/ai-material.constants.ts`
+- `server/src/ai-materials/ai-materials.controller.ts`
+- `server/src/ai-materials/ai-materials.service.ts`
+- `server/src/ai-materials/dto/ai-material.dto.ts`
+- `server/src/ai-materials/entities/ai-material.entity.ts`
+- `server/src/ai-materials/entities/material-generation-task.entity.ts`
+- `server/src/common/ai/image-generation.ts`
+- `server/src/managed-files/managed-files.module.ts`
+- `server/src/managed-files/managed-files.service.ts`
+- `web/src/api/aiFeatureConfig.ts`
+- `web/src/api/aiMaterial.ts`
+- `web/src/views/ai-feature-config/Edit.vue`
+- `web/src/views/ai-material/Edit.vue`
+- `web/src/views/ai-material/Index.vue`
+- `web/src/views/ai-material/View.vue`
+
+删除文件：无。
+
 ### 2026-10-19 收敛 AI 功能配置侧边导航
 
 - “AI 功能配置”在侧边栏收敛为单一可点击入口，功能配置、AI 指令集和 AI 工作流继续在页面内按原权限展示页签；访问任一页签路由时统一保持该侧边入口激活。

@@ -8,6 +8,7 @@ import { In, Like, Repository } from 'typeorm';
 import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
 import { MineruConfigsService } from '../mineru-configs/mineru-configs.service';
 import type { AiFeatureConfigType } from './ai-feature-config.constants';
+import type { AiMaterialGenerationMode } from '../ai-materials/ai-material.constants';
 import {
   CreateAiFeatureConfigDto,
   QueryAiFeatureConfigDto,
@@ -115,7 +116,10 @@ export class AiFeatureConfigsService {
 
   async update(id: number, dto: UpdateAiFeatureConfigDto) {
     const config = await this.findOne(id);
-    Object.assign(config, await this.toEntityPayload(dto, false));
+    Object.assign(
+      config,
+      await this.toEntityPayload(dto, false, config.featureType),
+    );
     this.normalizeFeatureSpecificSettings(config);
     await this.assertExecutableConfig(config);
     return this.configRepository.save(config);
@@ -134,7 +138,10 @@ export class AiFeatureConfigsService {
     return config;
   }
 
-  async findUsableImageGenerationConfig(id: number) {
+  async findUsableImageGenerationConfig(
+    id: number,
+    generationMode: AiMaterialGenerationMode = 'textToImage',
+  ) {
     const config = await this.findOne(id);
     if (config.featureType !== 'imageGeneration')
       throw new BadRequestException('请选择图片生成类型的 AI 功能配置');
@@ -142,6 +149,8 @@ export class AiFeatureConfigsService {
       throw new BadRequestException('该图片生成配置未启用');
     if (!config.providerId || !config.model?.trim())
       throw new BadRequestException('图片生成配置缺少模型账号或生图模型');
+    if (generationMode === 'imageToImage' && !config.supportsImageToImage)
+      throw new BadRequestException('所选图片生成配置未启用图生图能力');
     return config;
   }
 
@@ -153,7 +162,12 @@ export class AiFeatureConfigsService {
     const keyword = query.keyword?.trim();
     const base = { featureType: 'imageGeneration' as const, isEnabled: true };
     const [rows, total] = await this.configRepository.findAndCount({
-      select: { id: true, name: true, model: true },
+      select: {
+        id: true,
+        name: true,
+        model: true,
+        supportsImageToImage: true,
+      },
       where: keyword
         ? [
             { ...base, name: Like(`%${keyword}%`) },
@@ -220,6 +234,7 @@ export class AiFeatureConfigsService {
   private async toEntityPayload(
     dto: CreateAiFeatureConfigDto | UpdateAiFeatureConfigDto,
     isCreate: boolean,
+    previousFeatureType?: AiFeatureConfigType,
   ): Promise<Partial<AiFeatureConfig>> {
     const payload: Partial<AiFeatureConfig> = {};
     if (dto.name !== undefined) payload.name = dto.name.trim();
@@ -262,6 +277,14 @@ export class AiFeatureConfigsService {
     if (dto.responseFormat !== undefined || isCreate) {
       payload.responseFormat = dto.responseFormat ?? 'text';
     }
+    if (dto.supportsImageToImage !== undefined) {
+      payload.supportsImageToImage = dto.supportsImageToImage;
+    } else if (
+      isCreate ||
+      (dto.featureType !== undefined && dto.featureType !== previousFeatureType)
+    ) {
+      payload.supportsImageToImage = dto.featureType === 'imageGeneration';
+    }
     if (dto.useMineru !== undefined || isCreate) {
       payload.useMineru = dto.useMineru ?? false;
       if (!payload.useMineru) {
@@ -280,6 +303,7 @@ export class AiFeatureConfigsService {
 
   private normalizeFeatureSpecificSettings(config: Partial<AiFeatureConfig>) {
     if (config.featureType === 'imageGeneration') {
+      config.supportsImageToImage ??= true;
       config.enableThinking = false;
       config.thinkingParameters = null;
       config.useMineru = false;
@@ -289,6 +313,7 @@ export class AiFeatureConfigsService {
       config.responseFormat = 'text';
       return;
     }
+    config.supportsImageToImage = false;
     if (config.featureType === 'contentCreation') {
       config.useMineru = false;
       config.mineruConfigId = null;

@@ -81,6 +81,25 @@ function download() {
               statusLabels[detail.generationStatus]
             }}</el-tag>
           </el-descriptions-item>
+          <el-descriptions-item label="生成模式">
+            {{
+              detail.generationMode === "imageToImage" ? "图生图" : "文生图"
+            }}
+          </el-descriptions-item>
+          <el-descriptions-item
+            v-if="detail.generationMode === 'imageToImage'"
+            label="参考图片"
+          >
+            <el-image
+              v-if="detail.referenceImageUrl"
+              class="material-view__reference"
+              :src="detail.referenceImageUrl"
+              :preview-src-list="[detail.referenceImageUrl]"
+              fit="cover"
+              preview-teleported
+            />
+            <span v-else>参考图片不可用</span>
+          </el-descriptions-item>
           <el-descriptions-item label="提示词">
             <div class="material-view__text">{{ detail.prompt }}</div>
           </el-descriptions-item>
@@ -124,5 +143,11 @@ function download() {
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.65;
+}
+.material-view__reference {
+  width: 80px;
+  height: 80px;
+  border-radius: 6px;
+  background: #f5f7fa;
 }
 </style>

@@ -26,8 +26,14 @@ export const AI_MATERIAL_STYLES = [
 export type AiMaterialStyleKey = (typeof AI_MATERIAL_STYLES)[number]['key'];
 export const AI_MATERIAL_STYLE_KEYS = AI_MATERIAL_STYLES.map(
   (item) => item.key,
-) as AiMaterialStyleKey[];
+);
 export const AI_MATERIAL_STYLE_VERSION = 1;
+export const AI_MATERIAL_GENERATION_MODES = [
+  'textToImage',
+  'imageToImage',
+] as const;
+export type AiMaterialGenerationMode =
+  (typeof AI_MATERIAL_GENERATION_MODES)[number];
 
 export function buildMaterialPrompt(payload: {
   prompt: string;

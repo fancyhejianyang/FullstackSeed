@@ -24,6 +24,7 @@ export interface AiFeatureConfig {
   systemPrompt: string | null;
   temperature: number;
   responseFormat: AiResponseFormat;
+  supportsImageToImage: boolean;
   isEnabled: boolean;
   description: string | null;
   createdAt: string;
@@ -56,6 +57,7 @@ export interface AiFeatureConfigForm {
   systemPrompt?: string;
   temperature?: number;
   responseFormat?: AiResponseFormat;
+  supportsImageToImage?: boolean;
   isEnabled?: boolean;
   description?: string;
 }

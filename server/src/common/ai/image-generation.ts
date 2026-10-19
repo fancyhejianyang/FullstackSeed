@@ -12,12 +12,31 @@ export function imageGenerationRequest(
   model: string,
   content: string,
   protocol: 'openai' | 'dashscope',
+  referenceImageDataUrl?: string,
 ) {
+  if (referenceImageDataUrl && protocol !== 'dashscope') {
+    throw new BadRequestException('图生图当前仅支持 DashScope 多模态生图协议');
+  }
   return protocol === 'dashscope'
     ? {
         model,
-        input: { messages: [{ role: 'user', content: [{ text: content }] }] },
-        parameters: { n: 1 },
+        input: {
+          messages: [
+            {
+              role: 'user',
+              content: [
+                ...(referenceImageDataUrl
+                  ? [{ image: referenceImageDataUrl }]
+                  : []),
+                { text: content },
+              ],
+            },
+          ],
+        },
+        parameters: {
+          n: 1,
+          ...(referenceImageDataUrl ? { prompt_extend: true } : {}),
+        },
       }
     : { model, prompt: content, n: 1, size: '1024x1024' };
 }
