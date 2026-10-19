@@ -10,11 +10,32 @@ export const taskLabels: Record<ContentTaskStatus, string> = {
   interrupted: '已中断',
   adopted: '已采用',
 };
-export function taskLabel(status: ContentTaskStatus) {
+export const coverLabels: Record<string, string> = {
+  pending: '待生成',
+  running: '生成中',
+  succeeded: '已生成',
+  skipped: '已跳过',
+  failed: '失败',
+  interrupted: '已中断',
+};
+export function taskLabel(
+  status: ContentTaskStatus,
+  coverStatus?: ContentTask['coverStatus'],
+) {
+  if (
+    status === 'succeeded' &&
+    (coverStatus === 'pending' || coverStatus === 'running')
+  )
+    return '封面生成中';
   return taskLabels[status] ?? status;
 }
 export function isActiveTask(task?: ContentTask | null) {
-  return task?.status === 'pending' || task?.status === 'running';
+  return (
+    task?.status === 'pending' ||
+    task?.status === 'running' ||
+    task?.coverStatus === 'pending' ||
+    task?.coverStatus === 'running'
+  );
 }
 export function taskColor(status: ContentTaskStatus) {
   const action = {

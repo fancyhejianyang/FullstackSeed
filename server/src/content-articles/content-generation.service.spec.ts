@@ -85,12 +85,18 @@ function setup() {
       instruction: '先叙事再总结',
     }),
   };
+  const covers = {
+    generate: jest
+      .fn()
+      .mockResolvedValue({ status: 'skipped', data: { message: '未配置' } }),
+  };
   const service = new ContentGenerationService(
     tasks as never,
     articles as never,
     configs as never,
     providers as never,
     templates as never,
+    covers as never,
   );
   const dto = {
     version: 2,
@@ -122,12 +128,142 @@ function setup() {
     config,
     providers,
     templates,
+    covers,
     dto,
     task,
   };
 }
 
 describe('持久化文章生成任务', () => {
+  it('新任务启用封面而历史任务不补计费，正文完成先落库并保留活跃锁', async () => {
+    const h = setup();
+    await h.service.submit(3, h.dto, 7);
+    expect(h.tasks.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        snapshot: expect.objectContaining({ coverRequested: true }) as unknown,
+      }),
+    );
+    h.task.snapshot.coverRequested = true;
+    h.tasks.findOne.mockImplementation(
+      ({ where }: { where: { coverStatus?: string } }) =>
+        Promise.resolve(where.coverStatus ? null : h.task),
+    );
+    await h.service.tick();
+    expect(h.tasks.update).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        status: 'succeeded',
+        result: '新正文',
+        coverStatus: 'pending',
+        activeArticleId: 3,
+        activeUserId: 7,
+        finishedAt: null,
+      }),
+    );
+    expect(h.covers.generate).not.toHaveBeenCalled();
+    expect(h.articles.save).not.toHaveBeenCalled();
+  });
+  it.each(['succeeded', 'failed', 'skipped', 'interrupted'])(
+    '封面 %s 只更新封面并释放锁，不清除正文',
+    async (status) => {
+      const h = setup();
+      h.task.status = 'succeeded';
+      h.task.coverStatus = 'pending';
+      h.task.result = '已完成正文';
+      h.tasks.findOne.mockResolvedValue(h.task);
+      h.covers.generate.mockResolvedValue({
+        status,
+        data: { message: '结果' },
+      });
+      await h.service.tick();
+      expect(h.providers.callChat).not.toHaveBeenCalled();
+      expect(h.covers.generate).toHaveBeenCalledTimes(1);
+      const write = h.tasks.update.mock.calls.at(-1) as unknown as [
+        Record<string, unknown>,
+        Record<string, unknown>,
+      ];
+      expect(write[0]).toMatchObject({
+        status: 'succeeded',
+        coverStatus: 'running',
+      });
+      expect(write[1]).toMatchObject({
+        coverStatus: status,
+        activeArticleId: null,
+        activeUserId: null,
+      });
+      expect(write[1]).not.toHaveProperty('result');
+      expect(write[1]).not.toHaveProperty('status');
+      expect(h.articles.save).not.toHaveBeenCalled();
+    },
+  );
+  it('封面抢占失败不计费，过期封面中断保留正文，停服取消且不自动重试', async () => {
+    const h = setup();
+    h.task.status = 'succeeded';
+    h.task.coverStatus = 'pending';
+    h.tasks.findOne.mockResolvedValue(h.task);
+    h.tasks.update
+      .mockResolvedValueOnce({ affected: 0 })
+      .mockResolvedValueOnce({ affected: 1 })
+      .mockResolvedValueOnce({ affected: 0 });
+    await h.service.tick();
+    expect(h.covers.generate).not.toHaveBeenCalled();
+    expect(h.tasks.update).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ coverStatus: 'running' }),
+      expect.objectContaining({
+        coverStatus: 'interrupted',
+        activeUserId: null,
+      }),
+    );
+    h.covers.generate.mockImplementation(() => {
+      h.service.onModuleDestroy();
+      return Promise.resolve({
+        status: 'succeeded',
+        data: { message: '迟到' },
+      });
+    });
+    await h.service.tick();
+    expect(h.tasks.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({ leaseExpiresAt: expect.anything() as unknown }),
+      expect.objectContaining({ coverStatus: 'interrupted' }),
+    );
+  });
+  it('封面采纳显式勾选且校验版本、状态、归属；不勾选保留原封面', async () => {
+    const h = setup();
+    Object.assign(h.article, { coverUrl: '/uploads/original.png' });
+    h.task.status = 'succeeded';
+    h.task.result = '新正文';
+    h.task.coverStatus = 'succeeded';
+    h.task.coverData = { url: '/uploads/generated.png' };
+    h.tasks.findOne.mockResolvedValue(h.task);
+    await h.service.adopt(20, 2, 7);
+    expect(h.articles.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({ coverUrl: '/uploads/original.png' }),
+    );
+    await h.service.adopt(20, 2, 7, false, true);
+    expect(h.articles.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        coverUrl: '/uploads/generated.png',
+        content: '新正文',
+      }),
+    );
+    await expect(h.service.adopt(20, 9, 7, false, true)).rejects.toThrow(
+      '文章在提交',
+    );
+    h.task.coverStatus = 'failed';
+    await expect(h.service.adopt(20, 2, 7, false, true)).rejects.toThrow(
+      '没有可采用的封面',
+    );
+    await expect(
+      h.service.adopt(20, 2, 7, false, false),
+    ).resolves.toBeDefined();
+    h.task.coverStatus = 'running';
+    await expect(h.service.adopt(20, 2, 7)).rejects.toThrow('封面仍在生成');
+    const errors = await validate(
+      plainToInstance(AdoptContentTaskDto, { version: 2, adoptCover: 'true' }),
+    );
+    expect(errors.some((error) => error.property === 'adoptCover')).toBe(true);
+  });
   it('独立记录列表按本人/未删除文章过滤，分页倒序且不查询大字段', async () => {
     const h = setup();
     const builder = {
@@ -192,6 +328,7 @@ describe('持久化文章生成任务', () => {
       'task.result',
       'task.snapshot',
       'task.editorNotes',
+      'task.coverData',
       'article.content',
     ])
       expect(fields).not.toContain(field);
@@ -296,7 +433,14 @@ describe('持久化文章生成任务', () => {
     expect(h.providers.callChat).not.toHaveBeenCalled();
     h.task.articleVersion = 3;
     h.task.snapshot.requestVersion = 2;
-    h.tasks.findOne.mockResolvedValue(h.task);
+    h.tasks.findOne.mockImplementation(
+      ({ where }: { where: { coverStatus?: string } }) =>
+        Promise.resolve(
+          where.coverStatus === 'pending' && h.task.coverStatus !== 'pending'
+            ? null
+            : h.task,
+        ),
+    );
     await expect(h.service.submit(3, h.dto, 7)).resolves.toMatchObject({
       id: 20,
       articleVersion: 3,
@@ -339,7 +483,14 @@ describe('持久化文章生成任务', () => {
   });
   it('重复请求返回原任务，跨文章复用请求号拒绝', async () => {
     const h = setup();
-    h.tasks.findOne.mockResolvedValue(h.task);
+    h.tasks.findOne.mockImplementation(
+      ({ where }: { where: { coverStatus?: string } }) =>
+        Promise.resolve(
+          where.coverStatus === 'pending' && h.task.coverStatus !== 'pending'
+            ? null
+            : h.task,
+        ),
+    );
     await expect(h.service.submit(3, h.dto, 7)).resolves.toMatchObject({
       id: 20,
     });
@@ -349,7 +500,14 @@ describe('持久化文章生成任务', () => {
   });
   it('同请求号不能悄悄替换配置、模板或文章版本', async () => {
     const h = setup();
-    h.tasks.findOne.mockResolvedValue(h.task);
+    h.tasks.findOne.mockImplementation(
+      ({ where }: { where: { coverStatus?: string } }) =>
+        Promise.resolve(
+          where.coverStatus === 'pending' && h.task.coverStatus !== 'pending'
+            ? null
+            : h.task,
+        ),
+    );
     for (const changes of [
       { aiConfigId: 9 },
       { templateId: 10 },
@@ -445,7 +603,14 @@ describe('持久化文章生成任务', () => {
   });
   it('从队列取出后按快照调用，仅保存候选结果，文章原文不变', async () => {
     const h = setup();
-    h.tasks.findOne.mockResolvedValue(h.task);
+    h.tasks.findOne.mockImplementation(
+      ({ where }: { where: { coverStatus?: string } }) =>
+        Promise.resolve(
+          where.coverStatus === 'pending' && h.task.coverStatus !== 'pending'
+            ? null
+            : h.task,
+        ),
+    );
     h.config.model = 'changed-after-submit';
     await h.service.tick();
     expect(h.providers.callChat).toHaveBeenCalledWith(
@@ -480,7 +645,14 @@ describe('持久化文章生成任务', () => {
   it('实际调用带当前时间和任务提交时间，使用取消新闻审核门槛后的成稿提示', async () => {
     const h = setup();
     h.task.createdAt = new Date('2026-10-18T16:30:00Z');
-    h.tasks.findOne.mockResolvedValue(h.task);
+    h.tasks.findOne.mockImplementation(
+      ({ where }: { where: { coverStatus?: string } }) =>
+        Promise.resolve(
+          where.coverStatus === 'pending' && h.task.coverStatus !== 'pending'
+            ? null
+            : h.task,
+        ),
+    );
     await h.service.tick();
     const prompt = (
       h.providers.callChat.mock.calls[0] as unknown as [
@@ -507,7 +679,14 @@ describe('持久化文章生成任务', () => {
       }),
     );
     h.config.responseFormat = 'markdown';
-    h.tasks.findOne.mockResolvedValue(h.task);
+    h.tasks.findOne.mockImplementation(
+      ({ where }: { where: { coverStatus?: string } }) =>
+        Promise.resolve(
+          where.coverStatus === 'pending' && h.task.coverStatus !== 'pending'
+            ? null
+            : h.task,
+        ),
+    );
     await h.service.tick();
     expect(h.providers.callChat).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -517,7 +696,14 @@ describe('持久化文章生成任务', () => {
   });
   it('模型仍返回待补充时保留真实状态，释放活跃锁，不伪装成功或重复调用', async () => {
     const h = setup();
-    h.tasks.findOne.mockResolvedValue(h.task);
+    h.tasks.findOne.mockImplementation(
+      ({ where }: { where: { coverStatus?: string } }) =>
+        Promise.resolve(
+          where.coverStatus === 'pending' && h.task.coverStatus !== 'pending'
+            ? null
+            : h.task,
+        ),
+    );
     h.providers.callChat.mockResolvedValue({
       isSuccess: true,
       answer: JSON.stringify({
@@ -547,7 +733,14 @@ describe('持久化文章生成任务', () => {
   });
   it('无效结构失败而非伪装成稿，保留用量且不自动追加调用', async () => {
     const h = setup();
-    h.tasks.findOne.mockResolvedValue(h.task);
+    h.tasks.findOne.mockImplementation(
+      ({ where }: { where: { coverStatus?: string } }) =>
+        Promise.resolve(
+          where.coverStatus === 'pending' && h.task.coverStatus !== 'pending'
+            ? null
+            : h.task,
+        ),
+    );
     h.providers.callChat.mockResolvedValue({
       isSuccess: true,
       answer: '作者认为……待补充',
@@ -572,7 +765,14 @@ describe('持久化文章生成任务', () => {
     const h = setup();
     h.task.status = 'succeeded';
     h.task.result = '历史正文';
-    h.tasks.findOne.mockResolvedValue(h.task);
+    h.tasks.findOne.mockImplementation(
+      ({ where }: { where: { coverStatus?: string } }) =>
+        Promise.resolve(
+          where.coverStatus === 'pending' && h.task.coverStatus !== 'pending'
+            ? null
+            : h.task,
+        ),
+    );
     await expect(h.service.detail(20, 7)).resolves.toMatchObject({
       result: '历史正文',
       editorNotes: null,
@@ -590,8 +790,16 @@ describe('持久化文章生成任务', () => {
   });
   it('抢占失败不调用；过期运行任务只标记中断，不重新计费', async () => {
     const h = setup();
-    h.tasks.findOne.mockResolvedValue(h.task);
+    h.tasks.findOne.mockImplementation(
+      ({ where }: { where: { coverStatus?: string } }) =>
+        Promise.resolve(
+          where.coverStatus === 'pending' && h.task.coverStatus !== 'pending'
+            ? null
+            : h.task,
+        ),
+    );
     h.tasks.update
+      .mockResolvedValueOnce({ affected: 1 })
       .mockResolvedValueOnce({ affected: 1 })
       .mockResolvedValueOnce({ affected: 0 });
     await h.service.tick();
@@ -613,7 +821,14 @@ describe('持久化文章生成任务', () => {
     '空白/超长输出失败，原文保持不变 (%#)',
     async (answer) => {
       const h = setup();
-      h.tasks.findOne.mockResolvedValue(h.task);
+      h.tasks.findOne.mockImplementation(
+        ({ where }: { where: { coverStatus?: string } }) =>
+          Promise.resolve(
+            where.coverStatus === 'pending' && h.task.coverStatus !== 'pending'
+              ? null
+              : h.task,
+          ),
+      );
       h.providers.callChat.mockResolvedValue({
         isSuccess: true,
         answer,
@@ -629,7 +844,14 @@ describe('持久化文章生成任务', () => {
   );
   it('失败不泄漏供应商错误，不自动重试', async () => {
     const h = setup();
-    h.tasks.findOne.mockResolvedValue(h.task);
+    h.tasks.findOne.mockImplementation(
+      ({ where }: { where: { coverStatus?: string } }) =>
+        Promise.resolve(
+          where.coverStatus === 'pending' && h.task.coverStatus !== 'pending'
+            ? null
+            : h.task,
+        ),
+    );
     h.providers.callChat.mockRejectedValue(new Error('secret internal-url'));
     await h.service.tick();
     expect(h.providers.callChat).toHaveBeenCalledTimes(1);
@@ -641,7 +863,14 @@ describe('持久化文章生成任务', () => {
   });
   it('服务停止发出取消信号，结果按中断记录，不覆盖文章', async () => {
     const h = setup();
-    h.tasks.findOne.mockResolvedValue(h.task);
+    h.tasks.findOne.mockImplementation(
+      ({ where }: { where: { coverStatus?: string } }) =>
+        Promise.resolve(
+          where.coverStatus === 'pending' && h.task.coverStatus !== 'pending'
+            ? null
+            : h.task,
+        ),
+    );
     h.providers.callChat.mockImplementation(() => {
       h.service.onModuleDestroy();
       return Promise.resolve({ isSuccess: true, answer: '完成' });
@@ -671,14 +900,28 @@ describe('持久化文章生成任务', () => {
     expect(options.select).not.toHaveProperty('editorNotes');
     expect(options.where).toEqual({ articleId: 3, userId: 7 });
     h.articles.findOne.mockResolvedValue(null);
-    h.tasks.findOne.mockResolvedValue(h.task);
+    h.tasks.findOne.mockImplementation(
+      ({ where }: { where: { coverStatus?: string } }) =>
+        Promise.resolve(
+          where.coverStatus === 'pending' && h.task.coverStatus !== 'pending'
+            ? null
+            : h.task,
+        ),
+    );
     await expect(h.service.detail(20, 7)).rejects.toThrow('内容不存在');
   });
   it('采用必须为本人已成功任务且两个版本一致，二次采用拒绝', async () => {
     const h = setup();
     h.task.status = 'succeeded';
     h.task.result = '候选正文';
-    h.tasks.findOne.mockResolvedValue(h.task);
+    h.tasks.findOne.mockImplementation(
+      ({ where }: { where: { coverStatus?: string } }) =>
+        Promise.resolve(
+          where.coverStatus === 'pending' && h.task.coverStatus !== 'pending'
+            ? null
+            : h.task,
+        ),
+    );
     await expect(h.service.adopt(20, 1, 7)).rejects.toThrow(
       '文章在提交任务后已修改',
     );
@@ -702,7 +945,14 @@ describe('持久化文章生成任务', () => {
       h.task.status = 'succeeded';
       h.task.result = '候选正文';
       h.task.generatedTitle = '发布标题';
-      h.tasks.findOne.mockResolvedValue(h.task);
+      h.tasks.findOne.mockImplementation(
+        ({ where }: { where: { coverStatus?: string } }) =>
+          Promise.resolve(
+            where.coverStatus === 'pending' && h.task.coverStatus !== 'pending'
+              ? null
+              : h.task,
+          ),
+      );
       await h.service.adopt(20, 2, 7, adoptTitle);
       expect(h.articles.save).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -719,7 +969,14 @@ describe('持久化文章生成任务', () => {
     const h = setup();
     h.task.status = 'succeeded';
     h.task.result = '候选正文';
-    h.tasks.findOne.mockResolvedValue(h.task);
+    h.tasks.findOne.mockImplementation(
+      ({ where }: { where: { coverStatus?: string } }) =>
+        Promise.resolve(
+          where.coverStatus === 'pending' && h.task.coverStatus !== 'pending'
+            ? null
+            : h.task,
+        ),
+    );
     await expect(h.service.adopt(20, 2, 7, true)).rejects.toThrow(
       '没有生成标题',
     );
@@ -732,7 +989,14 @@ describe('持久化文章生成任务', () => {
   });
   it('当前生成链路必须返回标题，失败无额外计费重试；详情才加载生成标题', async () => {
     const h = setup();
-    h.tasks.findOne.mockResolvedValue(h.task);
+    h.tasks.findOne.mockImplementation(
+      ({ where }: { where: { coverStatus?: string } }) =>
+        Promise.resolve(
+          where.coverStatus === 'pending' && h.task.coverStatus !== 'pending'
+            ? null
+            : h.task,
+        ),
+    );
     h.providers.callChat.mockResolvedValue({
       isSuccess: true,
       answer: JSON.stringify({
@@ -785,9 +1049,9 @@ describe('持久化文章生成任务', () => {
       generation as never,
     );
     await controller.adopt(20, { version: 2, adoptTitle: true }, 7);
-    expect(generation.adopt).toHaveBeenCalledWith(20, 2, 7, true);
+    expect(generation.adopt).toHaveBeenCalledWith(20, 2, 7, true, false);
     await controller.adopt(20, { version: 2 }, 7);
-    expect(generation.adopt).toHaveBeenLastCalledWith(20, 2, 7, false);
+    expect(generation.adopt).toHaveBeenLastCalledWith(20, 2, 7, false, false);
   });
   it('生成时选择模板需独立读取权限', () => {
     const h = setup();

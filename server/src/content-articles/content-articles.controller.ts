@@ -184,6 +184,7 @@ export class ContentArticlesController {
       dto.version,
       userId,
       dto.adoptTitle ?? false,
+      dto.adoptCover ?? false,
     );
   }
 }

@@ -9,6 +9,7 @@ export type ContentTaskStatus =
   | 'interrupted'
   | 'adopted';
 export interface ContentGenerationSnapshot {
+  coverRequested?: boolean; // 仅新任务启用；不为历史任务补发计费请求。
   requestVersion?: number; // 首次记住生成偏好可能递增文章版本，重试仍绑定原请求版本。
   title: string;
   idea: string;
@@ -25,10 +26,25 @@ export interface ContentGenerationSnapshot {
     responseFormat?: 'text' | 'markdown'; // 历史快照无此项，按 Markdown 处理。
   };
 }
+export type ContentCoverStatus =
+  | 'pending'
+  | 'running'
+  | 'succeeded'
+  | 'skipped'
+  | 'failed'
+  | 'interrupted';
+export interface ContentCoverData {
+  url?: string;
+  prompt?: string;
+  model?: string;
+  totalTokens?: number | null;
+  message?: string;
+}
 @Entity('content_generation_tasks')
 @Index('UQ_content_task_request', ['userId', 'requestId'], { unique: true })
 @Index('IDX_content_task_article', ['userId', 'articleId', 'id'])
 @Index('IDX_content_task_queue', ['status', 'id'])
+@Index('IDX_content_cover_queue', ['coverStatus', 'id'])
 export class ContentGenerationTask extends BaseEntity {
   @Column({ type: 'int' }) userId: number;
   @Column({ type: 'int' }) articleId: number;
@@ -48,6 +64,9 @@ export class ContentGenerationTask extends BaseEntity {
     | string
     | null;
   @Column({ type: 'json', nullable: true }) editorNotes: string[] | null;
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  coverStatus: ContentCoverStatus | null;
+  @Column({ type: 'json', nullable: true }) coverData: ContentCoverData | null;
   @Column({ type: 'varchar', length: 300, nullable: true }) errorMessage:
     | string
     | null;

@@ -15,6 +15,27 @@ const compile = (source) =>
     },
   }).outputText;
 const stateExports = {};
+test('采纳接口默认不替换封面，只发送任务 ID、版本及布尔选择', async () => {
+  const api = {},
+    calls = [];
+  new Function(
+    'require',
+    'exports',
+    compile(await read('../../api/contentArticle.ts')),
+  )(() => ({ default: { post: (...args) => calls.push(args) } }), api);
+  api.adoptContentTask(20, 2);
+  api.adoptContentTask(20, 2, true, true);
+  assert.deepEqual(calls, [
+    [
+      '/content-articles/tasks/20/adopt',
+      { version: 2, adoptTitle: false, adoptCover: false },
+    ],
+    [
+      '/content-articles/tasks/20/adopt',
+      { version: 2, adoptTitle: true, adoptCover: true },
+    ],
+  ]);
+});
 new Function('require', 'exports', compile(await read('./taskState.ts')))(
   () => ({ getPermissionActionColor: (action) => action }),
   stateExports,
@@ -79,7 +100,7 @@ function harness() {
       'window',
       compile(
         parse(source).descriptor.scriptSetup.content +
-          '\nexport { fetchTasks, showDetail, adopt, detail, tableRef, pollFailed, hasCandidate, copyResult, closeDetail, detailVisible, adoptTitle, adoptConfirmation, hasGeneratedTitle, copyTitle };',
+          '\nexport { adoptCover, hasCover, fetchTasks, showDetail, adopt, detail, tableRef, pollFailed, hasCandidate, copyResult, closeDetail, detailVisible, adoptTitle, adoptConfirmation, hasGeneratedTitle, copyTitle };',
       ),
     )(
       (name) => {
@@ -203,7 +224,7 @@ test('无写权限或版本不一致不能采用，详情读取当前版本，�
   await h.adopt();
   assert.deepEqual(
     h.calls.find((call) => call[0] === 'adopt'),
-    ['adopt', 20, 2, false],
+    ['adopt', 20, 2, false, false],
   );
   assert.equal(h.detail.value.status, 'adopted');
   assert.equal(
@@ -367,7 +388,7 @@ test('生成标题与正文分开复制，采用默认携带标题，取消勾�
   await h.adopt();
   assert.deepEqual(
     h.calls.find((call) => call[0] === 'adopt'),
-    ['adopt', 20, 2, false],
+    ['adopt', 20, 2, false, false],
   );
   h.close();
   const withTitle = harness();
@@ -376,9 +397,35 @@ test('生成标题与正文分开复制，采用默认携带标题，取消勾�
   await withTitle.adopt();
   assert.deepEqual(
     withTitle.calls.find((call) => call[0] === 'adopt'),
-    ['adopt', 20, 2, true],
+    ['adopt', 20, 2, true, false],
   );
   withTitle.close();
+});
+
+test('独立生成记录展示封面并在生成中持续轮询，不提前采纳', async () => {
+  const h = harness();
+  h.state.detail.coverStatus = 'pending';
+  await h.showDetail({ id: 20 });
+  assert.equal(stateExports.isActiveTask(h.detail.value), true);
+  assert.equal(stateExports.taskLabel('succeeded', 'running'), '封面生成中');
+  await h.adopt();
+  assert.equal(
+    h.calls.some(([kind]) => kind === 'adopt'),
+    false,
+  );
+  h.state.detail.coverStatus = 'succeeded';
+  h.state.detail.coverData = { url: '/uploads/cover.png' };
+  await h.showDetail({ id: 20 }, true);
+  assert.equal(h.adoptCover.value, false);
+  h.adoptCover.value = true;
+  await h.showDetail({ id: 20 }, true);
+  assert.equal(h.adoptCover.value, true);
+  await h.adopt();
+  assert.deepEqual(
+    h.calls.find(([kind]) => kind === 'adopt'),
+    ['adopt', 20, 2, false, true],
+  );
+  h.close();
 });
 
 test('旧记录不伪造生成标题；失败及待补充记录不复制标题或采用', async () => {

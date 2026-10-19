@@ -1,5 +1,53 @@
 # CHANGELOG
 
+### 2026-10-19 同账号独立生成情感表达封面
+
+- 新文章任务在正文成功持久化后进入独立封面阶段。直接读取本次 AI 配置的模型账号，选取生图目录 imageGenerationModels 首个有效模型；不调用 Agent、不创建会话、不使用识图目录 visionModels，也不回退其它模型或账号。缺模型、有效目录或完整生图端点时跳过，且不追加构思或生图请求。
+- 原文本模型根据本次生成标题和正文总结主题、核心情感、视觉意象与光影色调，再按账号 OpenAI / DashScope 同步生图协议生成一张概念插画。保留原协议尺寸策略（OpenAI 1024×1024，DashScope 模型默认），不猜测宽屏参数；无文字、水印，不伪造新闻现场照片或真实当事人证据。不发送原封面、已保存正文及其它文章，不修改配置或模板。
+- 将图片请求/响应协议、格式检查及受限安全下载提取为 common/ai 公共能力；Agent 保留兼容导出与既有调用行为。封面路径仅依赖模型账号与 UploadsService，下载防内网地址、DNS 重绑定和重定向，限制响应/图片大小；校验后保存统一本地/OSS 公开上传存储，不将供应商临时地址作为持久候选。
+- 任务新增可空 coverStatus / coverData，详情携带候选地址、构思、实际模型、构思 Token 用量及安全提示，列表仅加载封面状态。新快照 coverRequested 标记启用，历史任务不补计费。正文先保存、候选封面不自动写入文章；封面阶段延续活跃锁与幂等约束，整体 120 秒期限 / 150 秒租约，构思最多 45 秒。未开始的封面可在重启后消费；已运行超时/中断只转终态，不自动重复可能已计费的请求。生图或存储失败不清空已生成标题/正文。
+- 查看弹窗和生成记录详情复用 CoverPreview 展示当前候选、真实状态及折叠构思，记录列表新增封面状态；封面生成中继续轮询、防重复生成，正文仍可复制，结束后才允许采用。默认不勾选“同时采纳生成封面”，明确选择并二次确认才替换；可选布尔 adoptCover 默认 false，后端仅采用本任务已成功存储的 URL，沿用权限/归属/版本校验，与正文、可选标题及采用状态事务更新。失败/跳过可正常仅采用正文，旧调用保留原封面。同步前端类型、费用说明及设计规范。
+- 验证：后端全量 49 套 / 502 项 Jest、前端全量 145 项 Node 离线回归通过；前端无输出类型检查、相关 Vue 模板/scoped CSS 编译、变更后端 ESLint、Prettier、组件复用核查与 diff 空白检查通过。新功能执行后端 build，TypeORM 实体校验和 Nest 构建通过。覆盖同账号选型/缺配置跳过、两种生图协议、安全下载复用、异常/取消/存储失败、正文独立持久化、抢占/租约/停服、显式采用与版本冲突、前端轮询及默认不覆盖。
+- 新增迁移 1792393200000-AddContentCover，仅增可空列和队列索引，不回填历史；有数据时拒绝破坏性回退。部署前在关闭自动同步的环境执行迁移，并统一更新前后端及全部任务消费者，避免新旧消费者混跑。本次未连接真实数据库、执行迁移、启动/重启服务、调用真实 AI、生图计费或进行浏览器视觉验收。
+- web/components.d.ts 原有未提交内容及 SHA256 保持不变，不纳入本次提交。
+
+新增文件（7）：
+
+- `server/src/common/ai/image-generation.ts`
+- `server/src/common/ai/image-utils.ts`
+- `server/src/content-articles/content-cover.service.spec.ts`
+- `server/src/content-articles/content-cover.service.ts`
+- `server/src/migrations/1792393200000-AddContentCover.spec.ts`
+- `server/src/migrations/1792393200000-AddContentCover.ts`
+- `web/src/views/content-article/CoverPreview.vue`
+
+修改文件（21）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/agent-apps/agent-image-utils.ts`
+- `server/src/agent-apps/agent-media.service.ts`
+- `server/src/content-articles/content-articles.controller.ts`
+- `server/src/content-articles/content-articles.module.ts`
+- `server/src/content-articles/content-generation.service.spec.ts`
+- `server/src/content-articles/content-generation.service.ts`
+- `server/src/content-articles/dto/content-article.dto.ts`
+- `server/src/content-articles/entities/content-generation-task.entity.ts`
+- `server/src/knowledge-ai-providers/knowledge-ai-media-target.spec.ts`
+- `server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`
+- `web/src/api/contentArticle.ts`
+- `web/src/views/content-article/Generate.vue`
+- `web/src/views/content-article/Index.vue`
+- `web/src/views/content-article/Tasks.vue`
+- `web/src/views/content-article/View.vue`
+- `web/src/views/content-article/contentArticle.test.mjs`
+- `web/src/views/content-article/preview.test.mjs`
+- `web/src/views/content-article/taskState.ts`
+- `web/src/views/content-article/tasks.test.mjs`
+
+删除文件：无。
+
+
 ### 2026-10-19 修复编辑正文回填并恢复查看初始想法
 
 - 修复编辑弹窗只读取已保存文章、未采纳生成稿导致正文留空的问题：改为复用现有 preview 接口同时读取 article/latestTask。已保存正文为空、最新任务成功且 articleVersion 与当前文章 version 一致时，自动将 result 填入正文编辑框；标题、想法和生成设置保持原值，不调用 AI 或自动写入数据库。

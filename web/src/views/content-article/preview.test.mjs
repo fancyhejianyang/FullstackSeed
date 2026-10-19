@@ -37,7 +37,7 @@ function harness() {
     scope = vue.effectScope();
   const code = ts.transpileModule(
     parse(source).descriptor.scriptSetup.content +
-      '\nexport { load, preview, content, copyContent, generatedTitle, copyTitle, adopt, adoptTitle, canAdopt, adopting, adoptConfirmation, canLeave, beforeClose, requestClose, beforeUnload, originalIdea };',
+      '\nexport { adoptCover, hasCover, load, preview, content, copyContent, generatedTitle, copyTitle, adopt, adoptTitle, canAdopt, adopting, adoptConfirmation, canLeave, beforeClose, requestClose, beforeUnload, originalIdea };',
     {
       compilerOptions: {
         module: ts.ModuleKind.CommonJS,
@@ -81,7 +81,8 @@ function harness() {
         if (name === './taskState')
           return {
             isActiveTask: (task) =>
-              ['pending', 'running'].includes(task?.status),
+              ['pending', 'running'].includes(task?.status) ||
+              ['pending', 'running'].includes(task?.coverStatus),
           };
         if (name === '@/api/contentArticle')
           return {
@@ -89,8 +90,8 @@ function harness() {
               calls.push(['read', id]);
               return structuredClone(await state.response);
             },
-            adoptContentTask: async (id, version, adoptTitle) => {
-              calls.push(['adopt', id, version, adoptTitle]);
+            adoptContentTask: async (id, version, adoptTitle, adoptCover) => {
+              calls.push(['adopt', id, version, adoptTitle, adoptCover]);
               if (state.adoptError) throw Error('conflict');
               return state.adopted
                 ? await state.adopted
@@ -370,7 +371,7 @@ test('当前生成稿可采纳标题和正文，更新预览并通知列表，�
   await h.adopt();
   assert.deepEqual(
     h.calls.find(([kind]) => kind === 'adopt'),
-    ['adopt', 20, 2, true],
+    ['adopt', 20, 2, true, false],
   );
   assert.equal(h.preview.value.article.title, 'AI 推荐标题');
   assert.equal(h.preview.value.article.content, '最新生成稿');
@@ -400,7 +401,7 @@ test('可取消标题采纳，旧记录自动只采纳正文，不把原标题�
     await h.adopt();
     assert.deepEqual(
       h.calls.find(([kind]) => kind === 'adopt'),
-      ['adopt', 20, 2, false],
+      ['adopt', 20, 2, false, false],
     );
     assert.equal(h.preview.value.article.title, '标题');
     h.close();
@@ -487,6 +488,50 @@ test('采纳请求期间阻止重复操作、关闭、路由离开和刷新；�
   assert.equal(closed, true);
   h.close();
   assert.equal(h.listeners.size, 0);
+});
+
+test('封面生成中保持正文可读与轮询，终态才允许采纳，失败不影响正文', async () => {
+  const h = harness();
+  h.state.response.latestTask.coverStatus = 'running';
+  h.visible.value = true;
+  await flush();
+  assert.equal(h.content.value, '最新生成稿');
+  assert.equal(h.canAdopt.value, false);
+  assert.equal(h.timers.size, 1);
+  await h.adopt();
+  assert.equal(
+    h.calls.some(([kind]) => kind === 'adopt'),
+    false,
+  );
+  h.state.response.latestTask.coverStatus = 'failed';
+  await h.load(true);
+  assert.equal(h.canAdopt.value, true);
+  assert.equal(h.timers.size, 0);
+  assert.equal(h.content.value, '最新生成稿');
+  h.close();
+});
+
+test('候选封面默认不覆盖，明确勾选才随采纳请求保存，切换文章清空选择', async () => {
+  const h = harness();
+  h.state.response.latestTask.coverStatus = 'succeeded';
+  h.state.response.latestTask.coverData = { url: '/uploads/candidate.png' };
+  h.visible.value = true;
+  await flush();
+  assert.equal(h.hasCover.value, true);
+  assert.equal(h.adoptCover.value, false);
+  h.adoptCover.value = true;
+  await h.load(true);
+  assert.equal(h.adoptCover.value, true);
+  assert.match(h.adoptConfirmation.value, /正文及封面/);
+  await h.adopt();
+  assert.deepEqual(
+    h.calls.find(([kind]) => kind === 'adopt'),
+    ['adopt', 20, 2, false, true],
+  );
+  h.props.row = { id: 4 };
+  await flush();
+  assert.equal(h.adoptCover.value, false);
+  h.close();
 });
 
 test('采纳响应迟到时不回填另一篇文章或卸载后的界面', async () => {

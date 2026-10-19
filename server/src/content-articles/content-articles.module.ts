@@ -8,6 +8,8 @@ import { KnowledgeAiProvidersModule } from '../knowledge-ai-providers/knowledge-
 import { ContentArticle } from './entities/content-article.entity';
 import { ContentArticlesController } from './content-articles.controller';
 import { ContentArticlesService } from './content-articles.service';
+import { ContentCoverService } from './content-cover.service';
+import { UploadsModule } from '../uploads/uploads.module';
 
 @Module({
   imports: [
@@ -15,8 +17,13 @@ import { ContentArticlesService } from './content-articles.service';
     ContentTemplatesModule,
     AiFeatureConfigsModule,
     KnowledgeAiProvidersModule,
+    UploadsModule,
   ],
   controllers: [ContentArticlesController],
-  providers: [ContentArticlesService, ContentGenerationService],
+  providers: [
+    ContentArticlesService,
+    ContentGenerationService,
+    ContentCoverService,
+  ],
 })
 export class ContentArticlesModule {}

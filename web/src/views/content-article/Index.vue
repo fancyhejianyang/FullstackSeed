@@ -192,7 +192,7 @@ function batchDeleteRequest({ ids }: { ids: Array<string | number> }) {
           icon="MagicStick"
           :disabled="!canGenerate(selectedRows)"
           :loading="generatingId !== null"
-          title="使用已保存的模板与 AI 配置直接生成，调用可能计费；更换设置请编辑文章"
+          title="按已保存设置生成；同账号配置了生图模型时还会生成候选封面，调用可能计费。更换设置请编辑文章"
           @click="openGenerate(selectedRows)"
           >AI 生成</Button
         >
@@ -210,7 +210,7 @@ function batchDeleteRequest({ ids }: { ids: Array<string | number> }) {
           :auto-icon="false"
           :disabled="!canGenerate([row])"
           :loading="generatingId === row.id"
-          title="按已保存设置生成，调用可能计费；更换设置请编辑文章"
+          title="按已保存设置生成；同账号配置了生图模型时还会生成候选封面，调用可能计费。更换设置请编辑文章"
           @click="openGenerate([row])"
           >AI 生成</Button
         >
@@ -219,7 +219,9 @@ function batchDeleteRequest({ ids }: { ids: Array<string | number> }) {
         ><el-tag
           v-if="row.latestTask"
           :type="taskColor(row.latestTask.status)"
-          >{{ taskLabel(row.latestTask.status) }}</el-tag
+          >{{
+            taskLabel(row.latestTask.status, row.latestTask.coverStatus)
+          }}</el-tag
         ><span v-else>未生成</span></template
       >
       <template #column-coverUrl="{ row }">

@@ -14,6 +14,7 @@ import { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-config
 import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
 import { ContentTemplatesService } from '../content-templates/content-templates.service';
 import { ContentArticle } from './entities/content-article.entity';
+import { ContentCoverService } from './content-cover.service';
 import {
   buildContentWritingPrompt,
   parseContentWritingResponse,
@@ -33,6 +34,7 @@ const SUMMARY_FIELDS = {
   articleId: true,
   articleVersion: true,
   status: true,
+  coverStatus: true,
   createdAt: true,
   startedAt: true,
   finishedAt: true,
@@ -56,6 +58,7 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
     private readonly configs: AiFeatureConfigsService,
     private readonly providers: KnowledgeAiProvidersService,
     private readonly templates: ContentTemplatesService,
+    private readonly covers: ContentCoverService,
   ) {}
 
   onModuleInit() {
@@ -102,6 +105,7 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
       ? await this.templates.findOne(dto.templateId, userId)
       : null;
     const snapshot = {
+      coverRequested: true,
       requestVersion: dto.version,
       title: article.title,
       idea: article.idea,
@@ -269,6 +273,7 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
       result: task.result,
       generatedTitle: task.generatedTitle ?? null,
       editorNotes: task.editorNotes ?? null,
+      coverData: task.coverData ?? null,
     };
   }
   async latest(articleIds: number[], userId: number) {
@@ -286,7 +291,13 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
       .setParameters(latestIds.getParameters())
       .getMany();
   }
-  async adopt(id: number, version: number, userId: number, adoptTitle = false) {
+  async adopt(
+    id: number,
+    version: number,
+    userId: number,
+    adoptTitle = false,
+    adoptCover = false,
+  ) {
     const task = await this.tasks.findOne({ where: { id, userId } });
     if (!task) throw new NotFoundException('生成任务不存在');
     return this.tasks.manager.transaction(async (manager) => {
@@ -304,6 +315,13 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
       if (!current || current.status !== 'succeeded' || !current.result)
         throw new ConflictException('该任务没有可采用的正文');
       if (
+        current.coverStatus === 'pending' ||
+        current.coverStatus === 'running'
+      )
+        throw new ConflictException(
+          '封面仍在生成，请等待完成后采纳；正文可以先复制',
+        );
+      if (
         article.version !== version ||
         article.version !== current.articleVersion
       )
@@ -315,6 +333,11 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
           '该任务没有生成标题，请保留原标题后采用正文',
         );
       if (adoptTitle) article.title = current.generatedTitle!;
+      if (adoptCover) {
+        if (current.coverStatus !== 'succeeded' || !current.coverData?.url)
+          throw new ConflictException('该任务没有可采用的封面');
+        article.coverUrl = current.coverData.url;
+      }
       article.content = current.result;
       const saved = await articles.save(article);
       await repo.update(id, { status: 'adopted' });
@@ -338,6 +361,27 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
             '执行中断或超时，供应商可能已计费；请核实后手动重新生成',
         },
       );
+      await this.tasks.update(
+        { coverStatus: 'running', leaseExpiresAt: LessThan(new Date()) },
+        {
+          coverStatus: 'interrupted',
+          coverData: {
+            message: '封面执行中断或超时，正文已保留；可能已计费，不自动重试。',
+          },
+          finishedAt: new Date(),
+          activeArticleId: null,
+          activeUserId: null,
+          leaseExpiresAt: null,
+        },
+      );
+      const coverTask = await this.tasks.findOne({
+        where: { status: 'succeeded', coverStatus: 'pending' },
+        order: { id: 'ASC' },
+      });
+      if (coverTask) {
+        if (!this.stopped) await this.runCover(coverTask);
+        return;
+      }
       const task = await this.tasks.findOne({
         where: { status: 'pending' },
         order: { id: 'ASC' },
@@ -412,6 +456,8 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
       errorMessage = '服务停止，任务已中断；供应商可能已计费，请核实后重试';
     }
     this.activeAbort = undefined;
+    const coverPending =
+      status === 'succeeded' && task.snapshot.coverRequested === true;
     // 只允许当前租约写回；过期/已恢复的任务不能被迟到响应改成成功。
     await this.tasks.update(
       {
@@ -427,6 +473,65 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
         editorNotes,
         totalTokens,
         errorMessage,
+        coverStatus: coverPending ? 'pending' : null,
+        finishedAt: coverPending ? null : new Date(),
+        activeArticleId: coverPending ? task.articleId : null,
+        activeUserId: coverPending ? task.userId : null,
+        leaseExpiresAt: null,
+      },
+    );
+  }
+  private async runCover(task: ContentGenerationTask) {
+    const claim = await this.tasks.update(
+      {
+        id: task.id,
+        status: 'succeeded',
+        coverStatus: 'pending',
+        deletedAt: IsNull(),
+      },
+      {
+        coverStatus: 'running',
+        workerId: this.workerId,
+        leaseExpiresAt: new Date(Date.now() + 150000),
+      },
+    );
+    if (claim.affected !== 1) return;
+    this.activeAbort = new AbortController();
+    const signal = AbortSignal.any([
+      this.activeAbort.signal,
+      AbortSignal.timeout(120000),
+    ]);
+    let outcome: Awaited<ReturnType<ContentCoverService['generate']>>;
+    try {
+      // 删除文章、停服不应继续发起付费图片请求。
+      if (this.stopped) this.activeAbort.abort();
+      signal.throwIfAborted();
+      await this.article(task.articleId, task.userId);
+      outcome = await this.covers.generate(task, signal);
+    } catch {
+      outcome = {
+        status: 'failed',
+        data: { message: '封面生成未完成，正文已保留；不会自动重试。' },
+      };
+    } finally {
+      this.activeAbort = undefined;
+    }
+    if (this.stopped || signal.aborted)
+      outcome = {
+        status: 'interrupted',
+        data: { message: '封面执行中断，正文已保留；可能已计费，不自动重试。' },
+      };
+    await this.tasks.update(
+      {
+        id: task.id,
+        status: 'succeeded',
+        coverStatus: 'running',
+        workerId: this.workerId,
+        leaseExpiresAt: MoreThan(new Date()),
+      },
+      {
+        coverStatus: outcome.status,
+        coverData: outcome.data,
         finishedAt: new Date(),
         activeArticleId: null,
         activeUserId: null,
@@ -445,6 +550,7 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
       articleId: task.articleId,
       articleVersion: task.articleVersion,
       status: task.status,
+      coverStatus: task.coverStatus ?? null,
       createdAt: task.createdAt,
       startedAt: task.startedAt,
       finishedAt: task.finishedAt,

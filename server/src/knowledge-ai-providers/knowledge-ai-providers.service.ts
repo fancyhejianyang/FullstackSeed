@@ -405,8 +405,29 @@ export class KnowledgeAiProvidersService {
     };
   }
 
-  /** Agent 媒体引用必须在专用目录内，不能回退到通用/文本模型。 */
+  /** 内容封面只使用同账号的生图目录；无配置时不发起任何计费调用。 */
+  async resolveContentCoverTarget(providerId: number) {
+    const provider = await this.findEntity(providerId);
+    if (
+      !provider.imageGenerationModels?.trim() ||
+      !provider.imageGenerationApiUrl?.trim()
+    )
+      return null;
+    const model = this.parseModels(provider.imageGenerationModels)[0]?.code;
+    if (!model) return null;
+    return this.resolveMediaTarget(providerId, model, 'imageGeneration');
+  }
+
   async resolveAgentMediaTarget(
+    providerId: number,
+    model: string,
+    kind: 'vision' | 'imageGeneration',
+  ) {
+    return this.resolveMediaTarget(providerId, model, kind);
+  }
+
+  /** 媒体引用必须在专用目录内，不能回退到通用/文本模型。 */
+  async resolveMediaTarget(
     providerId: number,
     model: string,
     kind: 'vision' | 'imageGeneration',

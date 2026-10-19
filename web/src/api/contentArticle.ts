@@ -63,6 +63,14 @@ export type ContentTaskStatus =
   | 'interrupted'
   | 'adopted';
 export interface ContentTask {
+  coverStatus?:
+    | 'pending'
+    | 'running'
+    | 'succeeded'
+    | 'skipped'
+    | 'failed'
+    | 'interrupted'
+    | null;
   id: number;
   articleId: number;
   articleVersion: number;
@@ -74,6 +82,13 @@ export interface ContentTask {
   totalTokens: number | null;
 }
 export interface ContentTaskDetail extends ContentTask {
+  coverData?: {
+    url?: string;
+    prompt?: string;
+    model?: string;
+    totalTokens?: number | null;
+    message?: string;
+  } | null;
   generatedTitle: string | null;
   snapshot: {
     title: string;
@@ -170,9 +185,10 @@ export function adoptContentTask(
   id: number,
   version: number,
   adoptTitle = false,
+  adoptCover = false,
 ) {
   return request.post<unknown, ContentArticle>(
     `/content-articles/tasks/${id}/adopt`,
-    { version, adoptTitle },
+    { version, adoptTitle, adoptCover },
   );
 }

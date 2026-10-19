@@ -5,6 +5,7 @@ import { ElMessage } from 'element-plus';
 import Button from '@/components/Button.vue';
 import Checkbox from '@/components/Checkbox.vue';
 import Dialog from '@/components/Dialog.vue';
+import CoverPreview from './CoverPreview.vue';
 import { useUserStore } from '@/stores/user';
 import {
   adoptContentTask,
@@ -22,9 +23,14 @@ const user = useUserStore();
 const loading = ref(false);
 const adopting = ref(false);
 const adoptTitle = ref(false);
+const adoptCover = ref(false);
 const preview = ref<ContentArticlePreview | null>(null);
 const detail = computed(() => preview.value?.article);
 const latest = computed(() => preview.value?.latestTask);
+const hasCover = computed(
+  () =>
+    latest.value?.coverStatus === 'succeeded' && !!latest.value.coverData?.url,
+);
 const originalIdea = computed(
   () => latest.value?.snapshot?.idea ?? detail.value?.idea ?? '',
 );
@@ -47,13 +53,16 @@ const canAdopt = computed(
     !adopting.value &&
     !!content.value &&
     latest.value?.status === 'succeeded' &&
+    !isActiveTask(latest.value) &&
     latest.value.articleVersion === detail.value?.version &&
     user.hasPermission('ContentArticle.update'),
 );
 const adoptConfirmation = computed(() =>
-  adoptTitle.value && generatedTitle.value
-    ? '采纳后将替换文章标题与正文并立即保存，确认采纳？'
-    : '采纳后将替换文章正文并立即保存，确认采纳？',
+  adoptCover.value && hasCover.value
+    ? `采纳后将替换文章${adoptTitle.value && generatedTitle.value ? '标题、' : ''}正文及封面并立即保存，确认采纳？`
+    : adoptTitle.value && generatedTitle.value
+      ? '采纳后将替换文章标题与正文并立即保存，确认采纳？'
+      : '采纳后将替换文章正文并立即保存，确认采纳？',
 );
 let alive = true;
 let epoch = 0;
@@ -72,6 +81,8 @@ async function load(silent = false) {
     const result = await getContentArticlePreview(id, silent);
     if (!alive || current !== epoch) return;
     preview.value = result;
+    if (!silent || previousTaskId !== result.latestTask?.id || !hasCover.value)
+      adoptCover.value = false;
     if (!silent || previousTaskId !== result.latestTask?.id || !hadTitle)
       adoptTitle.value = !!generatedTitle.value;
     if (!generatedTitle.value) adoptTitle.value = false;
@@ -90,6 +101,7 @@ watch(
   () => [visible.value, props.row?.id] as const,
   () => {
     adoptTitle.value = false;
+    adoptCover.value = false;
     void load();
   },
   { immediate: true },
@@ -112,6 +124,7 @@ async function adopt() {
       task.id,
       version,
       adoptTitle.value && !!generatedTitle.value,
+      adoptCover.value && hasCover.value,
     );
     if (!alive || current !== epoch) return;
     preview.value = { article, latestTask: { ...task, status: 'adopted' } };
@@ -188,10 +201,13 @@ async function copyTitle() {
           </p>
           <div class="article-view__status">
             <el-tag :type="taskColor(latest.status)">{{
-              taskLabel(latest.status)
+              taskLabel(latest.status, latest.coverStatus)
             }}</el-tag>
           </div>
-          <p v-if="isActiveTask(latest)" role="status">
+          <p
+            v-if="latest.status === 'pending' || latest.status === 'running'"
+            role="status"
+          >
             {{
               latest.status === 'pending' ? '任务排队中' : '正文生成中'
             }}，完成后自动更新。
@@ -219,6 +235,7 @@ async function copyTitle() {
               </li>
             </ul>
           </details>
+          <CoverPreview :task="latest" />
           <pre v-if="content" class="article-view__content">{{ content }}</pre>
           <el-empty
             v-else-if="!isActiveTask(latest)"
@@ -249,6 +266,16 @@ async function copyTitle() {
           v-model="adoptTitle"
           :disabled="!canAdopt"
           label="同时采纳推荐标题"
+        />
+        <Checkbox
+          v-if="
+            hasCover &&
+            latest?.status === 'succeeded' &&
+            user.hasPermission('ContentArticle.update')
+          "
+          v-model="adoptCover"
+          :disabled="!canAdopt"
+          label="同时采纳生成封面"
         />
         <Button
           v-if="latest?.status === 'succeeded' && content"

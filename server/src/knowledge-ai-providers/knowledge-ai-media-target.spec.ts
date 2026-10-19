@@ -55,6 +55,24 @@ describe('Agent media targets', () => {
       service.resolveAgentMediaTarget(2, 'vision', 'imageGeneration'),
     ).rejects.toThrow('不在');
   });
+  it('内容封面直接选同账号首个有效生图模型，缺配置跳过且不调用 Agent 入口', async () => {
+    const { service, provider } = harness();
+    const agent = jest.spyOn(service, 'resolveAgentMediaTarget');
+    provider.imageGenerationModels = '\n#无编码\nfirst#首选\nsecond#备用';
+    await expect(service.resolveContentCoverTarget(2)).resolves.toMatchObject({
+      providerId: 2,
+      model: 'first',
+      protocol: 'dashscope',
+    });
+    expect(agent).not.toHaveBeenCalled();
+    provider.imageGenerationModels = null;
+    await expect(service.resolveContentCoverTarget(2)).resolves.toBeNull();
+    provider.imageGenerationModels = '#无编码';
+    await expect(service.resolveContentCoverTarget(2)).resolves.toBeNull();
+    provider.imageGenerationModels = 'image';
+    provider.imageGenerationApiUrl = '';
+    await expect(service.resolveContentCoverTarget(2)).resolves.toBeNull();
+  });
 
   it('rejects missing catalog, disabled account, missing key and unsafe generation endpoints', async () => {
     const { service, provider } = harness();

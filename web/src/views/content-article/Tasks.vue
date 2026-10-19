@@ -6,6 +6,7 @@ import Table, { type TableColumn } from '@/components/Table.vue';
 import Button from '@/components/Button.vue';
 import Checkbox from '@/components/Checkbox.vue';
 import Dialog from '@/components/Dialog.vue';
+import CoverPreview from './CoverPreview.vue';
 import type { FormField } from '@/components/Form.vue';
 import { useUserStore } from '@/stores/user';
 import {
@@ -19,7 +20,13 @@ import {
   type ContentTaskQuery,
 } from '@/api/contentArticle';
 import { formatDateTime } from '@/utils/format';
-import { isActiveTask, taskLabel, taskColor, taskElapsed } from './taskState';
+import {
+  isActiveTask,
+  taskLabel,
+  taskColor,
+  taskElapsed,
+  coverLabels,
+} from './taskState';
 
 const props = defineProps<{
   articleId?: number;
@@ -45,10 +52,17 @@ const hasGeneratedTitle = computed(
   () => hasCandidate.value && !!detail.value?.generatedTitle?.trim(),
 );
 const adoptTitle = ref(false);
+const adoptCover = ref(false);
+const hasCover = computed(
+  () =>
+    detail.value?.coverStatus === 'succeeded' && !!detail.value.coverData?.url,
+);
 const adoptConfirmation = computed(() =>
-  adoptTitle.value && hasGeneratedTitle.value
-    ? '采用后将替换文章标题与正文并立即保存，确认采用？'
-    : '采用后将替换文章正文并立即保存，确认采用？',
+  adoptCover.value && hasCover.value
+    ? `采用后将替换文章${adoptTitle.value && hasGeneratedTitle.value ? '标题、' : ''}正文及封面并立即保存，确认采用？`
+    : adoptTitle.value && hasGeneratedTitle.value
+      ? '采用后将替换文章标题与正文并立即保存，确认采用？'
+      : '采用后将替换文章正文并立即保存，确认采用？',
 );
 const adopting = ref(false);
 const pollFailed = ref(false);
@@ -65,6 +79,7 @@ const columns: TableColumn[] = [
   { prop: 'id', label: '任务', width: 80 },
   { prop: 'articleTitle', label: '文章标题', minWidth: 260 },
   { prop: 'status', label: '状态', width: 100, slot: true },
+  { prop: 'coverStatus', label: '封面', width: 120, slot: true },
   { prop: 'elapsed', label: '耗时', width: 100, slot: true },
   { prop: 'createdAt', label: '提交时间', minWidth: 180, slot: true },
 ];
@@ -154,6 +169,7 @@ async function showDetail(row: Pick<ContentTask, 'id'>, silent = false) {
   detailVisible.value = true;
   loadingDetail.value = true;
   if (!silent || detail.value?.id !== row.id) {
+    adoptCover.value = false;
     detail.value = null;
     article.value = null;
   }
@@ -193,6 +209,7 @@ async function adopt() {
     !user.hasPermission('ContentArticle.update') ||
     loadingDetail.value ||
     detail.value.status !== 'succeeded' ||
+    isActiveTask(detail.value) ||
     detail.value.articleVersion !== article.value?.version
   )
     return;
@@ -204,6 +221,7 @@ async function adopt() {
       taskId,
       article.value!.version,
       adoptTitle.value && hasGeneratedTitle.value,
+      adoptCover.value && hasCover.value,
     );
     if (!alive) return;
     if (detail.value?.id === taskId) detail.value.status = 'adopted';
@@ -242,6 +260,7 @@ function closeDetail() {
   ++detailSequence;
   detailReadFailed = false;
   adoptTitle.value = false;
+  adoptCover.value = false;
   selectedId.value = null;
   detail.value = null;
   article.value = null;
@@ -300,9 +319,12 @@ onBeforeUnmount(() => {
       </template>
       <template #column-status="{ row }"
         ><el-tag :type="taskColor(row.status)">{{
-          taskLabel(row.status)
+          taskLabel(row.status, row.coverStatus)
         }}</el-tag></template
       >
+      <template #column-coverStatus="{ row }">{{
+        coverLabels[row.coverStatus] || '—'
+      }}</template>
       <template #column-elapsed="{ row }">{{ taskElapsed(row, now) }}</template>
       <template #column-createdAt="{ row }">{{
         formatDateTime(row.createdAt)
@@ -340,7 +362,10 @@ onBeforeUnmount(() => {
                 : 'Markdown'
             }}
           </p>
-          <p v-if="isActiveTask(detail)" role="status">
+          <p
+            v-if="detail.status === 'pending' || detail.status === 'running'"
+            role="status"
+          >
             {{
               detail.status === 'pending'
                 ? '等待执行，可关闭页面稍后查看'
@@ -377,6 +402,7 @@ onBeforeUnmount(() => {
             <pre>{{ detail.snapshot.template.instruction || '通用写作' }}</pre>
           </details>
           <template v-if="hasCandidate">
+            <CoverPreview :task="detail" />
             <div v-if="hasGeneratedTitle" class="generation-records__title">
               <span>生成标题</span>
               <h3>{{ detail.generatedTitle }}</h3>
@@ -405,6 +431,7 @@ onBeforeUnmount(() => {
                 perm="ContentArticle.update"
                 :disabled="
                   detail.articleVersion !== article?.version ||
+                  isActiveTask(detail) ||
                   adopting ||
                   loadingDetail
                 "
@@ -414,6 +441,16 @@ onBeforeUnmount(() => {
                 @click="adopt"
                 >采用并保存</Button
               >
+              <Checkbox
+                v-if="
+                  hasCover &&
+                  detail.status === 'succeeded' &&
+                  user.hasPermission('ContentArticle.update')
+                "
+                v-model="adoptCover"
+                :disabled="adopting || loadingDetail || isActiveTask(detail)"
+                label="同时采用生成封面"
+              />
             </div>
             <p
               v-if="

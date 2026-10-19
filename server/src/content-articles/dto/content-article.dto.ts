@@ -70,6 +70,9 @@ export class AdoptContentTaskDto extends ContentArticleVersionDto {
   @IsOptional()
   @IsBoolean()
   adoptTitle?: boolean;
+  @IsOptional()
+  @IsBoolean()
+  adoptCover?: boolean;
 }
 export class GenerateContentTaskDto extends ContentArticleVersionDto {
   @IsUUID()

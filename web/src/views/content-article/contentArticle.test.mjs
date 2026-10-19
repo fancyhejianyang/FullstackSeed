@@ -465,6 +465,7 @@ test('创作页面模板与样式可编译，不执行生成 HTML', async () => 
     'Edit.vue',
     'View.vue',
     'Tasks.vue',
+    'CoverPreview.vue',
     '../content-generation/Index.vue',
     '../content-template/Index.vue',
     '../content-template/Edit.vue',
