@@ -1,5 +1,32 @@
 # CHANGELOG
 
+### 2026-10-19 精简 Agent 执行记录列表并按需展示完整详情
+
+- 执行记录列表移除多行模型调度、参数 JSON、结果 JSON 和配置版本列，保留标识、能力、执行状态、耗时、Token、状态原因和时间，复用 Table 默认单行省略及溢出提示；通过内置“查看”操作打开执行详情，未修改通用 Table 或其他页面样式。
+- `GET /agent-apps/execution-records` 在 TypeORM 查询层显式选择必要标量列，不读取/返回 `parameterSummary`、`result`、`configSnapshot` 和 `errorMessage` 等大字段；分页、排序、Agent/用户/状态过滤以及请求号/错误关键词检索保持不变。前端新增独立轻量列表类型，与返回字段对齐。
+- 新增 `GET /agent-apps/execution-records/:id`，沿用列表的 `AgentApp.read` 权限，按需提供完整记录；原工作台本人执行查询及其归属校验保持不变，不修改数据库结构或执行数据。详情沿用 demo 的 Dialog 模式，展示模型调用轨迹、Token、耗时、状态原因、错误、版本及可折叠滚动的参数/结果/配置 JSON；处理失败、关闭和切换记录时的迟到响应，不串数据。
+- 列表仅表达执行状态，成功统一显示“处理完成”；详情继续根据真实回执区分回答完成、录入成功、图片生成完成及结果待核实，不因列表去掉 result 而错误判断回执。同步设计规范。
+- 验证：前端 65 项 Node 测试、后端 40 个 Jest 套件 / 372 项测试通过；完整 Vue 类型检查、后端生产源码 `tsc --noEmit --incremental false -p tsconfig.build.json`、变更后端文件 ESLint、TypeORM 实体列校验、Vue 模板编译和 `git diff --check` 通过。新增覆盖列表字段选择/序列化、分页过滤、空列表、耗时、详情缺失、读取权限、本人隔离、前端按需加载及请求竞态。
+- 执行边界：此次为列表/详情数据展示重构，未 build、未启动或重启服务、未连接真实数据库或进行浏览器视觉验收。前后端需同步更新。保留已有 `web/components.d.ts` 改动，不纳入提交。
+
+新增文件（3）：
+
+- `web/src/views/agent-app/RecordView.vue`
+- `web/src/views/agent-app/executionRecord.ts`
+- `web/src/views/agent-app/executionRecord.test.mjs`
+
+修改文件（7）：
+
+- `server/src/agent-apps/agent-apps.controller.ts`
+- `server/src/agent-apps/agent-workspace.service.ts`
+- `server/src/agent-apps/agent-workspace.service.spec.ts`
+- `web/src/api/agentWorkspace.ts`
+- `web/src/views/agent-app/Records.vue`
+- `.design-spec.md`
+- `CHANGELOG.md`
+
+删除文件：无。
+
 ### 2026-10-19 区分侧栏激活分组与当前菜单配色
 
 - 当前菜单所属的激活分组恢复侧栏底色 `#304156`，保留白字加粗并取消左侧蓝条；当前激活菜单改为 `#1F5F99` 蓝色底，保留白字和左侧品牌蓝条，悬停时维持选中底色，避免父分组与当前页面连成同一块。

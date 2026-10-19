@@ -53,9 +53,16 @@ export class AgentAppsController {
 
   @Get('execution-records')
   @RequirePermissions('AgentApp.read')
-  @ApiOperation({ summary: '分页查询 Agent 工具执行记录' })
+  @ApiOperation({ summary: '分页查询 Agent 执行记录概要（不含 JSON 载荷）' })
   findExecutionRecords(@Query() query: QueryAgentExecutionDto) {
     return this.workspaceService.findExecutionRecords(query);
+  }
+
+  @Get('execution-records/:id')
+  @RequirePermissions('AgentApp.read')
+  @ApiOperation({ summary: '查询 Agent 执行详情及模型轨迹、参数和结果' })
+  findExecutionRecord(@Param('id', ParseIntPipe) id: number) {
+    return this.workspaceService.findExecutionRecord(id);
   }
 
   @Post('probe-media-model')

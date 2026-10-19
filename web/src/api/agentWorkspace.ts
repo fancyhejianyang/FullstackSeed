@@ -227,6 +227,24 @@ export interface AgentModelTrace {
   }>;
 }
 
+// 管理列表只返回标量字段；模型轨迹和 JSON 载荷通过详情接口按需获取。
+export type AgentExecutionRecord = Pick<
+  AgentExecution,
+  | "id"
+  | "requestId"
+  | "sessionId"
+  | "userId"
+  | "agentAppId"
+  | "toolKey"
+  | "status"
+  | "statusReason"
+  | "totalTokens"
+  | "modelCallDurationMs"
+  | "startedAt"
+  | "finishedAt"
+  | "createdAt"
+> & { elapsedMilliseconds: number | null };
+
 export interface AgentSessionDetail extends AgentSession {
   messages: AgentMessage[];
   messageTotal: number;
@@ -393,8 +411,14 @@ export function getAgentExecutionRecords(params: {
   status?: AgentExecutionStatus | "";
   keyword?: string;
 }) {
-  return request.get<unknown, { list: AgentExecution[]; total: number }>(
+  return request.get<unknown, { list: AgentExecutionRecord[]; total: number }>(
     "/agent-apps/execution-records",
     { params },
+  );
+}
+
+export function getAgentExecutionRecord(id: number) {
+  return request.get<unknown, AgentExecution>(
+    `/agent-apps/execution-records/${id}`,
   );
 }

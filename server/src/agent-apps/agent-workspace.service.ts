@@ -152,6 +152,22 @@ export class AgentWorkspaceService {
         ]
       : baseWhere;
     const [list, total] = await this.executionRepository.findAndCount({
+      // 列表从数据库层排除大 JSON 和错误正文，完整载荷仅在详情读取。
+      select: [
+        'id',
+        'requestId',
+        'sessionId',
+        'userId',
+        'agentAppId',
+        'toolKey',
+        'status',
+        'statusReason',
+        'totalTokens',
+        'modelCallDurationMs',
+        'startedAt',
+        'finishedAt',
+        'createdAt',
+      ],
       where,
       order: { id: 'DESC' },
       skip: (page - 1) * pageSize,
@@ -159,13 +175,38 @@ export class AgentWorkspaceService {
     });
     return {
       list: list.map((item) => ({
-        ...item,
+        id: item.id,
+        requestId: item.requestId,
+        sessionId: item.sessionId,
+        userId: item.userId,
+        agentAppId: item.agentAppId,
+        toolKey: item.toolKey,
+        status: item.status,
+        statusReason: item.statusReason,
+        totalTokens: item.totalTokens,
+        modelCallDurationMs: item.modelCallDurationMs,
+        startedAt: item.startedAt,
+        finishedAt: item.finishedAt,
+        createdAt: item.createdAt,
         elapsedMilliseconds:
           item.startedAt && item.finishedAt
             ? item.finishedAt.getTime() - item.startedAt.getTime()
             : null,
       })),
       total,
+    };
+  }
+
+  /** 管理端详情沿用执行记录列表的 AgentApp.read 权限，不替代工作台本人查询。 */
+  async findExecutionRecord(id: number) {
+    const execution = await this.executionRepository.findOne({ where: { id } });
+    if (!execution) throw new NotFoundException('执行记录不存在');
+    return {
+      ...execution,
+      elapsedMilliseconds:
+        execution.startedAt && execution.finishedAt
+          ? execution.finishedAt.getTime() - execution.startedAt.getTime()
+          : null,
     };
   }
 

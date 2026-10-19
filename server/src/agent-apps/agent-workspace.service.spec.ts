@@ -2,8 +2,17 @@ import {
   ConflictException,
   ForbiddenException,
   NotFoundException,
+  type ExecutionContext,
 } from '@nestjs/common';
-import type { DataSource, Repository } from 'typeorm';
+import { Reflector } from '@nestjs/core';
+import {
+  Like,
+  type DataSource,
+  type FindManyOptions,
+  type Repository,
+} from 'typeorm';
+import { PermissionsGuard } from '../common/guards/permissions.guard';
+import { AgentAppsController } from './agent-apps.controller';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
 import type { KnowledgeAiChatService } from '../knowledge-ai-chat/knowledge-ai-chat.service';
 import type { ProductCatalogService } from '../product-catalog/product-catalog.service';
@@ -53,6 +62,7 @@ describe('AgentWorkspaceService ownership and state guards', () => {
   };
   const executionRepository = {
     findOne: jest.fn(),
+    findAndCount: jest.fn(),
     count: jest.fn(),
     save: jest.fn(),
     update: jest.fn().mockResolvedValue({ affected: 1 }),
@@ -95,6 +105,162 @@ describe('AgentWorkspaceService ownership and state guards', () => {
       'product.query',
       'productSku.create',
     ]);
+  });
+
+  it('selects only scalar list fields while preserving filters, pagination and elapsed time', async () => {
+    const row = {
+      id: 9,
+      requestId: 'message:1:abc',
+      sessionId: 1,
+      userId: 10,
+      agentAppId: 3,
+      toolKey: 'productSku.create',
+      status: 'succeeded',
+      statusReason: 'completed',
+      totalTokens: 0,
+      modelCallDurationMs: 0,
+      startedAt: new Date('2026-10-19T00:00:00Z'),
+      finishedAt: new Date('2026-10-19T00:00:01Z'),
+      createdAt: new Date('2026-10-19T00:00:00Z'),
+      parameterSummary: { large: 'x'.repeat(10000) },
+      result: { recordType: 'productSku', recordId: 7 },
+      configSnapshot: { models: ['model'] },
+      errorMessage: 'large error body',
+    };
+    executionRepository.findAndCount.mockResolvedValue([[row], 21]);
+    const result = await service.findExecutionRecords({
+      page: 2,
+      pageSize: 10,
+      agentAppId: 3,
+      userId: 10,
+      status: 'succeeded',
+      keyword: ' abc ',
+    });
+    const [options] = executionRepository.findAndCount.mock.calls[0] as [
+      FindManyOptions<AgentExecution>,
+    ];
+    const fields = [
+      'id',
+      'requestId',
+      'sessionId',
+      'userId',
+      'agentAppId',
+      'toolKey',
+      'status',
+      'statusReason',
+      'totalTokens',
+      'modelCallDurationMs',
+      'startedAt',
+      'finishedAt',
+      'createdAt',
+    ];
+    expect(options).toEqual({
+      select: fields,
+      where: [
+        {
+          agentAppId: 3,
+          userId: 10,
+          status: 'succeeded',
+          requestId: Like('%abc%'),
+        },
+        {
+          agentAppId: 3,
+          userId: 10,
+          status: 'succeeded',
+          errorMessage: Like('%abc%'),
+        },
+      ],
+      order: { id: 'DESC' },
+      skip: 10,
+      take: 10,
+    });
+    expect(result.total).toBe(21);
+    expect(Object.keys(result.list[0])).toEqual([
+      ...fields,
+      'elapsedMilliseconds',
+    ]);
+    expect(result.list[0]).toMatchObject({
+      elapsedMilliseconds: 1000,
+      totalTokens: 0,
+      modelCallDurationMs: 0,
+    });
+    expect(result.list[0]).not.toHaveProperty('result');
+    expect(result.list[0]).not.toHaveProperty('parameterSummary');
+    expect(result.list[0]).not.toHaveProperty('configSnapshot');
+    expect(result.list[0]).not.toHaveProperty('errorMessage');
+  });
+
+  it('keeps unfinished duration null and handles empty execution lists', async () => {
+    executionRepository.findAndCount.mockResolvedValue([
+      [{ id: 1, startedAt: new Date(), finishedAt: null }],
+      1,
+    ]);
+    expect(
+      (await service.findExecutionRecords({})).list[0].elapsedMilliseconds,
+    ).toBeNull();
+    expect(executionRepository.findAndCount).toHaveBeenLastCalledWith(
+      expect.objectContaining({ where: {}, skip: 0, take: 20 }),
+    );
+    executionRepository.findAndCount.mockResolvedValue([[], 0]);
+    await expect(service.findExecutionRecords({})).resolves.toEqual({
+      list: [],
+      total: 0,
+    });
+  });
+
+  it('loads the full management record only on detail requests and preserves owner-only workspace lookup', async () => {
+    const row = {
+      id: 9,
+      parameterSummary: { modelRouting: { attempts: [] } },
+      result: { recordId: 7 },
+      configSnapshot: { configVersion: 'v1' },
+      errorMessage: 'failure',
+      startedAt: new Date(0),
+      finishedAt: new Date(120),
+    };
+    executionRepository.findOne.mockResolvedValue(row);
+    await expect(service.findExecutionRecord(9)).resolves.toEqual({
+      ...row,
+      elapsedMilliseconds: 120,
+    });
+    expect(executionRepository.findOne).toHaveBeenLastCalledWith({
+      where: { id: 9 },
+    });
+    executionRepository.findOne.mockResolvedValue(null);
+    await expect(service.findExecutionRecord(404)).rejects.toThrow(
+      NotFoundException,
+    );
+    await expect(service.findExecution(9, currentUser)).rejects.toThrow(
+      NotFoundException,
+    );
+    expect(executionRepository.findOne).toHaveBeenLastCalledWith({
+      where: { id: 9, userId: currentUser.userId },
+    });
+    expect(executionRepository.save).not.toHaveBeenCalled();
+    expect(executionRepository.update).not.toHaveBeenCalled();
+  });
+
+  it('requires AgentApp.read for both management list and detail, not workspace access', () => {
+    const guard = new PermissionsGuard(new Reflector());
+    for (const method of [
+      'findExecutionRecords',
+      'findExecutionRecord',
+    ] as const) {
+      const context = (permissions: string[], isAdmin = false) =>
+        ({
+          getHandler: () => AgentAppsController.prototype[method],
+          getClass: () => AgentAppsController,
+          switchToHttp: () => ({
+            getRequest: () => ({ user: { permissions, isAdmin } }),
+          }),
+        }) as ExecutionContext;
+      expect(() => guard.canActivate(context(['AgentWorkspace.read']))).toThrow(
+        ForbiddenException,
+      );
+      expect(() => guard.canActivate(context([]))).toThrow(ForbiddenException);
+      expect(guard.canActivate(context(['AgentApp.read']))).toBe(true);
+      expect(guard.canActivate(context([], true))).toBe(true);
+    }
   });
 
   it('returns null for missing or foreign progress without exposing execution data', async () => {

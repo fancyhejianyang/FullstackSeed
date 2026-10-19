@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import PageContainer from "@/components/PageContainer.vue";
 import Table, { type TableColumn } from "@/components/Table.vue";
 import type { FormField } from "@/components/Form.vue";
@@ -6,9 +7,14 @@ import { formatDateTime } from "@/utils/format";
 import AgentExecutionStatusTag from "@/views/agent-workspace/components/AgentExecutionStatus.vue";
 import {
   getAgentExecutionRecords,
-  type AgentExecution,
+  type AgentExecutionRecord,
   type AgentExecutionStatus,
 } from "@/api/agentWorkspace";
+import RecordView from "./RecordView.vue";
+import { statusReasonLabel, toolLabel } from "./executionRecord";
+
+const viewVisible = ref(false);
+const currentRow = ref<AgentExecutionRecord | null>(null);
 
 const columns: TableColumn[] = [
   { prop: "id", label: "ID", width: 80 },
@@ -17,20 +23,10 @@ const columns: TableColumn[] = [
   { prop: "userId", label: "用户 ID", width: 100 },
   { prop: "sessionId", label: "会话 ID", width: 100 },
   { prop: "toolKey", label: "执行能力", minWidth: 180, slot: true },
-  { prop: "status", label: "状态", width: 120, slot: true },
-  {
-    prop: "modelRouting",
-    label: "模型调度",
-    minWidth: 300,
-    slot: true,
-    showOverflowTooltip: false,
-  },
-  { prop: "parameterSummary", label: "参数摘要", minWidth: 260, slot: true },
-  { prop: "result", label: "结果摘要", minWidth: 260, slot: true },
+  { prop: "status", label: "状态", width: 130, slot: true },
   { prop: "elapsedMilliseconds", label: "耗时", width: 110, slot: true },
   { prop: "tokenUsage", label: "Token", width: 150, slot: true },
   { prop: "statusReason", label: "状态原因", width: 150, slot: true },
-  { prop: "configVersion", label: "配置版本", width: 130, slot: true },
   { prop: "createdAt", label: "开始时间", width: 180, slot: true },
 ];
 
@@ -70,71 +66,9 @@ function request(params: Record<string, unknown>) {
   );
 }
 
-function toolLabel(toolKey: AgentExecution["toolKey"]) {
-  const labels: Record<AgentExecution["toolKey"], string> = {
-    "model.chat": "模型对话",
-    "knowledge.answer": "知识增强",
-    "product.query": "产品/SKU 查询",
-    "productSku.create": "受控新增 SKU",
-  };
-  return labels[toolKey] || toolKey;
-}
-
-function routingSummary(row: AgentExecution) {
-  const trace = row.parameterSummary?.modelRouting;
-  if (!trace) return "—";
-  const strategies = {
-    priority: "优先顺序",
-    balanced: "均衡使用",
-    intent: "意图调度",
-    fixed: "指定模型",
-  };
-  const intents = {
-    chat: "问答",
-    query: "查询",
-    write: "录入",
-    analysis: "分析",
-  };
-  const purposes = { routing: "识别", planning: "规划", answer: "回答" };
-  const reasons: Record<string, string> = {
-    account_auth: "账号鉴权失败",
-    account_balance: "账号余额不足",
-    quota: "额度不足",
-    rate_limit: "限流",
-    timeout: "超时",
-    context_length: "上下文超限",
-    model_unavailable: "模型不可用",
-    request_failed: "请求失败",
-    invalid_output: "识别格式无效",
-  };
-  return [
-    `${strategies[trace.strategy]}${trace.selectedModel ? ` · ${trace.selectedModel}` : ""}`,
-    trace.decision
-      ? `${intents[trace.decision.intent]} · ${trace.decision.complexity === "complex" ? "复杂" : "简单"}${trace.decision.source === "fallback" ? "（保守回退）" : ""}`
-      : "",
-    ...trace.attempts.map(
-      (a) =>
-        `${purposes[a.purpose]}：${a.model} · ${a.status === "succeeded" ? "成功" : reasons[a.reason ?? ""] || "失败"}${a.totalTokens == null ? "" : ` · ${a.totalTokens} tokens`}`,
-    ),
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
-function statusReasonLabel(reason: string | null) {
-  if (!reason) return "-";
-  const labels: Record<string, string> = {
-    completed: "处理完成",
-    waiting_input: "等待补充",
-    waiting_confirmation: "等待确认",
-    user_cancelled: "用户停止",
-    execution_timeout: "执行超时",
-    provider_or_runtime_error: "模型或运行失败",
-    execution_failed: "执行失败",
-    business_write_failed: "业务写入失败",
-    stale_lease: "进程中断回收",
-  };
-  return labels[reason] || reason;
+function openView(row: AgentExecutionRecord) {
+  currentRow.value = row;
+  viewVisible.value = true;
 }
 </script>
 
@@ -144,27 +78,19 @@ function statusReasonLabel(reason: string | null) {
       :columns="columns"
       :search-fields="searchFields"
       :request="request"
-      :show-actions="false"
+      perm-module="agentApp"
+      :show-edit="false"
+      :show-delete="false"
+      :action-width="90"
       :fit="false"
+      @view="openView"
     >
       <template #column-toolKey="{ row }">
         {{ toolLabel(row.toolKey) }}
       </template>
       <template #column-status="{ row }">
-        <AgentExecutionStatusTag
-          :status="row.status"
-          :tool-key="row.toolKey"
-          :result="row.result"
-        />
-      </template>
-      <template #column-parameterSummary="{ row }">
-        <code>{{ JSON.stringify(row.parameterSummary) }}</code>
-      </template>
-      <template #column-modelRouting="{ row }">
-        <span class="routing-summary">{{ routingSummary(row) }}</span>
-      </template>
-      <template #column-result="{ row }">
-        <code>{{ row.errorMessage || JSON.stringify(row.result) }}</code>
+        <!-- 列表只表达执行状态；真实业务回执在详情中核实，不依赖已移除的 result。 -->
+        <AgentExecutionStatusTag :status="row.status" />
       </template>
       <template #column-elapsedMilliseconds="{ row }">
         {{
@@ -182,23 +108,10 @@ function statusReasonLabel(reason: string | null) {
       <template #column-statusReason="{ row }">
         {{ statusReasonLabel(row.statusReason) }}
       </template>
-      <template #column-configVersion="{ row }">
-        <code>{{ row.configVersion?.slice(0, 10) || "-" }}</code>
-      </template>
       <template #column-createdAt="{ row }">{{
         formatDateTime(row.createdAt)
       }}</template>
     </Table>
+    <RecordView v-model:visible="viewVisible" :row="currentRow" />
   </PageContainer>
 </template>
-
-<style scoped>
-.routing-summary {
-  white-space: pre-line;
-  line-height: 1.7;
-}
-code {
-  color: #606266;
-  font-family: Consolas, Monaco, monospace;
-}
-</style>
