@@ -61,7 +61,7 @@ function harness() {
   const exports = {};
   const script =
     parse(editor).descriptor.scriptSetup.content +
-    '\nexport { form, formRef, fields, version, savedId, busy, loadFailed, handleSubmit, canLeave, beforeClose, requestClose, adopted };';
+    '\nexport { form, formRef, fields, version, savedId, busy, loadFailed, handleSubmit, canLeave, beforeClose, requestClose };';
   scope.run(() =>
     new Function(
       'require',
@@ -264,6 +264,7 @@ test('创作页面模板与样式可编译，不执行生成 HTML', async () => 
     'Edit.vue',
     'View.vue',
     'Tasks.vue',
+    '../content-generation/Index.vue',
     '../content-template/Index.vue',
     '../content-template/Edit.vue',
     '../content-template/View.vue',

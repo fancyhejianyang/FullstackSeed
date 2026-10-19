@@ -1,46 +1,72 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import Button from '@/components/Button.vue';
-import Tasks from './Tasks.vue';
 import Dialog from '@/components/Dialog.vue';
 import {
-  getContentArticle,
-  type ContentArticle,
+  getContentArticlePreview,
+  type ContentArticlePreview,
   type ContentArticleSummary,
 } from '@/api/contentArticle';
+import { formatDateTime } from '@/utils/format';
+import { isActiveTask, taskLabel, taskColor } from './taskState';
 
 const props = defineProps<{ row?: ContentArticleSummary | null }>();
-const emit = defineEmits<{ success: [] }>();
+const emit = defineEmits<{ records: [articleId: number] }>();
 const visible = defineModel<boolean>('visible', { required: true });
 const loading = ref(false);
-const detail = ref<ContentArticle | null>(null);
+const preview = ref<ContentArticlePreview | null>(null);
+const pane = ref<'latest' | 'saved'>('latest');
+const detail = computed(() => preview.value?.article);
+const latest = computed(() => preview.value?.latestTask);
+const content = computed(() => {
+  if (pane.value === 'saved') return detail.value?.content || '';
+  return latest.value && ['succeeded', 'adopted'].includes(latest.value.status)
+    ? latest.value.result || ''
+    : '';
+});
 let epoch = 0;
+let timer: ReturnType<typeof setTimeout> | undefined;
+async function load(initial = false, silent = false) {
+  clearTimeout(timer);
+  const current = ++epoch;
+  const id = props.row?.id;
+  if (!silent) preview.value = null;
+  loading.value = false;
+  if (!visible.value || !id) return;
+  loading.value = true;
+  try {
+    const result = await getContentArticlePreview(id, silent);
+    if (current !== epoch) return;
+    preview.value = result;
+    if (initial) pane.value = result.latestTask ? 'latest' : 'saved';
+    if (isActiveTask(result.latestTask))
+      timer = setTimeout(() => {
+        void load(false, true);
+      }, 3000);
+  } catch {
+    // 不回显旧正文；页面提供手动重试入口。
+    if (current === epoch) preview.value = null;
+  } finally {
+    if (current === epoch) loading.value = false;
+  }
+}
 watch(
   () => [visible.value, props.row?.id] as const,
-  async ([open, id]) => {
-    const current = ++epoch;
-    detail.value = null;
-    loading.value = false;
-    if (!open || !id) return;
-    loading.value = true;
-    try {
-      const result = await getContentArticle(id);
-      if (current === epoch) detail.value = result;
-    } catch {
-      /* 请求层显示错误，绝不回显上一条记录。 */
-    } finally {
-      if (current === epoch) loading.value = false;
-    }
+  () => {
+    pane.value = 'latest';
+    void load(true);
   },
+  { immediate: true },
 );
 onBeforeUnmount(() => {
   ++epoch;
+  clearTimeout(timer);
 });
 async function copyContent() {
-  if (!detail.value?.content) return;
+  if (!content.value || loading.value) return;
   try {
-    await navigator.clipboard.writeText(detail.value.content);
+    await navigator.clipboard.writeText(content.value);
     ElMessage.success('正文已复制');
   } catch {
     ElMessage.warning('浏览器不支持复制，请选中正文手动复制');
@@ -70,27 +96,88 @@ async function copyContent() {
           <summary>想法</summary>
           <pre>{{ detail.idea || '暂无想法' }}</pre>
         </details>
-        <pre class="article-view__content">{{
-          detail.content || '尚未生成正文'
-        }}</pre>
-        <Tasks
-          v-if="visible"
-          :key="detail.id"
-          :article-id="detail.id"
-          :version="detail.version"
-          can-adopt
-          @adopted="
-            detail = $event;
-            emit('success');
-          "
-        />
+        <el-tabs v-model="pane">
+          <el-tab-pane label="最新生成" name="latest">
+            <template v-if="latest">
+              <div class="article-view__status">
+                <el-tag :type="taskColor(latest.status)">{{
+                  taskLabel(latest.status)
+                }}</el-tag>
+                <span
+                  >任务 #{{ latest.id }} ·
+                  {{ formatDateTime(latest.createdAt) }}</span
+                >
+              </div>
+              <p v-if="isActiveTask(latest)" role="status">
+                {{
+                  latest.status === 'pending' ? '任务排队中' : '正文生成中'
+                }}，完成后自动更新。
+              </p>
+              <p v-else-if="latest.status === 'succeeded'">
+                本次生成稿尚未采用。
+              </p>
+              <p v-if="latest.errorMessage" role="alert">
+                {{ latest.errorMessage }}
+              </p>
+              <details
+                v-if="latest.editorNotes?.length"
+                class="article-view__idea"
+              >
+                <summary>
+                  {{
+                    latest.status === 'needs_input'
+                      ? '本次生成提示'
+                      : '编辑提示'
+                  }}
+                </summary>
+                <ul>
+                  <li v-for="(note, index) in latest.editorNotes" :key="index">
+                    {{ note }}
+                  </li>
+                </ul>
+              </details>
+              <pre
+                v-if="pane === 'latest' && content"
+                class="article-view__content"
+                >{{ content }}</pre
+              >
+              <el-empty
+                v-else-if="
+                  !isActiveTask(latest) &&
+                  !['succeeded', 'adopted'].includes(latest.status)
+                "
+                description="本次未生成正文"
+              />
+            </template>
+            <el-empty v-else description="暂无生成记录" />
+          </el-tab-pane>
+          <el-tab-pane label="已保存正文" name="saved">
+            <pre class="article-view__content">{{
+              detail.content || '尚未保存正文'
+            }}</pre>
+          </el-tab-pane>
+        </el-tabs>
       </template>
-      <el-empty v-else-if="!loading" description="内容读取失败" />
+      <el-empty v-else-if="!loading" description="内容读取失败，请刷新重试" />
     </div>
     <template #footer>
-      <Button :disabled="!detail?.content || loading" @click="copyContent"
-        >复制正文</Button
+      <Button
+        perm="ContentArticle.read"
+        icon="Refresh"
+        :disabled="loading"
+        @click="load()"
+        >刷新</Button
       >
+      <Button
+        v-if="row"
+        perm="ContentArticle.read"
+        :disabled="loading"
+        @click="emit('records', row.id)"
+        >生成记录</Button
+      >
+      <Button :disabled="!content || loading" @click="copyContent">{{
+        pane === 'latest' ? '复制最新生成稿' : '复制已保存正文'
+      }}</Button>
       <Button @click="visible = false">关闭</Button>
     </template>
   </Dialog>
@@ -99,6 +186,7 @@ async function copyContent() {
 <style scoped>
 .article-view {
   max-width: 800px;
+  min-height: 160px;
   margin: auto;
   color: #303133;
 }
@@ -124,8 +212,16 @@ async function copyContent() {
   border-radius: 6px;
   background: #f0f2f5;
   color: #606266;
+  overflow-wrap: anywhere;
 }
 .article-view__idea summary {
   cursor: pointer;
+}
+.article-view__status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  color: #606266;
 }
 </style>

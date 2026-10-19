@@ -13,7 +13,6 @@ import Form, { type FormField } from '@/components/Form.vue';
 import Dialog from '@/components/Dialog.vue';
 import Button from '@/components/Button.vue';
 import Input from '@/components/Input.vue';
-import Tasks from './Tasks.vue';
 import GenerationSettings from './GenerationSettings.vue';
 import { useUserStore } from '@/stores/user';
 import UploadImage from '@/components/UploadImage.vue';
@@ -42,7 +41,6 @@ const form = reactive<ContentArticleForm>({
 const user = useUserStore();
 const version = ref(1);
 const savedId = ref<number | null>(null);
-const adopting = ref(false);
 const loading = ref(false);
 const loadFailed = ref(false);
 const submitting = ref(false);
@@ -50,7 +48,7 @@ const uploading = ref(false);
 const baseline = ref(JSON.stringify(form));
 const dirty = computed(() => JSON.stringify(form) !== baseline.value);
 const busy = computed(
-  () => loading.value || submitting.value || uploading.value || adopting.value,
+  () => loading.value || submitting.value || uploading.value,
 );
 const editPermission = computed(() =>
   savedId.value ? 'ContentArticle.update' : 'ContentArticle.create',
@@ -146,10 +144,6 @@ async function saveDraft() {
     : await createContentArticle({ ...form });
   if (current !== epoch) return;
   fillSaved(saved);
-  emit('success');
-}
-function adopted(article: ContentArticle) {
-  fillSaved(article);
   emit('success');
 }
 async function handleSubmit() {
@@ -288,21 +282,6 @@ onBeforeUnmount(() => {
         v-model:ai-config-id="form.aiConfigId"
         v-model:template-id="form.templateId"
         :disabled="busy"
-      />
-      <Tasks
-        v-if="
-          visible &&
-          savedId &&
-          !loading &&
-          !loadFailed &&
-          user.hasPermission('ContentArticle.read')
-        "
-        :key="savedId"
-        :article-id="savedId"
-        :version="version"
-        :can-adopt="!dirty && !busy"
-        @busy="adopting = $event"
-        @adopted="adopted"
       />
     </div>
     <template #footer>

@@ -59,12 +59,14 @@ test('内容创作路由仅允许 ContentArticle.read，不继承 Agent 或菜�
     ['AgentWorkspace.read'],
     ['ContentArticle.read'],
   ]) {
-    const h = routerHarness(permissions);
-    await h.router.push('/content-articles');
-    assert.equal(
-      h.router.currentRoute.value.path,
-      permissions.includes('ContentArticle.read') ? '/content-articles' : '/',
-    );
+    for (const path of ['/content-articles', '/content-generation']) {
+      const h = routerHarness(permissions);
+      await h.router.push(path);
+      assert.equal(
+        h.router.currentRoute.value.path,
+        permissions.includes('ContentArticle.read') ? path : '/',
+      );
+    }
   }
 });
 

@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   ForbiddenException,
   Param,
   ParseIntPipe,
@@ -22,6 +23,7 @@ import {
   GenerateContentTaskDto,
   AdoptContentTaskDto,
   QueryContentArticleDto,
+  QueryContentTaskDto,
   UpdateContentArticleDto,
 } from './dto/content-article.dto';
 
@@ -51,7 +53,30 @@ export class ContentArticlesController {
     return this.generation.configOptions(query);
   }
 
+  @Get('tasks')
+  @Header('Cache-Control', 'no-store')
+  @RequirePermissions('ContentArticle.read')
+  @ApiOperation({ summary: '分页查询本人文章生成记录（不含长文本）' })
+  allTasks(
+    @Query() query: QueryContentTaskDto,
+    @CurrentUser('userId') userId: number,
+  ) {
+    return this.generation.listAll(query, userId);
+  }
+
+  @Get(':id/preview')
+  @Header('Cache-Control', 'no-store')
+  @RequirePermissions('ContentArticle.read')
+  @ApiOperation({ summary: '实时读取文章与最新一次生成结果' })
+  preview(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('userId') userId: number,
+  ) {
+    return this.generation.preview(id, userId);
+  }
+
   @Get(':id')
+  @Header('Cache-Control', 'no-store')
   @RequirePermissions('ContentArticle.read')
   @ApiOperation({ summary: '本人创作内容详情' })
   findOne(
@@ -127,6 +152,7 @@ export class ContentArticlesController {
   }
 
   @Get(':id/tasks')
+  @Header('Cache-Control', 'no-store')
   @RequirePermissions('ContentArticle.read')
   tasks(
     @Param('id', ParseIntPipe) id: number,
@@ -137,6 +163,7 @@ export class ContentArticlesController {
   }
 
   @Get('tasks/:taskId')
+  @Header('Cache-Control', 'no-store')
   @RequirePermissions('ContentArticle.read')
   task(
     @Param('taskId', ParseIntPipe) id: number,

@@ -168,6 +168,18 @@ describe('MenusService Agent menu reconciliation', () => {
       isSystem: false,
     });
     const authorized = await service.findMine(false, ['ContentArticle.read']);
+    const records = rows.filter((item) => item.path === '/content-generation');
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      name: '生成记录',
+      permissionCode: 'ContentArticle.read',
+      isSystem: false,
+    });
+    expect(
+      authorized
+        .flatMap((item) => item.children)
+        .some((item) => item.path === '/content-generation'),
+    ).toBe(true);
     expect(
       authorized
         .flatMap((item) => item.children)
@@ -177,6 +189,11 @@ describe('MenusService Agent menu reconciliation', () => {
       'AgentWorkspace.read',
       'Menu.read',
     ]);
+    expect(
+      unauthorized
+        .flatMap((item) => item.children)
+        .some((item) => item.path === '/content-generation'),
+    ).toBe(false);
     expect(
       unauthorized
         .flatMap((item) => item.children)

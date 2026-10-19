@@ -4,6 +4,7 @@ import {
   ArrayNotEmpty,
   IsArray,
   IsInt,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -106,4 +107,24 @@ export class BatchDeleteContentArticleDto {
   @IsInt({ each: true })
   @Min(1, { each: true })
   ids: number[];
+}
+
+export class QueryContentTaskDto extends QueryContentArticleDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  articleId?: number;
+
+  @IsIn([
+    'pending',
+    'running',
+    'succeeded',
+    'needs_input',
+    'failed',
+    'interrupted',
+    'adopted',
+  ])
+  @IsOptional()
+  status?: string;
 }

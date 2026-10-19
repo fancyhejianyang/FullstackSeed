@@ -222,9 +222,7 @@ async function generate() {
     });
     if (current !== epoch) return;
     pendingRequest = null;
-    ElMessage.success(
-      '已提交后台生成，可点击该文章“查看”中的“生成记录”查看进度',
-    );
+    ElMessage.success('已提交后台生成，可在“内容创作 → 生成记录”查看进度');
     emit('submitted');
     visible.value = false;
   } catch {

@@ -22,14 +22,13 @@ new Function('require', 'exports', compile(await read('./taskState.ts')))(
 function harness() {
   const props = vue.reactive({
     articleId: 3,
-    version: 2,
-    canAdopt: true,
-    revision: 0,
   });
   const calls = [],
     timers = new Map(),
     unmount = [];
   const state = {
+    article: { id: 3, version: 2 },
+    canAdopt: true,
     list: {
       list: [
         {
@@ -77,19 +76,31 @@ function harness() {
       'setTimeout',
       'clearTimeout',
       'navigator',
+      'window',
       compile(
         parse(source).descriptor.scriptSetup.content +
-          '\nexport { fetchTasks, showDetail, adopt, detail, tableRef, pollFailed, hasCandidate, copyResult };',
+          '\nexport { fetchTasks, showDetail, adopt, detail, tableRef, pollFailed, hasCandidate, copyResult, closeDetail, detailVisible };',
       ),
     )(
       (name) => {
         if (name === 'vue')
-          return { ...vue, onBeforeUnmount: (cb) => unmount.push(cb) };
+          return {
+            ...vue,
+            onMounted() {},
+            onBeforeUnmount: (cb) => unmount.push(cb),
+          };
         if (name === 'element-plus')
           return { ElMessage: { success() {}, warning() {} } };
+        if (name === 'vue-router')
+          return { onBeforeRouteLeave() {}, onBeforeRouteUpdate() {} };
+        if (name === '@/stores/user')
+          return {
+            useUserStore: () => ({ hasPermission: () => state.canAdopt }),
+          };
         if (name === '@/api/contentArticle')
           return {
-            getContentTasks: async (...args) => {
+            getContentArticle: async () => ({ ...state.article }),
+            getContentGenerationRecords: async (...args) => {
               calls.push(['list', ...args]);
               return await state.list;
             },
@@ -119,6 +130,7 @@ function harness() {
       {
         clipboard: { writeText: async (value) => calls.push(['copy', value]) },
       },
+      { addEventListener() {}, removeEventListener() {} },
     ),
   );
   exports.tableRef.value = {
@@ -173,19 +185,21 @@ test('迟到列表不得在卸载后继续轮询，失败显示手动刷新入�
   assert.equal(failed.timers.size, 0);
   failed.close();
 });
-test('未保存修改或版本不一致不能直接采用，合法采用立即同步文章版本', async () => {
+test('无写权限或版本不一致不能采用，详情读取当前版本，合法采用同步版本', async () => {
   const h = harness();
   await h.showDetail({ id: 20 });
-  h.props.canAdopt = false;
+  h.state.canAdopt = false;
   await h.adopt();
-  h.props.canAdopt = true;
-  h.props.version = 3;
+  h.state.canAdopt = true;
+  h.state.article.version = 3;
+  await h.showDetail({ id: 20 });
   await h.adopt();
   assert.equal(
     h.calls.some((call) => call[0] === 'adopt'),
     false,
   );
-  h.props.version = 2;
+  h.state.article.version = 2;
+  await h.showDetail({ id: 20 });
   await h.adopt();
   assert.deepEqual(
     h.calls.find((call) => call[0] === 'adopt'),
@@ -267,4 +281,65 @@ test('耗时使用真实时间边界，不生成百分比', () => {
   );
   assert.equal(stateExports.taskElapsed({ createdAt: 'invalid' }), '—');
   assert.equal(stateExports.isActiveTask({ status: 'adopted' }), false);
+});
+
+test('重复打开详情重新读取，失败清空旧稿，关闭后迟到响应不得恢复', async () => {
+  const h = harness();
+  await h.showDetail({ id: 20 });
+  h.state.detail = { ...h.state.detail, result: '更新后的结果' };
+  await h.showDetail({ id: 20 });
+  assert.equal(h.detail.value.result, '更新后的结果');
+  h.state.detail = Promise.reject(Error('network'));
+  await h.showDetail({ id: 21 });
+  assert.equal(h.detail.value, null);
+  assert.equal(h.hasCandidate.value, false);
+  let resolve;
+  h.state.detail = new Promise((done) => {
+    resolve = done;
+  });
+  const pending = h.showDetail({ id: 20 });
+  h.closeDetail();
+  resolve({ id: 20, articleId: 3, status: 'succeeded', result: '迟到' });
+  await pending;
+  assert.equal(h.detail.value, null);
+  assert.equal(h.detailVisible.value, false);
+  h.close();
+});
+
+test('记录请求包含文章/状态/标题，迟到旧列表不能覆盖新筛选结果', async () => {
+  const h = harness();
+  let resolve;
+  h.state.list = new Promise((done) => {
+    resolve = done;
+  });
+  const old = h.fetchTasks({ page: 1, keyword: '旧' });
+  h.state.list = {
+    list: [{ id: 21, status: 'succeeded', articleTitle: '新' }],
+    total: 1,
+  };
+  await h.fetchTasks({ page: 1, status: 'succeeded', keyword: '新' });
+  resolve({ list: [{ id: 20, status: 'running' }], total: 5 });
+  assert.equal((await old).list[0].id, 21);
+  assert.deepEqual(h.calls.filter((call) => call[0] === 'list')[1][1], {
+    page: 1,
+    status: 'succeeded',
+    keyword: '新',
+    articleId: 3,
+  });
+  assert.equal(h.timers.size, 0);
+  h.close();
+});
+
+test('选中的活跃详情不在当前分页时仍会刷新，并且只保留一个轮询', async () => {
+  const h = harness();
+  h.state.detail.status = 'running';
+  await h.showDetail({ id: 20 });
+  h.state.list = { list: [], total: 0 };
+  await h.fetchTasks({ page: 2 });
+  assert.equal(h.timers.size, 1);
+  assert.equal(h.calls.filter((call) => call[0] === 'detail').length, 2);
+  h.state.detail.status = 'succeeded';
+  await h.fetchTasks({ page: 2 });
+  assert.equal(h.timers.size, 0);
+  h.close();
 });

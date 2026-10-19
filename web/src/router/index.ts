@@ -60,6 +60,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '文章创作', permission: 'ContentArticle.read' },
       },
       {
+        path: 'content-generation',
+        name: 'content-generation',
+        component: () => import('@/views/content-generation/Index.vue'),
+        meta: { title: '生成记录', permission: 'ContentArticle.read' },
+      },
+      {
         path: 'knowledge-bases',
         name: 'knowledge-bases',
         redirect: '/knowledge-bases/categories',

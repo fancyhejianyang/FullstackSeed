@@ -25,6 +25,7 @@ import {
 import {
   GenerateContentTaskDto,
   QueryContentArticleDto,
+  QueryContentTaskDto,
 } from './dto/content-article.dto';
 
 const SUMMARY_FIELDS = {
@@ -194,6 +195,57 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
       task.snapshot.template.id !== (dto.templateId ?? null)
     )
       throw new ConflictException('请求号已用于不同生成参数，请重新提交');
+  }
+
+  async listAll(query: QueryContentTaskDto, userId: number) {
+    const builder = this.tasks
+      .createQueryBuilder('task')
+      .innerJoin(
+        ContentArticle,
+        'article',
+        'article.id = task.articleId AND article.userId = :userId AND article.deletedAt IS NULL',
+        { userId },
+      )
+      .where('task.userId = :userId', { userId });
+    if (query.articleId)
+      builder.andWhere('task.articleId = :articleId', {
+        articleId: query.articleId,
+      });
+    if (query.status)
+      builder.andWhere('task.status = :status', { status: query.status });
+    if (query.keyword?.trim())
+      builder.andWhere('article.title LIKE :keyword', {
+        keyword: `%${query.keyword.trim()}%`,
+      });
+    const total = await builder.getCount();
+    builder.select([]);
+    for (const field of Object.keys(SUMMARY_FIELDS))
+      builder.addSelect(`task.${field}`, field);
+    const list = await builder
+      .addSelect('article.title', 'articleTitle')
+      .orderBy('task.id', 'DESC')
+      .offset(((query.page ?? 1) - 1) * (query.pageSize ?? 10))
+      .limit(query.pageSize ?? 10)
+      .getRawMany<
+        ReturnType<ContentGenerationService['summary']> & {
+          articleTitle: string;
+        }
+      >();
+    return { list, total };
+  }
+
+  async preview(articleId: number, userId: number) {
+    const article = await this.article(articleId, userId);
+    const latest = await this.tasks.findOne({
+      select: { id: true },
+      where: { articleId, userId },
+      order: { id: 'DESC' },
+    });
+    // 最新一次即使失败/排队也返回真实状态，不回退到更早的成功稿。
+    return {
+      article,
+      latestTask: latest ? await this.detail(latest.id, userId) : null,
+    };
   }
 
   async list(articleId: number, query: QueryContentArticleDto, userId: number) {

@@ -98,7 +98,13 @@ function harness(list = false) {
             onMounted: () => {},
             onBeforeUnmount: (fn) => unmount.push(fn),
           };
-        if (name === 'vue-router') return { onBeforeRouteLeave: () => {} };
+        if (name === 'vue-router')
+          return {
+            onBeforeRouteLeave: () => {},
+            useRouter: () => ({
+              push: async (target) => calls.push(['navigate', target]),
+            }),
+          };
         if (name === 'element-plus')
           return {
             ElMessage: {
@@ -395,17 +401,17 @@ test('行内和顶部共用入口；零选/多选/活跃任务/无权限均不�
   assert.match(index, /#toolbar="\{ selectedRows \}"/);
   assert.match(index, /@click="openGenerate\(selectedRows\)"/);
   assert.match(index, /@click="openGenerate\(\[row\]\)"/);
-  assert.match(index, /:action-width="260"/);
+  assert.match(index, /:action-width="340"/);
   h.close();
 });
 
-test('编辑页保留内容字段、生成设置和任务记录，但保存不生成', async () => {
+test('编辑页保留内容字段和生成设置，记录移到独立页，保存不生成', async () => {
   const editor = await read('./Edit.vue');
   assert.doesNotMatch(
     editor,
     /generateContentArticle|保存并生成|getContentTemplates/,
   );
-  assert.match(editor, /<Tasks/);
+  assert.doesNotMatch(editor, /<Tasks/);
   assert.match(editor, /<GenerationSettings/);
 });
 

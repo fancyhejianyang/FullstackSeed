@@ -1,4 +1,9 @@
 import { getMetadataArgsStorage } from 'typeorm';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
+import { HEADERS_METADATA, PATH_METADATA } from '@nestjs/common/constants';
+import { PERMISSIONS_KEY } from '../common/decorators/require-permissions.decorator';
+import { QueryContentTaskDto } from './dto/content-article.dto';
 import { ContentGenerationService } from './content-generation.service';
 import { ContentArticle } from './entities/content-article.entity';
 import { ContentGenerationTask } from './entities/content-generation-task.entity';
@@ -119,6 +124,155 @@ function setup() {
 }
 
 describe('持久化文章生成任务', () => {
+  it('独立记录列表按本人/未删除文章过滤，分页倒序且不查询大字段', async () => {
+    const h = setup();
+    const builder = {
+      innerJoin: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      offset: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      getCount: jest.fn().mockResolvedValue(12),
+      getRawMany: jest
+        .fn()
+        .mockResolvedValue([{ id: 20, articleTitle: '标题' }]),
+    };
+    Object.assign(h.tasks, {
+      createQueryBuilder: jest.fn().mockReturnValue(builder),
+    });
+    expect(
+      await h.service.listAll(
+        {
+          articleId: 3,
+          status: 'succeeded',
+          keyword: ' 标题 ',
+          page: 2,
+          pageSize: 10,
+        },
+        7,
+      ),
+    ).toEqual({ list: [{ id: 20, articleTitle: '标题' }], total: 12 });
+    expect(builder.innerJoin).toHaveBeenCalledWith(
+      ContentArticle,
+      'article',
+      expect.stringContaining(
+        'article.userId = :userId AND article.deletedAt IS NULL',
+      ),
+      { userId: 7 },
+    );
+    expect(builder.where).toHaveBeenCalledWith('task.userId = :userId', {
+      userId: 7,
+    });
+    expect(builder.andWhere).toHaveBeenCalledWith(
+      'task.articleId = :articleId',
+      { articleId: 3 },
+    );
+    expect(builder.andWhere).toHaveBeenCalledWith('task.status = :status', {
+      status: 'succeeded',
+    });
+    expect(builder.andWhere).toHaveBeenCalledWith(
+      'article.title LIKE :keyword',
+      { keyword: '%标题%' },
+    );
+    expect(builder.orderBy).toHaveBeenCalledWith('task.id', 'DESC');
+    expect(builder.offset).toHaveBeenCalledWith(10);
+    expect(builder.limit).toHaveBeenCalledWith(10);
+    expect(builder.select).toHaveBeenCalledWith([]);
+    const fields = builder.addSelect.mock.calls.map(
+      (call: string[]) => call[0],
+    );
+    for (const field of [
+      'task.result',
+      'task.snapshot',
+      'task.editorNotes',
+      'article.content',
+    ])
+      expect(fields).not.toContain(field);
+    expect(fields).toContain('article.title');
+  });
+  it.each([
+    'pending',
+    'running',
+    'failed',
+    'needs_input',
+    'succeeded',
+    'adopted',
+  ] as const)(
+    '实时预览保留最新任务 %s，不回退历史成功稿或写回正文',
+    async (status) => {
+      const h = setup();
+      h.task.status = status;
+      h.tasks.findOne
+        .mockResolvedValueOnce({ id: 20 })
+        .mockResolvedValueOnce(h.task);
+      const preview = await h.service.preview(3, 7);
+      expect(preview.article.content).toBe('原文');
+      expect(preview.latestTask?.status).toBe(status);
+      expect(h.tasks.findOne).toHaveBeenNthCalledWith(1, {
+        select: { id: true },
+        where: { articleId: 3, userId: 7 },
+        order: { id: 'DESC' },
+      });
+      expect(h.tasks.findOne).toHaveBeenNthCalledWith(2, {
+        where: { id: 20, userId: 7 },
+      });
+      expect(h.articles.save).not.toHaveBeenCalled();
+      expect(h.providers.callChat).not.toHaveBeenCalled();
+    },
+  );
+  it('预览无任务返回空；越权或已删除文章不读取任务', async () => {
+    const h = setup();
+    expect((await h.service.preview(3, 7)).latestTask).toBeNull();
+    h.tasks.findOne.mockClear();
+    h.articles.findOne.mockResolvedValue(null);
+    await expect(h.service.preview(3, 8)).rejects.toThrow('内容不存在');
+    expect(h.articles.findOne).toHaveBeenLastCalledWith({
+      where: { id: 3, userId: 8 },
+    });
+    expect(h.tasks.findOne).not.toHaveBeenCalled();
+  });
+  it('独立查询校验分页/文章/状态，新接口沿用读取权限并禁止缓存', async () => {
+    expect(
+      await validate(
+        plainToInstance(QueryContentTaskDto, {
+          articleId: '3',
+          page: '2',
+          status: 'running',
+        }),
+      ),
+    ).toHaveLength(0);
+    for (const query of [
+      { articleId: 0 },
+      { articleId: 'invalid' },
+      { status: 'bogus' },
+      { pageSize: 101 },
+    ]) {
+      expect(
+        (await validate(plainToInstance(QueryContentTaskDto, query))).length,
+      ).toBeGreaterThan(0);
+    }
+    for (const name of ['allTasks', 'preview', 'task'] as const) {
+      const handler = ContentArticlesController.prototype[name];
+      expect(Reflect.getMetadata(PERMISSIONS_KEY, handler)).toEqual([
+        'ContentArticle.read',
+      ]);
+      expect(Reflect.getMetadata(HEADERS_METADATA, handler)).toContainEqual({
+        name: 'Cache-Control',
+        value: 'no-store',
+      });
+    }
+    expect(
+      Reflect.getMetadata(
+        PATH_METADATA,
+        // 只读取装饰器元数据，不脱离实例调用方法。
+        // eslint-disable-next-line @typescript-eslint/unbound-method
+        ContentArticlesController.prototype.allTasks,
+      ),
+    ).toBe('tasks');
+  });
   it('首次选择与任务在同一事务中保存，递增版本但不写正文', async () => {
     const h = setup();
     h.article.aiConfigId = null;

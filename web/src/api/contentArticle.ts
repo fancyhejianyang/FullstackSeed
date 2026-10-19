@@ -29,8 +29,10 @@ export function getContentArticles(params: {
     { params },
   );
 }
-export function getContentArticle(id: number) {
-  return request.get<unknown, ContentArticle>(`/content-articles/${id}`);
+export function getContentArticle(id: number, silentError = false) {
+  return request.get<unknown, ContentArticle>(`/content-articles/${id}`, {
+    silentError,
+  });
 }
 export function createContentArticle(data: ContentArticleForm) {
   return request.post<unknown, ContentArticle>('/content-articles', data);
@@ -97,6 +99,32 @@ export interface ContentGenerationConfigOption {
   model: string | null;
   responseFormat: 'text' | 'markdown';
 }
+export interface ContentArticlePreview {
+  article: ContentArticle;
+  latestTask: ContentTaskDetail | null;
+}
+export interface ContentTaskQuery {
+  page?: number;
+  pageSize?: number;
+  keyword?: string;
+  articleId?: number;
+  status?: ContentTaskStatus;
+}
+export function getContentArticlePreview(id: number, silentError = false) {
+  return request.get<unknown, ContentArticlePreview>(
+    `/content-articles/${id}/preview`,
+    { silentError },
+  );
+}
+export function getContentGenerationRecords(
+  params: ContentTaskQuery,
+  silentError = false,
+) {
+  return request.get<
+    unknown,
+    { list: (ContentTask & { articleTitle: string })[]; total: number }
+  >('/content-articles/tasks', { params, silentError });
+}
 export function getContentGenerationConfigs(params: {
   page?: number;
   pageSize?: number;
@@ -131,9 +159,10 @@ export function getContentTasks(
     { params, silentError },
   );
 }
-export function getContentTask(id: number) {
+export function getContentTask(id: number, silentError = false) {
   return request.get<unknown, ContentTaskDetail>(
     `/content-articles/tasks/${id}`,
+    { silentError },
   );
 }
 export function adoptContentTask(id: number, version: number) {

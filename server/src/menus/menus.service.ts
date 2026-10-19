@@ -71,6 +71,18 @@ const BASE_SEED_MENUS: SeedMenu[] = [
     preserveVisibility: true,
   },
   {
+    name: '生成记录',
+    path: '/content-generation',
+    icon: '',
+    sort: 30,
+    permissionCode: 'ContentArticle.read',
+    isSystem: false,
+    parentPath: '/content-creation',
+    reconcile: true,
+    preserveVisibility: true,
+    matchByName: false,
+  },
+  {
     name: 'Agent 管理',
     path: '/agent-management',
     icon: 'MagicStick',

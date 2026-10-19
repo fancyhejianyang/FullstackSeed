@@ -1,5 +1,44 @@
 # CHANGELOG
 
+### 2026-10-19 生成记录独立模块与文章最新生成稿预览
+
+- 新增“内容创作 → 生成记录”独立页面 `/content-generation`，复用 Demo 的 PageContainer / Table / Dialog 结构。支持分页、文章标题及状态筛选；文章列表顶部进入全部记录，行内及查看弹窗入口按 articleId 定位。菜单种子幂等补齐，沿用 ContentArticle.read，采用沿用 ContentArticle.update，不扩大授权。
+- 新增 `GET /content-articles/tasks` 标量记录列表和 `GET /content-articles/:id/preview` 最新预览接口；查询参数 page/pageSize/keyword/articleId/status 前后端对齐。列表按任务 ID 倒序，只查询本人及未删除文章的任务，不加载 result/snapshot/editorNotes 等大字段。无新增数据库列或迁移，原有单篇记录及采用接口兼容保留。
+- 文章编辑/查看弹窗移除嵌套历史记录表。查看每次打开重新读取接口，默认展示最新一次生成稿，已保存正文独立页签；无任务时展示已保存正文。最新任务失败、待补充、排队或中断时不回退旧成功稿；查看和刷新不自动采用、不重新生成、不覆盖文章。
+- 任务详情每次打开重读当前任务及文章版本，相关读取接口禁止缓存；前端隔离关闭、切换、卸载后的迟到响应，读取失败清空旧详情并提供手动重试。活跃任务每 3 秒刷新，选中详情不在当前列表页时仍更新；完成停止轮询，后台刷新保留展开素材区。采用仍需确认和服务端版本校验，并防止写回期间误关闭/离开。
+- 同步生成成功提示与设计规范，修正 Dialog Teleport 后的长文本换行作用域。正文、快照与编辑提示仍安全转义，复制只取当前所选正文，不混入提示。
+- 验证：后端 46 套 / 464 项 Jest、前端 124 项 Node 离线回归通过；前端无输出类型检查、后端变更文件 ESLint、Vue 模板/scoped CSS 编译及 diff 空白检查通过；新增模块执行后端 build，TypeORM 实体检查和 Nest 构建通过。未启动/重启服务、连接真实数据库、调用真实模型或进行浏览器视觉验收；前端未执行产物构建。
+- 部署后需更新前后端，后端启动时补齐新菜单，刷新登录菜单可见。无自动生成或历史数据改写。`web/components.d.ts` 原有未提交变更 SHA256 保持不变，不纳入提交。
+
+新增文件（2）：
+
+- `web/src/views/content-generation/Index.vue`
+- `web/src/views/content-article/preview.test.mjs`
+
+修改文件（19）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/content-articles/content-articles.controller.ts`
+- `server/src/content-articles/content-generation.service.ts`
+- `server/src/content-articles/content-generation.service.spec.ts`
+- `server/src/content-articles/dto/content-article.dto.ts`
+- `server/src/menus/menus.service.ts`
+- `server/src/menus/menus.service.spec.ts`
+- `web/src/api/contentArticle.ts`
+- `web/src/router/index.ts`
+- `web/src/router/systemNavigation.test.mjs`
+- `web/src/views/content-article/Edit.vue`
+- `web/src/views/content-article/Generate.vue`
+- `web/src/views/content-article/Index.vue`
+- `web/src/views/content-article/Tasks.vue`
+- `web/src/views/content-article/View.vue`
+- `web/src/views/content-article/contentArticle.test.mjs`
+- `web/src/views/content-article/generate.test.mjs`
+- `web/src/views/content-article/tasks.test.mjs`
+
+删除文件：无。
+
 ### 2026-10-19 取消文章生成的新闻素材强制审核门槛
 
 - 调整后台固定写作提示词：默认直接按作者素材、观点和模板成稿，不再因缺少新闻来源链接、准确日期、学校/课程、当事方回应或处理结果而要求补全后才能生成。材料较少时省略细节、缩短篇幅或围绕主题评论，不输出核查清单、写作方案，不逐项追问措辞。配置中的身份和风格继续生效，但“新闻工作者”等称谓不自动附加采访、核验或审核流程；未改用户保存的模板与 AI 配置。
