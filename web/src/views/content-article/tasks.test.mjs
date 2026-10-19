@@ -100,7 +100,7 @@ function harness() {
       'window',
       compile(
         parse(source).descriptor.scriptSetup.content +
-          '\nexport { adoptCover, hasCover, fetchTasks, showDetail, adopt, detail, tableRef, pollFailed, hasCandidate, copyResult, closeDetail, detailVisible, adoptTitle, adoptConfirmation, hasGeneratedTitle, copyTitle };',
+          '\nexport { hasCover, fetchTasks, showDetail, adopt, detail, tableRef, pollFailed, hasCandidate, copyResult, closeDetail, detailVisible, adoptConfirmation, hasGeneratedTitle };',
       ),
     )(
       (name) => {
@@ -365,41 +365,25 @@ test('选中的活跃详情不在当前分页时仍会刷新，并且只保留�
   h.close();
 });
 
-test('生成标题与正文分开复制，采用默认携带标题，取消勾选可保留原标题', async () => {
+test('生成记录只复制正文，统一采纳自动包含推荐标题', async () => {
   const h = harness();
   h.state.detail.generatedTitle = '发布标题';
   await h.showDetail({ id: 20 });
   assert.equal(h.hasGeneratedTitle.value, true);
-  assert.equal(h.adoptTitle.value, true);
   assert.match(h.adoptConfirmation.value, /替换文章标题与正文/);
-  await h.copyTitle();
   await h.copyResult();
   assert.deepEqual(
     h.calls.filter((call) => call[0] === 'copy'),
-    [
-      ['copy', '发布标题'],
-      ['copy', '候选正文'],
-    ],
+    [['copy', '候选正文']],
   );
-  h.adoptTitle.value = false;
   await h.showDetail({ id: 20 }, true);
-  assert.equal(h.adoptTitle.value, false);
-  assert.doesNotMatch(h.adoptConfirmation.value, /标题与正文/);
+  assert.match(h.adoptConfirmation.value, /标题与正文/);
   await h.adopt();
   assert.deepEqual(
     h.calls.find((call) => call[0] === 'adopt'),
-    ['adopt', 20, 2, false, false],
-  );
-  h.close();
-  const withTitle = harness();
-  withTitle.state.detail.generatedTitle = '发布标题';
-  await withTitle.showDetail({ id: 20 });
-  await withTitle.adopt();
-  assert.deepEqual(
-    withTitle.calls.find((call) => call[0] === 'adopt'),
     ['adopt', 20, 2, true, false],
   );
-  withTitle.close();
+  h.close();
 });
 
 test('独立生成记录展示封面并在生成中持续轮询，不提前采纳', async () => {
@@ -416,10 +400,9 @@ test('独立生成记录展示封面并在生成中持续轮询，不提前采�
   h.state.detail.coverStatus = 'succeeded';
   h.state.detail.coverData = { url: '/uploads/cover.png' };
   await h.showDetail({ id: 20 }, true);
-  assert.equal(h.adoptCover.value, false);
-  h.adoptCover.value = true;
+  assert.equal(h.hasCover.value, true);
   await h.showDetail({ id: 20 }, true);
-  assert.equal(h.adoptCover.value, true);
+  assert.match(h.adoptConfirmation.value, /正文及封面/);
   await h.adopt();
   assert.deepEqual(
     h.calls.find(([kind]) => kind === 'adopt'),
@@ -428,16 +411,14 @@ test('独立生成记录展示封面并在生成中持续轮询，不提前采�
   h.close();
 });
 
-test('旧记录不伪造生成标题；失败及待补充记录不复制标题或采用', async () => {
+test('旧记录不伪造生成标题；失败及待补充记录不复制正文或采用', async () => {
   const h = harness();
   await h.showDetail({ id: 20 });
   assert.equal(h.hasGeneratedTitle.value, false);
-  assert.equal(h.adoptTitle.value, false);
-  await h.copyTitle();
   for (const status of ['failed', 'needs_input', 'pending']) {
     h.state.detail = { ...h.state.detail, status, generatedTitle: '不应使用' };
     await h.showDetail({ id: 20 });
-    await h.copyTitle();
+    await h.copyResult();
     await h.adopt();
     assert.equal(h.hasGeneratedTitle.value, false);
   }
@@ -446,4 +427,46 @@ test('旧记录不伪造生成标题；失败及待补充记录不复制标题�
     false,
   );
   h.close();
+});
+
+test('生成记录统一采纳可用内容，不采用缺失标题或无效封面', async () => {
+  for (const title of ['推荐标题', undefined, null, '', '  ']) {
+    for (const [coverStatus, url, expectedCover] of [
+      ['succeeded', '/uploads/cover.png', true],
+      ['succeeded', '  ', false],
+      ['succeeded', undefined, false],
+      ['failed', '/uploads/stale.png', false],
+      ['skipped', undefined, false],
+      ['interrupted', undefined, false],
+      [undefined, undefined, false],
+    ]) {
+      const h = harness();
+      h.state.detail.generatedTitle = title;
+      h.state.detail.coverStatus = coverStatus;
+      h.state.detail.coverData = url === undefined ? null : { url };
+      await h.showDetail({ id: 20 });
+      const expectedTitle = !!title?.trim();
+      assert.equal(h.adoptConfirmation.value.includes('标题'), expectedTitle);
+      assert.equal(h.adoptConfirmation.value.includes('封面'), expectedCover);
+      await h.adopt();
+      assert.deepEqual(
+        h.calls.find(([kind]) => kind === 'adopt'),
+        ['adopt', 20, 2, expectedTitle, expectedCover],
+      );
+      await h.adopt();
+      assert.equal(h.calls.filter(([kind]) => kind === 'adopt').length, 1);
+      h.close();
+    }
+  }
+});
+
+test('生成记录只有一个采纳操作，不再提供标题复制或独立勾选', () => {
+  const template = parse(source).descriptor.template.content;
+  assert.doesNotMatch(
+    source,
+    /Checkbox|copyTitle|v-model="adopt(?:Title|Cover)"/,
+  );
+  assert.equal((template.match(/@click="adopt"/g) || []).length, 1);
+  assert.match(template, /采纳并保存/);
+  assert.match(template, /@click="copyResult"/);
 });

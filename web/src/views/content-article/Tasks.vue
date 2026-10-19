@@ -4,7 +4,6 @@ import { ElMessage } from 'element-plus';
 import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
 import Table, { type TableColumn } from '@/components/Table.vue';
 import Button from '@/components/Button.vue';
-import Checkbox from '@/components/Checkbox.vue';
 import Dialog from '@/components/Dialog.vue';
 import CoverPreview from './CoverPreview.vue';
 import type { FormField } from '@/components/Form.vue';
@@ -51,18 +50,17 @@ const hasCandidate = computed(
 const hasGeneratedTitle = computed(
   () => hasCandidate.value && !!detail.value?.generatedTitle?.trim(),
 );
-const adoptTitle = ref(false);
-const adoptCover = ref(false);
 const hasCover = computed(
   () =>
-    detail.value?.coverStatus === 'succeeded' && !!detail.value.coverData?.url,
+    detail.value?.coverStatus === 'succeeded' &&
+    !!detail.value.coverData?.url?.trim(),
 );
 const adoptConfirmation = computed(() =>
-  adoptCover.value && hasCover.value
-    ? `采用后将替换文章${adoptTitle.value && hasGeneratedTitle.value ? '标题、' : ''}正文及封面并立即保存，确认采用？`
-    : adoptTitle.value && hasGeneratedTitle.value
-      ? '采用后将替换文章标题与正文并立即保存，确认采用？'
-      : '采用后将替换文章正文并立即保存，确认采用？',
+  hasCover.value
+    ? `采纳后将替换文章${hasGeneratedTitle.value ? '标题、' : ''}正文及封面并立即保存，确认采纳？`
+    : hasGeneratedTitle.value
+      ? '采纳后将替换文章标题与正文并立即保存，确认采纳？'
+      : '采纳后将替换文章正文并立即保存，确认采纳？',
 );
 const adopting = ref(false);
 const pollFailed = ref(false);
@@ -159,17 +157,12 @@ async function fetchTasks(params: ContentTaskQuery) {
 }
 async function showDetail(row: Pick<ContentTask, 'id'>, silent = false) {
   if (adopting.value) return;
-  const initializeTitle =
-    !detailVisible.value ||
-    selectedId.value !== row.id ||
-    !detail.value?.generatedTitle;
   const sequence = ++detailSequence;
   detailReadFailed = false;
   selectedId.value = row.id;
   detailVisible.value = true;
   loadingDetail.value = true;
   if (!silent || detail.value?.id !== row.id) {
-    adoptCover.value = false;
     detail.value = null;
     article.value = null;
   }
@@ -180,8 +173,6 @@ async function showDetail(row: Pick<ContentTask, 'id'>, silent = false) {
     if (alive && sequence === detailSequence) {
       detail.value = result;
       article.value = currentArticle;
-      if (initializeTitle) adoptTitle.value = hasGeneratedTitle.value;
-      if (!hasGeneratedTitle.value) adoptTitle.value = false;
       if (isActiveTask(result)) {
         clearTimeout(timer);
         timer = setTimeout(() => {
@@ -220,14 +211,14 @@ async function adopt() {
     const result = await adoptContentTask(
       taskId,
       article.value!.version,
-      adoptTitle.value && hasGeneratedTitle.value,
-      adoptCover.value && hasCover.value,
+      hasGeneratedTitle.value,
+      hasCover.value,
     );
     if (!alive) return;
     if (detail.value?.id === taskId) detail.value.status = 'adopted';
     article.value = result;
     emit('adopted', result);
-    ElMessage.success('已采用并保存');
+    ElMessage.success('已采纳并保存');
     await tableRef.value?.refresh();
   } catch {
     /* 冲突时保留候选正文，允许复制后手工合并。 */
@@ -246,21 +237,10 @@ async function copyResult() {
     ElMessage.warning('复制失败，请选中正文手动复制');
   }
 }
-async function copyTitle() {
-  if (!hasGeneratedTitle.value || loadingDetail.value) return;
-  try {
-    await navigator.clipboard.writeText(detail.value!.generatedTitle!);
-    ElMessage.success('生成标题已复制');
-  } catch {
-    ElMessage.warning('复制失败，请选中标题手动复制');
-  }
-}
 function closeDetail() {
   if (adopting.value) return;
   ++detailSequence;
   detailReadFailed = false;
-  adoptTitle.value = false;
-  adoptCover.value = false;
   selectedId.value = null;
   detail.value = null;
   article.value = null;
@@ -409,23 +389,7 @@ onBeforeUnmount(() => {
             </div>
             <p v-else>该历史记录未生成标题，采用正文时保留原标题。</p>
             <div class="generation-records__heading">
-              <Button
-                v-if="hasGeneratedTitle"
-                :disabled="loadingDetail"
-                @click="copyTitle"
-                >复制生成标题</Button
-              >
               <Button @click="copyResult">复制候选正文</Button>
-              <Checkbox
-                v-if="
-                  hasGeneratedTitle &&
-                  detail.status === 'succeeded' &&
-                  user.hasPermission('ContentArticle.update')
-                "
-                v-model="adoptTitle"
-                :disabled="adopting || loadingDetail"
-                label="同时采用生成标题"
-              />
               <Button
                 v-if="detail.status === 'succeeded'"
                 perm="ContentArticle.update"
@@ -439,18 +403,8 @@ onBeforeUnmount(() => {
                 confirm
                 :confirm-text="adoptConfirmation"
                 @click="adopt"
-                >采用并保存</Button
+                >采纳并保存</Button
               >
-              <Checkbox
-                v-if="
-                  hasCover &&
-                  detail.status === 'succeeded' &&
-                  user.hasPermission('ContentArticle.update')
-                "
-                v-model="adoptCover"
-                :disabled="adopting || loadingDetail || isActiveTask(detail)"
-                label="同时采用生成封面"
-              />
             </div>
             <p
               v-if="

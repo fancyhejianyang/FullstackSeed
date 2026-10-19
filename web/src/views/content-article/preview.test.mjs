@@ -37,7 +37,7 @@ function harness() {
     scope = vue.effectScope();
   const code = ts.transpileModule(
     parse(source).descriptor.scriptSetup.content +
-      '\nexport { adoptCover, hasCover, load, preview, content, copyContent, generatedTitle, copyTitle, adopt, adoptTitle, canAdopt, adopting, adoptConfirmation, canLeave, beforeClose, requestClose, beforeUnload, originalIdea };',
+      '\nexport { hasCover, load, preview, content, copyContent, generatedTitle, adopt, canAdopt, adopting, adoptConfirmation, canLeave, beforeClose, requestClose, beforeUnload, originalIdea };',
     {
       compilerOptions: {
         module: ts.ModuleKind.CommonJS,
@@ -100,6 +100,9 @@ function harness() {
                     title: adoptTitle
                       ? state.response.latestTask.generatedTitle
                       : state.response.article.title,
+                    coverUrl: adoptCover
+                      ? state.response.latestTask.coverData.url
+                      : state.response.article.coverUrl,
                     content: state.response.latestTask.result,
                     version: version + 1,
                   };
@@ -316,20 +319,16 @@ test('没有任务或历史缺少想法快照时展示文章想法；任务失�
   h.close();
 });
 
-test('最新稿展示 AI 推荐标题，复制标题不混入正文或提示', async () => {
+test('最新稿展示 AI 推荐标题，只复制正文且不混入标题或提示', async () => {
   const h = harness();
   h.state.response.latestTask.generatedTitle = 'AI 发布标题';
   h.visible.value = true;
   await flush();
   assert.equal(h.generatedTitle.value, 'AI 发布标题');
-  await h.copyTitle();
   await h.copyContent();
   assert.deepEqual(
     h.calls.filter(([kind]) => kind === 'copy'),
-    [
-      ['copy', 'AI 发布标题'],
-      ['copy', '最新生成稿'],
-    ],
+    [['copy', '最新生成稿']],
   );
   h.close();
 });
@@ -339,7 +338,6 @@ test('旧记录与最新失败结果不把原标题或错误字段当生成标�
   h.visible.value = true;
   await flush();
   assert.equal(h.generatedTitle.value, '');
-  await h.copyTitle();
   h.state.response.latestTask = {
     id: 21,
     status: 'failed',
@@ -347,7 +345,6 @@ test('旧记录与最新失败结果不把原标题或错误字段当生成标�
     result: '不可用正文',
   };
   await h.load();
-  await h.copyTitle();
   assert.equal(h.generatedTitle.value, '');
   assert.equal(
     h.calls.some(([kind]) => kind === 'copy'),
@@ -361,7 +358,6 @@ test('当前生成稿可采纳标题和正文，更新预览并通知列表，�
   h.state.response.latestTask.generatedTitle = 'AI 推荐标题';
   h.visible.value = true;
   await flush();
-  assert.equal(h.adoptTitle.value, true);
   assert.equal(h.canAdopt.value, true);
   assert.match(h.adoptConfirmation.value, /标题与正文/);
   assert.equal(
@@ -388,15 +384,14 @@ test('当前生成稿可采纳标题和正文，更新预览并通知列表，�
   h.close();
 });
 
-test('可取消标题采纳，旧记录自动只采纳正文，不把原标题当 AI 推荐', async () => {
-  for (const hasTitle of [true, false]) {
+test('旧记录缺少或只有空白标题时只采纳正文，保留原标题', async () => {
+  for (const title of [undefined, null, '', '  \n ']) {
     const h = harness();
-    if (hasTitle) h.state.response.latestTask.generatedTitle = '新标题';
+    h.state.response.latestTask.generatedTitle = title;
     h.visible.value = true;
     await flush();
-    h.adoptTitle.value = false;
     await h.load(true);
-    assert.equal(h.adoptTitle.value, false);
+    assert.equal(h.generatedTitle.value, '');
     assert.doesNotMatch(h.adoptConfirmation.value, /标题与正文/);
     await h.adopt();
     assert.deepEqual(
@@ -511,27 +506,79 @@ test('封面生成中保持正文可读与轮询，终态才允许采纳，失�
   h.close();
 });
 
-test('候选封面默认不覆盖，明确勾选才随采纳请求保存，切换文章清空选择', async () => {
+test('一次采纳同时保存生成标题、正文与成功封面，并通知列表更新', async () => {
   const h = harness();
+  h.state.response.article.coverUrl = '/uploads/old.png';
+  h.state.response.latestTask.generatedTitle = 'AI 推荐标题';
   h.state.response.latestTask.coverStatus = 'succeeded';
   h.state.response.latestTask.coverData = { url: '/uploads/candidate.png' };
   h.visible.value = true;
   await flush();
   assert.equal(h.hasCover.value, true);
-  assert.equal(h.adoptCover.value, false);
-  h.adoptCover.value = true;
   await h.load(true);
-  assert.equal(h.adoptCover.value, true);
-  assert.match(h.adoptConfirmation.value, /正文及封面/);
+  assert.match(h.adoptConfirmation.value, /标题、正文及封面/);
   await h.adopt();
   assert.deepEqual(
     h.calls.find(([kind]) => kind === 'adopt'),
-    ['adopt', 20, 2, false, true],
+    ['adopt', 20, 2, true, true],
   );
-  h.props.row = { id: 4 };
-  await flush();
-  assert.equal(h.adoptCover.value, false);
+  assert.equal(h.preview.value.article.title, 'AI 推荐标题');
+  assert.equal(h.preview.value.article.content, '最新生成稿');
+  assert.equal(h.preview.value.article.coverUrl, '/uploads/candidate.png');
+  assert.equal(h.calls.filter(([kind]) => kind === 'adopt').length, 1);
+  assert.equal(
+    h.calls.find(([kind, event]) => kind === 'emit' && event === 'adopted')[2]
+      .coverUrl,
+    '/uploads/candidate.png',
+  );
   h.close();
+});
+
+test('采纳只包含可用的标题和封面，失败或缺失封面保留原图', async () => {
+  for (const [coverStatus, url, expectedCover] of [
+    [undefined, undefined, false],
+    ['skipped', undefined, false],
+    ['failed', '/uploads/stale.png', false],
+    ['interrupted', '/uploads/stale.png', false],
+    ['succeeded', undefined, false],
+    ['succeeded', '  ', false],
+    ['succeeded', '/uploads/new.png', true],
+  ]) {
+    const h = harness();
+    h.state.response.article.coverUrl = '/uploads/old.png';
+    h.state.response.latestTask.coverStatus = coverStatus;
+    h.state.response.latestTask.coverData = url === undefined ? null : { url };
+    h.visible.value = true;
+    await flush();
+    assert.equal(h.hasCover.value, expectedCover);
+    assert.equal(h.adoptConfirmation.value.includes('封面'), expectedCover);
+    assert.doesNotMatch(h.adoptConfirmation.value, /标题/);
+    await h.adopt();
+    assert.deepEqual(
+      h.calls.find(([kind]) => kind === 'adopt'),
+      ['adopt', 20, 2, false, expectedCover],
+    );
+    assert.equal(h.preview.value.article.title, '标题');
+    assert.equal(
+      h.preview.value.article.coverUrl,
+      expectedCover ? url : '/uploads/old.png',
+    );
+    h.close();
+  }
+});
+
+test('查看页只保留统一采纳、复制正文和关闭，不再分散选择或复制标题', () => {
+  const template = parse(source).descriptor.template.content;
+  assert.doesNotMatch(
+    source,
+    /Checkbox|copyTitle|v-model="adopt(?:Title|Cover)"/,
+  );
+  assert.equal((template.match(/@click="adopt"/g) || []).length, 1);
+  const footer = template.slice(template.indexOf('<template #footer>'));
+  assert.deepEqual(
+    [...footer.matchAll(/@click="([^"]+)"/g)].map((match) => match[1]),
+    ['copyContent', 'adopt', 'requestClose'],
+  );
 });
 
 test('采纳响应迟到时不回填另一篇文章或卸载后的界面', async () => {
