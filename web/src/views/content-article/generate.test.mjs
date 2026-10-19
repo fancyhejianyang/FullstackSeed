@@ -9,6 +9,13 @@ const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
 const generator = await read('./Generate.vue');
 const index = await read('./Index.vue');
 const requestHelper = await read('./generationRequest.ts');
+test('生成说明不再把新闻来源与日期作为成稿前置要求', () => {
+  assert.match(generator, /按已保存的标题、想法和模板直接成稿/);
+  assert.doesNotMatch(
+    generator,
+    /新闻类请先在想法中提供来源|素材不足时在生成记录中提示补充/,
+  );
+});
 async function flush() {
   for (let i = 0; i < 16; i++) await Promise.resolve();
   await vue.nextTick();

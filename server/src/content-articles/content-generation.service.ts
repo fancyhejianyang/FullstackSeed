@@ -319,7 +319,11 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
             model: config.model,
             temperature: config.temperature,
             thinkingParameters: config.thinkingParameters,
-            systemPrompt: buildContentWritingPrompt(task.snapshot),
+            systemPrompt: buildContentWritingPrompt(
+              task.snapshot,
+              new Date(),
+              task.createdAt,
+            ),
             question: JSON.stringify({ title, idea }),
           }),
       );

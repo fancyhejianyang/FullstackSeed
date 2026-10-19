@@ -1,5 +1,32 @@
 # CHANGELOG
 
+### 2026-10-19 取消文章生成的新闻素材强制审核门槛
+
+- 调整后台固定写作提示词：默认直接按作者素材、观点和模板成稿，不再因缺少新闻来源链接、准确日期、学校/课程、当事方回应或处理结果而要求补全后才能生成。材料较少时省略细节、缩短篇幅或围绕主题评论，不输出核查清单、写作方案，不逐项追问措辞。配置中的身份和风格继续生效，但“新闻工作者”等称谓不自动附加采访、核验或审核流程；未改用户保存的模板与 AI 配置。
+- 仅保留不编造事实/来源/引语、不冒充已独立核实、不将未证实个人指控或歧义行为写成确定事实等基础要求。未接入新闻检索或外链读取，本次没有启用联网、真实调用模型或自动重新生成历史任务。
+- 每次实际模型调用加入服务器当前时间、任务提交时间及 Asia/Shanghai 时区；任务时间仅用于理解相对日期，不当成事件日期。禁止拿知识截止日期代替当前日期或据此断言素材时间线错误；日期由运行时生成，不硬编码，不新增数据库列或接口字段。
+- 默认返回 draft，编辑提示默认空且仅在必要时建议 1～2 条；只有完全无法理解写作主题时才请求补充。解析器继续兼容旧版六条提示与历史 needs_input，模型真实返回待补充时仍保留状态，不伪装成功、不自动追加计费调用。原有正文格式、权限、幂等、候选采用和版本校验保持不变。
+- 同步生成弹窗与 AI 配置编辑页说明，移除“新闻类请先提供来源、日期”等强制前置文案；更新设计规范。既有历史任务及候选正文保持原样，新部署后的生成调用使用新规则，无需新增数据库迁移。
+- 验证：后端 46 套 / 455 项 Jest、前端 115 项 Node 离线回归通过；前后端无输出类型检查、变更后端 ESLint、Vue 模板/scoped CSS 编译与 diff 空白检查通过。覆盖默认成稿、配置/模板不被篡改、上海时区跨日/跨年、任务提交时间传入及旧状态兼容。未 build、启动/重启服务、连接真实数据库或调用真实模型；实际文章效果需重新生成后验收。
+- `web/components.d.ts` 已有未提交内容保持原样，SHA256 未变，不纳入本次提交。
+
+新增文件：无。
+
+修改文件（10）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/content-articles/content-writing.ts`
+- `server/src/content-articles/content-writing.spec.ts`
+- `server/src/content-articles/content-generation.service.ts`
+- `server/src/content-articles/content-generation.service.spec.ts`
+- `web/src/views/ai-feature-config/Edit.vue`
+- `web/src/views/ai-feature-config/contentFormat.test.mjs`
+- `web/src/views/content-article/Generate.vue`
+- `web/src/views/content-article/generate.test.mjs`
+
+删除文件：无。
+
 ### 2026-10-19 文章记住生成设置与一键重新生成
 
 - 文章新增可空 `aiConfigId/templateId`，前后端字段一致。已有配置时，列表行内和顶部单选“AI 生成”读取最新已保存文章后直接提交后台任务，不再重复弹出选择窗口；未配置时仍先选择，点击“开始生成”才写入。可选的通用写作也记住 AI 配置，不引入批量生成或自动调用。

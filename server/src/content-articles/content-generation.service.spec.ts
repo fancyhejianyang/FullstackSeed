@@ -317,6 +317,23 @@ describe('持久化文章生成任务', () => {
     expect(h.articles.save).not.toHaveBeenCalled();
     expect(h.article.content).toBe('原文');
   });
+  it('实际调用带当前时间和任务提交时间，使用取消新闻审核门槛后的成稿提示', async () => {
+    const h = setup();
+    h.task.createdAt = new Date('2026-10-18T16:30:00Z');
+    h.tasks.findOne.mockResolvedValue(h.task);
+    await h.service.tick();
+    const prompt = (
+      h.providers.callChat.mock.calls[0] as unknown as [
+        { systemPrompt: string },
+      ]
+    )[0].systemPrompt;
+    expect(prompt).toMatch(
+      /当前服务器时间为 \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/,
+    );
+    expect(prompt).toContain('任务提交时间为 2026-10-19 00:30:00');
+    expect(prompt).toContain('默认直接输出 draft 正文');
+    expect(h.providers.callChat).toHaveBeenCalledTimes(1);
+  });
   it('格式写入任务快照，后续配置修改不会影响已排队任务', async () => {
     const h = setup();
     await h.service.submit(3, h.dto, 7);
@@ -338,7 +355,7 @@ describe('持久化文章生成任务', () => {
       }),
     );
   });
-  it('核心素材不足结束为待补充，释放活跃锁，不保存或采用提示正文', async () => {
+  it('模型仍返回待补充时保留真实状态，释放活跃锁，不伪装成功或重复调用', async () => {
     const h = setup();
     h.tasks.findOne.mockResolvedValue(h.task);
     h.providers.callChat.mockResolvedValue({

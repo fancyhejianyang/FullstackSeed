@@ -121,3 +121,21 @@ test('配置模板可编译，创作模式无固定 Markdown 提示', () => {
   );
   assert.doesNotMatch(source, /文章正文固定输出 Markdown/);
 });
+test('内容创作提示改为直接成稿，用户保存的身份与模板偏好不被覆盖', async () => {
+  const h = harness();
+  h.fillForm({
+    name: '写作',
+    featureType: 'contentCreation',
+    responseFormat: 'text',
+    systemPrompt: '',
+  });
+  await vue.nextTick();
+  assert.match(
+    h.fields.value.find((field) => field.prop === 'systemPrompt').hint,
+    /不设置新闻素材审核门槛/,
+  );
+  h.form.systemPrompt = '你是一名新闻工作者';
+  assert.equal(h.buildPayload().systemPrompt, '你是一名新闻工作者');
+  assert.doesNotMatch(source, /缺少关键素材时单独提示补充/);
+  h.close();
+});
