@@ -213,17 +213,17 @@ async function handleLogout() {
   font-weight: 600;
 }
 .layout__aside :deep(.el-sub-menu.is-active > .el-sub-menu__title) {
-  background: #263445;
-  box-shadow: inset 3px 0 0 #409eff;
+  background: #304156;
+  box-shadow: none;
 }
 .layout__aside :deep(.el-menu-item.is-active) {
   color: #fff;
   font-weight: 600;
-  background: #263445;
+  background: #1f5f99;
   box-shadow: inset 3px 0 0 #409eff;
 }
 .layout__aside :deep(.el-menu-item.is-active:hover) {
-  background: #263445;
+  background: #1f5f99;
 }
 .layout__aside :deep(.el-sub-menu .el-menu) {
   background: #304156;
