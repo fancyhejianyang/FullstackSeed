@@ -28,7 +28,12 @@ const form = reactive<DocumentParseRuleForm>({
 });
 
 const fields = computed<FormField[]>(() => [
-  { prop: 'name', label: '规则名称', type: 'input', placeholder: '如 系统默认文档解析规则' },
+  {
+    prop: 'name',
+    label: '规则名称',
+    type: 'input',
+    placeholder: '如 系统默认文档解析规则',
+  },
   {
     prop: 'textMaxSizeMb',
     label: 'TXT目标大小',
@@ -43,7 +48,12 @@ const fields = computed<FormField[]>(() => [
     prop: 'textMaxLines',
     label: 'TXT最大行数',
     component: 'InputNumber',
-    componentProps: { mode: 'integer', min: 100, max: 1000000, suffixText: '行' },
+    componentProps: {
+      mode: 'integer',
+      min: 100,
+      max: 1000000,
+      suffixText: '行',
+    },
     hint:
       form.textMaxLines <= 10000
         ? `当前 ${form.textMaxLines} 行：会较早按行数拆分，适合结构复杂或超长日志文本。`
@@ -85,10 +95,18 @@ const fields = computed<FormField[]>(() => [
 
 const rules: FormRules = {
   name: [{ required: true, message: '请输入规则名称', trigger: 'blur' }],
-  textMaxSizeMb: [{ required: true, message: '请输入 TXT 目标大小', trigger: 'blur' }],
-  textMaxLines: [{ required: true, message: '请输入 TXT 最大行数', trigger: 'blur' }],
-  pdfPagesPerPart: [{ required: true, message: '请输入 PDF 每份页数', trigger: 'blur' }],
-  wordParagraphsPerPart: [{ required: true, message: '请输入 Word 每份段落数', trigger: 'blur' }],
+  textMaxSizeMb: [
+    { required: true, message: '请输入 TXT 目标大小', trigger: 'blur' },
+  ],
+  textMaxLines: [
+    { required: true, message: '请输入 TXT 最大行数', trigger: 'blur' },
+  ],
+  pdfPagesPerPart: [
+    { required: true, message: '请输入 PDF 每份页数', trigger: 'blur' },
+  ],
+  wordParagraphsPerPart: [
+    { required: true, message: '请输入 Word 每份段落数', trigger: 'blur' },
+  ],
 };
 
 function fillForm(data: DocumentParseRule) {
@@ -140,19 +158,36 @@ onMounted(loadConfig);
       <div class="document-parse-rule__header">
         <div>
           <h2>上传预拆分规则</h2>
-          <p>用于大文件进入解析任务前的预处理。TXT/MD 按大小和行数拆分，PDF 按页数规划，Word 按段落规划。</p>
-          <p class="document-parse-rule__tip">达到目标后会优先向后寻找句末或段落结束，避免截断完整语义。预拆分不替代后续知识库分片。</p>
+          <p>
+            用于大文件进入解析任务前的预处理。TXT/MD 按大小和行数拆分，PDF
+            按页数规划，Word 按段落规划。
+          </p>
+          <p class="document-parse-rule__tip">
+            达到目标后会优先向后寻找句末或段落结束，避免截断完整语义。预拆分不替代后续知识库分片。
+          </p>
         </div>
         <el-tag :type="form.isEnabled ? 'success' : 'info'">
           {{ form.isEnabled ? '启用中' : '已停用' }}
         </el-tag>
       </div>
 
-      <Form ref="formRef" v-model="form" :fields="fields" :rules="rules" label-width="130px" />
+      <Form
+        ref="formRef"
+        v-model="form"
+        :fields="fields"
+        :rules="rules"
+        label-width="130px"
+      />
 
       <div class="document-parse-rule__footer">
         <span>{{ updatedAt ? `最后更新：${updatedAt}` : '尚未保存配置' }}</span>
-        <Button type="primary" icon="Check" :loading="submitting" @click="handleSubmit">保存配置</Button>
+        <Button
+          perm="KnowledgeBase.update"
+          icon="Check"
+          :loading="submitting"
+          @click="handleSubmit"
+          >保存配置</Button
+        >
       </div>
     </div>
   </PageContainer>

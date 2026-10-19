@@ -1,5 +1,83 @@
 # CHANGELOG
 
+### 2026-10-19 首页受控板块配置、运营看板与第三方配置拆分
+
+- 首页改为真实聚合数据：核心指标、Agent 趋势、业务健康、产品/SKU 分布、客服任务趋势、知识健康、待办异常、最近动态和快捷入口，共九种注册板块。关闭或无权限的板块不查询，混合卡片按指标裁剪，单块错误隔离，缺失指标不伪造为 0。
+- 新增“系统管理 → 首页配置”：卡片目录、静态示意预览、勾选、标题/跨度/顺序/白名单参数设置、保存草稿、发布与前一版回退；未保存离开提示。前后端契约使用 instanceId/widgetKey/schemaVersion/layout/params，禁止任意 SQL、URL、HTML、脚本与图表配置。数据库事务、行锁与 revision 校验避免旧版本覆盖，发布/回退记入安全审计。
+- 新增独立第三方配置及只读服务概览，迁移 AI、微信、OSS/CDN、MinerU、向量化入口；文档解析规则归知识库，旧地址重定向。种子保留原菜单 ID 与可见性，重复启动不重复建菜单。第三方读写权限拆分到各模块，普通角色不自动继承旧 Menu.read 的写权限。
+- 业务表单改用安全服务选项投影，避免权限拆分误伤已有账号/模型选择；自动模型测试遵守对应 update 权限。OSS 不再回传 AccessKey/Secret，空值保留，单独清除需二次确认；向量 Token 留空保留。
+- 图表懒加载 ECharts 6.1.0，按实际容器响应、自动 resize/dispose、减少动态效果、richText Tooltip 与可读 ARIA；修正了自检发现的筛选框宽度、默认周期覆盖和旧图表布局参数问题。依赖检查发现 6.0 的已知 XSS 后仅升级本次新增依赖，详见设计文档的上游公告链接。
+- 数据库新增建表迁移 `1792364400000-AddDashboardConfiguration.ts`。本次未连接真实数据库、执行迁移、修改线上配置或调用付费模型；部署前需审阅迁移与普通角色权限。上线步骤、统计口径和未实施边界已同步到 `MD/首页改版设计方案.md` 与 `.design-spec.md`。
+- 验证：后端实体检查、39 个 Jest 套件 / 357 项测试、后端 build；前端 38 项 Node 测试（含契约一致性和 ECharts 6.1 实际 SVG 渲染）、完整 Vue 类型检查与生产构建；组件复用只读扫描、变更 diff 检查。新增后端代码及其余变更后端文件 ESLint 通过；`app.module.ts` 原有 10 项 require/any 规则问题已用 HEAD 原文复核一致，未混入额外重构。
+- 浏览器按 computer-use 流程使用临时本机示意 API 检查：卡片参数、7/30 天选择、发布后板块移除、回退、整页预览及第三方状态；侧栏展开的窄内容区可用。实际代码不含测试账号或演示接口。临时脚本与服务已清理，截图位于工作区外的可视化产物目录。浏览器截图为示意数据，不是生产数据验证。
+- 已知提醒：构建保留上游 Rollup 注释警告及约 560 kB（gzip 193 kB）的懒加载图表包体积提示；npm 对未变动的旧依赖树仍报告 12 项高危依赖告警，未执行跨项目 audit fix。额外执行包含所有 spec 的后端 `tsc --noEmit` 时，两个本次未修改的测试夹具仍有类型问题：`agent-workspace.service.spec.ts:300` 的 AgentApp 强转缺字段、`menus.service.spec.ts:177` 的 Date 赋 null；生产构建范围类型检查及 Jest 均通过，未混入旧测试重构。真实 MySQL 聚合、生产菜单迁移、性能与第三方连通性仍需部署环境验收。
+
+新增文件（30）：
+
+- `server/src/dashboard/dashboard-config.service.spec.ts`
+- `server/src/dashboard/dashboard-config.service.ts`
+- `server/src/dashboard/dashboard.controller.ts`
+- `server/src/dashboard/dashboard.module.ts`
+- `server/src/dashboard/dashboard.registry.spec.ts`
+- `server/src/dashboard/dashboard.registry.ts`
+- `server/src/dashboard/dashboard.service.spec.ts`
+- `server/src/dashboard/dashboard.service.ts`
+- `server/src/dashboard/dashboard.types.ts`
+- `server/src/dashboard/dto/dashboard.dto.ts`
+- `server/src/dashboard/entities/dashboard-config.entity.ts`
+- `server/src/menus/menu-structure.spec.ts`
+- `server/src/menus/menu-structure.ts`
+- `server/src/migrations/1792364400000-AddDashboardConfiguration.ts`
+- `server/src/third-party-config/third-party-config.controller.ts`
+- `server/src/third-party-config/third-party-config.module.ts`
+- `server/src/third-party-config/third-party-config.service.spec.ts`
+- `server/src/third-party-config/third-party-config.service.ts`
+- `web/src/api/dashboard.ts`
+- `web/src/api/thirdPartyConfig.ts`
+- `web/src/views/dashboard-config/Edit.vue`
+- `web/src/views/dashboard-config/Index.vue`
+- `web/src/views/dashboard-config/View.vue`
+- `web/src/views/home/components/DashboardChart.vue`
+- `web/src/views/home/components/DashboardGrid.vue`
+- `web/src/views/home/components/DashboardWidgetCard.vue`
+- `web/src/views/home/dashboard.test.mjs`
+- `web/src/views/home/dashboardChart.ts`
+- `web/src/views/home/dashboardPreview.ts`
+- `web/src/views/third-party-config/Index.vue`
+
+修改文件（26）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `MD/首页改版设计方案.md`
+- `server/src/app.module.ts`
+- `server/src/document-parse-rules/document-parse-rules.controller.ts`
+- `server/src/knowledge-ai-providers/knowledge-ai-providers.controller.ts`
+- `server/src/menus/menus.service.ts`
+- `server/src/mineru-configs/mineru-configs.controller.ts`
+- `server/src/storage-config/dto/storage-config.dto.ts`
+- `server/src/storage-config/storage-config.controller.ts`
+- `server/src/storage-config/storage-config.service.ts`
+- `server/src/users/users.service.ts`
+- `server/src/vector-configs/vector-configs.controller.ts`
+- `server/src/vector-configs/vector-configs.service.ts`
+- `web/components.d.ts`
+- `web/package-lock.json`
+- `web/package.json`
+- `web/src/api/storageConfig.ts`
+- `web/src/router/index.ts`
+- `web/src/views/HomeView.vue`
+- `web/src/views/ai-feature-config/Edit.vue`
+- `web/src/views/document-parse-rule/Index.vue`
+- `web/src/views/knowledge-ai-provider/Index.vue`
+- `web/src/views/mineru-config/Index.vue`
+- `web/src/views/storage-config/Index.vue`
+- `web/src/views/vector-config/Index.vue`
+
+删除文件：无（临时自检脚本不纳入版本库）。
+
+
+
 ### 2026-10-18 首页运营看板改版设计方案
 
 - 新增 `MD/首页改版设计方案.md`，将首页从脚手架统计卡定位为权限自适应的运营工作台，规划六项核心指标、Agent 执行趋势、产品/SKU 分布、客服 AI 任务趋势、知识库健康、待办异常、最近动态和快捷入口。

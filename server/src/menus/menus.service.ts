@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Menu } from './entities/menu.entity';
 import { CreateMenuDto, UpdateMenuDto } from './dto/menu.dto';
+import { reorganizeSystemMenus } from './menu-structure';
 
 // 菜单树节点（实体 + children）
 export interface MenuTreeNode extends Menu {
@@ -18,11 +19,12 @@ type SeedMenu = Partial<Menu> & {
   parentPath?: string;
   legacyPaths?: string[];
   reconcile?: boolean;
+  preserveVisibility?: boolean;
 };
 
 // 内置菜单种子（path 对应前端路由）
 // isSystem=true 为系统固定菜单：仅超管可见、不可分配给角色；业务菜单 isSystem=false 可分配。
-const SEED_MENUS: SeedMenu[] = [
+const BASE_SEED_MENUS: SeedMenu[] = [
   {
     name: 'Agent 管理',
     path: '/agent-management',
@@ -394,10 +396,13 @@ const SEED_MENUS: SeedMenu[] = [
   },
 ];
 
+const SEED_MENUS = reorganizeSystemMenus(BASE_SEED_MENUS);
+
 // 锁定菜单路径：前端不限制操作，后端 API 对此类菜单统一做管理员身份校验
 const PROTECTED_MENU_PATHS = [
   '/menus',
   '/system-config',
+  '/third-party-config',
   '/agent-management',
   '/chat-management',
 ];
@@ -420,6 +425,7 @@ export class MenusService implements OnModuleInit {
         parentPath,
         legacyPaths = [],
         reconcile = false,
+        preserveVisibility = false,
         ...menuSeed
       } = seed;
       const parent = parentPath
@@ -446,6 +452,9 @@ export class MenusService implements OnModuleInit {
         if (reconcile) {
           await this.menuRepository.update(exist.id, {
             ...menuSeed,
+            ...(preserveVisibility
+              ? { isSystem: exist.isSystem, isActive: exist.isActive }
+              : {}),
             parentId: parent?.id ?? menuSeed.parentId ?? null,
           });
           continue;

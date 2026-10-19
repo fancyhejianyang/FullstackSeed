@@ -100,19 +100,38 @@ const routes: RouteRecordRaw[] = [
         path: 'system-config',
         name: 'system-config',
         redirect: '/system-config/menu',
-        meta: { title: '系统配置', permission: 'Menu.read' },
+        meta: { title: '系统管理' },
       },
       {
         path: 'system-config/menu',
         name: 'system-config-menu',
         component: () => import('@/views/system/Index.vue'),
-        meta: { title: '配置菜单', permission: 'Menu.read' },
+        meta: { title: '菜单可见性配置', permission: 'Menu.read' },
       },
       {
-        path: 'system-config/ai',
+        path: 'system-config/home',
+        name: 'dashboard-config',
+        component: () => import('@/views/dashboard-config/Index.vue'),
+        meta: { title: '首页配置', permission: 'DashboardConfig.read' },
+      },
+      {
+        path: 'third-party-config',
+        redirect: '/third-party-config/overview',
+      },
+      {
+        path: 'third-party-config/overview',
+        name: 'third-party-config-overview',
+        component: () => import('@/views/third-party-config/Index.vue'),
+        meta: { title: '第三方配置' },
+      },
+      {
+        path: 'third-party-config/ai',
         name: 'system-config-ai',
         component: () => import('@/views/knowledge-ai-provider/Index.vue'),
-        meta: { title: 'AI 大模型账号', permission: 'Menu.read' },
+        meta: {
+          title: 'AI 大模型账号',
+          permission: 'KnowledgeAiProvider.read',
+        },
       },
       {
         path: 'chat-management',
@@ -228,7 +247,10 @@ const routes: RouteRecordRaw[] = [
         path: 'chat-management/routing-rules',
         name: 'chat-management-routing-rules',
         component: () => import('@/views/knowledge-routing-rule/Index.vue'),
-        meta: { title: '知识库路由规则', permission: 'KnowledgeRoutingRule.read' },
+        meta: {
+          title: '知识库路由规则',
+          permission: 'KnowledgeRoutingRule.read',
+        },
       },
       {
         path: 'chat-management/standard-qas',
@@ -240,7 +262,10 @@ const routes: RouteRecordRaw[] = [
         path: 'chat-management/colloquial-terms',
         name: 'chat-management-colloquial-terms',
         component: () => import('@/views/knowledge-colloquial-term/Index.vue'),
-        meta: { title: '口语化表达词库', permission: 'KnowledgeColloquialTerm.read' },
+        meta: {
+          title: '口语化表达词库',
+          permission: 'KnowledgeColloquialTerm.read',
+        },
       },
       {
         path: 'chat-management/records',
@@ -261,10 +286,10 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '问题记录', permission: 'Menu.read' },
       },
       {
-        path: 'system-config/wechat',
+        path: 'third-party-config/wechat',
         name: 'system-config-wechat',
         component: () => import('@/views/system/Wechat.vue'),
-        meta: { title: '微信 / 小程序', permission: 'Menu.read' },
+        meta: { title: '微信 / 小程序', permission: 'WechatConfig.read' },
       },
       {
         path: 'system-config/log-record',
@@ -279,28 +304,36 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '数据导入', permission: 'Menu.read' },
       },
       {
-        path: 'system-config/storage',
+        path: 'third-party-config/storage',
         name: 'system-config-storage',
         component: () => import('@/views/storage-config/Index.vue'),
-        meta: { title: 'OSS/CDN 配置', permission: 'Menu.read' },
+        meta: { title: 'OSS/CDN 配置', permission: 'StorageConfig.read' },
       },
       {
-        path: 'system-config/mineru',
+        path: 'third-party-config/mineru',
         name: 'system-config-mineru',
         component: () => import('@/views/mineru-config/Index.vue'),
-        meta: { title: 'MinerU 引擎配置', permission: 'Menu.read' },
+        meta: { title: 'MinerU 解析服务', permission: 'MineruConfig.read' },
       },
       {
-        path: 'system-config/vector',
+        path: 'third-party-config/vector',
         name: 'system-config-vector',
         component: () => import('@/views/vector-config/Index.vue'),
-        meta: { title: '向量化配置', permission: 'Menu.read' },
+        meta: { title: '向量化服务', permission: 'VectorConfig.read' },
       },
       {
-        path: 'system-config/document-parse',
+        path: 'knowledge-bases/document-parse',
         name: 'system-config-document-parse',
         component: () => import('@/views/document-parse-rule/Index.vue'),
-        meta: { title: '文档上传拆分规则', permission: 'Menu.read' },
+        meta: { title: '文档解析规则', permission: 'KnowledgeBase.read' },
+      },
+      ...['ai', 'wechat', 'storage', 'mineru', 'vector'].map((key) => ({
+        path: 'system-config/' + key,
+        redirect: '/third-party-config/' + key,
+      })),
+      {
+        path: 'system-config/document-parse',
+        redirect: '/knowledge-bases/document-parse',
       },
       {
         // 布局内兜底 404（保留侧边栏）

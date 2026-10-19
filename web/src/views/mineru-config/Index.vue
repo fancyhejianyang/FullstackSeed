@@ -43,7 +43,12 @@ const searchFields: FormField[] = [
       { label: '停用', value: false },
     ],
   },
-  { prop: 'keyword', label: '关键词', type: 'input', placeholder: '名称/服务地址/模型版本' },
+  {
+    prop: 'keyword',
+    label: '关键词',
+    type: 'input',
+    placeholder: '名称/服务地址/模型版本',
+  },
 ];
 
 const editVisible = ref(false);
@@ -75,6 +80,7 @@ async function batchDeleteRequest(payload: { ids: Array<string | number> }) {
 <template>
   <PageContainer title="MinerU 引擎配置">
     <Table
+      perm-module="MineruConfig"
       ref="tableRef"
       :columns="columns"
       :search-fields="searchFields"
@@ -86,8 +92,9 @@ async function batchDeleteRequest(payload: { ids: Array<string | number> }) {
       @edit="handleEdit"
     >
       <template #toolbar>
-        <Button type="primary" icon="Plus" @click="openCreate">新增配置</Button>
+        <Button perm="MineruConfig.create" @click="openCreate">新增配置</Button>
         <Button
+          perm="MineruConfig.batchDelete"
           icon="Delete"
           type="danger"
           :confirm="false"

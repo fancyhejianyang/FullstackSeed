@@ -160,6 +160,7 @@ async function handleTest() {
 <template>
   <PageContainer title="AI 大模型账号">
     <Table
+      perm-module="KnowledgeAiProvider"
       ref="tableRef"
       :columns="columns"
       :search-fields="searchFields"
@@ -172,8 +173,11 @@ async function handleTest() {
       @edit="handleEdit"
     >
       <template #toolbar>
-        <Button type="primary" icon="Plus" @click="openCreate">新增账号</Button>
+        <Button perm="KnowledgeAiProvider.create" @click="openCreate"
+          >新增账号</Button
+        >
         <Button
+          perm="KnowledgeAiProvider.batchDelete"
           icon="Delete"
           type="danger"
           :confirm="false"
@@ -185,6 +189,7 @@ async function handleTest() {
 
       <template #actions="{ row }">
         <Button
+          perm="KnowledgeAiProvider.update"
           link
           type="primary"
           icon="Connection"
@@ -239,7 +244,10 @@ async function handleTest() {
         <el-alert
           :type="testResult.isSuccess ? 'success' : 'error'"
           :title="testResult.isSuccess ? '测试成功' : '测试失败'"
-          :description="testResult.errorMessage || `耗时 ${testResult.elapsedMilliseconds} ms`"
+          :description="
+            testResult.errorMessage ||
+            `耗时 ${testResult.elapsedMilliseconds} ms`
+          "
           show-icon
           :closable="false"
         />

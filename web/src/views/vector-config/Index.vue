@@ -12,9 +12,11 @@ import {
   type VectorConfigForm,
 } from '@/api/vectorConfig';
 import {
-  getKnowledgeAiProviders,
-  type KnowledgeAiProvider,
-} from '@/api/knowledgeAiProvider';
+  getThirdPartyOptions,
+  type ProviderOption,
+} from '@/api/thirdPartyConfig';
+import { useUserStore } from '@/stores/user';
+const user = useUserStore();
 
 const formRef = ref<InstanceType<typeof Form>>();
 const loading = ref(false);
@@ -22,7 +24,7 @@ const submitting = ref(false);
 const currentId = ref<number | null>(null);
 const tokenSet = ref(false);
 const loadedConfigName = ref('');
-const providers = ref<KnowledgeAiProvider[]>([]);
+const providers = ref<ProviderOption[]>([]);
 const configReady = ref(false);
 const detectingDimension = ref(false);
 let dimensionRequestId = 0;
@@ -59,9 +61,7 @@ const modelOptions = computed(() =>
       return {
         ...item,
         disabled: unsupported,
-        label: unsupported
-          ? `${item.label}（不适用于文本索引）`
-          : item.label,
+        label: unsupported ? `${item.label}（不适用于文本索引）` : item.label,
       };
     },
   ),
@@ -71,7 +71,12 @@ const selectableModelOptions = computed(() =>
 );
 
 const fields = computed<FormField[]>(() => [
-  { prop: 'name', label: '配置名称', type: 'input', placeholder: '如 本地 Chroma 向量配置' },
+  {
+    prop: 'name',
+    label: '配置名称',
+    type: 'input',
+    placeholder: '如 本地 Chroma 向量配置',
+  },
   {
     prop: 'vectorDbType',
     label: '数据库类型',
@@ -139,7 +144,12 @@ const fields = computed<FormField[]>(() => [
     placeholder: 'knowledge_chunks',
     hint: `“${form.collectionName || '未命名'}”是向量库中的索引集合；若切换到 ${form.providerEmbeddingDimension || form.embeddingDimension || 768} 维模型，应使用空的新 Collection 或先重建索引。`,
   },
-  { prop: 'tenant', label: 'Tenant', type: 'input', placeholder: 'default_tenant' },
+  {
+    prop: 'tenant',
+    label: 'Tenant',
+    type: 'input',
+    placeholder: 'default_tenant',
+  },
   {
     prop: 'database',
     label: 'Database',
@@ -151,7 +161,9 @@ const fields = computed<FormField[]>(() => [
     label: '访问令牌',
     type: 'input',
     inputMode: 'password',
-    placeholder: tokenSet.value ? '已配置；留空表示不修改' : '本地服务通常可留空',
+    placeholder: tokenSet.value
+      ? '已配置；留空表示不修改'
+      : '本地服务通常可留空',
   },
   {
     prop: 'isEnabled',
@@ -163,12 +175,16 @@ const fields = computed<FormField[]>(() => [
 
 const rules: FormRules = {
   name: [{ required: true, message: '请输入配置名称', trigger: 'blur' }],
-  providerId: [{ required: true, message: '请选择大模型账号', trigger: 'change' }],
+  providerId: [
+    { required: true, message: '请选择大模型账号', trigger: 'change' },
+  ],
   model: [{ required: true, message: '请选择向量模型', trigger: 'change' }],
   embeddingDimension: [
     { required: true, message: '请输入向量维度', trigger: 'blur' },
   ],
-  chromaUrl: [{ required: true, message: '请输入 Chroma 地址', trigger: 'blur' }],
+  chromaUrl: [
+    { required: true, message: '请输入 Chroma 地址', trigger: 'blur' },
+  ],
 };
 
 function resetForm() {
@@ -216,12 +232,9 @@ async function loadConfig() {
   try {
     const [config, embeddingResult] = await Promise.all([
       getCurrentVectorConfig(),
-      getKnowledgeAiProviders({
-        page: 1,
-        pageSize: 200,
-      }),
+      getThirdPartyOptions(),
     ]);
-    providers.value = embeddingResult.list;
+    providers.value = embeddingResult.providers;
     if (!config) {
       resetForm();
       configReady.value = true;
@@ -259,6 +272,7 @@ watch(
 );
 
 async function detectCurrentDimension() {
+  if (!user.hasPermission('VectorConfig.update')) return;
   const requestId = ++dimensionRequestId;
   detectingDimension.value = true;
   try {
@@ -360,15 +374,14 @@ onMounted(loadConfig);
             向量模型：
             <template v-if="form.providerId && form.model">
               {{ selectedProvider?.name || '已选择账号' }}
-              <span>
-                （{{ form.model }}）
-              </span>
+              <span> （{{ form.model }}） </span>
             </template>
-          <template v-else>请选择大模型账号和向量模型</template>
+            <template v-else>请选择大模型账号和向量模型</template>
           </p>
           <p class="vector-config__tip">
             当前知识库索引只处理文本分片，请选择文本向量模型；视觉/多模态向量模型不用于这里。
-            向量服务维度默认 768；供应商模型维度填写后优先用于模型调用和校验，留空则沿用向量服务维度。
+            向量服务维度默认
+            768；供应商模型维度填写后优先用于模型调用和校验，留空则沿用向量服务维度。
             <span v-if="detectingDimension">正在检测当前模型实际维度...</span>
           </p>
         </div>
@@ -387,9 +400,18 @@ onMounted(loadConfig);
 
       <div class="vector-config__footer">
         <span class="vector-config__meta">
-          {{ loadedConfigName ? `当前配置：${loadedConfigName}` : '当前配置：尚未创建' }}
+          {{
+            loadedConfigName
+              ? `当前配置：${loadedConfigName}`
+              : '当前配置：尚未创建'
+          }}
         </span>
-        <Button type="primary" icon="Check" :loading="submitting" @click="handleSubmit">
+        <Button
+          perm="VectorConfig.update"
+          icon="Check"
+          :loading="submitting"
+          @click="handleSubmit"
+        >
           保存配置
         </Button>
       </div>

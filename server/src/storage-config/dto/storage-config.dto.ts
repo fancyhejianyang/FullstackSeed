@@ -9,6 +9,10 @@ import {
 export type StorageProvider = 'local' | 'aliyun-oss' | 'tencent-cos' | 'qiniu';
 
 export class UpdateStorageConfigDto {
+  @IsOptional()
+  @IsBoolean()
+  clearCredentials?: boolean;
+
   @IsBoolean()
   enabled: boolean;
 

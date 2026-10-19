@@ -11,14 +11,14 @@ export class DocumentParseRulesController {
   constructor(private readonly service: DocumentParseRulesService) {}
 
   @Get('current')
-  @RequirePermissions('Menu.read')
+  @RequirePermissions('KnowledgeBase.read')
   @ApiOperation({ summary: '获取当前文档解析规则' })
   findCurrent() {
     return this.service.findCurrent();
   }
 
   @Post('current')
-  @RequirePermissions('Menu.read')
+  @RequirePermissions('KnowledgeBase.update')
   @ApiOperation({ summary: '保存当前文档解析规则' })
   saveCurrent(@Body() dto: SaveDocumentParseRuleDto) {
     return this.service.saveCurrent(dto);

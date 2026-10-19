@@ -30,28 +30,28 @@ export class KnowledgeAiProvidersController {
   ) {}
 
   @Get()
-  @RequirePermissions('Menu.read')
+  @RequirePermissions('KnowledgeAiProvider.read')
   @ApiOperation({ summary: '分页查询大模型账号' })
   findAll(@Query() query: QueryKnowledgeAiProviderDto) {
     return this.knowledgeAiProvidersService.findAll(query);
   }
 
   @Get(':id')
-  @RequirePermissions('Menu.read')
+  @RequirePermissions('KnowledgeAiProvider.read')
   @ApiOperation({ summary: '大模型账号详情' })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.knowledgeAiProvidersService.findOne(id);
   }
 
   @Post()
-  @RequirePermissions('Menu.read')
+  @RequirePermissions('KnowledgeAiProvider.create')
   @ApiOperation({ summary: '创建大模型账号' })
   create(@Body() dto: CreateKnowledgeAiProviderDto) {
     return this.knowledgeAiProvidersService.create(dto);
   }
 
   @Patch(':id')
-  @RequirePermissions('Menu.read')
+  @RequirePermissions('KnowledgeAiProvider.update')
   @ApiOperation({ summary: '更新大模型账号' })
   update(
     @Param('id', ParseIntPipe) id: number,
@@ -61,28 +61,28 @@ export class KnowledgeAiProvidersController {
   }
 
   @Delete(':id')
-  @RequirePermissions('Menu.read')
+  @RequirePermissions('KnowledgeAiProvider.delete')
   @ApiOperation({ summary: '删除大模型账号' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.knowledgeAiProvidersService.remove(id);
   }
 
   @Post('batch-delete')
-  @RequirePermissions('Menu.read')
+  @RequirePermissions('KnowledgeAiProvider.batchDelete')
   @ApiOperation({ summary: '批量删除大模型账号' })
   batchRemove(@Body() dto: BatchDeleteKnowledgeAiProviderDto) {
     return this.knowledgeAiProvidersService.batchRemove(dto.ids);
   }
 
   @Post('test')
-  @RequirePermissions('Menu.read')
+  @RequirePermissions('KnowledgeAiProvider.update')
   @ApiOperation({ summary: '测试大模型账号调用' })
   test(@Body() dto: TestKnowledgeAiProviderDto) {
     return this.knowledgeAiProvidersService.test(dto);
   }
 
   @Post('validate-model')
-  @RequirePermissions('Menu.read')
+  @RequirePermissions('KnowledgeAiProvider.update')
   @ApiOperation({ summary: '验证模型可用性并清理失效模型' })
   validateModel(@Body() dto: ValidateKnowledgeAiProviderModelDto) {
     return this.knowledgeAiProvidersService.validateModel(dto);

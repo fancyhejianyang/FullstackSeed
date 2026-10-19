@@ -21,6 +21,30 @@ export interface StorageConfig {
   updatedAt: string;
 }
 
+export function publicStorageConfig(config: StorageConfig) {
+  return {
+    ...config,
+    accessKeyId: '',
+    accessKeySecret: '',
+    accessKeyIdSet: !!config.accessKeyId,
+    accessKeySecretSet: !!config.accessKeySecret,
+  };
+}
+
+export function mergeStorageCredentials(
+  current: StorageConfig,
+  dto: UpdateStorageConfigDto,
+) {
+  return {
+    accessKeyId: dto.clearCredentials
+      ? ''
+      : dto.accessKeyId?.trim() || current.accessKeyId,
+    accessKeySecret: dto.clearCredentials
+      ? ''
+      : dto.accessKeySecret?.trim() || current.accessKeySecret,
+  };
+}
+
 @Injectable()
 export class StorageConfigService {
   private readonly configPath = join(
@@ -47,6 +71,7 @@ export class StorageConfigService {
     const next = this.normalizeConfig({
       ...current,
       ...dto,
+      ...mergeStorageCredentials(current, dto),
       updatedAt: new Date().toISOString(),
     });
     await fs.mkdir(join(process.cwd(), 'storage'), { recursive: true });

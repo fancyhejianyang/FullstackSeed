@@ -40,6 +40,12 @@ const ADMIN_PERMISSION_MODULES = [
   'Role',
   'Permission',
   'Menu',
+  'DashboardConfig',
+  'KnowledgeAiProvider',
+  'WechatConfig',
+  'StorageConfig',
+  'MineruConfig',
+  'VectorConfig',
 ];
 
 // 内置权限点种子：只保存基础动作目录。

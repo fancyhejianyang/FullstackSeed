@@ -27,49 +27,49 @@ export class VectorConfigsController {
   constructor(private readonly vectorConfigsService: VectorConfigsService) {}
 
   @Get()
-  @RequirePermissions('Menu.read')
+  @RequirePermissions('VectorConfig.read')
   @ApiOperation({ summary: '分页查询向量化配置' })
   findAll(@Query() query: QueryVectorConfigDto) {
     return this.vectorConfigsService.findAll(query);
   }
 
   @Get('current')
-  @RequirePermissions('Menu.read')
+  @RequirePermissions('VectorConfig.read')
   @ApiOperation({ summary: '当前向量化配置' })
   findCurrent() {
     return this.vectorConfigsService.findCurrent();
   }
 
   @Post('detect-dimension')
-  @RequirePermissions('Menu.read')
+  @RequirePermissions('VectorConfig.update')
   @ApiOperation({ summary: '检测向量模型实际维度' })
   detectDimension(@Body() dto: DetectVectorDimensionDto) {
     return this.vectorConfigsService.detectDimension(dto);
   }
 
   @Post('current')
-  @RequirePermissions('Menu.read')
+  @RequirePermissions('VectorConfig.update')
   @ApiOperation({ summary: '保存当前向量化配置' })
   saveCurrent(@Body() dto: CreateVectorConfigDto) {
     return this.vectorConfigsService.saveCurrent(dto);
   }
 
   @Get(':id')
-  @RequirePermissions('Menu.read')
+  @RequirePermissions('VectorConfig.read')
   @ApiOperation({ summary: '向量化配置详情' })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.vectorConfigsService.findOne(id);
   }
 
   @Post()
-  @RequirePermissions('Menu.read')
+  @RequirePermissions('VectorConfig.create')
   @ApiOperation({ summary: '创建向量化配置' })
   create(@Body() dto: CreateVectorConfigDto) {
     return this.vectorConfigsService.create(dto);
   }
 
   @Patch(':id')
-  @RequirePermissions('Menu.read')
+  @RequirePermissions('VectorConfig.update')
   @ApiOperation({ summary: '更新向量化配置' })
   update(
     @Param('id', ParseIntPipe) id: number,
@@ -79,14 +79,14 @@ export class VectorConfigsController {
   }
 
   @Delete(':id')
-  @RequirePermissions('Menu.read')
+  @RequirePermissions('VectorConfig.delete')
   @ApiOperation({ summary: '删除向量化配置' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.vectorConfigsService.remove(id);
   }
 
   @Post('batch-delete')
-  @RequirePermissions('Menu.read')
+  @RequirePermissions('VectorConfig.batchDelete')
   @ApiOperation({ summary: '批量删除向量化配置' })
   batchRemove(@Body() dto: BatchDeleteVectorConfigDto) {
     return this.vectorConfigsService.batchRemove(dto.ids);

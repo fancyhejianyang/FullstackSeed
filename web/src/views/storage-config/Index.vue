@@ -61,16 +61,37 @@ const fields: FormField[] = [
     type: 'input',
     placeholder: '如 uploads 或 tenant-a/uploads',
   },
-  { prop: 'bucket', label: 'Bucket', type: 'input', placeholder: 'OSS/COS/Kodo Bucket 名称' },
-  { prop: 'region', label: 'Region', type: 'input', placeholder: '如 oss-cn-hangzhou' },
-  { prop: 'endpoint', label: 'Endpoint', type: 'input', placeholder: '如 https://oss-cn-hangzhou.aliyuncs.com' },
-  { prop: 'accessKeyId', label: 'AccessKey', type: 'input' },
+  {
+    prop: 'bucket',
+    label: 'Bucket',
+    type: 'input',
+    placeholder: 'OSS/COS/Kodo Bucket 名称',
+  },
+  {
+    prop: 'region',
+    label: 'Region',
+    type: 'input',
+    placeholder: '如 oss-cn-hangzhou',
+  },
+  {
+    prop: 'endpoint',
+    label: 'Endpoint',
+    type: 'input',
+    placeholder: '如 https://oss-cn-hangzhou.aliyuncs.com',
+  },
+  {
+    prop: 'accessKeyId',
+    label: 'AccessKey',
+    type: 'input',
+    inputMode: 'password',
+    placeholder: '留空保留已保存的 AccessKey',
+  },
   {
     prop: 'accessKeySecret',
     label: 'Secret',
     type: 'input',
     inputMode: 'password',
-    placeholder: '保存后仅用于服务端上传，后续可改为加密存储',
+    placeholder: '留空保留已保存的 Secret',
   },
 ];
 
@@ -92,11 +113,12 @@ async function fetchConfig() {
   }
 }
 
-async function handleSave() {
+async function handleSave(clearCredentials = false) {
   await formRef.value?.validate();
   saving.value = true;
   try {
-    fillForm(await updateStorageConfig({ ...form }));
+    const { updatedAt, accessKeyIdSet, accessKeySecretSet, ...payload } = form;
+    fillForm(await updateStorageConfig({ ...payload, clearCredentials }));
     ElMessage.success('存储配置已保存');
   } finally {
     saving.value = false;
@@ -127,12 +149,31 @@ onMounted(fetchConfig);
 
       <div class="storage-config__footer">
         <Button
+          perm="StorageConfig.update"
           :type="getPermissionActionColor('update')"
           :loading="saving"
           @click="(_, done) => done(handleSave())"
         >
           保存配置
         </Button>
+        <Button
+          v-if="form.accessKeyIdSet || form.accessKeySecretSet"
+          perm="StorageConfig.update"
+          :auto-type="false"
+          type="danger"
+          :disabled="saving || loading"
+          :confirm="true"
+          confirm-text="清除已保存的存储凭据？依赖此配置的上传可能失败。"
+          @click="(_, done) => done(handleSave(true))"
+          >清除凭据</Button
+        >
+        <el-text type="info"
+          >凭据{{
+            form.accessKeyIdSet && form.accessKeySecretSet
+              ? '已配置'
+              : '未完整配置'
+          }}</el-text
+        >
         <el-text v-if="form.updatedAt" type="info">
           上次保存：{{ form.updatedAt }}
         </el-text>

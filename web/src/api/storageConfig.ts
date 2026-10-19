@@ -13,12 +13,19 @@ export interface StorageConfig {
   accessKeySecret: string;
   uploadDir: string;
   updatedAt: string;
+  accessKeyIdSet?: boolean;
+  accessKeySecretSet?: boolean;
 }
 
 export function getStorageConfig() {
   return request.get<unknown, StorageConfig>('/storage-config');
 }
 
-export function updateStorageConfig(data: StorageConfig) {
+export function updateStorageConfig(
+  data: Omit<
+    StorageConfig,
+    'updatedAt' | 'accessKeyIdSet' | 'accessKeySecretSet'
+  > & { clearCredentials?: boolean },
+) {
   return request.put<unknown, StorageConfig>('/storage-config', data);
 }

@@ -262,7 +262,8 @@ export class VectorConfigsService {
     } else if (isCreate) {
       payload.database = 'default_database';
     }
-    if (dto.token !== undefined) payload.token = dto.token.trim() || null;
+    if (dto.token?.trim()) payload.token = dto.token.trim();
+    else if (isCreate) payload.token = null;
     if (dto.isEnabled !== undefined) payload.isEnabled = dto.isEnabled;
     if (isCreate && payload.vectorDbType === undefined)
       payload.vectorDbType = 'chroma';

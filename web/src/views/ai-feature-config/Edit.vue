@@ -11,12 +11,14 @@ import {
   type AiFeatureConfigForm,
   type AiFeatureType,
 } from '@/api/aiFeatureConfig';
+import { validateKnowledgeAiProviderModel } from '@/api/knowledgeAiProvider';
 import {
-  getKnowledgeAiProviders,
-  validateKnowledgeAiProviderModel,
-  type KnowledgeAiProvider,
-} from '@/api/knowledgeAiProvider';
-import { getMineruConfigs, type MineruConfig } from '@/api/mineruConfig';
+  getThirdPartyOptions,
+  type ProviderOption,
+  type MineruOption,
+} from '@/api/thirdPartyConfig';
+import { useUserStore } from '@/stores/user';
+const user = useUserStore();
 
 const props = defineProps<{
   row?: AiFeatureConfig | null;
@@ -28,8 +30,8 @@ const visible = defineModel<boolean>('visible', { required: true });
 const loading = ref(false);
 const submitting = ref(false);
 const formRef = ref<InstanceType<typeof Form>>();
-const providers = ref<KnowledgeAiProvider[]>([]);
-const mineruConfigs = ref<MineruConfig[]>([]);
+const providers = ref<ProviderOption[]>([]);
+const mineruConfigs = ref<MineruOption[]>([]);
 const formReadyForModelValidation = ref(false);
 const validatingModel = ref(false);
 const modelValidationHint = ref('');
@@ -91,15 +93,14 @@ const isMineruOcrFeature = computed(
 const isChatFeature = computed(() => form.featureType === 'chat');
 const isRerankFeature = computed(() => form.featureType === 'rerank');
 const isStructuredParseFeature = computed(() => isParseFeature.value);
-const usesTemperature = computed(
-  () => !isRerankFeature.value,
-);
-const usesPromptSettings = computed(
-  () => !isRerankFeature.value,
-);
+const usesTemperature = computed(() => !isRerankFeature.value);
+const usesPromptSettings = computed(() => !isRerankFeature.value);
 
 const modelOptions = computed(() =>
-  getModelOptions(selectedProvider.value, isMineruOcrFeature.value ? 'documentParse' : form.featureType),
+  getModelOptions(
+    selectedProvider.value,
+    isMineruOcrFeature.value ? 'documentParse' : form.featureType,
+  ),
 );
 
 const modelPlaceholder = computed(() => {
@@ -282,23 +283,30 @@ const rules = computed<FormRules>(() => ({
   featureType: [
     { required: true, message: '请选择功能类型', trigger: 'change' },
   ],
-  ...(isMineruOcrFeature.value ? {
+  ...(isMineruOcrFeature.value
+    ? {
         mineruConfigId: [
-          { required: true, message: '请选择 MinerU引擎', trigger: ['change', 'blur'] },
+          {
+            required: true,
+            message: '请选择 MinerU引擎',
+            trigger: ['change', 'blur'],
+          },
         ],
-      } : {}),
+      }
+    : {}),
   ...{
-        providerId: [
-          { required: true, message: '请选择大模型账号', trigger: 'change' },
-        ],
-        model: [{ required: true, message: '请选择模型', trigger: 'change' }],
-      },
+    providerId: [
+      { required: true, message: '请选择大模型账号', trigger: 'change' },
+    ],
+    model: [{ required: true, message: '请选择模型', trigger: 'change' }],
+  },
   ...(usesTemperature.value
     ? {
         temperature: [
           { required: true, message: '请输入温度', trigger: 'blur' },
         ],
-      } : {}),
+      }
+    : {}),
 }));
 
 watch(visible, async (value) => {
@@ -365,11 +373,7 @@ watch(
   () =>
     [form.model, form.providerId, form.featureType, form.useMineru] as const,
   () => {
-    if (
-      !formReadyForModelValidation.value ||
-      !form.providerId ||
-      !form.model
-    ) {
+    if (!formReadyForModelValidation.value || !form.providerId || !form.model) {
       return;
     }
     void validateSelectedModel();
@@ -377,12 +381,9 @@ watch(
 );
 
 async function fetchOptions() {
-  const [providerResult, mineruResult] = await Promise.all([
-    getKnowledgeAiProviders({ page: 1, pageSize: 200 }),
-    getMineruConfigs({ page: 1, pageSize: 200 }),
-  ]);
-  providers.value = providerResult.list;
-  mineruConfigs.value = mineruResult.list;
+  const options = await getThirdPartyOptions();
+  providers.value = options.providers;
+  mineruConfigs.value = options.mineruConfigs;
 }
 
 function resetForm() {
@@ -493,7 +494,7 @@ async function handleSubmit() {
 }
 
 function getModelText(
-  provider: KnowledgeAiProvider | undefined,
+  provider: ProviderOption | undefined,
   featureType: AiFeatureType,
 ) {
   if (!provider) return '';
@@ -511,6 +512,7 @@ function getModelText(
 }
 
 async function validateSelectedModel() {
+  if (!user.hasPermission('KnowledgeAiProvider.update')) return;
   const providerId = Number(form.providerId);
   const model = form.model?.trim() ?? '';
   if (!providerId || !model) return;
@@ -521,7 +523,9 @@ async function validateSelectedModel() {
     const result = await validateKnowledgeAiProviderModel({
       id: providerId,
       model,
-      featureType: isMineruOcrFeature.value ? 'documentParse' : form.featureType,
+      featureType: isMineruOcrFeature.value
+        ? 'documentParse'
+        : form.featureType,
     });
     if (requestSequence !== modelValidationSequence) return;
     providers.value = providers.value.map((item) =>
@@ -553,7 +557,7 @@ async function validateSelectedModel() {
 }
 
 function getModelOptions(
-  provider: KnowledgeAiProvider | undefined,
+  provider: ProviderOption | undefined,
   featureType: AiFeatureType,
 ) {
   const seen = new Set<string>();

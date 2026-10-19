@@ -37,6 +37,8 @@ import { ApprovalRequestsModule } from './approval-requests/approval-requests.mo
 import { ProductCatalogModule } from './product-catalog/product-catalog.module';
 import { AiWorkflowsModule } from './ai-workflows/ai-workflows.module';
 import { AgentAppsModule } from './agent-apps/agent-apps.module';
+import { DashboardModule } from './dashboard/dashboard.module';
+import { ThirdPartyConfigModule } from './third-party-config/third-party-config.module';
 
 @Module({
   imports: [
@@ -129,6 +131,8 @@ import { AgentAppsModule } from './agent-apps/agent-apps.module';
     AiFeatureConfigsModule,
     AiWorkflowsModule,
     AgentAppsModule,
+    DashboardModule,
+    ThirdPartyConfigModule,
     KnowledgeRetrievalConfigsModule,
     KnowledgeRoutingRulesModule,
     KnowledgeStandardQasModule,
