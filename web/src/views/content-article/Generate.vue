@@ -90,7 +90,7 @@ async function fetchConfigs(keyword = '', autoSelect = false) {
   configOptions.value = withSelected(
     result.list.map((row) => ({
       value: String(row.id),
-      text: `${row.name} · ${row.model || '未设置模型'}`,
+      text: `${row.name} · ${row.model || '未设置模型'} · ${row.responseFormat === 'text' ? '纯文本' : 'Markdown'}`,
     })),
     configOptions.value,
     form.aiConfigId,
@@ -325,7 +325,7 @@ onBeforeUnmount(() => {
           </template>
         </Form>
         <p class="article-generate__hint">
-          使用已保存的标题和想法生成，调用可能计费。完成后在生成记录中查看并采用，不会自动覆盖正文。
+          使用已保存的标题和想法生成，调用可能计费，不会自动覆盖正文。新闻类请先在想法中提供来源、日期和关键事实，系统不会自动检索或读取链接；素材不足时在生成记录中提示补充。
         </p>
       </template>
     </div>

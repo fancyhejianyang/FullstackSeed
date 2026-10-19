@@ -126,23 +126,44 @@ describe('AiFeatureConfigsService', () => {
     });
   });
 
-  it('内容创作固定 Markdown，保留文本模型与 Think 设置', () => {
-    const config: Partial<AiFeatureConfig> = {
-      featureType: 'contentCreation',
-      useMineru: true,
-      mineruConfigId: 3,
-      responseFormat: 'json',
-      enableThinking: true,
-      thinkingParameters: { enable_thinking: true },
-    };
+  it.each(['text', 'markdown'] as const)(
+    '内容创作保留所选 %s 格式与 Think 设置',
+    (responseFormat) => {
+      const config: Partial<AiFeatureConfig> = {
+        featureType: 'contentCreation',
+        useMineru: true,
+        mineruConfigId: 3,
+        responseFormat,
+        enableThinking: true,
+        thinkingParameters: { enable_thinking: true },
+      };
+      internals.normalizeFeatureSpecificSettings(config);
+      expect(config).toMatchObject({
+        useMineru: false,
+        mineruConfigId: null,
+        responseFormat,
+        enableThinking: true,
+        thinkingParameters: { enable_thinking: true },
+      });
+    },
+  );
+  it('新创作配置默认纯文本；拒绝 JSON 正文；不改变解析与重排规范', () => {
+    const config: Partial<AiFeatureConfig> = { featureType: 'contentCreation' };
     internals.normalizeFeatureSpecificSettings(config);
-    expect(config).toMatchObject({
-      useMineru: false,
-      mineruConfigId: null,
-      responseFormat: 'markdown',
-      enableThinking: true,
-      thinkingParameters: { enable_thinking: true },
-    });
+    expect(config.responseFormat).toBe('text');
+    expect(() =>
+      internals.normalizeFeatureSpecificSettings({
+        ...config,
+        responseFormat: 'json',
+      }),
+    ).toThrow('仅支持');
+    const ocr: Partial<AiFeatureConfig> = {
+      featureType: 'ocr',
+      useMineru: true,
+      responseFormat: 'text',
+    };
+    internals.normalizeFeatureSpecificSettings(ocr);
+    expect(ocr.responseFormat).toBe('markdown');
   });
   it('按指定 ID 选择启用创作配置，不回退聊天或其它配置', async () => {
     const repository = { findOne: jest.fn().mockResolvedValue(null) };
@@ -182,6 +203,7 @@ describe('AiFeatureConfigsService', () => {
     }
     const config = {
       id: 9,
+      responseFormat: 'text',
       featureType: 'contentCreation',
       isEnabled: true,
       providerId: 2,
@@ -216,7 +238,11 @@ describe('AiFeatureConfigsService', () => {
         providerId: 2,
         model: 'text',
       }),
-    ).resolves.toMatchObject({ name: '第二个创作', isEnabled: true });
+    ).resolves.toMatchObject({
+      name: '第二个创作',
+      isEnabled: true,
+      responseFormat: 'text',
+    });
     expect(providers.assertModelSupported).toHaveBeenCalledWith({
       id: 2,
       model: 'text',
@@ -226,7 +252,7 @@ describe('AiFeatureConfigsService', () => {
     expect(repository.find).not.toHaveBeenCalled();
   });
 
-  it('选项只查询启用创作的 ID、名称、模型，支持搜索分页且不外泄其它字段', async () => {
+  it('选项只查询启用创作的 ID、名称、模型和格式，支持搜索分页且不外泄其它字段', async () => {
     const repository = {
       findAndCount: jest.fn().mockResolvedValue([
         [
@@ -234,6 +260,7 @@ describe('AiFeatureConfigsService', () => {
             id: 9,
             name: '创作',
             model: 'text',
+            responseFormat: 'text',
             systemPrompt: 'private',
             thinkingParameters: { secret: true },
           },
@@ -253,12 +280,12 @@ describe('AiFeatureConfigsService', () => {
         keyword: ' 创作 ',
       }),
     ).resolves.toEqual({
-      list: [{ id: 9, name: '创作', model: 'text' }],
+      list: [{ id: 9, name: '创作', model: 'text', responseFormat: 'text' }],
       total: 101,
     });
     expect(repository.findAndCount).toHaveBeenCalledWith(
       expect.objectContaining({
-        select: { id: true, name: true, model: true },
+        select: { id: true, name: true, model: true, responseFormat: true },
         skip: 100,
         take: 100,
         where: expect.arrayContaining([

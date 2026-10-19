@@ -1,5 +1,42 @@
 # CHANGELOG
 
+### 2026-10-19 修正内容创作格式与成稿、编辑提示分离
+
+- 内容创作的“正文格式”开放纯文本 / Markdown，新建或用户切换到内容创作类型时默认纯文本；移除前端禁用、提交强制值和后端 Markdown 覆盖。已有配置保留原格式，若需纯文本须在 AI 功能配置中明确修改并保存，不批量改动用户配置或历史文章。聊天、文档解析、OCR、重排的既有格式行为不变；创作配置拒绝 JSON 正文。
+- 生成选项增加安全标量 `responseFormat`，下拉显示配置名称、模型与正文格式；新任务把格式写入配置快照，排队后修改配置不影响该任务，历史快照缺少此字段时继续按 Markdown。格式只控制文章正文，不开放配置管理权限。
+- 独立写作协议负责提示词组装：默认替作者成稿、面向读者表达，不用“作者认为”等分析口吻，不强制堆砌报告章节或重复待核实说明。模板优先决定口吻、结构、篇幅；系统保留事实底线，所选正文格式和结果协议不可被模板覆盖。新闻或真实人物事件的核心信息不足/行为歧义时提示补充，普通随笔不机械索要来源。不执行新闻检索或读取外链，不声称已核验事实；不修改用户保存的模板。
+- 单次模型调用返回内部结构 `{ outcome, body, notes }`；校验枚举、字段类型、数量、长度和正文/提示一致性后拆分，`result` 仅存正文，`editorNotes` 单独存编辑提示。允许完整 JSON 代码围栏，拒绝截断/无效结构与额外字段，不把原始响应、内部推理或辅助方案降级成文章，不额外调用模型修复响应。用量在协议校验失败时仍保留。
+- 核心素材不足终止为 `needs_input`（待补充素材），无候选正文，释放用户/文章活跃锁、停止轮询，不自动重试；在生成记录中展示需补充的问题，用户编辑想法并保存后从列表重新发起。成功任务的编辑提示与候选正文分区安全转义展示，复制/采用只作用于正文，不夹带提示；旧成功任务仍可查看、复制与采用，原文不自动覆盖。
+- 数据库新增幂等迁移 `1792378800000-AddContentEditorNotes`，仅增加可空 JSON 提示列；状态仍使用原 varchar 字段，不改历史状态或数据。已有提示/待补充任务时回退先拒绝，避免丢弃编辑提示。生产需先执行迁移并统一部署前后端与任务消费者；开发环境下次正常启动按已有 synchronize 策略应用。本次未执行迁移、未启动/重启服务。
+- 验证：后端 45 套 / 443 项 Jest、前端 105 项 Node 回归通过；前后端无输出类型检查、变更后端 ESLint、TypeORM 列检查、源码离线 MySQL 元数据检查、Vue 模板/scoped CSS 编译、组件复用核对和 diff 空白检查通过。按修复范围未执行 build；未连接真实数据库、调用真实模型或进行浏览器视觉验收，实际文章文风与事实判断仍需部署后人工验收。
+- 已有未提交的 `web/components.d.ts` 保持原样，不纳入本次提交。
+
+新增文件（4）：
+
+- `server/src/content-articles/content-writing.ts`
+- `server/src/content-articles/content-writing.spec.ts`
+- `server/src/migrations/1792378800000-AddContentEditorNotes.ts`
+- `web/src/views/ai-feature-config/contentFormat.test.mjs`
+
+修改文件（14）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/ai-feature-configs/ai-feature-configs.service.ts`
+- `server/src/ai-feature-configs/ai-feature-configs.service.spec.ts`
+- `server/src/content-articles/content-generation.service.ts`
+- `server/src/content-articles/content-generation.service.spec.ts`
+- `server/src/content-articles/entities/content-generation-task.entity.ts`
+- `web/src/api/contentArticle.ts`
+- `web/src/views/ai-feature-config/Edit.vue`
+- `web/src/views/content-article/Generate.vue`
+- `web/src/views/content-article/Tasks.vue`
+- `web/src/views/content-article/taskState.ts`
+- `web/src/views/content-article/generate.test.mjs`
+- `web/src/views/content-article/tasks.test.mjs`
+
+删除文件：无。
+
 ### 2026-10-19 文章列表生成入口与指定模板、AI 配置
 
 - 文章列表每行新增“AI 生成”，顶部选中恰好一篇文章后也可打开同一个生成弹窗；保留多选删除，不自动批量调用。进行中的任务禁重复发起，成功提交后刷新列表并清空勾选。

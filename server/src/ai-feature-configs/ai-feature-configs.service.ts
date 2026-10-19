@@ -129,6 +129,8 @@ export class AiFeatureConfigsService {
       throw new BadRequestException('该内容创作配置未启用');
     if (!config.providerId || !config.model?.trim())
       throw new BadRequestException('内容创作配置缺少大模型账号或模型');
+    if (!['text', 'markdown'].includes(config.responseFormat))
+      throw new BadRequestException('内容创作仅支持纯文本或 Markdown 正文');
     return config;
   }
 
@@ -140,7 +142,7 @@ export class AiFeatureConfigsService {
     const keyword = query.keyword?.trim();
     const base = { featureType: 'contentCreation' as const, isEnabled: true };
     const [rows, total] = await this.configRepository.findAndCount({
-      select: { id: true, name: true, model: true },
+      select: { id: true, name: true, model: true, responseFormat: true },
       where: keyword
         ? [
             { ...base, name: Like(`%${keyword}%`) },
@@ -153,7 +155,12 @@ export class AiFeatureConfigsService {
     });
     // 专用于生成选项，不暴露配置管理接口或提示词、账号参数。
     return {
-      list: rows.map(({ id, name, model }) => ({ id, name, model })),
+      list: rows.map(({ id, name, model, responseFormat }) => ({
+        id,
+        name,
+        model,
+        responseFormat,
+      })),
       total,
     };
   }
@@ -243,7 +250,9 @@ export class AiFeatureConfigsService {
       config.useMineru = false;
       config.mineruConfigId = null;
       config.mineruConfigName = null;
-      config.responseFormat = 'markdown';
+      config.responseFormat ??= 'text';
+      if (!['text', 'markdown'].includes(config.responseFormat))
+        throw new BadRequestException('内容创作仅支持纯文本或 Markdown 正文');
     }
     if (config.useMineru && config.featureType === 'ocr')
       config.responseFormat = 'markdown';

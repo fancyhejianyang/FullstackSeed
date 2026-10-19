@@ -76,9 +76,10 @@ function harness() {
       'defineEmits',
       'setTimeout',
       'clearTimeout',
+      'navigator',
       compile(
         parse(source).descriptor.scriptSetup.content +
-          '\nexport { fetchTasks, showDetail, adopt, detail, tableRef, pollFailed };',
+          '\nexport { fetchTasks, showDetail, adopt, detail, tableRef, pollFailed, hasCandidate, copyResult };',
       ),
     )(
       (name) => {
@@ -115,6 +116,9 @@ function harness() {
         return id;
       },
       (id) => timers.delete(id),
+      {
+        clipboard: { writeText: async (value) => calls.push(['copy', value]) },
+      },
     ),
   );
   exports.tableRef.value = {
@@ -208,6 +212,48 @@ test('较早详情响应不覆盖当前任务', async () => {
   resolve({ id: 20, status: 'succeeded', result: '迟到正文' });
   await first;
   assert.equal(h.detail.value.id, 21);
+  h.close();
+});
+test('待补充素材终止轮询且不能复制或采用提示为正文', async () => {
+  const h = harness();
+  h.state.list.list[0].status = 'needs_input';
+  h.state.detail = {
+    ...h.state.detail,
+    status: 'needs_input',
+    result: '错误混入的内容',
+    editorNotes: ['请补充新闻来源'],
+  };
+  await h.fetchTasks({});
+  await h.showDetail({ id: 20 });
+  assert.equal(h.timers.size, 0);
+  assert.equal(h.hasCandidate.value, false);
+  await h.adopt();
+  await h.copyResult();
+  assert.equal(
+    h.calls.some((call) => ['adopt', 'copy'].includes(call[0])),
+    false,
+  );
+  assert.equal(stateExports.taskLabel('needs_input'), '待补充素材');
+  assert.equal(stateExports.isActiveTask({ status: 'needs_input' }), false);
+  h.close();
+});
+test('复制与采用只使用正文，独立编辑提示不混入；历史候选仍可复制', async () => {
+  const h = harness();
+  h.state.detail.editorNotes = ['发布前核对日期'];
+  await h.showDetail({ id: 20 });
+  await h.copyResult();
+  assert.deepEqual(
+    h.calls.find((call) => call[0] === 'copy'),
+    ['copy', '候选正文'],
+  );
+  await h.adopt();
+  assert.equal(h.detail.value.status, 'adopted');
+  delete h.state.detail.editorNotes;
+  await h.showDetail({ id: 20 });
+  await h.copyResult();
+  assert.equal(h.calls.filter((call) => call[0] === 'copy').length, 2);
+  assert.match(source, /aria-label="编辑提示"/);
+  assert.doesNotMatch(source, /v-html/);
   h.close();
 });
 test('耗时使用真实时间边界，不生成百分比', () => {

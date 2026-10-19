@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import Table, { type TableColumn } from '@/components/Table.vue';
 import Button from '@/components/Button.vue';
@@ -28,6 +28,11 @@ const emit = defineEmits<{
 const tableRef = ref<{ refresh: () => Promise<void> }>();
 const detail = ref<ContentTaskDetail | null>(null);
 const loadingDetail = ref(false);
+const hasCandidate = computed(
+  () =>
+    !!detail.value?.result &&
+    ['succeeded', 'adopted'].includes(detail.value.status),
+);
 const adopting = ref(false);
 const pollFailed = ref(false);
 const now = ref(Date.now());
@@ -80,6 +85,7 @@ async function showDetail(row: ContentTask) {
 async function adopt() {
   if (
     !detail.value ||
+    !hasCandidate.value ||
     adopting.value ||
     !props.canAdopt ||
     detail.value.status !== 'succeeded' ||
@@ -104,7 +110,7 @@ async function adopt() {
   }
 }
 async function copyResult() {
-  if (!detail.value?.result) return;
+  if (!hasCandidate.value || !detail.value?.result) return;
   try {
     await navigator.clipboard.writeText(detail.value.result);
     ElMessage.success('候选正文已复制');
@@ -179,7 +185,12 @@ onBeforeUnmount(() => {
       </p>
       <p>
         {{ detail.snapshot.config.name }} · {{ detail.snapshot.config.model }} ·
-        {{ detail.snapshot.template.name }}
+        {{ detail.snapshot.template.name }} ·
+        {{
+          detail.snapshot.config.responseFormat === 'text'
+            ? '纯文本'
+            : 'Markdown'
+        }}
       </p>
       <p v-if="isActiveTask(detail)" role="status">
         {{
@@ -189,13 +200,33 @@ onBeforeUnmount(() => {
         }}
       </p>
       <p v-if="detail.errorMessage" role="alert">{{ detail.errorMessage }}</p>
+      <section
+        v-if="detail.editorNotes?.length"
+        class="generation-records__notes"
+        aria-label="编辑提示"
+      >
+        <strong>{{
+          detail.status === 'needs_input'
+            ? '需要补充的素材'
+            : '编辑提示（不属于正文）'
+        }}</strong>
+        <ul>
+          <li v-for="(note, index) in detail.editorNotes" :key="index">
+            {{ note }}
+          </li>
+        </ul>
+      </section>
+      <p v-if="detail.status === 'needs_input'" role="status">
+        本次未生成正文，请在文章“编辑 →
+        想法”中补充并保存，再从列表重新发起生成。该任务不会自动重试。
+      </p>
       <details>
         <summary>生成时的素材与模板</summary>
         <p>{{ detail.snapshot.title }}</p>
         <pre>{{ detail.snapshot.idea }}</pre>
         <pre>{{ detail.snapshot.template.instruction || '通用写作' }}</pre>
       </details>
-      <template v-if="detail.result">
+      <template v-if="hasCandidate">
         <div class="generation-records__heading">
           <Button @click="copyResult">复制候选正文</Button>
           <Button
@@ -260,6 +291,18 @@ onBeforeUnmount(() => {
 }
 .generation-records summary {
   cursor: pointer;
+}
+.generation-records__notes {
+  padding: 12px;
+  margin: 12px 0;
+  background: #fff;
+  border: 1px solid #dce3ed;
+  border-radius: 6px;
+}
+.generation-records__notes li {
+  margin-top: 6px;
+  white-space: pre-wrap;
+  line-height: 1.7;
 }
 .generation-records__result {
   background: #fff;

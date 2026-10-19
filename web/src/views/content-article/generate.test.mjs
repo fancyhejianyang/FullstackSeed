@@ -26,7 +26,9 @@ function harness(list = false) {
   const state = {
     detail: { id: 1, title: '标题', idea: '想法', content: '原文', version: 4 },
     configs: {
-      list: [{ id: 5, name: '创作配置', model: 'model-a' }],
+      list: [
+        { id: 5, name: '创作配置', model: 'model-a', responseFormat: 'text' },
+      ],
       total: 1,
     },
     templates: { list: [{ id: 8, name: '热点解读' }], total: 1 },
@@ -157,6 +159,7 @@ test('打开仅读取素材/选项，单配置自动选中，不触发模型或�
   const h = harness();
   await h.open();
   assert.equal(h.form.aiConfigId, '5');
+  assert.match(h.configOptions.value[0].text, /纯文本/);
   assert.equal(h.form.templateId, null);
   assert.deepEqual(
     h.fields.value.map((field) => field.prop),

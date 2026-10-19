@@ -97,9 +97,7 @@ const isTextFeature = computed(() =>
 );
 const isRerankFeature = computed(() => form.featureType === 'rerank');
 const isStructuredParseFeature = computed(() => isParseFeature.value);
-const isMarkdownFeature = computed(
-  () => isParseFeature.value || isWritingFeature.value,
-);
+const isMarkdownFeature = computed(() => isParseFeature.value);
 const usesTemperature = computed(() => !isRerankFeature.value);
 const usesPromptSettings = computed(() => !isRerankFeature.value);
 
@@ -237,7 +235,9 @@ const fields = computed<FormField[]>(() => {
         rows: 5,
         placeholder: isStructuredParseFeature.value
           ? '可补充业务术语、标题规则或保留项；系统会固定追加 Markdown 结构化输出要求'
-          : '该功能默认系统提示词，可被测试请求临时覆盖',
+          : isWritingFeature.value
+            ? '填写默认写作口吻或偏好；模板决定文章结构，正文格式以所选格式为准'
+            : '该功能默认系统提示词，可被测试请求临时覆盖',
         hint: (() => {
           const prompt = form.systemPrompt?.trim() ?? '';
           if (isStructuredParseFeature.value) {
@@ -247,25 +247,32 @@ const fields = computed<FormField[]>(() => {
           }
           return prompt
             ? `当前已填写 ${prompt.length} 个字符；业务规则、口吻和禁止项请直接写在此提示词中。`
-            : '未填写时将使用系统默认提示词；业务规则、口吻和禁止项请直接写在此处。';
+            : isWritingFeature.value
+              ? '默认替作者成稿，不分析作者观点；缺少关键素材时单独提示补充。不会自动检索新闻或读取链接。'
+              : '未填写时将使用系统默认提示词；业务规则、口吻和禁止项请直接写在此处。';
         })(),
       },
       {
         prop: 'responseFormat',
-        label: '返回格式',
+        label: isWritingFeature.value ? '正文格式' : '返回格式',
         type: 'select',
         options: isMarkdownFeature.value
           ? [{ label: 'Markdown（固定）', value: 'markdown' }]
-          : [
-              { label: '文本', value: 'text' },
-              { label: 'JSON', value: 'json' },
-              { label: 'Markdown', value: 'markdown' },
-            ],
+          : isWritingFeature.value
+            ? [
+                { label: '纯文本', value: 'text' },
+                { label: 'Markdown', value: 'markdown' },
+              ]
+            : [
+                { label: '文本', value: 'text' },
+                { label: 'JSON', value: 'json' },
+                { label: 'Markdown', value: 'markdown' },
+              ],
         componentProps: isMarkdownFeature.value
           ? { disabled: true }
           : undefined,
         hint: isWritingFeature.value
-          ? '文章正文固定输出 Markdown，使用此配置及所选写作模板。'
+          ? '仅控制文章正文格式，优先于模板中的格式描述；编辑提示单独展示。纯文本适合复制到发布平台。'
           : isStructuredParseFeature.value
             ? '文档解析固定输出 Markdown，以保留标题、列表、表格等结构并支持章节分片。'
             : form.responseFormat === 'json'
@@ -338,6 +345,15 @@ watch(visible, async (value) => {
     formReadyForModelValidation.value = true;
   }
 });
+
+watch(
+  () => form.featureType,
+  (type) => {
+    // 用户切换为内容创作时默认纯文本；编辑回显保留已有格式。
+    if (type === 'contentCreation' && formReadyForModelValidation.value)
+      form.responseFormat = 'text';
+  },
+);
 
 watch(
   () => [

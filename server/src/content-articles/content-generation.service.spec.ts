@@ -20,6 +20,7 @@ function setup() {
     providerId: 6,
     providerName: '账号',
     model: 'text-model',
+    responseFormat: 'text',
     temperature: 0.4,
     enableThinking: true,
     thinkingParameters: { enable_thinking: true },
@@ -58,7 +59,11 @@ function setup() {
     ),
     callChat: jest.fn().mockResolvedValue({
       isSuccess: true,
-      answer: ' 新正文 ',
+      answer: JSON.stringify({
+        outcome: 'draft',
+        body: ' 新正文 ',
+        notes: ['发布前确认来源日期'],
+      }),
       usage: { totalTokens: 100 },
     }),
   };
@@ -267,6 +272,7 @@ describe('持久化文章生成任务', () => {
       expect.objectContaining({
         status: 'succeeded',
         result: '新正文',
+        editorNotes: ['发布前确认来源日期'],
         totalTokens: 100,
         activeUserId: null,
         activeArticleId: null,
@@ -274,6 +280,99 @@ describe('持久化文章生成任务', () => {
     );
     expect(h.articles.save).not.toHaveBeenCalled();
     expect(h.article.content).toBe('原文');
+  });
+  it('格式写入任务快照，后续配置修改不会影响已排队任务', async () => {
+    const h = setup();
+    await h.service.submit(3, h.dto, 7);
+    expect(h.tasks.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        snapshot: expect.objectContaining({
+          config: expect.objectContaining({
+            responseFormat: 'text',
+          }) as unknown,
+        }) as unknown,
+      }),
+    );
+    h.config.responseFormat = 'markdown';
+    h.tasks.findOne.mockResolvedValue(h.task);
+    await h.service.tick();
+    expect(h.providers.callChat).toHaveBeenCalledWith(
+      expect.objectContaining({
+        systemPrompt: expect.stringContaining('body 使用纯文本') as unknown,
+      }),
+    );
+  });
+  it('核心素材不足结束为待补充，释放活跃锁，不保存或采用提示正文', async () => {
+    const h = setup();
+    h.tasks.findOne.mockResolvedValue(h.task);
+    h.providers.callChat.mockResolvedValue({
+      isSuccess: true,
+      answer: JSON.stringify({
+        outcome: 'needs_input',
+        body: '',
+        notes: ['请澄清“审批旭日旗”的具体行为，并提供报道日期与原文'],
+      }),
+      usage: { totalTokens: 80 },
+    });
+    await h.service.tick();
+    expect(h.tasks.update).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        status: 'needs_input',
+        result: null,
+        editorNotes: ['请澄清“审批旭日旗”的具体行为，并提供报道日期与原文'],
+        activeUserId: null,
+        activeArticleId: null,
+        totalTokens: 80,
+        errorMessage: null,
+      }),
+    );
+    expect(h.providers.callChat).toHaveBeenCalledTimes(1);
+    expect(h.articles.save).not.toHaveBeenCalled();
+    h.task.status = 'needs_input';
+    await expect(h.service.adopt(20, 2, 7)).rejects.toThrow('没有可采用');
+  });
+  it('无效结构失败而非伪装成稿，保留用量且不自动追加调用', async () => {
+    const h = setup();
+    h.tasks.findOne.mockResolvedValue(h.task);
+    h.providers.callChat.mockResolvedValue({
+      isSuccess: true,
+      answer: '作者认为……待补充',
+      usage: { totalTokens: 40 },
+    });
+    await h.service.tick();
+    expect(h.tasks.update).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        status: 'failed',
+        result: null,
+        editorNotes: null,
+        totalTokens: 40,
+        errorMessage: expect.stringContaining(
+          '有效的正文与编辑提示结构',
+        ) as unknown,
+      }),
+    );
+    expect(h.providers.callChat).toHaveBeenCalledTimes(1);
+  });
+  it('旧成功任务继续读取与采用，详情提示与正文分开返回', async () => {
+    const h = setup();
+    h.task.status = 'succeeded';
+    h.task.result = '历史正文';
+    h.tasks.findOne.mockResolvedValue(h.task);
+    await expect(h.service.detail(20, 7)).resolves.toMatchObject({
+      result: '历史正文',
+      editorNotes: null,
+    });
+    h.task.editorNotes = ['发布前核对'];
+    await expect(h.service.detail(20, 7)).resolves.toMatchObject({
+      result: '历史正文',
+      editorNotes: ['发布前核对'],
+    });
+    await h.service.adopt(20, 2, 7);
+    expect(h.articles.save).toHaveBeenCalledWith(
+      expect.objectContaining({ content: '历史正文' }),
+    );
   });
   it('抢占失败不调用；过期运行任务只标记中断，不重新计费', async () => {
     const h = setup();
@@ -355,6 +454,7 @@ describe('持久化文章生成任务', () => {
     ];
     expect(options.select).not.toHaveProperty('snapshot');
     expect(options.select).not.toHaveProperty('result');
+    expect(options.select).not.toHaveProperty('editorNotes');
     expect(options.where).toEqual({ articleId: 3, userId: 7 });
     h.articles.findOne.mockResolvedValue(null);
     h.tasks.findOne.mockResolvedValue(h.task);

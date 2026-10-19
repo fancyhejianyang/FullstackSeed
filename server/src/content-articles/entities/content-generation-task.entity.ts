@@ -4,6 +4,7 @@ export type ContentTaskStatus =
   | 'pending'
   | 'running'
   | 'succeeded'
+  | 'needs_input'
   | 'failed'
   | 'interrupted'
   | 'adopted';
@@ -20,6 +21,7 @@ export interface ContentGenerationSnapshot {
     temperature: number;
     thinkingParameters: Record<string, unknown> | null;
     systemPrompt: string;
+    responseFormat?: 'text' | 'markdown'; // 历史快照无此项，按 Markdown 处理。
   };
 }
 @Entity('content_generation_tasks')
@@ -41,6 +43,7 @@ export class ContentGenerationTask extends BaseEntity {
   activeUserId: number | null;
   @Column({ type: 'json' }) snapshot: ContentGenerationSnapshot;
   @Column({ type: 'mediumtext', nullable: true }) result: string | null;
+  @Column({ type: 'json', nullable: true }) editorNotes: string[] | null;
   @Column({ type: 'varchar', length: 300, nullable: true }) errorMessage:
     | string
     | null;

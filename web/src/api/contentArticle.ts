@@ -54,6 +54,7 @@ export type ContentTaskStatus =
   | 'pending'
   | 'running'
   | 'succeeded'
+  | 'needs_input'
   | 'failed'
   | 'interrupted'
   | 'adopted';
@@ -82,14 +83,17 @@ export interface ContentTaskDetail extends ContentTask {
       temperature: number;
       thinkingParameters: Record<string, unknown> | null;
       systemPrompt: string;
+      responseFormat?: 'text' | 'markdown';
     };
   };
   result: string | null;
+  editorNotes: string[] | null;
 }
 export interface ContentGenerationConfigOption {
   id: number;
   name: string;
   model: string | null;
+  responseFormat: 'text' | 'markdown';
 }
 export function getContentGenerationConfigs(params: {
   page?: number;
