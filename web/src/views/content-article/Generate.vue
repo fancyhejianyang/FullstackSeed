@@ -222,7 +222,7 @@ async function generate() {
     });
     if (current !== epoch) return;
     pendingRequest = null;
-    ElMessage.success('已提交后台生成，可在“内容创作 → 生成记录”查看进度');
+    ElMessage.success('已提交后台生成，可点击“查看”阅读生成结果');
     emit('submitted');
     visible.value = false;
   } catch {
@@ -286,7 +286,7 @@ onBeforeUnmount(() => {
         />
         <el-alert
           v-else-if="isActiveTask(props.row?.latestTask)"
-          title="该文章已有生成任务，请在生成记录中查看进度"
+          title="该文章已有生成任务，可点击文章的“查看”了解进度"
           :closable="false"
         />
         <el-alert

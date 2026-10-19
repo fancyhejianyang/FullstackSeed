@@ -401,7 +401,7 @@ test('行内和顶部共用入口；零选/多选/活跃任务/无权限均不�
   assert.match(index, /#toolbar="\{ selectedRows \}"/);
   assert.match(index, /@click="openGenerate\(selectedRows\)"/);
   assert.match(index, /@click="openGenerate\(\[row\]\)"/);
-  assert.match(index, /:action-width="340"/);
+  assert.match(index, /:action-width="260"/);
   h.close();
 });
 

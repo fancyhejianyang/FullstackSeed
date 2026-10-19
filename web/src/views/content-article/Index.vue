@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
-import { onBeforeRouteLeave, useRouter } from 'vue-router';
+import { onBeforeRouteLeave } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { useUserStore } from '@/stores/user';
 import { taskColor, taskLabel, isActiveTask } from './taskState';
@@ -22,14 +22,6 @@ import View from './View.vue';
 import { createGenerationSubmitter } from './generationRequest';
 
 const user = useUserStore();
-const router = useRouter();
-function openRecords(articleId?: number) {
-  viewVisible.value = false;
-  void router.push({
-    path: '/content-generation',
-    query: articleId ? { articleId } : {},
-  });
-}
 const tableRef = ref<{
   refresh: () => Promise<void>;
   clearSelection: () => void;
@@ -124,7 +116,7 @@ async function openGenerate(rows: ContentArticleSummary[]) {
       };
     });
     if (accepted && alive) {
-      ElMessage.success('已提交后台生成，可在“内容创作 → 生成记录”查看进度');
+      ElMessage.success('已提交后台生成，可点击“查看”阅读生成结果');
       submitted();
     }
   } catch {
@@ -187,20 +179,11 @@ function batchDeleteRequest({ ids }: { ids: Array<string | number> }) {
       :delete-request="deleteRequest"
       :batch-delete-request="batchDeleteRequest"
       perm-module="contentArticle"
-      :action-width="340"
+      :action-width="260"
       @view="handleView"
       @edit="handleEdit"
     >
       <template #toolbar="{ selectedRows }">
-        <Button perm="ContentArticle.read" icon="Tickets" @click="openRecords()"
-          >生成记录</Button
-        >
-        <Button
-          perm="ContentArticle.read"
-          icon="Refresh"
-          @click="tableRef?.refresh()"
-          >刷新</Button
-        >
         <Button perm="ContentArticle.create" @click="openCreate"
           >记录想法</Button
         >
@@ -221,13 +204,6 @@ function batchDeleteRequest({ ids }: { ids: Array<string | number> }) {
         >
       </template>
       <template #actions="{ row }">
-        <Button
-          perm="ContentArticle.read"
-          link
-          :auto-icon="false"
-          @click="openRecords(row.id)"
-          >生成记录</Button
-        >
         <Button
           perm="ContentArticle.update"
           link
@@ -272,7 +248,7 @@ function batchDeleteRequest({ ids }: { ids: Array<string | number> }) {
     <View
       v-model:visible="viewVisible"
       :row="viewingRow"
-      @records="openRecords"
+      @adopted="submitted"
     />
   </PageContainer>
 </template>
