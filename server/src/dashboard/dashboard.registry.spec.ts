@@ -15,6 +15,13 @@ const user = (permissions: string[]): AuthUser => ({
   permissions,
 });
 describe('dashboard registry boundary', () => {
+  it('recent activity requires independent log access rather than menu management access', () => {
+    const definition = DASHBOARD_WIDGETS.find(
+      (w) => w.key === 'activity.recent',
+    )!;
+    expect(canViewWidget(user(['Menu.read']), definition)).toBe(false);
+    expect(canViewWidget(user(['LogRecord.read']), definition)).toBe(true);
+  });
   it('accepts every built-in widget and does not share mutable defaults', () => {
     const first = defaultWidgets();
     expect(validateWidgets(first)).toEqual(first);

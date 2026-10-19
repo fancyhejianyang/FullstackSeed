@@ -138,10 +138,11 @@ function isTruthyValue(value: unknown) {
 const permissionTreeData = computed<PermissionTreeNode[]>(() => {
   const buildMenus = (menus: MenuNode[]): PermissionTreeNode[] =>
     menus.flatMap((menu) => {
-      if (menu.isSystem) return [];
+      if (menu.isSystem || !menu.isActive) return [];
 
       const children = buildMenus(menu.children || []);
-      const moduleName = getMenuModule(menu);
+      // 目录只分组，不把聚合权限的第一个模块再生成一组重复授权节点。
+      const moduleName = menu.children?.length ? '' : getMenuModule(menu);
       const permissions = moduleName
         ? basePermissions.value.map((permission) => {
             const code = `${moduleName}.${permission.code}`;
@@ -197,7 +198,7 @@ function fillForm(data: Role) {
     .filter((code) => code.includes('.'));
   form.permissionCodes = data.permissionCodes?.length
     ? data.permissionCodes
-    : legacyRelationCodes ?? [];
+    : (legacyRelationCodes ?? []);
 }
 
 // 打开时：编辑态强制走详情接口取最新数据

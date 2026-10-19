@@ -31,14 +31,14 @@ export class DataImportController {
   constructor(private readonly dataImportService: DataImportService) {}
 
   @Get('configs')
-  @RequirePermissions('Menu.read')
+  @RequirePermissions('DataImport.read')
   @ApiOperation({ summary: '分页查询数据导入配置记录' })
   findAll(@Query() query: QueryDataImportConfigDto) {
     return this.dataImportService.findAll(query);
   }
 
   @Post('configs')
-  @RequirePermissions('Menu.read')
+  @RequirePermissions('DataImport.create')
   @UseInterceptors(FileInterceptor('template'))
   @ApiOperation({ summary: '保存数据导入字段配置并上传模板' })
   createConfig(
@@ -49,7 +49,7 @@ export class DataImportController {
   }
 
   @Patch('configs/:id')
-  @RequirePermissions('Menu.read')
+  @RequirePermissions('DataImport.update')
   @UseInterceptors(FileInterceptor('template'))
   @ApiOperation({ summary: '更新数据导入字段配置' })
   updateConfig(
@@ -61,7 +61,7 @@ export class DataImportController {
   }
 
   @Get('configs/:id/template')
-  @RequirePermissions('Menu.read')
+  @RequirePermissions('DataImport.read')
   @ApiOperation({ summary: '下载数据导入模板文件' })
   async downloadTemplate(
     @Param('id', ParseIntPipe) id: number,

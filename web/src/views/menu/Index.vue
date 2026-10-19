@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { ElMessage } from 'element-plus';
+import { useRoute, useRouter } from 'vue-router';
 import PageContainer from '@/components/PageContainer.vue';
 import Dialog from '@/components/Dialog.vue';
 import Button from '@/components/Button.vue';
@@ -10,8 +11,18 @@ import { getAllPermissions, type Permission } from '@/api/permission';
 import { useUserStore } from '@/stores/user';
 import { getPermissionActionLabel } from '@/utils/permission';
 import Edit from './Edit.vue';
+import Scope from './Scope.vue';
 
 const userStore = useUserStore();
+const route = useRoute();
+const router = useRouter();
+const activeTab = computed({
+  get: () =>
+    route.query.tab === 'scope' && userStore.isAdmin ? 'scope' : 'structure',
+  set: (tab: string) => {
+    void router.replace({ query: { ...route.query, tab } });
+  },
+});
 
 const loading = ref(false);
 const tree = ref<MenuNode[]>([]);
@@ -76,7 +87,9 @@ function getMenuModule(menu: MenuNode) {
 
 function getPermissionLabel(code: string) {
   const action = toBaseAction(code);
-  const matched = permissions.value.find((permission) => permission.code === action);
+  const matched = permissions.value.find(
+    (permission) => permission.code === action,
+  );
   return matched?.name || getPermissionActionLabel(code) || code;
 }
 
@@ -102,7 +115,10 @@ const permissionsLoading = ref(false);
 const permissions = ref<Permission[]>([]);
 const selectedPermissionCodes = ref<string[]>([]);
 const permissionOptions = computed(() =>
-  permissions.value.map((permission) => ({ value: permission.code, text: permission.name })),
+  permissions.value.map((permission) => ({
+    value: permission.code,
+    text: permission.name,
+  })),
 );
 
 async function ensurePermissions() {
@@ -123,8 +139,9 @@ async function openAssignPermission() {
   }
   selectedPermissionCodes.value =
     selectedRows.value.length === 1
-      ? splitPermissionCodes(selectedRows.value[0].permissionCode)
-          .map(toBaseAction)
+      ? splitPermissionCodes(selectedRows.value[0].permissionCode).map(
+          toBaseAction,
+        )
       : [];
   assignVisible.value = true;
   await ensurePermissions();
@@ -168,7 +185,9 @@ async function handleAssignPermission() {
       selectedRows.value.map((row) => {
         const moduleName = getMenuModule(row);
         const permissionCode = selectedPermissionCodes.value
-          .map((code) => (moduleName ? `${moduleName}.${toBaseAction(code)}` : code))
+          .map((code) =>
+            moduleName ? `${moduleName}.${toBaseAction(code)}` : code,
+          )
           .join(',');
         return updateMenu(row.id, { permissionCode });
       }),
@@ -181,125 +200,148 @@ async function handleAssignPermission() {
   }
 }
 
-onMounted(async () => {
-  await Promise.all([fetchData(), ensurePermissions()]);
-});
+onMounted(fetchData);
 </script>
 
 <template>
   <PageContainer title="菜单管理">
-    <div class="menu-toolbar">
-      <Button perm="Menu.create" :auto-icon="false" @click="openCreate">新增菜单</Button>
-      <Button
-        perm="Menu.update"
-        :auto-icon="false"
-        :disabled="selectedRows.length === 0"
-        @click="(_, done) => done(openAssignPermission())"
-      >
-        分配权限
-      </Button>
-    </div>
-
-    <el-table
-      v-loading="loading"
-      :data="tree"
-      row-key="id"
-      border
-      default-expand-all
-      :tree-props="{ children: 'children' }"
-      @selection-change="handleSelectionChange"
-    >
-      <el-table-column type="selection" width="48" />
-      <el-table-column prop="name" label="菜单名称" width="180">
-        <template #default="{ row }">
-          <el-icon v-if="isTopMenu(row) && row.icon" class="menu-icon">
-            <component :is="row.icon" />
-          </el-icon>
-          {{ row.name }}
-        </template>
-      </el-table-column>
-      <el-table-column prop="type" label="类型" width="90">
-        <template #default="{ row }">
-          <el-tag size="small" :type="row.type === 'menu' ? 'primary' : 'info'">
-            {{ row.type === 'menu' ? '菜单' : '按钮' }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="path" label="路由地址" min-width="140">
-        <template #default="{ row }">{{ row.path || '-' }}</template>
-      </el-table-column>
-      <el-table-column prop="permissionCode" label="权限码" min-width="140">
-        <template #default="{ row }">{{ formatPermissionCodes(row.permissionCode) }}</template>
-      </el-table-column>
-      <el-table-column prop="sort" label="排序" width="80" />
-      <el-table-column prop="isActive" label="状态" width="90">
-        <template #default="{ row }">
-          <el-tag size="small" :type="row.isActive ? 'success' : 'info'">
-            {{ row.isActive ? '启用' : '禁用' }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" width="200" fixed="right">
-        <template #default="{ row }">
-          <Button perm="Menu.create" link :auto-icon="false" @click="openCreateChild(row)">
-            加子级
-          </Button>
-          <Button perm="Menu.update" link :auto-icon="false" @click="openEdit(row)">
-            编辑
-          </Button>
-          <Button
-            perm="Menu.delete"
-            link
-            :auto-icon="false"
-            :confirm-text="getDeleteConfirmText(row)"
-            @click="(_, done) => done(handleDelete(row))"
+    <el-tabs v-model="activeTab">
+      <el-tab-pane label="菜单结构" name="structure">
+        <div class="menu-toolbar">
+          <Button perm="Menu.create" :auto-icon="false" @click="openCreate"
+            >新增菜单</Button
           >
-            删除
+          <Button
+            v-if="userStore.hasPermission('Permission.read')"
+            perm="Menu.update"
+            :auto-icon="false"
+            :disabled="selectedRows.length === 0"
+            @click="(_, done) => done(openAssignPermission())"
+          >
+            分配权限
           </Button>
-        </template>
-      </el-table-column>
-    </el-table>
-
-    <!-- 新增/编辑弹窗 -->
-    <Edit
-      v-model:visible="editVisible"
-      :row="editingRow"
-      :parent-id="presetParentId"
-      :tree-data="tree"
-      @success="refreshAfterChange"
-    />
-
-    <Dialog
-      v-model="assignVisible"
-      title="分配权限"
-      width="560px"
-      :confirm-loading="assigning"
-      @confirm="handleAssignPermission"
-    >
-      <div v-loading="permissionsLoading" class="assign-permission">
-        <el-alert
-          type="info"
-          :closable="false"
-          :title="`已选择 ${selectedRows.length} 个菜单，保存后将批量更新菜单可见权限。`"
-          class="assign-permission__tip"
-        />
-        <div class="assign-permission__header">权限码</div>
-        <CheckboxGroup
-          v-model="selectedPermissionCodes"
-          :options="permissionOptions"
-          border
-          class="assign-permission__grid"
-        >
-          <template #option="{ option }">
-            <span class="assign-permission__name">{{ option.text }}</span>
-            <span class="assign-permission__code">{{ option.value }}</span>
-          </template>
-        </CheckboxGroup>
-        <div class="assign-permission__hint">
-          可勾选多个权限；不勾选直接确定，将清空为登录可见。
         </div>
-      </div>
-    </Dialog>
+
+        <el-table
+          v-loading="loading"
+          :data="tree"
+          row-key="id"
+          border
+          default-expand-all
+          :tree-props="{ children: 'children' }"
+          @selection-change="handleSelectionChange"
+        >
+          <el-table-column type="selection" width="48" />
+          <el-table-column prop="name" label="菜单名称" width="180">
+            <template #default="{ row }">
+              <el-icon v-if="isTopMenu(row) && row.icon" class="menu-icon">
+                <component :is="row.icon" />
+              </el-icon>
+              {{ row.name }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="type" label="类型" width="90">
+            <template #default="{ row }">
+              <el-tag
+                size="small"
+                :type="row.type === 'menu' ? 'primary' : 'info'"
+              >
+                {{ row.type === 'menu' ? '菜单' : '按钮' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="path" label="路由地址" min-width="140">
+            <template #default="{ row }">{{ row.path || '-' }}</template>
+          </el-table-column>
+          <el-table-column prop="permissionCode" label="权限码" min-width="140">
+            <template #default="{ row }">{{
+              formatPermissionCodes(row.permissionCode)
+            }}</template>
+          </el-table-column>
+          <el-table-column prop="sort" label="排序" width="80" />
+          <el-table-column prop="isActive" label="状态" width="90">
+            <template #default="{ row }">
+              <el-tag size="small" :type="row.isActive ? 'success' : 'info'">
+                {{ row.isActive ? '启用' : '禁用' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="200" fixed="right">
+            <template #default="{ row }">
+              <Button
+                perm="Menu.create"
+                link
+                :auto-icon="false"
+                @click="openCreateChild(row)"
+              >
+                加子级
+              </Button>
+              <Button
+                perm="Menu.update"
+                link
+                :auto-icon="false"
+                @click="openEdit(row)"
+              >
+                编辑
+              </Button>
+              <Button
+                perm="Menu.delete"
+                link
+                :auto-icon="false"
+                :confirm-text="getDeleteConfirmText(row)"
+                @click="(_, done) => done(handleDelete(row))"
+              >
+                删除
+              </Button>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <!-- 新增/编辑弹窗 -->
+        <Edit
+          v-model:visible="editVisible"
+          :row="editingRow"
+          :parent-id="presetParentId"
+          :tree-data="tree"
+          @success="refreshAfterChange"
+        />
+
+        <Dialog
+          v-model="assignVisible"
+          title="分配权限"
+          width="560px"
+          :confirm-loading="assigning"
+          @confirm="handleAssignPermission"
+        >
+          <div v-loading="permissionsLoading" class="assign-permission">
+            <el-alert
+              type="info"
+              :closable="false"
+              :title="`已选择 ${selectedRows.length} 个菜单，保存后将批量更新菜单可见权限。`"
+              class="assign-permission__tip"
+            />
+            <div class="assign-permission__header">权限码</div>
+            <CheckboxGroup
+              v-model="selectedPermissionCodes"
+              :options="permissionOptions"
+              border
+              class="assign-permission__grid"
+            >
+              <template #option="{ option }">
+                <span class="assign-permission__name">{{ option.text }}</span>
+                <span class="assign-permission__code">{{ option.value }}</span>
+              </template>
+            </CheckboxGroup>
+            <div class="assign-permission__hint">
+              可勾选多个权限；不勾选直接确定，将清空为登录可见。
+            </div>
+          </div>
+        </Dialog>
+      </el-tab-pane>
+      <el-tab-pane v-if="userStore.isAdmin" label="分配范围" name="scope" lazy>
+        <Scope :tree="tree" :loading="loading" @changed="refreshAfterChange" />
+      </el-tab-pane>
+    </el-tabs>
   </PageContainer>
 </template>
 

@@ -1,5 +1,43 @@
 # CHANGELOG
 
+### 2026-10-19 拆分系统配置与权限审计，合并菜单分配范围
+
+- 系统导航调整为“系统配置 / 权限与审计 / 第三方配置”。系统配置保留首页配置、菜单管理、导入配置；账号、角色、权限定义、操作日志归入权限与审计。现有叶子路由和菜单 ID 保留，通过幂等种子更新名称、父级与权限码，保留已有启停及超管范围设置，空分组不显示。
+- 原“菜单可见性配置”并入菜单管理的“分配范围”页签，复用原配置逻辑，明确“仅超管使用 / 允许角色分配”的语义，仍由超管操作且后端继续拦截越权。旧 `/system-config/menu` 路由兼容跳转；旧菜单记录只停用、不物理删除，新环境不再创建重复入口。原 `system/Index.vue` 迁移到 `menu/Scope.vue`，并非删除其业务能力。
+- 日志读写拆分为 `LogRecord.read/update`，导入配置拆分为 `DataImport.read/create/update`；路由、按钮、控制器和首页最近动态读取同步对齐。内置 admin 角色补齐新模块权限，普通角色不自动从 `Menu.read` 继承权限，也不改写原角色权限数组。只读导入用户保留模块名称与模板下载，隐藏编辑入口。
+- 角色授权目录只分组，不重复生成聚合权限中首个模块的授权节点；停用/超管专用菜单不作为普通角色授权入口。分组默认跳转等待全局会话加载后再选有权限的子页面，兼容刷新及旧地址。菜单只读页不再无条件请求权限定义接口，避免跨模块读取权限不足影响菜单查看。
+- 验证：后端生产源码范围 `tsc --noEmit --incremental false -p tsconfig.build.json`、完整 Vue 类型检查、变更后端文件 ESLint、TypeORM 实体列检查、`git diff --check` 均通过；后端 40 个 Jest 套件 / 368 项测试、前端 57 项 Node 测试全部通过。新增覆盖种子重复运行与 ID 保留、新旧环境入口退役、不同权限可见菜单、接口读写边界、普通角色不自动扩权、路由冷启动、页签权限和模板编译。
+- 执行边界：此次为菜单/权限重构，未 build、未启动或重启服务，未连接真实数据库执行迁移，未进行浏览器视觉验收。部署后后端下次启动会执行菜单同步；刷新或重新登录后获取新菜单。需要使用日志/导入配置的普通角色，须由管理员先确认菜单允许角色分配，再单独授予相应新权限。已有 `web/components.d.ts` 改动保留且不纳入提交。
+
+新增文件（3）：
+
+- `server/src/menus/system-access.spec.ts`
+- `web/src/router/systemNavigation.test.mjs`
+- `web/src/views/menu/Scope.vue`（原菜单分配配置页迁入）
+
+修改文件（18）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/dashboard/dashboard.registry.spec.ts`
+- `server/src/dashboard/dashboard.registry.ts`
+- `server/src/data-import/data-import.controller.ts`
+- `server/src/log-records/log-records.controller.ts`
+- `server/src/menus/entities/menu.entity.ts`
+- `server/src/menus/menu-structure.spec.ts`
+- `server/src/menus/menu-structure.ts`
+- `server/src/menus/menus.service.ts`
+- `server/src/users/users.service.ts`
+- `web/src/api/menu.ts`
+- `web/src/router/index.ts`
+- `web/src/views/data-import/Index.vue`
+- `web/src/views/log-record/Index.vue`
+- `web/src/views/menu/Index.vue`
+- `web/src/views/permission/Index.vue`
+- `web/src/views/role/Edit.vue`
+
+删除文件（1）：`web/src/views/system/Index.vue`（已迁入 `menu/Scope.vue`，业务保留）。
+
 ### 2026-10-19 修复 Dialog 内单选与多选菜单被裁切
 
 - 公共 Select / SelectMultiple 菜单改为 Teleport 到 body，以 fixed 视口坐标定位；复用 Element Plus 层级序列并高于当前弹窗祖先层级。保留 Dialog 内容区滚动，不通过加高弹窗或取消 overflow 绕过问题，无后端、接口或数据字段变更。

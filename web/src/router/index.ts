@@ -88,7 +88,7 @@ const routes: RouteRecordRaw[] = [
         path: 'permissions',
         name: 'permissions',
         component: () => import('@/views/permission/Index.vue'),
-        meta: { title: '权限管理', permission: 'Permission.read' },
+        meta: { title: '权限定义', permission: 'Permission.read' },
       },
       {
         path: 'menus',
@@ -99,14 +99,38 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'system-config',
         name: 'system-config',
-        redirect: '/system-config/menu',
-        meta: { title: '系统管理' },
+        // 等全局守卫完成会话加载后，再进入当前账号可访问的子页。
+        children: [],
+        beforeEnter: () => {
+          const user = useUserStore();
+          if (user.hasPermission('DashboardConfig.read'))
+            return '/system-config/home';
+          if (user.hasPermission('Menu.read')) return '/menus';
+          return user.hasPermission('DataImport.read')
+            ? '/system-config/data-import'
+            : '/';
+        },
+        meta: { title: '系统配置' },
+      },
+      {
+        path: 'access-control',
+        name: 'access-control',
+        children: [],
+        beforeEnter: () => {
+          const user = useUserStore();
+          if (user.hasPermission('User.read')) return '/users';
+          if (user.hasPermission('Role.read')) return '/roles';
+          if (user.hasPermission('Permission.read')) return '/permissions';
+          return user.hasPermission('LogRecord.read')
+            ? '/system-config/log-record'
+            : '/';
+        },
+        meta: { title: '权限与审计' },
       },
       {
         path: 'system-config/menu',
         name: 'system-config-menu',
-        component: () => import('@/views/system/Index.vue'),
-        meta: { title: '菜单可见性配置', permission: 'Menu.read' },
+        redirect: { path: '/menus', query: { tab: 'scope' } },
       },
       {
         path: 'system-config/home',
@@ -295,13 +319,13 @@ const routes: RouteRecordRaw[] = [
         path: 'system-config/log-record',
         name: 'system-config-log-record',
         component: () => import('@/views/log-record/Index.vue'),
-        meta: { title: '日志记录', permission: 'Menu.read' },
+        meta: { title: '操作日志', permission: 'LogRecord.read' },
       },
       {
         path: 'system-config/data-import',
         name: 'system-config-data-import',
         component: () => import('@/views/data-import/Index.vue'),
-        meta: { title: '数据导入', permission: 'Menu.read' },
+        meta: { title: '导入配置', permission: 'DataImport.read' },
       },
       {
         path: 'third-party-config/storage',

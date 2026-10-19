@@ -41,6 +41,8 @@ const ADMIN_PERMISSION_MODULES = [
   'Permission',
   'Menu',
   'DashboardConfig',
+  'LogRecord',
+  'DataImport',
   'KnowledgeAiProvider',
   'WechatConfig',
   'StorageConfig',

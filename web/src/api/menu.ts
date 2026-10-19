@@ -12,7 +12,7 @@ export interface MenuNode {
   sort: number;
   type: MenuType;
   permissionCode: string;
-  // 系统固定菜单：仅超管可见、不可分配给角色（由「系统配置 > 配置菜单」维护）
+  // 系统固定菜单：仅超管可见、不可分配给角色（由「菜单管理 > 分配范围」维护）
   isSystem: BoolLike;
   isActive: BoolLike;
   children: MenuNode[];

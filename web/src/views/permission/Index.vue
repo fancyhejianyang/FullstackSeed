@@ -67,7 +67,7 @@ function deletePermissionRequest(row: Permission) {
 </script>
 
 <template>
-  <PageContainer title="权限管理">
+  <PageContainer title="权限定义">
     <Table
       ref="tableRef"
       :columns="columns"

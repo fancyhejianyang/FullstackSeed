@@ -26,6 +26,9 @@ import {
 } from '@/api/moduleModel';
 import { formatDateTime } from '@/utils/format';
 import { getPermissionActionColor } from '@/utils/permission';
+import { useUserStore } from '@/stores/user';
+
+const user = useUserStore();
 
 interface ImportFieldMappingForm {
   id: string;
@@ -74,12 +77,13 @@ const importFieldOptions = computed(() =>
   })),
 );
 
-const requiredFieldProps = computed(() =>
-  new Set(
-    importableFields.value
-      .filter((field) => field.required)
-      .map((field) => field.prop),
-  ),
+const requiredFieldProps = computed(
+  () =>
+    new Set(
+      importableFields.value
+        .filter((field) => field.required)
+        .map((field) => field.prop),
+    ),
 );
 
 const selectedFieldMetas = computed(() =>
@@ -95,7 +99,9 @@ const systemFieldOptions = computed(() =>
   })),
 );
 
-const hasTemplate = computed(() => !!templateFile.value || !!existingTemplate.value);
+const hasTemplate = computed(
+  () => !!templateFile.value || !!existingTemplate.value,
+);
 
 const columns: TableColumn[] = [
   { prop: 'moduleName', label: '模块', width: 140, slot: true },
@@ -141,6 +147,7 @@ async function fetchModules() {
 }
 
 async function openConfig() {
+  if (!user.hasPermission('DataImport.create')) return;
   configVisible.value = true;
   editingConfig.value = null;
   selectedModuleId.value = '';
@@ -161,6 +168,7 @@ async function openConfig() {
 }
 
 async function openEditConfig(row: DataImportConfigItem) {
+  if (!user.hasPermission('DataImport.update')) return;
   configVisible.value = true;
   editingConfig.value = row;
   selectedModuleId.value = row.moduleId;
@@ -259,6 +267,12 @@ async function downloadExistingTemplate() {
 }
 
 async function saveConfig() {
+  if (
+    !user.hasPermission(
+      editingConfig.value ? 'DataImport.update' : 'DataImport.create',
+    )
+  )
+    return;
   if (!selectedModuleId.value) {
     ElMessage.warning('请选择模块');
     return;
@@ -320,7 +334,7 @@ onMounted(fetchModules);
 </script>
 
 <template>
-  <PageContainer title="数据导入" class="data-import">
+  <PageContainer title="导入配置" class="data-import">
     <Table
       ref="tableRef"
       :columns="columns"
@@ -330,11 +344,11 @@ onMounted(fetchModules);
     >
       <template #toolbar>
         <Button
-          :type="getPermissionActionColor('update')"
+          perm="DataImport.create"
           :icon="Setting"
           @click="(_event, done) => done(openConfig())"
         >
-          配置
+          新增配置
         </Button>
       </template>
 
@@ -351,12 +365,16 @@ onMounted(fetchModules);
 
       <template #column-moduleName="{ row }">
         <Button
+          v-if="user.hasPermission('DataImport.update')"
+          perm="DataImport.update"
           link
-          :type="getPermissionActionColor('update')"
-          @click="(_event, done) => done(openEditConfig(row as DataImportConfigItem))"
+          @click="
+            (_event, done) => done(openEditConfig(row as DataImportConfigItem))
+          "
         >
           {{ (row as DataImportConfigItem).moduleName }}
         </Button>
+        <span v-else>{{ (row as DataImportConfigItem).moduleName }}</span>
       </template>
 
       <template #column-fieldLabels="{ row }">
@@ -375,7 +393,10 @@ onMounted(fetchModules);
         <Button
           link
           :type="getPermissionActionColor('export')"
-          @click="(_event, done) => done(downloadTemplate(row as DataImportConfigItem))"
+          @click="
+            (_event, done) =>
+              done(downloadTemplate(row as DataImportConfigItem))
+          "
         >
           {{ (row as DataImportConfigItem).templateName }}
         </Button>
@@ -461,9 +482,7 @@ onMounted(fetchModules);
             :on-remove="handleTemplateRemove"
           >
             <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
-            <div class="el-upload__text">
-              将模板文件拖到此处，或点击上传
-            </div>
+            <div class="el-upload__text">将模板文件拖到此处，或点击上传</div>
             <template #tip>
               <div class="el-upload__tip">
                 支持 .xlsx / .xls / .csv，保存配置时会同步上传模板。
@@ -547,7 +566,8 @@ onMounted(fetchModules);
             </el-table-column>
             <el-table-column label="确认" width="120">
               <template #default="{ row }">
-                {{ row.templateField }} → {{ getSystemFieldLabel(row.fieldProp) }}
+                {{ row.templateField }} →
+                {{ getSystemFieldLabel(row.fieldProp) }}
               </template>
             </el-table-column>
           </el-table>

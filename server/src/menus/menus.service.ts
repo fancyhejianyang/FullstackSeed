@@ -402,6 +402,7 @@ const SEED_MENUS = reorganizeSystemMenus(BASE_SEED_MENUS);
 const PROTECTED_MENU_PATHS = [
   '/menus',
   '/system-config',
+  '/access-control',
   '/third-party-config',
   '/agent-management',
   '/chat-management',
@@ -426,6 +427,7 @@ export class MenusService implements OnModuleInit {
         legacyPaths = [],
         reconcile = false,
         preserveVisibility = false,
+        retired = false,
         ...menuSeed
       } = seed;
       const parent = parentPath
@@ -455,6 +457,7 @@ export class MenusService implements OnModuleInit {
             ...(preserveVisibility
               ? { isSystem: exist.isSystem, isActive: exist.isActive }
               : {}),
+            ...(retired ? { isActive: false } : {}),
             parentId: parent?.id ?? menuSeed.parentId ?? null,
           });
           continue;
@@ -470,6 +473,8 @@ export class MenusService implements OnModuleInit {
         continue;
       }
 
+      // 合并入口只停用旧记录以保留 ID；新环境不再创建重复入口。
+      if (retired) continue;
       await this.menuRepository.save(
         this.menuRepository.create({
           ...menuSeed,
@@ -531,7 +536,12 @@ export class MenusService implements OnModuleInit {
       if (codes.length === 0) return true;
       return codes.some((code) => permissions.includes(code));
     });
-    return this.buildTree(visible);
+    return this.buildTree(visible).filter(
+      (node) =>
+        !['/system-config', '/access-control', '/third-party-config'].includes(
+          node.path,
+        ) || node.children.length > 0,
+    );
   }
 
   findOne(id: number) {

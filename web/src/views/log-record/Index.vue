@@ -19,7 +19,9 @@ import {
   type QueryLogRecordParams,
 } from '@/api/logRecord';
 import { formatDateTime } from '@/utils/format';
-import { getPermissionActionColor } from '@/utils/permission';
+import { useUserStore } from '@/stores/user';
+
+const user = useUserStore();
 
 const tableRef = ref<{ refresh: () => Promise<void> }>();
 const configVisible = ref(false);
@@ -99,6 +101,7 @@ async function fetchModuleConfigs() {
 }
 
 async function openConfig() {
+  if (!user.hasPermission('LogRecord.update')) return;
   configVisible.value = true;
   configLoading.value = true;
   try {
@@ -112,13 +115,16 @@ async function openConfig() {
 }
 
 async function saveConfig() {
+  if (!user.hasPermission('LogRecord.update')) return;
   savingConfig.value = true;
   try {
     const selected = new Set(selectedModuleIds.value);
-    const configs: LogModuleConfigPayload[] = moduleConfigs.value.map((item) => ({
-      moduleId: item.moduleId,
-      enabled: selected.has(item.moduleId),
-    }));
+    const configs: LogModuleConfigPayload[] = moduleConfigs.value.map(
+      (item) => ({
+        moduleId: item.moduleId,
+        enabled: selected.has(item.moduleId),
+      }),
+    );
     moduleConfigs.value = await updateLogModuleConfigs(configs);
     selectedModuleIds.value = moduleConfigs.value
       .filter((item) => item.enabled)
@@ -135,7 +141,7 @@ onMounted(fetchModuleConfigs);
 </script>
 
 <template>
-  <PageContainer title="日志记录">
+  <PageContainer title="操作日志">
     <Table
       ref="tableRef"
       :columns="columns"
@@ -145,11 +151,11 @@ onMounted(fetchModuleConfigs);
     >
       <template #toolbar>
         <Button
-          :type="getPermissionActionColor('update')"
+          perm="LogRecord.update"
           :icon="Setting"
           @click="(_, done) => done(openConfig())"
         >
-          配置
+          日志配置
         </Button>
       </template>
 

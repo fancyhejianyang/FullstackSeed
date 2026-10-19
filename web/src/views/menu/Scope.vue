@@ -1,57 +1,39 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { ref } from 'vue';
 import { ElMessage } from 'element-plus';
-import PageContainer from '@/components/PageContainer.vue';
 import Switch from '@/components/Switch.vue';
-import { getMenuTree, updateMenu, type MenuNode } from '@/api/menu';
+import { updateMenu, type MenuNode } from '@/api/menu';
+import { useUserStore } from '@/stores/user';
 
-const loading = ref(false);
-const tree = ref<MenuNode[]>([]);
-
-// 后端 tinyint 字段会序列化成 0/1，递归归一化为布尔，
-// 否则 el-switch 绑定值与 active/inactive-value(布尔) 不严格相等，会在挂载时自动 emit change 触发误请求
-function normalizeBool(nodes: MenuNode[]): MenuNode[] {
-  for (const n of nodes) {
-    n.isSystem = !!n.isSystem;
-    n.isActive = !!n.isActive;
-    if (n.children?.length) normalizeBool(n.children);
-  }
-  return nodes;
-}
-
-async function fetchMenus() {
-  loading.value = true;
-  try {
-    tree.value = normalizeBool(await getMenuTree());
-  } finally {
-    loading.value = false;
-  }
-}
+defineProps<{ tree: MenuNode[]; loading: boolean }>();
+const emit = defineEmits<{ changed: [] }>();
+const user = useUserStore();
+const savingId = ref<number | null>(null);
 
 // 切换「系统固定 / 可分配」：isSystem=true 系统固定（仅超管可见、不可分配）
 async function handleToggle(row: MenuNode, value: boolean) {
   // 同值短路：防止任何非用户主动触发的 change 造成多余请求
-  if (value === row.isSystem) return;
+  if (!user.isAdmin || savingId.value !== null || value === !!row.isSystem)
+    return;
+  savingId.value = row.id;
   try {
     await updateMenu(row.id, { isSystem: value });
     row.isSystem = value;
-    ElMessage.success(value ? '已设为系统固定' : '已设为可分配给角色');
-  } catch {
-    // 失败（如受保护菜单被后端拒绝）时重新拉取还原状态
-    await fetchMenus();
+    ElMessage.success(value ? '已设为仅超管使用' : '已允许角色分配');
+    emit('changed');
+  } finally {
+    savingId.value = null;
   }
 }
-
-onMounted(fetchMenus);
 </script>
 
 <template>
-  <PageContainer title="配置菜单">
+  <div v-if="user.isAdmin">
     <el-alert
       type="info"
       :closable="false"
       show-icon
-      title="系统固定菜单仅超级管理员可见、不可分配给角色；可分配菜单才能在角色授权中选择。锁定菜单的操作权限由后端按管理员身份校验。"
+      title="仅超管使用的菜单不能分配给普通角色；允许角色分配后，仍需在角色管理中授权。此设置不代表启用或禁用菜单。"
       class="config-menu__tip"
     />
     <el-table
@@ -64,7 +46,9 @@ onMounted(fetchMenus);
     >
       <el-table-column prop="name" label="菜单名称" min-width="180">
         <template #default="{ row }">
-          <el-icon v-if="row.icon" class="config-menu__icon"><component :is="row.icon" /></el-icon>
+          <el-icon v-if="row.icon" class="config-menu__icon"
+            ><component :is="row.icon"
+          /></el-icon>
           {{ row.name }}
         </template>
       </el-table-column>
@@ -74,25 +58,26 @@ onMounted(fetchMenus);
       <el-table-column label="当前分类" width="120">
         <template #default="{ row }">
           <el-tag size="small" :type="row.isSystem ? 'warning' : 'success'">
-            {{ row.isSystem ? '系统固定' : '可分配' }}
+            {{ row.isSystem ? '仅超管使用' : '允许角色分配' }}
           </el-tag>
         </template>
       </el-table-column>
       <el-table-column label="配置" width="220">
         <template #default="{ row }">
           <Switch
-            :model-value="row.isSystem"
+            :model-value="!!row.isSystem"
+            :disabled="savingId !== null"
             :active-value="true"
             :inactive-value="false"
-            active-text="系统固定"
-            inactive-text="可分配"
+            active-text="仅超管使用"
+            inactive-text="允许角色分配"
             inline-prompt
             @update:model-value="(val: boolean) => handleToggle(row, val)"
           />
         </template>
       </el-table-column>
     </el-table>
-  </PageContainer>
+  </div>
 </template>
 
 <style scoped>

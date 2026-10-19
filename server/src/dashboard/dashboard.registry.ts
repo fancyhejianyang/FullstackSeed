@@ -212,7 +212,7 @@ export const DASHBOARD_WIDGETS: WidgetDefinition[] = [
     name: '最近业务动态',
     description: '有权限业务模块的近期操作',
     category: 'list',
-    permissionCodes: ['Menu.read'],
+    permissionCodes: ['LogRecord.read'],
     allowedSpans: [6, 8, 12],
     defaultSpan: 8,
     schemaVersion: 1,
