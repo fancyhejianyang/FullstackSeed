@@ -69,13 +69,16 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
     this.activeAbort?.abort();
   }
 
+  configOptions(query: QueryContentArticleDto) {
+    return this.configs.contentCreationOptions(query);
+  }
+
   async submit(articleId: number, dto: GenerateContentTaskDto, userId: number) {
     const existing = await this.tasks.findOne({
       where: { userId, requestId: dto.requestId },
     });
     if (existing) {
-      if (existing.articleId !== articleId)
-        throw new ConflictException('请求号已用于其它文章');
+      this.assertSameRequest(existing, articleId, dto);
       await this.article(articleId, userId);
       return this.summary(existing);
     }
@@ -84,7 +87,9 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
       throw new ConflictException('文章已更新，请重新打开后生成');
     if (!article.idea.trim())
       throw new BadRequestException('请先填写并保存想法');
-    const config = await this.configs.findContentCreationConfig();
+    const config = await this.configs.findUsableContentCreationConfig(
+      dto.aiConfigId,
+    );
     // 仅校验配置，不调用计费 API；秘密不持久化到任务快照。
     await this.providers.resolveChatTarget({
       id: config.providerId!,
@@ -145,13 +150,31 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
         const retried = await this.tasks.findOne({
           where: { userId, requestId: dto.requestId, articleId },
         });
-        if (retried) return this.summary(retried);
+        if (retried) {
+          this.assertSameRequest(retried, articleId, dto);
+          return this.summary(retried);
+        }
         throw new ConflictException(
           '已有文章正在排队或生成，请等待完成后再提交',
         );
       }
       throw error;
     }
+  }
+
+  private assertSameRequest(
+    task: ContentGenerationTask,
+    articleId: number,
+    dto: GenerateContentTaskDto,
+  ) {
+    if (task.articleId !== articleId)
+      throw new ConflictException('请求号已用于其它文章');
+    if (
+      task.articleVersion !== dto.version ||
+      task.snapshot.config.id !== dto.aiConfigId ||
+      task.snapshot.template.id !== (dto.templateId ?? null)
+    )
+      throw new ConflictException('请求号已用于不同生成参数，请重新提交');
   }
 
   async list(articleId: number, query: QueryContentArticleDto, userId: number) {

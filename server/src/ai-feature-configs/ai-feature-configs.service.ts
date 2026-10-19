@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -110,7 +109,7 @@ export class AiFeatureConfigsService {
     const entity = this.configRepository.create(payload);
     this.normalizeFeatureSpecificSettings(entity);
     await this.assertExecutableConfig(entity);
-    const saved = await this.saveConfig(entity);
+    const saved = await this.configRepository.save(entity);
     return saved;
   }
 
@@ -119,41 +118,44 @@ export class AiFeatureConfigsService {
     Object.assign(config, await this.toEntityPayload(dto, false));
     this.normalizeFeatureSpecificSettings(config);
     await this.assertExecutableConfig(config);
-    return this.saveConfig(config);
+    return this.configRepository.save(config);
   }
 
-  async findContentCreationConfig() {
-    const rows = await this.configRepository.find({
-      where: { featureType: 'contentCreation', isEnabled: true },
-      take: 2,
+  async findUsableContentCreationConfig(id: number) {
+    const config = await this.findOne(id);
+    if (config.featureType !== 'contentCreation')
+      throw new BadRequestException('请选择内容创作类型的 AI 功能配置');
+    if (!config.isEnabled)
+      throw new BadRequestException('该内容创作配置未启用');
+    if (!config.providerId || !config.model?.trim())
+      throw new BadRequestException('内容创作配置缺少大模型账号或模型');
+    return config;
+  }
+
+  async contentCreationOptions(query: {
+    page?: number;
+    pageSize?: number;
+    keyword?: string;
+  }) {
+    const keyword = query.keyword?.trim();
+    const base = { featureType: 'contentCreation' as const, isEnabled: true };
+    const [rows, total] = await this.configRepository.findAndCount({
+      select: { id: true, name: true, model: true },
+      where: keyword
+        ? [
+            { ...base, name: Like(`%${keyword}%`) },
+            { ...base, model: Like(`%${keyword}%`) },
+          ]
+        : base,
+      order: { id: 'DESC' },
+      skip: ((query.page ?? 1) - 1) * (query.pageSize ?? 100),
+      take: query.pageSize ?? 100,
     });
-    if (rows.length !== 1 || !rows[0].providerId || !rows[0].model) {
-      throw new BadRequestException(
-        '请在 AI 功能配置中启用且仅启用一个“内容创作”配置',
-      );
-    }
-    return rows[0];
-  }
-
-  private async saveConfig(config: AiFeatureConfig) {
-    if (config.featureType === 'contentCreation' && config.isEnabled) {
-      const enabled = await this.configRepository.find({
-        where: { featureType: 'contentCreation', isEnabled: true },
-      });
-      if (enabled.some((item) => item.id !== config.id))
-        throw new ConflictException('已有启用的内容创作配置，请先停用原配置');
-    }
-    try {
-      return await this.configRepository.save(config);
-    } catch (error) {
-      if (
-        (error as { code?: string }).code === 'ER_DUP_ENTRY' &&
-        config.featureType === 'contentCreation'
-      ) {
-        throw new ConflictException('已有启用的内容创作配置，请先停用原配置');
-      }
-      throw error;
-    }
+    // 专用于生成选项，不暴露配置管理接口或提示词、账号参数。
+    return {
+      list: rows.map(({ id, name, model }) => ({ id, name, model })),
+      total,
+    };
   }
 
   async remove(id: number) {

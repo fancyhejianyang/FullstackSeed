@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref } from 'vue';
+import { ElMessage } from 'element-plus';
+import { useUserStore } from '@/stores/user';
 import { taskColor, taskLabel, isActiveTask } from './taskState';
 import PageContainer from '@/components/PageContainer.vue';
 import Button from '@/components/Button.vue';
@@ -12,11 +14,14 @@ import {
   batchDeleteContentArticles,
   type ContentArticleSummary,
 } from '@/api/contentArticle';
+import Generate from './Generate.vue';
 import Edit from './Edit.vue';
 import View from './View.vue';
 
+const user = useUserStore();
 const tableRef = ref<{
   refresh: () => Promise<void>;
+  clearSelection: () => void;
   runBatchDelete: () => Promise<void>;
 }>();
 const columns: TableColumn[] = [
@@ -61,6 +66,25 @@ onBeforeUnmount(() => {
 const searchFields: FormField[] = [
   { prop: 'keyword', label: '标题', type: 'input', placeholder: '搜索标题' },
 ];
+const generateVisible = ref(false);
+const generatingRow = ref<ContentArticleSummary | null>(null);
+function canGenerate(rows: ContentArticleSummary[]) {
+  return rows.length === 1 && !isActiveTask(rows[0]?.latestTask);
+}
+function openGenerate(rows: ContentArticleSummary[]) {
+  if (!user.hasPermission('ContentArticle.update')) return;
+  if (rows.length !== 1) {
+    ElMessage.warning('请选中一篇文章后生成');
+    return;
+  }
+  if (!canGenerate(rows)) return;
+  generatingRow.value = rows[0]!;
+  generateVisible.value = true;
+}
+function submitted() {
+  tableRef.value?.clearSelection();
+  void tableRef.value?.refresh().catch(() => undefined);
+}
 const editVisible = ref(false);
 const viewVisible = ref(false);
 const editingRow = ref<ContentArticleSummary | null>(null);
@@ -96,10 +120,11 @@ function batchDeleteRequest({ ids }: { ids: Array<string | number> }) {
       :delete-request="deleteRequest"
       :batch-delete-request="batchDeleteRequest"
       perm-module="contentArticle"
+      :action-width="260"
       @view="handleView"
       @edit="handleEdit"
     >
-      <template #toolbar>
+      <template #toolbar="{ selectedRows }">
         <Button
           perm="ContentArticle.read"
           icon="Refresh"
@@ -110,10 +135,28 @@ function batchDeleteRequest({ ids }: { ids: Array<string | number> }) {
           >记录想法</Button
         >
         <Button
+          perm="ContentArticle.update"
+          icon="MagicStick"
+          :disabled="!canGenerate(selectedRows)"
+          title="选中一篇文章，选择模板与 AI 配置后生成"
+          @click="openGenerate(selectedRows)"
+          >AI 生成</Button
+        >
+        <Button
           perm="ContentArticle.batchDelete"
           :confirm="false"
           @click="tableRef?.runBatchDelete()"
           >批量删除</Button
+        >
+      </template>
+      <template #actions="{ row }">
+        <Button
+          perm="ContentArticle.update"
+          link
+          :auto-icon="false"
+          :disabled="isActiveTask(row.latestTask)"
+          @click="openGenerate([row])"
+          >AI 生成</Button
         >
       </template>
       <template #column-latestTask="{ row }"
@@ -136,6 +179,11 @@ function batchDeleteRequest({ ids }: { ids: Array<string | number> }) {
         formatDateTime(row.updatedAt)
       }}</template>
     </Table>
+    <Generate
+      v-model:visible="generateVisible"
+      :row="generatingRow"
+      @submitted="submitted"
+    />
     <Edit
       v-model:visible="editVisible"
       :row="editingRow"

@@ -144,31 +144,57 @@ describe('AiFeatureConfigsService', () => {
       thinkingParameters: { enable_thinking: true },
     });
   });
-  it('创作配置必须唯一，不回退聊天配置', async () => {
-    const repository = { find: jest.fn().mockResolvedValue([]) };
+  it('按指定 ID 选择启用创作配置，不回退聊天或其它配置', async () => {
+    const repository = { findOne: jest.fn().mockResolvedValue(null) };
     const contentService = new AiFeatureConfigsService(
       repository as never,
       {} as never,
       {} as never,
     );
-    await expect(contentService.findContentCreationConfig()).rejects.toThrow(
-      '内容创作',
-    );
-    const config = { id: 1, providerId: 2, model: 'text' };
-    repository.find.mockResolvedValue([config, { ...config, id: 2 }]);
-    await expect(contentService.findContentCreationConfig()).rejects.toThrow(
-      '仅启用一个',
-    );
-    repository.find.mockResolvedValue([config]);
-    await expect(contentService.findContentCreationConfig()).resolves.toEqual(
-      config,
-    );
-    expect(repository.find).toHaveBeenLastCalledWith({
-      where: { featureType: 'contentCreation', isEnabled: true },
-      take: 2,
-    });
+    await expect(
+      contentService.findUsableContentCreationConfig(9),
+    ).rejects.toThrow('不存在');
+    for (const config of [
+      { featureType: 'chat', isEnabled: true, providerId: 2, model: 'text' },
+      {
+        featureType: 'contentCreation',
+        isEnabled: false,
+        providerId: 2,
+        model: 'text',
+      },
+      {
+        featureType: 'contentCreation',
+        isEnabled: true,
+        providerId: null,
+        model: 'text',
+      },
+      {
+        featureType: 'contentCreation',
+        isEnabled: true,
+        providerId: 2,
+        model: ' ',
+      },
+    ]) {
+      repository.findOne.mockResolvedValue(config);
+      await expect(
+        contentService.findUsableContentCreationConfig(9),
+      ).rejects.toThrow();
+    }
+    const config = {
+      id: 9,
+      featureType: 'contentCreation',
+      isEnabled: true,
+      providerId: 2,
+      model: 'text',
+    };
+    repository.findOne.mockResolvedValue(config);
+    await expect(
+      contentService.findUsableContentCreationConfig(9),
+    ).resolves.toEqual(config);
+    expect(repository.findOne).toHaveBeenLastCalledWith({ where: { id: 9 } });
   });
-  it('拒绝第二个启用创作配置，数据库并发冲突也转换为明确错误', async () => {
+
+  it('允许多个启用创作配置，仍校验账号模型能力', async () => {
     const repository = {
       create: jest.fn((value: unknown) => value),
       save: jest.fn((value: unknown) => Promise.resolve(value)),
@@ -183,17 +209,66 @@ describe('AiFeatureConfigsService', () => {
       providers as never,
       {} as never,
     );
-    const dto = {
-      name: '创作',
-      featureType: 'contentCreation' as const,
-      providerId: 2,
+    await expect(
+      contentService.create({
+        name: '第二个创作',
+        featureType: 'contentCreation',
+        providerId: 2,
+        model: 'text',
+      }),
+    ).resolves.toMatchObject({ name: '第二个创作', isEnabled: true });
+    expect(providers.assertModelSupported).toHaveBeenCalledWith({
+      id: 2,
       model: 'text',
+      featureType: 'contentCreation',
+    });
+    expect(repository.save).toHaveBeenCalledTimes(1);
+    expect(repository.find).not.toHaveBeenCalled();
+  });
+
+  it('选项只查询启用创作的 ID、名称、模型，支持搜索分页且不外泄其它字段', async () => {
+    const repository = {
+      findAndCount: jest.fn().mockResolvedValue([
+        [
+          {
+            id: 9,
+            name: '创作',
+            model: 'text',
+            systemPrompt: 'private',
+            thinkingParameters: { secret: true },
+          },
+        ],
+        101,
+      ]),
     };
-    await expect(contentService.create(dto)).rejects.toThrow('先停用');
-    expect(repository.save).not.toHaveBeenCalled();
-    repository.find.mockResolvedValue([]);
-    repository.save.mockRejectedValue({ code: 'ER_DUP_ENTRY' });
-    await expect(contentService.create(dto)).rejects.toThrow('先停用');
+    const service = new AiFeatureConfigsService(
+      repository as never,
+      {} as never,
+      {} as never,
+    );
+    await expect(
+      service.contentCreationOptions({
+        page: 2,
+        pageSize: 100,
+        keyword: ' 创作 ',
+      }),
+    ).resolves.toEqual({
+      list: [{ id: 9, name: '创作', model: 'text' }],
+      total: 101,
+    });
+    expect(repository.findAndCount).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: { id: true, name: true, model: true },
+        skip: 100,
+        take: 100,
+        where: expect.arrayContaining([
+          expect.objectContaining({
+            featureType: 'contentCreation',
+            isEnabled: true,
+          }),
+        ]) as unknown,
+      }),
+    );
   });
 
   it('keeps other enabled configurations when resolving the default by feature type', async () => {

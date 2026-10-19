@@ -61,7 +61,7 @@ function harness() {
   const exports = {};
   const script =
     parse(editor).descriptor.scriptSetup.content +
-    '\nexport { form, formRef, fields, version, savedId, revision, activeTask, generating, busy, loadFailed, generate, handleSubmit, canLeave, beforeClose, requestClose, adopted, templateId };';
+    '\nexport { form, formRef, fields, version, savedId, busy, loadFailed, handleSubmit, canLeave, beforeClose, requestClose, adopted };';
   scope.run(() =>
     new Function(
       'require',
@@ -151,92 +151,20 @@ test('表单仅四字段，打开新记录不调用模型，正文可空保存',
   h.close();
 });
 
-test('保存后提交后台任务，原文不被覆盖，任务运行不阻止关闭', async () => {
-  const h = harness();
-  h.props.row = { id: 1 };
-  h.visible.value = true;
-  await flush();
-  h.form.idea = '新想法';
-  h.templateId.value = '8';
-  await h.generate();
-  assert.equal(h.form.content, '原文');
-  const update = h.calls.find((call) => call[0] === 'update');
-  const generate = h.calls.find((call) => call[0] === 'generate');
-  assert.equal(update[2].idea, '新想法');
-  assert.equal(generate[1], 1);
-  assert.equal(generate[2].version, 5);
-  assert.equal(generate[2].templateId, 8);
-  assert.match(generate[2].requestId, /^[0-9a-f-]{36}$/);
-  assert.ok(h.calls.indexOf(update) < h.calls.indexOf(generate));
-  assert.equal(h.activeTask.value, true);
-  assert.equal(await h.canLeave(), true);
-  assert.equal(h.generating.value, false);
-  await h.requestClose();
-  assert.equal(h.visible.value, false);
-  h.close();
-});
-
-test('提交响应失败后保留草稿 ID 与请求号，重试不会重复创建文章', async () => {
-  const h = harness();
-  h.visible.value = true;
-  await flush();
-  h.form.title = '标题';
-  h.form.idea = '想法';
-  h.state.result = Promise.reject(Error('network'));
-  await h.generate();
-  const first = h.calls.find((call) => call[0] === 'generate');
-  assert.equal(h.savedId.value, 1);
-  h.state.result = { id: 20, status: 'pending' };
-  await h.generate();
-  assert.equal(h.calls.filter((call) => call[0] === 'create').length, 1);
-  const requests = h.calls.filter((call) => call[0] === 'generate');
-  assert.equal(requests.length, 2);
-  assert.equal(requests[1][2].requestId, first[2].requestId);
-  h.close();
-});
-
-test('保存冲突时不提交任务，仍保留窗口和编辑正文', async () => {
+test('保存冲突时不关闭，仍保留窗口和编辑正文', async () => {
   const h = harness();
   h.props.row = { id: 1 };
   h.visible.value = true;
   await flush();
   h.form.content = '手改正文';
   h.state.saveError = true;
-  await h.generate();
+  await h.handleSubmit();
   assert.equal(h.form.content, '手改正文');
   assert.equal(
     h.calls.some((call) => call[0] === 'generate'),
     false,
   );
   assert.equal(h.visible.value, true);
-  assert.equal(h.generating.value, false);
-  h.close();
-});
-
-test('空想法不触发模型；进行中禁重复调用与关闭', async () => {
-  const h = harness();
-  h.visible.value = true;
-  await flush();
-  h.form.title = '标题';
-  await h.generate();
-  assert.equal(
-    h.calls.some((call) => call[0] === 'generate'),
-    false,
-  );
-  let resolve;
-  h.state.result = new Promise((done) => {
-    resolve = done;
-  });
-  h.form.idea = '想法';
-  const pending = h.generate();
-  const duplicate = h.generate();
-  await flush();
-  await duplicate;
-  await h.generate();
-  assert.equal(h.calls.filter((call) => call[0] === 'generate').length, 1);
-  assert.equal(await h.canLeave(), false);
-  resolve({ id: 20, status: 'pending' });
-  await pending;
   h.close();
 });
 
@@ -304,27 +232,10 @@ test('详情读取失败不允许保存；迟到详情不覆盖新记录', async
   h.close();
 });
 
-test('卸载后的生成响应不会写入表单', async () => {
-  const h = harness();
-  h.visible.value = true;
-  await flush();
-  h.form.title = '标题';
-  h.form.idea = '想法';
-  let resolve;
-  h.state.result = new Promise((done) => {
-    resolve = done;
-  });
-  const pending = h.generate();
-  await flush();
-  h.close();
-  resolve({ id: 20, status: 'pending' });
-  await pending;
-  assert.equal(h.revision.value, 0);
-});
-
-test('三个页面模板与样式可编译，不执行生成 HTML', async () => {
+test('创作页面模板与样式可编译，不执行生成 HTML', async () => {
   for (const filename of [
     'Index.vue',
+    'Generate.vue',
     'Edit.vue',
     'View.vue',
     'Tasks.vue',

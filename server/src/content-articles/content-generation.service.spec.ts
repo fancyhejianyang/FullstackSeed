@@ -46,7 +46,8 @@ function setup() {
     (callback: (manager: unknown) => Promise<unknown>) => callback(manager),
   );
   const configs = {
-    findContentCreationConfig: jest.fn().mockResolvedValue(config),
+    findUsableContentCreationConfig: jest.fn().mockResolvedValue(config),
+    contentCreationOptions: jest.fn().mockResolvedValue({ list: [], total: 0 }),
   };
   const providers = {
     resolveChatTarget: jest
@@ -79,6 +80,7 @@ function setup() {
     version: 2,
     requestId: '890a892d-b369-405e-a8f1-7cb2c830a5a9',
     templateId: 8,
+    aiConfigId: 5,
   };
   const task = {
     id: 20,
@@ -118,7 +120,7 @@ describe('持久化文章生成任务', () => {
       articleVersion: 2,
     });
     expect(h.templates.findOne).toHaveBeenCalledWith(8, 7);
-    expect(h.configs.findContentCreationConfig).toHaveBeenCalledTimes(1);
+    expect(h.configs.findUsableContentCreationConfig).toHaveBeenCalledWith(5);
     expect(h.tasks.save).toHaveBeenCalledWith(
       expect.objectContaining({
         activeArticleId: 3,
@@ -143,8 +145,55 @@ describe('持久化文章生成任务', () => {
       id: 20,
     });
     await expect(h.service.submit(4, h.dto, 7)).rejects.toThrow('请求号');
-    expect(h.configs.findContentCreationConfig).not.toHaveBeenCalled();
+    expect(h.configs.findUsableContentCreationConfig).not.toHaveBeenCalled();
     expect(h.tasks.save).not.toHaveBeenCalled();
+  });
+  it('同请求号不能悄悄替换配置、模板或文章版本', async () => {
+    const h = setup();
+    h.tasks.findOne.mockResolvedValue(h.task);
+    for (const changes of [
+      { aiConfigId: 9 },
+      { templateId: 10 },
+      { version: 3 },
+    ]) {
+      await expect(
+        h.service.submit(3, { ...h.dto, ...changes }, 7),
+      ).rejects.toThrow('不同生成参数');
+    }
+    expect(h.tasks.save).not.toHaveBeenCalled();
+    expect(h.providers.callChat).not.toHaveBeenCalled();
+  });
+  it('安全选项入口仅委托专用概要方法；指定不同配置保存对应模型快照', async () => {
+    const h = setup();
+    const controller = new ContentArticlesController({} as never, h.service);
+    await expect(
+      controller.generationConfigs({ keyword: '写作', pageSize: 100 }),
+    ).resolves.toEqual({ list: [], total: 0 });
+    expect(h.configs.contentCreationOptions).toHaveBeenCalledWith({
+      keyword: '写作',
+      pageSize: 100,
+    });
+    h.configs.findUsableContentCreationConfig.mockResolvedValue({
+      ...h.config,
+      id: 9,
+      model: 'selected-model',
+    });
+    await h.service.submit(3, { ...h.dto, aiConfigId: 9 }, 7);
+    expect(h.configs.findUsableContentCreationConfig).toHaveBeenCalledWith(9);
+    expect(h.providers.resolveChatTarget).toHaveBeenCalledWith({
+      id: 6,
+      model: 'selected-model',
+    });
+    expect(h.tasks.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        snapshot: expect.objectContaining({
+          config: expect.objectContaining({
+            id: 9,
+            model: 'selected-model',
+          }) as unknown,
+        }) as unknown,
+      }),
+    );
   });
   it('数据库唯一约束兜底并发提交，网络重试回查同一任务', async () => {
     const h = setup();
@@ -168,7 +217,7 @@ describe('持久化文章生成任务', () => {
     h.article.idea = ' ';
     await expect(h.service.submit(3, h.dto, 7)).rejects.toThrow('想法');
     h.article.idea = '素材';
-    h.configs.findContentCreationConfig.mockRejectedValue(
+    h.configs.findUsableContentCreationConfig.mockRejectedValue(
       new Error('请配置内容创作'),
     );
     await expect(h.service.submit(3, h.dto, 7)).rejects.toThrow('内容创作');
@@ -188,7 +237,11 @@ describe('持久化文章生成任务', () => {
     h.templates.findOne.mockRejectedValueOnce(new Error('写作模板不存在'));
     await expect(h.service.submit(3, h.dto, 7)).rejects.toThrow('模板不存在');
     expect(h.tasks.save).not.toHaveBeenCalled();
-    await h.service.submit(3, { version: 2, requestId: h.dto.requestId }, 7);
+    await h.service.submit(
+      3,
+      { version: 2, requestId: h.dto.requestId, aiConfigId: 5 },
+      7,
+    );
     expect(h.templates.findOne).toHaveBeenCalledTimes(1);
   });
   it('从队列取出后按快照调用，仅保存候选结果，文章原文不变', async () => {

@@ -1,5 +1,43 @@
 # CHANGELOG
 
+### 2026-10-19 文章列表生成入口与指定模板、AI 配置
+
+- 文章列表每行新增“AI 生成”，顶部选中恰好一篇文章后也可打开同一个生成弹窗；保留多选删除，不自动批量调用。进行中的任务禁重复发起，成功提交后刷新列表并清空勾选。
+- 独立生成弹窗使用已保存文章的最新版本，选择 AI 配置（必选）与写作模板（可选，默认通用写作）。唯一配置自动选中，多个配置须明确选择；下拉支持搜索，超过 100 项提示筛选，搜索不丢失已选项。打开弹窗只读素材与选项，不创建/修改文章，不调用模型。
+- 编辑页移除底部“保存并生成”和模板控件，仍只有标题、封面、想法、正文四字段；保留未保存离开保护、版本校验与生成记录。文章“查看/编辑 → 生成记录”继续查看进度、候选稿并确认采用，不自动覆盖原文。
+- 前后端生成请求对齐新增必填正整数 `aiConfigId`，保留 `version/requestId/templateId`。后端按指定配置校验内容创作类型、启用状态、账号和模型，保存对应参数快照，不回退其它配置；请求号同时绑定文章、版本、配置和模板，网络重试复用同一任务，不允许同请求号换参数。
+- 新增 `GET /content-articles/generation-configs`，使用 `ContentArticle.update` 权限，只查询并返回已启用内容创作配置的 ID、名称、模型，支持分页搜索；不授予普通写作者 `Menu.read` 或配置管理能力，不返回提示词和账号参数。模板继续要求独立读取权限与本人归属。
+- 允许同时启用多个内容创作配置。新增前向迁移 `1792375200000-AllowContentCreationConfigSelection`，仅移除旧单例生成列及唯一索引，不修改历史迁移、业务配置或任务快照；回退前若存在多个启用配置则先拒绝，不自动停用用户配置。生产须先按维护流程执行迁移，并同步部署前后端；开发环境下次正常启动由现有 synchronize 策略应用。本次未连接数据库、未执行迁移、未启动/重启服务或调用真实模型。
+- 验证：后端 44 套 / 417 项 Jest、前端 99 项 Node 回归全部通过；前后端类型检查、变更后端文件 ESLint、实体列检查、离线 MySQL 元数据构建、Vue 模板/scoped CSS 编译和 diff 空白检查通过。组件复用核对使用现有 Table/Form/Dialog/Select/Button，无公共组件改动。后端生产构建及禁用声明文件写入的等效 Vite 构建通过；保留依赖 PURE 注释和大 chunk 警告。未进行真实数据库、供应商调用或浏览器视觉验收。
+- 已有未提交的 `web/components.d.ts` 保持原样，不纳入本次提交。
+
+新增文件（4）：
+
+- `server/src/migrations/1792375200000-AllowContentCreationConfigSelection.ts`
+- `server/src/migrations/1792375200000-AllowContentCreationConfigSelection.spec.ts`
+- `web/src/views/content-article/Generate.vue`
+- `web/src/views/content-article/generate.test.mjs`
+
+修改文件（15）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/ai-feature-configs/ai-feature-configs.service.ts`
+- `server/src/ai-feature-configs/ai-feature-configs.service.spec.ts`
+- `server/src/ai-feature-configs/entities/ai-feature-config.entity.ts`
+- `server/src/content-articles/content-articles.controller.ts`
+- `server/src/content-articles/content-articles.service.spec.ts`
+- `server/src/content-articles/content-generation.service.ts`
+- `server/src/content-articles/content-generation.service.spec.ts`
+- `server/src/content-articles/dto/content-article.dto.ts`
+- `web/src/api/contentArticle.ts`
+- `web/src/views/ai-feature-config/Edit.vue`
+- `web/src/views/content-article/Index.vue`
+- `web/src/views/content-article/Edit.vue`
+- `web/src/views/content-article/contentArticle.test.mjs`
+
+删除文件：无。
+
 ### 2026-10-19 内容创作配置、写作模板与持久化后台任务
 
 - AI 指令集、AI 工作流迁入统一“AI 功能配置”分组与页签，按原有 Menu / AiCommandDefinition / AiWorkflow 权限分别展示和挂载；旧聊天/Agent 地址保持重定向，原菜单 ID 与人工启停/超管可见性保留。新分组按路径匹配，避免同名父级占用旧配置菜单 ID。

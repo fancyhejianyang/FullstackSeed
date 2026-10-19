@@ -13,18 +13,14 @@ import Form, { type FormField } from '@/components/Form.vue';
 import Dialog from '@/components/Dialog.vue';
 import Button from '@/components/Button.vue';
 import Input from '@/components/Input.vue';
-import Select, { type SelectOption } from '@/components/Select.vue';
 import Tasks from './Tasks.vue';
 import { useUserStore } from '@/stores/user';
-import { getContentTemplates } from '@/api/contentTemplate';
-import { isActiveTask } from './taskState';
 import UploadImage from '@/components/UploadImage.vue';
 import { uploadFile } from '@/api/upload';
 import {
   createContentArticle,
   getContentArticle,
   updateContentArticle,
-  generateContentArticle,
   type ContentArticle,
   type ContentArticleForm,
   type ContentArticleSummary,
@@ -43,28 +39,15 @@ const form = reactive<ContentArticleForm>({
 const user = useUserStore();
 const version = ref(1);
 const savedId = ref<number | null>(null);
-const templateId = ref<string | null>('');
-const templateOptions = ref<SelectOption[]>([]);
-const templatesTruncated = ref(false);
-const revision = ref(0);
-const activeTask = ref(false);
 const adopting = ref(false);
-let templateSequence = 0;
-let pendingRequest: { key: string; id: string } | null = null;
 const loading = ref(false);
 const loadFailed = ref(false);
 const submitting = ref(false);
-const generating = ref(false);
 const uploading = ref(false);
 const baseline = ref(JSON.stringify(form));
 const dirty = computed(() => JSON.stringify(form) !== baseline.value);
 const busy = computed(
-  () =>
-    loading.value ||
-    submitting.value ||
-    generating.value ||
-    uploading.value ||
-    adopting.value,
+  () => loading.value || submitting.value || uploading.value || adopting.value,
 );
 const editPermission = computed(() =>
   savedId.value ? 'ContentArticle.update' : 'ContentArticle.create',
@@ -109,15 +92,9 @@ watch(
   async ([open, id]) => {
     const current = ++epoch;
     savedId.value = id ?? null;
-    templateId.value = '';
-    templateOptions.value = [];
-    activeTask.value = false;
-    pendingRequest = null;
     loadFailed.value = false;
     loading.value = false;
-    generating.value = false;
     if (!open) return;
-    void fetchTemplates();
     Object.assign(form, { title: '', coverUrl: '', idea: '', content: '' });
     baseline.value = JSON.stringify(form);
     version.value = 1;
@@ -146,45 +123,6 @@ function fillSaved(data: ContentArticle) {
   version.value = data.version;
   baseline.value = JSON.stringify(form);
 }
-async function fetchTemplates(keyword = '') {
-  if (!user.hasPermission('ContentTemplate.read') || !visible.value) return;
-  const sequence = ++templateSequence;
-  const current = epoch;
-  try {
-    const result = await getContentTemplates({ pageSize: 100, keyword });
-    if (sequence !== templateSequence || current !== epoch) return;
-    const selected = templateOptions.value.find(
-      (option) => option.value === templateId.value,
-    );
-    templateOptions.value = result.list.map((row) => ({
-      value: String(row.id),
-      text: row.name,
-    }));
-    if (
-      selected &&
-      !templateOptions.value.some((option) => option.value === selected.value)
-    )
-      templateOptions.value.unshift(selected);
-    templatesTruncated.value = result.total > result.list.length;
-  } catch {
-    /* 模板读取失败不影响通用写作。 */
-  }
-}
-function requestId() {
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
-  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
-  const hex = Array.from(bytes, (byte) =>
-    byte.toString(16).padStart(2, '0'),
-  ).join('');
-  return [
-    hex.slice(0, 8),
-    hex.slice(8, 12),
-    hex.slice(12, 16),
-    hex.slice(16, 20),
-    hex.slice(20),
-  ].join('-');
-}
 async function saveDraft() {
   if (savedId.value && !dirty.value) return;
   const current = epoch;
@@ -197,49 +135,6 @@ async function saveDraft() {
   if (current !== epoch) return;
   fillSaved(saved);
   emit('success');
-}
-async function generate() {
-  if (
-    busy.value ||
-    loadFailed.value ||
-    activeTask.value ||
-    !user.hasPermission('ContentArticle.update')
-  )
-    return;
-  await formRef.value?.validate();
-  if (busy.value || loadFailed.value || !visible.value) return;
-  if (!form.idea.trim()) {
-    ElMessage.warning('请先填写想法');
-    return;
-  }
-  generating.value = true;
-  const current = epoch;
-  try {
-    await saveDraft();
-    if (current !== epoch || !savedId.value) return;
-    const key = JSON.stringify([
-      savedId.value,
-      version.value,
-      templateId.value,
-    ]);
-    if (!pendingRequest || pendingRequest.key !== key)
-      pendingRequest = { key, id: requestId() };
-    const result = await generateContentArticle(savedId.value, {
-      version: version.value,
-      requestId: pendingRequest.id,
-      ...(templateId.value ? { templateId: Number(templateId.value) } : {}),
-    });
-    if (current !== epoch) return;
-    pendingRequest = null;
-    activeTask.value = isActiveTask(result);
-    revision.value++;
-    emit('success');
-    ElMessage.success('已提交，可在生成记录中查看进度');
-  } catch {
-    /* 保留已保存的文章和请求号，网络失败重试不重复创建任务。 */
-  } finally {
-    if (current === epoch) generating.value = false;
-  }
 }
 function adopted(article: ContentArticle) {
   fillSaved(article);
@@ -369,29 +264,6 @@ onBeforeUnmount(() => {
           </div>
         </template>
       </Form>
-      <div v-if="!loadFailed && !loading" class="article-editor__generation">
-        <Select
-          v-if="user.hasPermission('ContentTemplate.read')"
-          v-model="templateId"
-          :options="templateOptions"
-          :disabled="busy"
-          placeholder="通用写作 · 可选模板"
-          aria-label="写作模板"
-          @search="fetchTemplates"
-        />
-        <Button
-          v-if="user.hasPermission(editPermission)"
-          perm="ContentArticle.update"
-          icon="MagicStick"
-          :loading="generating"
-          :disabled="busy || activeTask"
-          title="保存当前文章并提交后台生成任务，调用可能计费"
-          @click="generate"
-        >
-          {{ activeTask ? '任务进行中' : '保存并生成' }}
-        </Button>
-        <span v-if="templatesTruncated">匹配项较多，请输入模板名称筛选</span>
-      </div>
       <Tasks
         v-if="
           visible &&
@@ -403,9 +275,7 @@ onBeforeUnmount(() => {
         :key="savedId"
         :article-id="savedId"
         :version="version"
-        :revision="revision"
         :can-adopt="!dirty && !busy"
-        @active="activeTask = $event"
         @busy="adopting = $event"
         @adopted="adopted"
       />
@@ -431,15 +301,5 @@ onBeforeUnmount(() => {
 .article-editor__body {
   width: 100%;
   min-width: 0;
-}
-.article-editor__generation {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  margin-top: 16px;
-}
-.article-editor__generation :deep(.select) {
-  max-width: 280px;
 }
 </style>

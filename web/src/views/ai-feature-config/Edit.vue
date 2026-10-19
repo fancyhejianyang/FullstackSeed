@@ -134,7 +134,7 @@ const fields = computed<FormField[]>(() => {
         form.featureType === 'chat'
           ? '当前为聊天：所选模型负责生成对话与知识库问答的最终回复。'
           : form.featureType === 'contentCreation'
-            ? '用于文章后台生成；同一时间只允许启用一个内容创作配置。'
+            ? '用于文章后台生成；可启用多个配置，生成时选择使用哪一个。'
             : form.featureType === 'rerank'
               ? '当前为 LLM 重排：模型只给召回的知识片段评分和排序，不参与最终回答。'
               : form.featureType === 'ocr'

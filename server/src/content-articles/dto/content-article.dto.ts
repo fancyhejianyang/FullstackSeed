@@ -58,6 +58,10 @@ export class GenerateContentTaskDto extends AdoptContentTaskDto {
   @IsUUID()
   requestId: string;
 
+  @IsInt()
+  @Min(1)
+  aiConfigId: number;
+
   @IsOptional()
   @IsInt()
   @Min(1)

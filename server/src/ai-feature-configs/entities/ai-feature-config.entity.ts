@@ -7,21 +7,6 @@ import type {
 
 @Entity('ai_feature_configs')
 export class AiFeatureConfig extends BaseEntity {
-  // MySQL 唯一索引允许多个 NULL；仅内容创作的启用记录占用固定键。
-  @Index('UQ_ai_feature_active_content', { unique: true })
-  @Column({
-    type: 'varchar',
-    length: 40,
-    nullable: true,
-    select: false,
-    insert: false,
-    update: false,
-    asExpression:
-      "CASE WHEN featureType = 'contentCreation' AND isEnabled = 1 AND deletedAt IS NULL THEN 'contentCreation' ELSE NULL END",
-    generatedType: 'STORED',
-  })
-  activeContentKey: string | null;
-
   @Column({ length: 120 })
   name: string;
 

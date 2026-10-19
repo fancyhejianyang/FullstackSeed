@@ -86,9 +86,29 @@ export interface ContentTaskDetail extends ContentTask {
   };
   result: string | null;
 }
+export interface ContentGenerationConfigOption {
+  id: number;
+  name: string;
+  model: string | null;
+}
+export function getContentGenerationConfigs(params: {
+  page?: number;
+  pageSize?: number;
+  keyword?: string;
+}) {
+  return request.get<
+    unknown,
+    { list: ContentGenerationConfigOption[]; total: number }
+  >('/content-articles/generation-configs', { params });
+}
 export function generateContentArticle(
   id: number,
-  data: { version: number; requestId: string; templateId?: number },
+  data: {
+    version: number;
+    requestId: string;
+    aiConfigId: number;
+    templateId?: number;
+  },
 ) {
   return request.post<unknown, ContentTask>(
     `/content-articles/${id}/generate`,

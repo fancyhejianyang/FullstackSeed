@@ -44,6 +44,13 @@ export class ContentArticlesController {
     return this.service.findAll(query, userId);
   }
 
+  @Get('generation-configs')
+  @RequirePermissions('ContentArticle.update')
+  @ApiOperation({ summary: '文章生成可选配置（仅启用的内容创作配置概要）' })
+  generationConfigs(@Query() query: QueryContentArticleDto) {
+    return this.generation.configOptions(query);
+  }
+
   @Get(':id')
   @RequirePermissions('ContentArticle.read')
   @ApiOperation({ summary: '本人创作内容详情' })

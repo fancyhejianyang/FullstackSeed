@@ -182,6 +182,7 @@ describe('内容创作 CRUD 与 AI 生成', () => {
       task: 'read',
       adopt: 'update',
       regenerate: 'update',
+      generationConfigs: 'update',
     })) {
       const handler =
         ContentArticlesController.prototype[
@@ -233,6 +234,25 @@ describe('内容创作 CRUD 与 AI 生成', () => {
     await expect(
       validate(plainToInstance(CreateContentArticleDto, { title: '先记标题' })),
     ).resolves.toHaveLength(0);
+  });
+
+  it('生成必须显式选择正整数配置 ID', async () => {
+    const base = {
+      version: 1,
+      requestId: '890a892d-b369-405e-a8f1-7cb2c830a5a9',
+    };
+    for (const aiConfigId of [undefined, null, 0, -1, 1.5, '2']) {
+      expect(
+        await validate(
+          plainToInstance(GenerateContentTaskDto, { ...base, aiConfigId }),
+        ),
+      ).not.toHaveLength(0);
+    }
+    expect(
+      await validate(
+        plainToInstance(GenerateContentTaskDto, { ...base, aiConfigId: 2 }),
+      ),
+    ).toHaveLength(0);
   });
 
   it('迁移可重复执行且不覆盖已存在的表', async () => {
