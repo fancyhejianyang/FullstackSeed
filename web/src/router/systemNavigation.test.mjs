@@ -199,3 +199,21 @@ test('changed templates compile and read-only users retain labels without editin
   assert.match(logs, /perm="LogRecord.update"/);
   assert.doesNotMatch(logs, /Menu.read/);
 });
+
+test('Agent debug and old aliases require AgentApp.read instead of Menu.read', async () => {
+  for (const path of [
+    '/agent-management/debug',
+    '/chat-management/ai-chat',
+    '/system-config/ai-chat',
+  ]) {
+    const denied = routerHarness(['Menu.read', 'AgentWorkspace.read']);
+    await denied.router.push(path);
+    assert.equal(denied.router.currentRoute.value.path, '/');
+    const allowed = routerHarness(['AgentApp.read', 'AgentWorkspace.read']);
+    await allowed.router.push(path);
+    assert.equal(
+      allowed.router.currentRoute.value.path,
+      '/agent-management/debug',
+    );
+  }
+});

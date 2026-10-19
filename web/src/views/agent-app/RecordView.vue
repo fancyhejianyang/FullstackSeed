@@ -16,7 +16,7 @@ import {
   toolLabel,
 } from "./executionRecord";
 
-const props = defineProps<{ row?: AgentExecutionRecord | null }>();
+const props = defineProps<{ row?: Pick<AgentExecutionRecord, "id"> | null }>();
 const visible = defineModel<boolean>("visible", { required: true });
 const loading = ref(false);
 const failed = ref(false);

@@ -200,7 +200,7 @@ const BASE_SEED_MENUS: SeedMenu[] = [
     path: '/agent-management/debug',
     icon: '',
     sort: 40,
-    permissionCode: 'Menu.read',
+    permissionCode: 'AgentApp.read',
     isSystem: true,
     parentPath: '/agent-management',
     legacyPaths: ['/chat-management/ai-chat'],

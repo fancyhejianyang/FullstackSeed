@@ -1,5 +1,34 @@
 # CHANGELOG
 
+### 2026-10-19 Agent 调试适配当前应用配置与统一对话链路
+
+- 原调试页移除“聊天配置 / 工作流”选择及旧知识问答请求，改为复用当前 Agent 工作台对话组件的调试态，沿用 Auto/指定文本模型、独立媒体模型、图片粘贴/上传、进度、停止、业务草稿和确认写入链路；不删除底层聊天配置、工作流服务或历史数据，不引入第二套模型执行接口。
+- 调试侧栏新增只读配置检查区：展示模型账号、文本模型/调度策略、媒体模型、写入开关、工具、工作指令及执行限制，可刷新已保存配置，并从最近执行进入现有执行详情。配置读取具备失败反馈与过期响应隔离，刷新同步可用能力并将失效指定文本模型退回 Auto；当前配置与执行实际版本明确区分。
+- 进入或切换 Agent 不读取/续接已有业务会话，不自动创建会话或调用模型；首次发送、首次上传图片或主动新建时才创建带“调试”标题的独立会话。上传不自动发送。调试使用真实运行链路，可能计费、正常留存记录，写入仍受业务权限与确认约束，不伪称无副作用沙盒。员工工作台历史恢复与原有布局保持不变。
+- 调试态职责、长名称、说明和配置值允许完整换行，指令可滚动阅读；内容容器不足 1000px 时改为上下布局，输入工具栏允许换行。移除旧表单固定标签留白，复用现有消息正文与组件，不修改全局 Form、Select 或菜单样式。
+- 调试路由及菜单读取权限改为 `AgentApp.read`，页面执行前还要求 `AgentWorkspace.read`；旧 `/chat-management/ai-chat` 与 `/system-config/ai-chat` 统一跳转。菜单 ID 保留，沿用既有超管默认分配规则，不自动给普通角色扩权；后台菜单同步在下次正常启动时生效。
+- 验证：完整 Vue 类型检查、后端生产源码 `tsc --noEmit --incremental false -p tsconfig.build.json`、变更后端文件 ESLint、TypeORM 实体列校验、Vue 模板与 scoped CSS 编译、`git diff --check` 通过；前端 74 项 Node 测试、后端 40 个 Jest 套件 / 373 项测试全部通过。新增覆盖调试空上下文、指定/Auto 模型请求、首次图片上传、员工历史恢复、配置刷新与竞态、双权限门槛、旧地址和菜单同步。
+- 执行边界：此次为调试入口适配重构，未 build、未启动或重启服务，未连接真实数据库、调用真实模型或进行浏览器视觉验收。已有 `web/components.d.ts` 改动保留且不纳入提交。
+
+新增文件（2）：
+
+- `web/src/views/agent-workspace/components/AgentDebugPanel.vue`
+- `web/src/views/agent-workspace/agentDebug.test.mjs`
+
+修改文件（9）：
+
+- `web/src/views/knowledge-ai-chat/Index.vue`
+- `web/src/views/agent-workspace/Index.vue`
+- `web/src/views/agent-app/RecordView.vue`
+- `web/src/router/index.ts`
+- `web/src/router/systemNavigation.test.mjs`
+- `server/src/menus/menus.service.ts`
+- `server/src/menus/menus.service.spec.ts`
+- `.design-spec.md`
+- `CHANGELOG.md`
+
+删除文件：无。
+
 ### 2026-10-19 精简 Agent 执行记录列表并按需展示完整详情
 
 - 执行记录列表移除多行模型调度、参数 JSON、结果 JSON 和配置版本列，保留标识、能力、执行状态、耗时、Token、状态原因和时间，复用 Table 默认单行省略及溢出提示；通过内置“查看”操作打开执行详情，未修改通用 Table 或其他页面样式。

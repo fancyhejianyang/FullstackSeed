@@ -185,7 +185,7 @@ const routes: RouteRecordRaw[] = [
         path: 'agent-management/debug',
         name: 'agent-management-debug',
         component: () => import('@/views/knowledge-ai-chat/Index.vue'),
-        meta: { title: 'Agent 调试', permission: 'Menu.read' },
+        meta: { title: 'Agent 调试', permission: 'AgentApp.read' },
       },
       {
         path: 'chat-management/ai-chat',
@@ -300,8 +300,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'system-config/ai-chat',
         name: 'system-config-ai-chat',
-        component: () => import('@/views/knowledge-ai-chat/Index.vue'),
-        meta: { title: 'Agent 调试', permission: 'Menu.read' },
+        redirect: '/agent-management/debug',
       },
       {
         path: 'system-config/ai-record',

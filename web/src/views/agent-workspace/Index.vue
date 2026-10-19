@@ -33,6 +33,7 @@ import {
   type AvailableAgentApp,
 } from "@/api/agentWorkspace";
 import AgentMessageList from "./components/AgentMessageList.vue";
+import AgentDebugPanel from "./components/AgentDebugPanel.vue";
 import { agentProgressText, createAgentProgressPoller } from "./agentProgress";
 import { clipboardImages, imageUploadError } from "./agentClipboard";
 
@@ -59,6 +60,9 @@ interface PendingAgentMessage {
 }
 
 const AUTO_TEXT_MODEL = "__agent_auto__";
+const props = withDefaults(defineProps<{ debug?: boolean }>(), {
+  debug: false,
+});
 
 const userStore = useUserStore();
 const apps = ref<AvailableAgentApp[]>([]);
@@ -78,6 +82,10 @@ const loadingSessions = ref(false);
 const loadingDetail = ref(false);
 const loadingOlderMessages = ref(false);
 const switchingAgent = ref(false);
+const debugRevision = ref(0);
+const debugBusy = computed(
+  () => props.debug && (switchingAgent.value || loadingDetail.value),
+);
 const sending = ref(false);
 const actionBusy = ref(false);
 const isComposing = ref(false);
@@ -136,11 +144,13 @@ async function uploadImage(file: File) {
     ElMessage.warning(error);
     throw new Error(error);
   }
-  if (uploadBusy.value || actionBusy.value)
+  if (uploadBusy.value || actionBusy.value || debugBusy.value)
     throw new Error("请等待当前上传完成");
   if (!currentApp.value?.mediaCapabilities?.vision)
     throw new Error("当前 Agent 未配置图片识别模型");
-  const sessionId = activeSession.value?.id;
+  const sessionId =
+    activeSession.value?.id ??
+    (props.debug ? await ensureSession() : undefined);
   if (!sessionId) throw new Error("请先创建会话");
   uploadBusy.value = true;
   try {
@@ -326,7 +336,7 @@ const promptSuggestions = computed<AgentPromptSuggestion[]>(() => {
 });
 
 async function loadSessions() {
-  if (!selectedAgentId.value) {
+  if (props.debug || !selectedAgentId.value) {
     sessions.value = [];
     return;
   }
@@ -387,15 +397,24 @@ async function loadOlderMessages() {
 }
 
 async function newSession() {
-  if (uploadBusy.value) return;
+  if (uploadBusy.value || debugBusy.value) return;
   resetMediaInput();
   if (!selectedAgentId.value) return;
   requestVersion += 1;
-  const session = await createAgentSession({
-    agentAppId: Number(selectedAgentId.value),
-  });
-  await loadSessions();
-  await loadSession(session.id);
+  if (props.debug) loadingDetail.value = true;
+  try {
+    const session = await createAgentSession({
+      agentAppId: Number(selectedAgentId.value),
+      ...(props.debug
+        ? { title: `调试 · ${currentApp.value?.name || "Agent"}` }
+        : {}),
+    });
+    if (disposed) return;
+    await loadSessions();
+    await loadSession(session.id);
+  } finally {
+    if (props.debug) loadingDetail.value = false;
+  }
 }
 
 async function switchAgent() {
@@ -413,9 +432,13 @@ async function switchAgent() {
   sessions.value = [];
   sessionKeyword.value = "";
   try {
-    await loadSessions();
-    if (sessions.value.length) await loadSession(sessions.value[0].id);
-    else await newSession();
+    if (props.debug) {
+      inputText.value = "";
+    } else {
+      await loadSessions();
+      if (sessions.value.length) await loadSession(sessions.value[0].id);
+      else await newSession();
+    }
     lastReadyAgentId = nextAgentId;
     ElMessage.success(`已切换至 ${currentApp.value?.name || "目标 Agent"}`);
   } catch {
@@ -444,6 +467,39 @@ async function selectSession(session: AgentSession) {
   await loadSession(session.id);
 }
 
+async function refreshDebugConfiguration() {
+  if (
+    !props.debug ||
+    debugBusy.value ||
+    hasPendingMessages.value ||
+    actionBusy.value ||
+    uploadBusy.value
+  )
+    return;
+  switchingAgent.value = true;
+  try {
+    const availableApps = await getAvailableAgentApps();
+    if (disposed) return;
+    apps.value = availableApps;
+    if (!currentApp.value) {
+      selectedAgentId.value = apps.value.length
+        ? String(apps.value[0].id)
+        : null;
+      lastReadyAgentId = selectedAgentId.value || "";
+      activeSession.value = null;
+      inputText.value = "";
+      requestVersion += 1;
+    }
+    if (!currentApp.value?.models.includes(selectedTextModel.value)) {
+      selectedTextModel.value = AUTO_TEXT_MODEL;
+    }
+    resetMediaInput();
+    debugRevision.value += 1;
+  } finally {
+    switchingAgent.value = false;
+  }
+}
+
 function makeKey() {
   if (typeof crypto !== "undefined" && crypto.randomUUID)
     return crypto.randomUUID();
@@ -462,7 +518,13 @@ async function send() {
   const image = attachedImage.value ?? undefined;
   const content =
     inputText.value.trim() || (image ? "请识别并描述这张图片的内容。" : "");
-  if (!content || actionBusy.value || isComposing.value || uploadBusy.value)
+  if (
+    !content ||
+    actionBusy.value ||
+    isComposing.value ||
+    uploadBusy.value ||
+    debugBusy.value
+  )
     return;
   let sessionId: number;
   try {
@@ -716,6 +778,8 @@ onMounted(async () => {
   if (!apps.value.length) return;
   selectedAgentId.value = String(apps.value[0].id);
   lastReadyAgentId = selectedAgentId.value;
+  // 调试从空上下文开始，首次发送/上传或点击新会话才创建，不续接员工已有对话。
+  if (props.debug) return;
   await loadSessions();
   if (sessions.value.length) await loadSession(sessions.value[0].id);
   else await newSession();
@@ -730,11 +794,23 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <PageContainer class="agent-workspace-page" title="Agent 工作台">
+  <PageContainer
+    class="agent-workspace-page"
+    :class="{ 'is-debug': debug }"
+    :title="debug ? 'Agent 调试' : 'Agent 工作台'"
+  >
     <div v-if="!apps.length" class="agent-workspace__empty">
       <el-empty description="当前没有可使用的 Agent 应用" />
+      <Button
+        v-if="debug"
+        perm="AgentApp.read"
+        icon="Refresh"
+        :loading="switchingAgent"
+        @click="refreshDebugConfiguration"
+        >刷新配置</Button
+      >
     </div>
-    <div v-else class="agent-workspace">
+    <div v-else class="agent-workspace" :class="{ 'is-debug': debug }">
       <aside
         class="agent-workspace__sidebar"
         v-loading="loadingSessions || switchingAgent"
@@ -752,7 +828,11 @@ onUnmounted(() => {
               :clearable="false"
               :filterable="false"
               :disabled="
-                hasPendingMessages || actionBusy || uploadBusy || switchingAgent
+                hasPendingMessages ||
+                actionBusy ||
+                uploadBusy ||
+                switchingAgent ||
+                debugBusy
               "
               @change="switchAgent"
             />
@@ -768,12 +848,17 @@ onUnmounted(() => {
             type="primary"
             icon="Plus"
             :disabled="
-              hasPendingMessages || actionBusy || uploadBusy || switchingAgent
+              hasPendingMessages ||
+              actionBusy ||
+              uploadBusy ||
+              switchingAgent ||
+              debugBusy
             "
             @click="newSession"
-            >开启新对话</Button
+            >{{ debug ? "新建调试会话" : "开启新对话" }}</Button
           >
           <Input
+            v-if="!debug"
             v-model="sessionKeyword"
             mode="search"
             placeholder="搜索历史对话"
@@ -782,11 +867,19 @@ onUnmounted(() => {
           />
         </div>
 
-        <div class="agent-workspace__history-title">
+        <AgentDebugPanel
+          v-if="debug && currentApp"
+          :app="currentApp"
+          :executions="activeSession?.executions || []"
+          :revision="debugRevision"
+          :busy="hasPendingMessages || actionBusy || uploadBusy || debugBusy"
+          @refresh="refreshDebugConfiguration"
+        />
+        <div v-if="!debug" class="agent-workspace__history-title">
           <span>最近对话</span>
           <span>{{ sessions.length }}</span>
         </div>
-        <div class="agent-workspace__sessions">
+        <div v-if="!debug" class="agent-workspace__sessions">
           <button
             v-for="session in sessions"
             :key="session.id"
@@ -812,7 +905,10 @@ onUnmounted(() => {
 
       <section class="agent-workspace__main" v-loading="loadingDetail">
         <header class="agent-workspace__header">
-          <div class="agent-workspace__capabilities">
+          <p v-if="debug" class="agent-workspace__debug-notice">
+            使用已保存配置进行真实调用，可能计费；确认写入会影响业务数据。
+          </p>
+          <div v-else class="agent-workspace__capabilities">
             <span
               v-for="item in capabilityLabels"
               :key="item.key"
@@ -825,15 +921,15 @@ onUnmounted(() => {
 
         <main class="agent-workspace__chat">
           <AgentMessageList
-            v-if="activeSession"
+            v-if="activeSession || debug"
             :agent-name="currentApp?.name || 'Agent'"
             :responsibility="currentApp?.responsibility || ''"
             :suggestions="promptSuggestions"
             :messages="visibleMessages"
-            :drafts="activeSession.drafts"
-            :executions="activeSession.executions"
+            :drafts="activeSession?.drafts || []"
+            :executions="activeSession?.executions || []"
             :products="products"
-            :busy="hasPendingMessages || actionBusy"
+            :busy="hasPendingMessages || actionBusy || debugBusy"
             :processing="processingMessage"
             :has-more="hasOlderMessages"
             :loading-older="loadingOlderMessages"
@@ -854,7 +950,7 @@ onUnmounted(() => {
                 :type="getPermissionActionColor('read')"
                 link
                 icon="Picture"
-                :disabled="uploadBusy || actionBusy"
+                :disabled="uploadBusy || actionBusy || debugBusy"
                 @click="showImagePicker = !showImagePicker"
                 >添加图片</Button
               >
@@ -867,7 +963,12 @@ onUnmounted(() => {
               :class="{ 'has-image': attachedImage }"
               accept="image/png,image/jpeg,image/webp"
               :max-size-mb="5"
-              :disabled="uploadBusy || actionBusy || !activeSession"
+              :disabled="
+                uploadBusy ||
+                actionBusy ||
+                debugBusy ||
+                (!activeSession && !debug)
+              "
               :upload-request="uploadImage"
               @remove="clearImage"
             />
@@ -917,7 +1018,7 @@ onUnmounted(() => {
               mode="textarea"
               :rows="3"
               :maxlength="8000"
-              :disabled="actionBusy"
+              :disabled="actionBusy || debugBusy"
               placeholder="给 Agent 发消息，描述需求或粘贴图片，由 AI 理解并处理…"
               @paste="pasteImage"
               @compositionstart="isComposing = true"
@@ -931,7 +1032,9 @@ onUnmounted(() => {
                 :options="textModelOptions"
                 :clearable="false"
                 :filterable="false"
-                :disabled="actionBusy || !activeSession"
+                :disabled="
+                  actionBusy || debugBusy || (!activeSession && !debug)
+                "
               />
               <span class="agent-workspace__composer-hint">
                 <template v-if="sending">
@@ -956,7 +1059,8 @@ onUnmounted(() => {
                 :disabled="
                   (!inputText.trim() && !attachedImage) ||
                   actionBusy ||
-                  uploadBusy
+                  uploadBusy ||
+                  debugBusy
                 "
                 @click="send"
                 >{{ sending ? "加入队列" : "发送" }}</Button
@@ -1402,6 +1506,61 @@ onUnmounted(() => {
   }
   .agent-workspace__model-select {
     width: 154px;
+  }
+}
+/* 调试态独立适配：不改变员工工作台的尺寸与历史列表。 */
+.agent-workspace-page.is-debug {
+  min-width: 0;
+  container-type: inline-size;
+}
+.agent-workspace.is-debug {
+  grid-template-columns: 320px minmax(0, 1fr);
+}
+.is-debug .agent-workspace__sidebar {
+  overflow-y: auto;
+}
+.is-debug .agent-workspace__session-actions {
+  grid-template-columns: minmax(0, 1fr);
+}
+.is-debug .agent-workspace__agent-select > small {
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  color: #606975;
+}
+.agent-workspace__debug-notice {
+  margin: 0;
+  color: #606975;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.is-debug :deep(.message-list__welcome h2),
+.is-debug :deep(.message-list__welcome > p),
+.is-debug :deep(.message-list__suggestions small),
+.is-debug :deep(.message-list__author) {
+  overflow-wrap: anywhere;
+  white-space: normal;
+  overflow: visible;
+}
+.is-debug :deep(.message-list__body) {
+  min-width: 0;
+}
+@container (max-width: 1000px) {
+  .agent-workspace.is-debug {
+    height: auto;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+  }
+  .is-debug .agent-workspace__sidebar {
+    max-height: 440px;
+    border-right: 0;
+    border-bottom: 1px solid #ebeef5;
+  }
+  .is-debug .agent-workspace__main {
+    height: max(600px, calc(100vh - 120px));
+  }
+  .is-debug .agent-workspace__composer-actions {
+    flex-wrap: wrap;
   }
 }
 </style>

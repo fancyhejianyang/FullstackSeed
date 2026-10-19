@@ -158,6 +158,37 @@ describe('MenusService Agent menu reconciliation', () => {
       '/agent-management/workspace',
     ]);
   });
+
+  it('reconciles debug to AgentApp.read with a stable id and the existing admin-only default', async () => {
+    await service.onModuleInit();
+    await service.onModuleInit();
+    const debug = rows.find((item) => item.path === '/agent-management/debug')!;
+    expect(debug).toMatchObject({
+      id: 3,
+      permissionCode: 'AgentApp.read',
+      isSystem: true,
+    });
+    const menuOnly = await service.findMine(false, [
+      'Menu.read',
+      'AgentWorkspace.read',
+    ]);
+    expect(
+      menuOnly
+        .flatMap((item) => item.children)
+        .some((item) => item.id === debug.id),
+    ).toBe(false);
+    // 默认仍为超管菜单；管理员主动允许角色分配后按新的读取权限过滤。
+    debug.isSystem = false;
+    const agentManager = await service.findMine(false, [
+      'AgentApp.read',
+      'AgentWorkspace.read',
+    ]);
+    expect(
+      agentManager
+        .flatMap((item) => item.children)
+        .some((item) => item.id === debug.id),
+    ).toBe(true);
+  });
 });
 
 function menu(value: Partial<Menu>): Menu {
