@@ -1,5 +1,28 @@
 # CHANGELOG
 
+### 2026-10-19 文章列表回显 40×40 封面缩略图
+
+- 文章列表封面由 56×36 改为固定 40×40px，保持 cover 缩放、小圆角和原有 Table 图片插槽。图片加载失败保持同尺寸占位，空封面显示“—”。
+- 优先显示已保存 coverUrl；为空时，仅回显最新成功任务中已生成、且绑定文章版本仍匹配的候选封面，右下角 AI 标记和悬浮文案说明未采纳。不自动保存或采纳，不回退旧任务；失败、排队、中断、跳过、已采用后没有保存封面及版本冲突时不展示候选。既有封面不会被候选替换。
+- 前后端对齐 latestTask.generatedCoverUrl 可空标量；服务端最新任务查询保留本人/文章范围与 MAX(id) 逻辑，仅通过 JSON_EXTRACT/JSON_UNQUOTE 提取成功候选地址，JSON 类型非字符串则返回 null。列表不加载整个 coverData、正文、构思或素材快照，不逐行查询详情，不调用 AI；不新增实体列、权限或数据库迁移。
+- 验证：后端全量 49 套 / 503 项 Jest、前端全量 146 项 Node 离线回归通过；后端生产源码 tsc --noEmit（tsconfig.build.json）、前端 vue-tsc 无输出类型检查、变更后端 ESLint、Prettier、Vue 模板/scoped CSS 编译、组件复用核查及 diff 空白检查通过。覆盖保存封面优先、最新候选回显、版本/状态/空值边界及列表标量投影。
+- 补充检查：包含全部测试文件的后端 tsconfig.json 类型检查仍报 4 处未修改测试错误：agent-workspace.service.spec.ts 的 ExecutionContext/AgentApp 断言、menus.service.spec.ts 的 null/Date 赋值、system-access.spec.ts 的 ExecutionContext 断言。未扩展修改这些既有文件；相关 Jest 仍通过。
+- 按修复范围未 build、启动/重启服务、连接数据库、调用真实 AI 或进行浏览器视觉验收。web/components.d.ts 既有改动与 SHA256 保持不变，不纳入提交。
+
+新增文件：无。
+
+修改文件（7）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/content-articles/content-generation.service.ts`
+- `server/src/content-articles/content-generation.service.spec.ts`
+- `web/src/api/contentArticle.ts`
+- `web/src/views/content-article/Index.vue`
+- `web/src/views/content-article/generate.test.mjs`
+
+删除文件：无。
+
 ### 2026-10-19 同账号独立生成情感表达封面
 
 - 新文章任务在正文成功持久化后进入独立封面阶段。直接读取本次 AI 配置的模型账号，选取生图目录 imageGenerationModels 首个有效模型；不调用 Agent、不创建会话、不使用识图目录 visionModels，也不回退其它模型或账号。缺模型、有效目录或完整生图端点时跳过，且不追加构思或生图请求。

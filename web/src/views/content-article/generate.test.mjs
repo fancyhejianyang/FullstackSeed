@@ -9,6 +9,70 @@ const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
 const generator = await read('./Generate.vue');
 const index = await read('./Index.vue');
 const requestHelper = await read('./generationRequest.ts');
+test('列表封面优先已保存图片，无封面时回显版本匹配的最新 AI 候选，固定 40×40', () => {
+  const h = harness(true);
+  const row = {
+    coverUrl: '',
+    version: 2,
+    latestTask: {
+      status: 'succeeded',
+      coverStatus: 'succeeded',
+      articleVersion: 2,
+      generatedCoverUrl: '/uploads/ai.png',
+    },
+  };
+  assert.deepEqual(h.listCover(row), {
+    url: '/uploads/ai.png',
+    generated: true,
+  });
+  assert.deepEqual(h.listCover({ ...row, coverUrl: '/uploads/saved.png' }), {
+    url: '/uploads/saved.png',
+    generated: false,
+  });
+  assert.equal(h.listCover({ ...row, version: 3 }), null);
+  assert.equal(h.listCover({ ...row, latestTask: null }), null);
+  for (const status of [
+    'pending',
+    'running',
+    'failed',
+    'interrupted',
+    'adopted',
+    'needs_input',
+  ])
+    assert.equal(
+      h.listCover({ ...row, latestTask: { ...row.latestTask, status } }),
+      null,
+    );
+  for (const coverStatus of [
+    'pending',
+    'running',
+    'failed',
+    'interrupted',
+    'skipped',
+    null,
+  ])
+    assert.equal(
+      h.listCover({ ...row, latestTask: { ...row.latestTask, coverStatus } }),
+      null,
+    );
+  for (const generatedCoverUrl of [undefined, null, '', '   '])
+    assert.equal(
+      h.listCover({
+        ...row,
+        latestTask: { ...row.latestTask, generatedCoverUrl },
+      }),
+      null,
+    );
+  assert.match(
+    index,
+    /\.article-cover\s*\{[^}]*width: 40px;[^}]*height: 40px;/,
+  );
+  assert.match(index, /AI 候选封面（未采纳）/);
+  assert.match(index, /fit="cover"/);
+  assert.match(index, /#error/);
+  assert.equal(h.calls.length, 0);
+  h.close();
+});
 test('生成说明不再把新闻来源与日期作为成稿前置要求', () => {
   assert.match(generator, /按已保存的标题、想法和模板直接成稿/);
   assert.doesNotMatch(
@@ -73,7 +137,7 @@ function harness(list = false) {
   const script =
     parse(list ? index : generator).descriptor.scriptSetup.content +
     (list
-      ? '\nexport { canGenerate, openGenerate, generateVisible, generatingRow, generatingId, submitted, tableRef };'
+      ? '\nexport { canGenerate, openGenerate, generateVisible, generatingRow, generatingId, submitted, tableRef, listCover };'
       : '\nexport { form, formRef, fields, article, ready, loadFailed, submitting, configOptions, templateOptions, fetchConfigs, fetchTemplates, generate, canLeave, requestClose, beforeClose };');
   const js = ts.transpileModule(script, {
     compilerOptions: {

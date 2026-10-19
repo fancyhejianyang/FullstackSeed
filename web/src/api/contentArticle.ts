@@ -17,7 +17,9 @@ export interface ContentArticle extends ContentArticleForm {
 export type ContentArticleSummary = Pick<
   ContentArticle,
   'id' | 'title' | 'coverUrl' | 'version' | 'createdAt' | 'updatedAt'
-> & { latestTask: ContentTask | null };
+> & {
+  latestTask: (ContentTask & { generatedCoverUrl?: string | null }) | null;
+};
 
 export function getContentArticles(params: {
   page?: number;

@@ -135,6 +135,67 @@ function setup() {
 }
 
 describe('持久化文章生成任务', () => {
+  it('列表最新任务仅投影封面 URL 标量，保持本人/文章范围且不加载大 JSON', async () => {
+    const h = setup();
+    const builder = {
+      select: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      getQuery: jest.fn().mockReturnValue('latest-task-ids'),
+      getParameters: jest.fn().mockReturnValue({ userId: 7, articleIds: [3] }),
+      setParameters: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      getRawMany: jest
+        .fn()
+        .mockResolvedValue([
+          { id: 20, articleId: 3, generatedCoverUrl: '/uploads/cover.png' },
+        ]),
+    };
+    const createQueryBuilder = jest.fn().mockReturnValue(builder);
+    Object.assign(h.tasks, { createQueryBuilder });
+    await expect(h.service.latest([], 7)).resolves.toEqual([]);
+    expect(createQueryBuilder).not.toHaveBeenCalled();
+    await expect(h.service.latest([3], 7)).resolves.toEqual([
+      { id: 20, articleId: 3, generatedCoverUrl: '/uploads/cover.png' },
+    ]);
+    expect(builder.where).toHaveBeenCalledWith('recent.userId = :userId', {
+      userId: 7,
+    });
+    expect(builder.andWhere).toHaveBeenCalledWith(
+      'recent.articleId IN (:...articleIds)',
+      { articleIds: [3] },
+    );
+    expect(builder.select).toHaveBeenCalledWith('MAX(recent.id)');
+    expect(builder.groupBy).toHaveBeenCalledWith('recent.articleId');
+    expect(builder.setParameters).toHaveBeenCalledWith({
+      userId: 7,
+      articleIds: [3],
+    });
+    const selections = builder.addSelect.mock.calls as unknown as Array<
+      [string, string]
+    >;
+    for (const field of [
+      'task.result',
+      'task.coverData',
+      'task.snapshot',
+      'task.editorNotes',
+    ])
+      expect(selections.some(([sql]) => sql === field)).toBe(false);
+    const coverSql = selections.find(
+      ([, alias]) => alias === 'generatedCoverUrl',
+    )![0];
+    expect(coverSql).toContain("task.status = 'succeeded'");
+    expect(coverSql).toContain("task.coverStatus = 'succeeded'");
+    expect(coverSql).toContain(
+      "JSON_TYPE(JSON_EXTRACT(task.coverData, '$.url')) = 'STRING'",
+    );
+    expect(coverSql).toContain(
+      "JSON_UNQUOTE(JSON_EXTRACT(task.coverData, '$.url')) ELSE NULL END",
+    );
+    expect(h.tasks.update).not.toHaveBeenCalled();
+    expect(h.providers.callChat).not.toHaveBeenCalled();
+  });
   it('新任务启用封面而历史任务不补计费，正文完成先落库并保留活跃锁', async () => {
     const h = setup();
     await h.service.submit(3, h.dto, 7);

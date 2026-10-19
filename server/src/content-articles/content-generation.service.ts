@@ -284,12 +284,26 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
       .where('recent.userId = :userId', { userId })
       .andWhere('recent.articleId IN (:...articleIds)', { articleIds })
       .groupBy('recent.articleId');
-    return this.tasks
+    const builder = this.tasks
       .createQueryBuilder('task')
-      .select(Object.keys(SUMMARY_FIELDS).map((field) => `task.${field}`))
+      .select([])
       .where(`task.id IN (${latestIds.getQuery()})`)
-      .setParameters(latestIds.getParameters())
-      .getMany();
+      .setParameters(latestIds.getParameters());
+    for (const field of Object.keys(SUMMARY_FIELDS))
+      builder.addSelect(`task.${field}`, field);
+    // 仅投影候选图片地址，避免为列表回显加载整个 coverData JSON。
+    return builder
+      .addSelect(
+        `CASE WHEN task.status = 'succeeded' AND task.coverStatus = 'succeeded'
+          AND JSON_TYPE(JSON_EXTRACT(task.coverData, '$.url')) = 'STRING'
+          THEN JSON_UNQUOTE(JSON_EXTRACT(task.coverData, '$.url')) ELSE NULL END`,
+        'generatedCoverUrl',
+      )
+      .getRawMany<
+        Pick<ContentGenerationTask, keyof typeof SUMMARY_FIELDS> & {
+          generatedCoverUrl: string | null;
+        }
+      >();
   }
   async adopt(
     id: number,

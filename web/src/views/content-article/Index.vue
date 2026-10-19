@@ -39,6 +39,18 @@ const columns: TableColumn[] = [
   { prop: 'latestTask', label: '生成状态', width: 110, slot: true },
   { prop: 'updatedAt', label: '更新时间', width: 180, slot: true },
 ];
+function listCover(row: ContentArticleSummary) {
+  if (row.coverUrl?.trim()) return { url: row.coverUrl, generated: false };
+  const task = row.latestTask;
+  if (
+    task?.status === 'succeeded' &&
+    task.coverStatus === 'succeeded' &&
+    task.articleVersion === row.version &&
+    task.generatedCoverUrl?.trim()
+  )
+    return { url: task.generatedCoverUrl, generated: true };
+  return null;
+}
 let timer: ReturnType<typeof setTimeout> | undefined;
 let alive = true;
 let requestSequence = 0;
@@ -225,12 +237,34 @@ function batchDeleteRequest({ ids }: { ids: Array<string | number> }) {
         ><span v-else>未生成</span></template
       >
       <template #column-coverUrl="{ row }">
-        <el-image
-          v-if="row.coverUrl"
-          class="article-cover"
-          :src="row.coverUrl"
-          fit="cover"
-        />
+        <div
+          v-if="listCover(row)"
+          class="article-cover-wrap"
+          :title="
+            listCover(row)?.generated ? 'AI 候选封面（未采纳）' : '文章封面'
+          "
+        >
+          <el-image
+            class="article-cover"
+            :src="listCover(row)?.url"
+            :alt="
+              listCover(row)?.generated ? 'AI 候选封面（未采纳）' : '文章封面'
+            "
+            fit="cover"
+          >
+            <template #error
+              ><span class="article-cover__error" title="封面加载失败"
+                >—</span
+              ></template
+            >
+          </el-image>
+          <span
+            v-if="listCover(row)?.generated"
+            class="article-cover__badge"
+            aria-hidden="true"
+            >AI</span
+          >
+        </div>
         <span v-else>—</span>
       </template>
       <template #column-updatedAt="{ row }">{{
@@ -258,8 +292,33 @@ function batchDeleteRequest({ ids }: { ids: Array<string | number> }) {
 <style scoped>
 .article-cover {
   display: block;
-  width: 56px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   border-radius: 4px;
+}
+.article-cover-wrap {
+  position: relative;
+  width: 40px;
+  height: 40px;
+}
+.article-cover__badge {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  padding: 0 3px;
+  font-size: 10px;
+  line-height: 14px;
+  background: #1f5f99;
+  color: #fff;
+  border-radius: 3px 0 3px 0;
+  pointer-events: none;
+}
+.article-cover__error {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  color: #606266;
+  background: #f0f2f5;
 }
 </style>
