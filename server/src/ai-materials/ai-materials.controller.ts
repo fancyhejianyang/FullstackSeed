@@ -19,7 +19,6 @@ import {
   CreateAiMaterialDto,
   GenerateAiMaterialDto,
   QueryAiMaterialDto,
-  QueryMaterialTaskDto,
   UpdateAiMaterialDto,
 } from './dto/ai-material.dto';
 
@@ -101,32 +100,5 @@ export class AiMaterialsController {
     @CurrentUser('userId') userId: number,
   ) {
     return this.service.submit(id, dto, userId);
-  }
-}
-
-@ApiTags('MaterialGenerationTask')
-@ApiBearerAuth()
-@Controller('material-generation-tasks')
-export class MaterialGenerationTasksController {
-  constructor(private readonly service: AiMaterialsService) {}
-
-  @Get()
-  @Header('Cache-Control', 'no-store')
-  @RequirePermissions('AiMaterial.read')
-  list(
-    @Query() query: QueryMaterialTaskDto,
-    @CurrentUser('userId') userId: number,
-  ) {
-    return this.service.listTasks(query, userId);
-  }
-
-  @Get(':id')
-  @Header('Cache-Control', 'no-store')
-  @RequirePermissions('AiMaterial.read')
-  detail(
-    @Param('id', ParseIntPipe) id: number,
-    @CurrentUser('userId') userId: number,
-  ) {
-    return this.service.taskDetail(id, userId);
   }
 }

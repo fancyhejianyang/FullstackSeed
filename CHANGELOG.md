@@ -1,5 +1,27 @@
 # CHANGELOG
 
+### 2026-10-19 修复接口日志来源重复登记
+
+- 修复素材模块在同一源码文件声明两个 Controller，导致日志扫描器把任务接口误归到 `/ai-materials` 并重复生成 `GET /ai-materials` 唯一键的问题；素材生成任务 Controller 已拆分到独立文件，实际路由与日志元数据均为 `/material-generation-tasks`。
+- 日志接口扫描先剔除独立注释和块注释中的装饰器示例，再按 `method + path` 稳定去重；来源同步由“先查再 save”改为数据库唯一键 `upsert`，同时覆盖单批重复声明及多实例并发初始化，已有部分来源数据可在重启时幂等补齐。
+- 验证：TypeScript 生产配置无输出检查、变更文件 ESLint、TypeORM 实体检查及相关 4 套 / 9 项 Jest 通过；按缺陷修复规则未 build、启动服务或连接数据库。`web/components.d.ts` 用户既有改动保持不变且不纳入提交。
+
+新增文件（3）：
+
+- `server/src/ai-materials/material-generation-tasks.controller.ts`
+- `server/src/log-records/log-api-scanner.spec.ts`
+- `server/src/log-records/log-records.service.spec.ts`
+
+修改文件（5）：
+
+- `CHANGELOG.md`
+- `server/src/ai-materials/ai-materials.controller.ts`
+- `server/src/ai-materials/ai-materials.module.ts`
+- `server/src/log-records/log-api-scanner.ts`
+- `server/src/log-records/log-records.service.ts`
+
+删除文件：无。
+
 ### 2026-10-19 新增 AI 素材生成与安全清理
 
 - 在“内容创作”下新增素材管理：用户保存提示词、受控风格和图片生成配置后，可提交持久化异步任务；列表展示 40×40 缩略图与实时状态，支持查看、编辑、下载、重新生成、删除和批量删除。重新生成只在新图校验、保存并事务挂接成功后切换当前结果，失败、迟到响应或编辑版本冲突均保留旧图。

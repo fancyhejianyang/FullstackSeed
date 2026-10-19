@@ -194,9 +194,21 @@ export function scanLogApiModules(): ScannedLogModule[] {
     .map((file) => scanControllerFile(srcRoot, file))
     .filter((item): item is ScannedLogModule => Boolean(item));
 
-  return [...modules, ...INTERNAL_LOG_MODULES].sort((a, b) =>
+  const sorted = [...modules, ...INTERNAL_LOG_MODULES].sort((a, b) =>
     a.moduleName.localeCompare(b.moduleName),
   );
+  const seen = new Set<string>();
+  return sorted
+    .map((module) => ({
+      ...module,
+      actions: module.actions.filter((action) => {
+        const key = `${action.method.toUpperCase()} ${action.path}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }),
+    }))
+    .filter((module) => module.actions.length > 0);
 }
 
 function createInternalAction(
@@ -245,7 +257,7 @@ function scanControllerFile(
   root: string,
   file: string,
 ): ScannedLogModule | null {
-  const content = readFileSync(file, 'utf8');
+  const content = stripStandaloneComments(readFileSync(file, 'utf8'));
   const controllerPath = readControllerPath(content);
   if (!controllerPath) return null;
 
@@ -269,6 +281,10 @@ function scanControllerFile(
     isSystem: fallback?.isSystem ?? false,
     actions,
   };
+}
+
+function stripStandaloneComments(content: string) {
+  return content.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 }
 
 function readControllerPath(content: string) {

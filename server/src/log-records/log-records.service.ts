@@ -311,7 +311,9 @@ export class LogRecordsService implements OnModuleInit {
       }
     }
 
-    await this.logApiSourceRepository.save(nextSources);
+    await this.logApiSourceRepository.upsert(nextSources, {
+      conflictPaths: ['method', 'apiPath'],
+    });
 
     const obsoleteSources = existingSources.filter(
       (source) =>
