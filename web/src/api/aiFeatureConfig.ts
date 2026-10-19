@@ -1,12 +1,13 @@
-import request from '@/utils/request';
+import request from "@/utils/request";
 
 export type AiFeatureType =
-  | 'chat'
-  | 'contentCreation'
-  | 'documentParse'
-  | 'ocr'
-  | 'rerank';
-export type AiResponseFormat = 'text' | 'json' | 'markdown';
+  | "chat"
+  | "contentCreation"
+  | "imageGeneration"
+  | "documentParse"
+  | "ocr"
+  | "rerank";
+export type AiResponseFormat = "text" | "json" | "markdown";
 
 export interface AiFeatureConfig {
   id: number;
@@ -38,20 +39,20 @@ export interface QueryAiFeatureConfigParams {
   page?: number;
   pageSize?: number;
   keyword?: string;
-  featureType?: AiFeatureType | '';
-  providerId?: number | '';
-  isEnabled?: boolean | '';
+  featureType?: AiFeatureType | "";
+  providerId?: number | "";
+  isEnabled?: boolean | "";
 }
 
 export interface AiFeatureConfigForm {
   name: string;
   featureType: AiFeatureType;
-  providerId?: number | '' | null;
+  providerId?: number | "" | null;
   model?: string;
   enableThinking?: boolean;
   thinkingParameters?: Record<string, unknown> | null;
   useMineru?: boolean;
-  mineruConfigId?: number | '' | null;
+  mineruConfigId?: number | "" | null;
   systemPrompt?: string;
   temperature?: number;
   responseFormat?: AiResponseFormat;
@@ -61,7 +62,7 @@ export interface AiFeatureConfigForm {
 
 export function getAiFeatureConfigs(params: QueryAiFeatureConfigParams) {
   return request.get<unknown, AiFeatureConfigListResult>(
-    '/ai-feature-configs',
+    "/ai-feature-configs",
     {
       params,
     },
@@ -73,7 +74,7 @@ export function getAiFeatureConfig(id: number) {
 }
 
 export function createAiFeatureConfig(data: AiFeatureConfigForm) {
-  return request.post<unknown, AiFeatureConfig>('/ai-feature-configs', data);
+  return request.post<unknown, AiFeatureConfig>("/ai-feature-configs", data);
 }
 
 export function updateAiFeatureConfig(id: number, data: AiFeatureConfigForm) {
@@ -89,7 +90,7 @@ export function deleteAiFeatureConfig(id: number) {
 
 export function batchDeleteAiFeatureConfigs(ids: Array<string | number>) {
   return request.post<unknown, { ids: number[] }>(
-    '/ai-feature-configs/batch-delete',
+    "/ai-feature-configs/batch-delete",
     { ids: ids.map(Number) },
   );
 }

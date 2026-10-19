@@ -266,6 +266,12 @@ export class KnowledgeAiProvidersService {
   }
 
   async validateModel(dto: ValidateKnowledgeAiProviderModelDto) {
+    if (dto.featureType === 'imageGeneration') {
+      throw new BadRequestException(
+        '图片生成模型不会通过文本接口自动校验，请在素材管理中明确发起实际生成',
+      );
+    }
+
     const provider = await this.findEntity(dto.id);
     const model = dto.model.trim();
     let currentProvider = provider;
@@ -550,6 +556,8 @@ export class KnowledgeAiProvidersService {
     featureType: AiModelFeatureType,
   ) {
     if (featureType === 'embedding') return provider.embeddingModels;
+    if (featureType === 'imageGeneration')
+      return provider.imageGenerationModels;
     if (featureType === 'ocr') {
       return this.joinModelTexts(provider.visionModels, provider.models);
     }
@@ -564,6 +572,10 @@ export class KnowledgeAiProvidersService {
     provider.textModels = this.removeModelFromList(provider.textModels, model);
     provider.visionModels = this.removeModelFromList(
       provider.visionModels,
+      model,
+    );
+    provider.imageGenerationModels = this.removeModelFromList(
+      provider.imageGenerationModels,
       model,
     );
     provider.embeddingModels = this.removeModelFromList(

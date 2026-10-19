@@ -134,6 +134,39 @@ export class AiFeatureConfigsService {
     return config;
   }
 
+  async findUsableImageGenerationConfig(id: number) {
+    const config = await this.findOne(id);
+    if (config.featureType !== 'imageGeneration')
+      throw new BadRequestException('请选择图片生成类型的 AI 功能配置');
+    if (!config.isEnabled)
+      throw new BadRequestException('该图片生成配置未启用');
+    if (!config.providerId || !config.model?.trim())
+      throw new BadRequestException('图片生成配置缺少模型账号或生图模型');
+    return config;
+  }
+
+  async imageGenerationOptions(query: {
+    page?: number;
+    pageSize?: number;
+    keyword?: string;
+  }) {
+    const keyword = query.keyword?.trim();
+    const base = { featureType: 'imageGeneration' as const, isEnabled: true };
+    const [rows, total] = await this.configRepository.findAndCount({
+      select: { id: true, name: true, model: true },
+      where: keyword
+        ? [
+            { ...base, name: Like(`%${keyword}%`) },
+            { ...base, model: Like(`%${keyword}%`) },
+          ]
+        : base,
+      order: { id: 'DESC' },
+      skip: ((query.page ?? 1) - 1) * (query.pageSize ?? 100),
+      take: query.pageSize ?? 100,
+    });
+    return { list: rows, total };
+  }
+
   async contentCreationOptions(query: {
     page?: number;
     pageSize?: number;
@@ -246,6 +279,16 @@ export class AiFeatureConfigsService {
   }
 
   private normalizeFeatureSpecificSettings(config: Partial<AiFeatureConfig>) {
+    if (config.featureType === 'imageGeneration') {
+      config.enableThinking = false;
+      config.thinkingParameters = null;
+      config.useMineru = false;
+      config.mineruConfigId = null;
+      config.mineruConfigName = null;
+      config.temperature = 0;
+      config.responseFormat = 'text';
+      return;
+    }
     if (config.featureType === 'contentCreation') {
       config.useMineru = false;
       config.mineruConfigId = null;

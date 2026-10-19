@@ -40,6 +40,8 @@ import { AiWorkflowsModule } from './ai-workflows/ai-workflows.module';
 import { AgentAppsModule } from './agent-apps/agent-apps.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { ThirdPartyConfigModule } from './third-party-config/third-party-config.module';
+import { ManagedFilesModule } from './managed-files/managed-files.module';
+import { AiMaterialsModule } from './ai-materials/ai-materials.module';
 
 @Module({
   imports: [
@@ -134,6 +136,8 @@ import { ThirdPartyConfigModule } from './third-party-config/third-party-config.
     AgentAppsModule,
     DashboardModule,
     ThirdPartyConfigModule,
+    ManagedFilesModule,
+    AiMaterialsModule,
     KnowledgeRetrievalConfigsModule,
     KnowledgeRoutingRulesModule,
     KnowledgeStandardQasModule,

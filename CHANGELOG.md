@@ -1,5 +1,58 @@
 # CHANGELOG
 
+### 2026-10-19 新增 AI 素材生成与安全清理
+
+- 在“内容创作”下新增素材管理：用户保存提示词、受控风格和图片生成配置后，可提交持久化异步任务；列表展示 40×40 缩略图与实时状态，支持查看、编辑、下载、重新生成、删除和批量删除。重新生成只在新图校验、保存并事务挂接成功后切换当前结果，失败、迟到响应或编辑版本冲突均保留旧图。
+- AI 功能配置新增 `imageGeneration` 类型，只从账号的 `imageGenerationModels` 目录选型并调用完整生图端点；默认画面要求仅参与提示词拼接，不调用 Agent、文本润色或文本模型校验，也不回退识图/聊天模型。任务使用请求 UUID 幂等、素材版本、单用户/单素材活跃锁、条件抢占与租约；中断和不确定计费请求不自动重试。
+- 新增受管文件与引用登记，图片写入固定 `ai-materials/{environment}/objects/{ownerId}/{materialId}/{revision}` 路径；本地及阿里云 OSS 保存实际对象键、存储位置指纹和文件状态。新引用建立后旧图进入 24 小时延迟清理，管理员在 OSS/CDN 页面先预览、再按登记 ID 精确删除；清理强制限定当前环境、当前存储位置、无有效引用和到期状态，不扫描文章封面或历史上传目录。
+- 新增 `AiMaterial.*` 与 `MediaStorage.read/update` 权限、菜单和角色授权展示；存储配置说明同步为本地及阿里云 OSS 已实现，COS/Kodo 不再宣称静默回退。新增数据库迁移 `1792396800000-CreateAiMaterials` 创建素材、任务、受管文件及引用四张表，有业务数据时拒绝破坏性回退。
+- 验证：后端 TypeORM 实体检查与 Nest 生产构建通过；前端 `vue-tsc --noEmit` 及 Vite 生产构建通过；相关 6 套 / 32 项 Jest 通过；Prettier 与 diff 空白检查通过。未连接真实数据库、执行迁移、启动服务、调用付费生图、写入真实 OSS/CDN 或执行物理清理，部署前仍需在专用测试数据与前缀上验收。`web/components.d.ts` 的用户既有未提交改动保持不纳入提交。
+
+新增文件（19）：
+
+- `server/src/ai-materials/ai-material.constants.spec.ts`
+- `server/src/ai-materials/ai-material.constants.ts`
+- `server/src/ai-materials/ai-materials.controller.ts`
+- `server/src/ai-materials/ai-materials.module.ts`
+- `server/src/ai-materials/ai-materials.service.ts`
+- `server/src/ai-materials/dto/ai-material.dto.ts`
+- `server/src/ai-materials/entities/ai-material.entity.ts`
+- `server/src/ai-materials/entities/material-generation-task.entity.ts`
+- `server/src/managed-files/dto/managed-file.dto.ts`
+- `server/src/managed-files/entities/managed-file-reference.entity.ts`
+- `server/src/managed-files/entities/managed-file.entity.ts`
+- `server/src/managed-files/managed-files.controller.ts`
+- `server/src/managed-files/managed-files.module.ts`
+- `server/src/managed-files/managed-files.service.ts`
+- `server/src/migrations/1792396800000-CreateAiMaterials.ts`
+- `web/src/api/aiMaterial.ts`
+- `web/src/views/ai-material/Edit.vue`
+- `web/src/views/ai-material/Index.vue`
+- `web/src/views/ai-material/View.vue`
+
+修改文件（18）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `MD/AI素材生成与存储清理设计方案.md`
+- `server/src/ai-feature-configs/ai-feature-config.constants.ts`
+- `server/src/ai-feature-configs/ai-feature-configs.service.ts`
+- `server/src/app.module.ts`
+- `server/src/knowledge-ai-providers/knowledge-ai-providers.service.spec.ts`
+- `server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`
+- `server/src/menus/menus.service.ts`
+- `server/src/uploads/uploads.service.ts`
+- `server/src/users/users.service.ts`
+- `web/src/api/aiFeatureConfig.ts`
+- `web/src/api/knowledgeAiProvider.ts`
+- `web/src/api/storageConfig.ts`
+- `web/src/router/index.ts`
+- `web/src/views/ai-feature-config/Edit.vue`
+- `web/src/views/role/Edit.vue`
+- `web/src/views/storage-config/Index.vue`
+
+删除文件：无。
+
 ### 2026-10-19 明确 ComfyUI 同机直连接入范围
 
 - 根据用户确认的部署关系，将 ComfyUI 方案收敛为 NestJS 后端与 ComfyUI 同机直连；保留 Docker/WSL 网络边界与实际地址核对，不默认同机一定共用 localhost。

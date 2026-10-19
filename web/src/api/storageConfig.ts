@@ -1,6 +1,6 @@
-import request from '@/utils/request';
+import request from "@/utils/request";
 
-export type StorageProvider = 'local' | 'aliyun-oss' | 'tencent-cos' | 'qiniu';
+export type StorageProvider = "local" | "aliyun-oss" | "tencent-cos" | "qiniu";
 
 export interface StorageConfig {
   enabled: boolean;
@@ -18,14 +18,43 @@ export interface StorageConfig {
 }
 
 export function getStorageConfig() {
-  return request.get<unknown, StorageConfig>('/storage-config');
+  return request.get<unknown, StorageConfig>("/storage-config");
 }
 
 export function updateStorageConfig(
   data: Omit<
     StorageConfig,
-    'updatedAt' | 'accessKeyIdSet' | 'accessKeySecretSet'
+    "updatedAt" | "accessKeyIdSet" | "accessKeySecretSet"
   > & { clearCredentials?: boolean },
 ) {
-  return request.put<unknown, StorageConfig>('/storage-config', data);
+  return request.put<unknown, StorageConfig>("/storage-config", data);
+}
+
+export interface ManagedCleanupPreview {
+  scope: string;
+  environment: string;
+  count: number;
+  totalSize: number;
+  fileIds: number[];
+  list: Array<{
+    id: number;
+    status: string;
+    size: number;
+    createdAt: string;
+    deleteAfter: string | null;
+  }>;
+}
+
+export function getManagedCleanupPreview() {
+  return request.get<unknown, ManagedCleanupPreview>(
+    "/media-storage/cleanup-preview",
+    { params: { scope: "ai-materials", limit: 100 } },
+  );
+}
+
+export function cleanupManagedFiles(fileIds: number[]) {
+  return request.post<
+    unknown,
+    { requested: number; deleted: number; failed: number }
+  >("/media-storage/cleanup", { fileIds });
 }

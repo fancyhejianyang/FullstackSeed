@@ -1,4 +1,4 @@
-import request from '@/utils/request';
+import request from "@/utils/request";
 
 export interface KnowledgeAiProvider {
   id: number;
@@ -10,7 +10,7 @@ export interface KnowledgeAiProvider {
   textModels: string;
   visionModels: string;
   imageGenerationModels: string;
-  imageGenerationProtocol: 'openai' | 'dashscope';
+  imageGenerationProtocol: "openai" | "dashscope";
   imageGenerationApiUrl: string;
   embeddingModels: string;
   isEnabled: boolean;
@@ -30,7 +30,7 @@ export interface QueryKnowledgeAiProviderParams {
   page?: number;
   pageSize?: number;
   keyword?: string;
-  isEnabled?: boolean | '';
+  isEnabled?: boolean | "";
 }
 
 export interface KnowledgeAiProviderForm {
@@ -43,7 +43,7 @@ export interface KnowledgeAiProviderForm {
   textModels?: string;
   visionModels?: string;
   imageGenerationModels?: string;
-  imageGenerationProtocol?: 'openai' | 'dashscope';
+  imageGenerationProtocol?: "openai" | "dashscope";
   imageGenerationApiUrl?: string;
   embeddingModels?: string;
   isEnabled?: boolean;
@@ -68,12 +68,13 @@ export interface ValidateKnowledgeAiProviderModelPayload {
   id: number;
   model: string;
   featureType:
-    | 'chat'
-    | 'contentCreation'
-    | 'documentParse'
-    | 'ocr'
-    | 'rerank'
-    | 'embedding';
+    | "chat"
+    | "contentCreation"
+    | "documentParse"
+    | "ocr"
+    | "rerank"
+    | "embedding"
+    | "imageGeneration";
 }
 
 export interface ValidateKnowledgeAiProviderModelResult {
@@ -89,7 +90,7 @@ export function getKnowledgeAiProviders(
   params: QueryKnowledgeAiProviderParams,
 ) {
   return request.get<unknown, KnowledgeAiProviderListResult>(
-    '/knowledge-ai-providers',
+    "/knowledge-ai-providers",
     { params },
   );
 }
@@ -102,7 +103,7 @@ export function getKnowledgeAiProvider(id: number) {
 
 export function createKnowledgeAiProvider(data: KnowledgeAiProviderForm) {
   return request.post<unknown, KnowledgeAiProvider>(
-    '/knowledge-ai-providers',
+    "/knowledge-ai-providers",
     data,
   );
 }
@@ -125,14 +126,14 @@ export function deleteKnowledgeAiProvider(id: number) {
 
 export function batchDeleteKnowledgeAiProviders(ids: Array<string | number>) {
   return request.post<unknown, { ids: number[] }>(
-    '/knowledge-ai-providers/batch-delete',
+    "/knowledge-ai-providers/batch-delete",
     { ids: ids.map(Number) },
   );
 }
 
 export function testKnowledgeAiProvider(data: TestKnowledgeAiProviderPayload) {
   return request.post<unknown, TestKnowledgeAiProviderResult>(
-    '/knowledge-ai-providers/test',
+    "/knowledge-ai-providers/test",
     data,
   );
 }
@@ -141,7 +142,7 @@ export function validateKnowledgeAiProviderModel(
   data: ValidateKnowledgeAiProviderModelPayload,
 ) {
   return request.post<unknown, ValidateKnowledgeAiProviderModelResult>(
-    '/knowledge-ai-providers/validate-model',
+    "/knowledge-ai-providers/validate-model",
     data,
   );
 }

@@ -1,0 +1,128 @@
+<script setup lang="ts">
+import { computed, ref, watch } from "vue";
+import Dialog from "@/components/Dialog.vue";
+import Button from "@/components/Button.vue";
+import { formatDateTime } from "@/utils/format";
+import {
+  getAiMaterial,
+  type AiMaterial,
+  type AiMaterialSummary,
+} from "@/api/aiMaterial";
+
+const props = defineProps<{ row?: AiMaterialSummary | null }>();
+const visible = defineModel<boolean>("visible", { required: true });
+const loading = ref(false);
+const detail = ref<AiMaterial | null>(null);
+const styleLabels: Record<string, string> = {
+  original: "原始描述",
+  photorealistic: "写实摄影",
+  watercolor: "水彩",
+  flatIllustration: "扁平插画",
+  cinematic: "电影质感",
+  custom: "自定义风格",
+};
+const statusLabels: Record<string, string> = {
+  idle: "待生成",
+  pending: "排队中",
+  running: "生成中",
+  storing: "保存中",
+  succeeded: "生成完成",
+  failed: "失败",
+  interrupted: "已中断",
+};
+const statusType = computed(() =>
+  detail.value?.generationStatus === "succeeded"
+    ? "success"
+    : ["failed", "interrupted"].includes(detail.value?.generationStatus ?? "")
+      ? "danger"
+      : "info",
+);
+
+watch(visible, async (value) => {
+  if (!value) {
+    detail.value = null;
+    return;
+  }
+  if (!props.row?.id) return;
+  loading.value = true;
+  try {
+    detail.value = await getAiMaterial(props.row.id);
+  } finally {
+    loading.value = false;
+  }
+});
+
+function download() {
+  if (!detail.value?.currentImageUrl) return;
+  const link = document.createElement("a");
+  link.href = detail.value.currentImageUrl;
+  link.download = `ai-material-${detail.value.id}`;
+  link.target = "_blank";
+  link.rel = "noopener";
+  link.click();
+}
+</script>
+
+<template>
+  <Dialog v-model="visible" title="查看素材" width="820px" :show-footer="false">
+    <div v-loading="loading">
+      <div v-if="detail" class="material-view">
+        <el-image
+          v-if="detail.currentImageUrl"
+          class="material-view__image"
+          :src="detail.currentImageUrl"
+          :preview-src-list="[detail.currentImageUrl]"
+          fit="contain"
+        />
+        <el-empty v-else description="尚未生成图片" :image-size="90" />
+        <el-descriptions :column="1" border>
+          <el-descriptions-item label="状态">
+            <el-tag :type="statusType">{{
+              statusLabels[detail.generationStatus]
+            }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="提示词">
+            <div class="material-view__text">{{ detail.prompt }}</div>
+          </el-descriptions-item>
+          <el-descriptions-item label="风格">
+            {{ styleLabels[detail.styleKey] || detail.styleKey }}
+            <span v-if="detail.customStyle">：{{ detail.customStyle }}</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="生图配置">
+            {{ detail.aiConfigName }} · {{ detail.aiModel }}
+          </el-descriptions-item>
+          <el-descriptions-item v-if="detail.generationError" label="最近结果">
+            {{ detail.generationError }}
+          </el-descriptions-item>
+          <el-descriptions-item label="更新时间">
+            {{ formatDateTime(detail.updatedAt) }}
+          </el-descriptions-item>
+        </el-descriptions>
+      </div>
+    </div>
+    <template #footer>
+      <Button v-if="detail?.currentImageUrl" icon="Download" @click="download"
+        >下载</Button
+      >
+      <Button @click="visible = false">关闭</Button>
+    </template>
+  </Dialog>
+</template>
+
+<style scoped>
+.material-view {
+  display: grid;
+  gap: 16px;
+}
+.material-view__image {
+  width: 100%;
+  height: min(52vh, 440px);
+  border-radius: 8px;
+  background: #f5f7fa;
+}
+.material-view__text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.65;
+}
+</style>

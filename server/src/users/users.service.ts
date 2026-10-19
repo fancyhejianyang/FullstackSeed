@@ -26,6 +26,8 @@ const ADMIN_PERMISSION_MODULES = [
   'Demo',
   'ContentArticle',
   'ContentTemplate',
+  'AiMaterial',
+  'MediaStorage',
   'KnowledgeBase',
   'KnowledgeRoutingRule',
   'KnowledgeStandardQa',

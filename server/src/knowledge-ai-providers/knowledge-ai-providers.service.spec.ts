@@ -28,7 +28,12 @@ interface ProviderInternals {
   };
   getFeatureModels: (
     provider: KnowledgeAiProvider,
-    featureType: 'chat' | 'documentParse' | 'ocr' | 'embedding',
+    featureType:
+      | 'chat'
+      | 'documentParse'
+      | 'ocr'
+      | 'embedding'
+      | 'imageGeneration',
   ) => string | null;
   removeModelFromList: (models: string | null, model: string) => string | null;
   isMissingModelError: (status: number, message: string) => boolean;
@@ -108,6 +113,7 @@ describe('KnowledgeAiProvidersService', () => {
       models: 'chat-model',
       textModels: 'text-model',
       visionModels: 'vision-model',
+      imageGenerationModels: 'image-model',
       embeddingModels: 'embedding-model',
     } as KnowledgeAiProvider;
 
@@ -123,6 +129,19 @@ describe('KnowledgeAiProvidersService', () => {
     expect(internals.getFeatureModels(provider, 'embedding')).toBe(
       'embedding-model',
     );
+    expect(internals.getFeatureModels(provider, 'imageGeneration')).toBe(
+      'image-model',
+    );
+  });
+
+  it('does not probe image generation models through the text validation endpoint', async () => {
+    await expect(
+      service.validateModel({
+        id: 1,
+        model: 'image-model',
+        featureType: 'imageGeneration',
+      }),
+    ).rejects.toThrow('图片生成模型不会通过文本接口自动校验');
   });
 
   it('removes only the invalid model entry and recognizes model-not-found errors', () => {
