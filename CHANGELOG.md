@@ -1,5 +1,29 @@
 # CHANGELOG
 
+### 2026-10-19 修复 Dialog 内单选与多选菜单被裁切
+
+- 公共 Select / SelectMultiple 菜单改为 Teleport 到 body，以 fixed 视口坐标定位；复用 Element Plus 层级序列并高于当前弹窗祖先层级。保留 Dialog 内容区滚动，不通过加高弹窗或取消 overflow 绕过问题，无后端、接口或数据字段变更。
+- 抽取共用定位逻辑：跟随祖先滚动、窗口/可视视口和控件尺寸变化；宽度对齐控件、底部空间不足时向上展开、窄视口限宽限高，菜单内部继续支持横向/虚拟滚动。控件完全滚出可见区域时关闭，关闭/卸载/停用时清理监听、观察器与动画帧。
+- 独立弹层纳入内部点击判断，保留输入焦点和多选连续勾选；Esc 只关闭菜单，Tab 正常导航，禁用和窗口失焦关闭。键盘滚动按实际可视高度计算，空数据保留一行提示；移除 Agent 输入区依赖祖先的旧菜单定位覆盖，统一由公共组件避让边界。
+- 同步公共组件契约。验证：完整前端 Vue 类型检查（无输出构建）、53 项 Node 测试全部通过，其中新增 15 项覆盖定位、组件脚本交互、模板编译及生命周期清理；`git diff --check` 通过。测试使用 Vue 响应式与可控布局桩，不等同于浏览器视觉验收；遵循修复类改动规则，未 build、未启动服务。
+- 本次仅提交下列文件；保留工作区已有的自动生成文件 `web/components.d.ts` 改动，不纳入提交。
+
+新增文件（3）：
+
+- `web/src/components/selectDropdownPosition.ts`
+- `web/src/components/useSelectDropdown.ts`
+- `web/src/components/selectDropdown.test.mjs`
+
+修改文件（5）：
+
+- `web/src/components/Select.vue`
+- `web/src/components/SelectMultiple.vue`
+- `web/src/views/agent-workspace/Index.vue`
+- `AGENTS-COMPONENTS.md`
+- `CHANGELOG.md`
+
+删除文件：无。
+
 ### 2026-10-19 首页受控板块配置、运营看板与第三方配置拆分
 
 - 首页改为真实聚合数据：核心指标、Agent 趋势、业务健康、产品/SKU 分布、客服任务趋势、知识健康、待办异常、最近动态和快捷入口，共九种注册板块。关闭或无权限的板块不查询，混合卡片按指标裁剪，单块错误隔离，缺失指标不伪造为 0。

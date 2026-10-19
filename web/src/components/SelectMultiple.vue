@@ -21,6 +21,7 @@ import {
   watch,
 } from 'vue';
 import type { SelectOption } from './Select.vue';
+import { useSelectDropdown } from './useSelectDropdown';
 
 defineOptions({ inheritAttrs: false });
 
@@ -63,6 +64,7 @@ const emit = defineEmits<{
 }>();
 
 const rootRef = ref<HTMLElement>();
+const dropdownRef = ref<HTMLElement>();
 const menuRef = ref<HTMLElement>();
 const inputRef = ref<HTMLInputElement>();
 const opened = ref(false);
@@ -86,7 +88,9 @@ const selectedTags = computed(() =>
   })),
 );
 const visibleTags = computed(() =>
-  expanded.value ? selectedTags.value : selectedTags.value.slice(0, props.maxTagCount),
+  expanded.value
+    ? selectedTags.value
+    : selectedTags.value.slice(0, props.maxTagCount),
 );
 const hiddenTagCount = computed(() =>
   Math.max(0, selectedTags.value.length - props.maxTagCount),
@@ -102,8 +106,17 @@ const filteredOptions = computed(() => {
   });
 });
 
-const menuHeight = computed(() =>
-  Math.min(filteredOptions.value.length, props.visibleCount) * props.itemHeight,
+const menuHeight = computed(
+  () =>
+    Math.max(1, Math.min(filteredOptions.value.length, props.visibleCount)) *
+    props.itemHeight,
+);
+const { dropdownStyle, dropdownHeight } = useSelectDropdown(
+  rootRef,
+  dropdownRef,
+  opened,
+  menuHeight,
+  close,
 );
 const shouldVirtual = computed(
   () => props.virtual && filteredOptions.value.length > props.visibleCount,
@@ -122,7 +135,9 @@ const visibleEnd = computed(() =>
 const visibleOptions = computed(() =>
   filteredOptions.value.slice(visibleStart.value, visibleEnd.value),
 );
-const listHeight = computed(() => filteredOptions.value.length * props.itemHeight);
+const listHeight = computed(
+  () => filteredOptions.value.length * props.itemHeight,
+);
 const offsetTop = computed(() => visibleStart.value * props.itemHeight);
 
 watch(
@@ -147,7 +162,10 @@ watch(
   (value) => {
     // 多选值契约严格保持 string[]，兼容外部误传数字但会立即规范化。
     const next = Array.isArray(value) ? value.map((item) => String(item)) : [];
-    if (next.length !== value.length || next.some((item, index) => item !== value[index])) {
+    if (
+      next.length !== value.length ||
+      next.some((item, index) => item !== value[index])
+    ) {
       model.value = next;
     }
   },
@@ -277,6 +295,10 @@ function handleKeydown(event: KeyboardEvent) {
     const option = filteredOptions.value[highlightedIndex.value];
     if (option) toggleOption(option);
   } else if (event.key === 'Escape') {
+    event.preventDefault();
+    event.stopPropagation();
+    close();
+  } else if (event.key === 'Tab') {
     close();
   }
 }
@@ -289,16 +311,17 @@ function moveHighlight(step: number) {
 }
 
 function scrollHighlightedIntoView() {
-  // 键盘移动高亮项时，虚拟列表要同步滚动，保证高亮项始终可见。
-  if (!menuRef.value || !shouldVirtual.value) return;
+  // 使用实际可视高度；非虚拟列表也可能因视口边界而缩短。
+  if (!menuRef.value) return;
   const top = highlightedIndex.value * props.itemHeight;
   const bottom = top + props.itemHeight;
   const viewTop = menuRef.value.scrollTop;
-  const viewBottom = viewTop + menuHeight.value;
+  const viewHeight = menuRef.value.clientHeight;
+  const viewBottom = viewTop + viewHeight;
   if (top < viewTop) {
     menuRef.value.scrollTop = top;
   } else if (bottom > viewBottom) {
-    menuRef.value.scrollTop = bottom - menuHeight.value;
+    menuRef.value.scrollTop = bottom - viewHeight;
   }
 }
 
@@ -308,15 +331,25 @@ function handleScroll(event: Event) {
 
 function handleDocumentClick(event: MouseEvent) {
   const target = event.target as Node;
-  if (!rootRef.value?.contains(target)) close();
+  if (!rootRef.value?.contains(target) && !dropdownRef.value?.contains(target))
+    close();
 }
+
+watch(
+  () => props.disabled,
+  (disabled) => {
+    if (disabled) close();
+  },
+);
 
 onMounted(() => {
   document.addEventListener('mousedown', handleDocumentClick);
+  window.addEventListener('blur', close);
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener('mousedown', handleDocumentClick);
+  window.removeEventListener('blur', close);
   window.clearTimeout(searchTimer);
 });
 
@@ -331,7 +364,11 @@ watch(opened, async (value) => {
   <div
     ref="rootRef"
     class="select-multiple"
-    :class="{ 'is-opened': opened, 'is-disabled': props.disabled, 'is-expanded': expanded }"
+    :class="{
+      'is-opened': opened,
+      'is-disabled': props.disabled,
+      'is-expanded': expanded,
+    }"
     v-bind="$attrs"
   >
     <div class="select-multiple__control" @mousedown.prevent="toggleOpen">
@@ -379,7 +416,7 @@ watch(opened, async (value) => {
           :disabled="props.disabled"
           :placeholder="selectedTags.length ? '' : props.placeholder"
           @input="handleInput"
-          @focus="open"
+          @blur="close"
           @keydown="handleKeydown"
         />
       </div>
@@ -395,48 +432,56 @@ watch(opened, async (value) => {
       <span class="select-multiple__arrow" />
     </div>
 
-    <div v-if="opened" class="select-multiple__dropdown">
+    <Teleport to="body">
       <div
-        ref="menuRef"
-        class="select-multiple__menu"
-        :style="{ height: `${menuHeight}px` }"
-        @scroll="handleScroll"
+        v-if="opened"
+        ref="dropdownRef"
+        class="select-multiple__dropdown"
+        :style="dropdownStyle"
+        @mousedown.prevent
       >
         <div
-          v-if="filteredOptions.length"
-          class="select-multiple__virtual"
-          :style="{ height: `${listHeight}px` }"
+          ref="menuRef"
+          class="select-multiple__menu"
+          :style="{ height: `${dropdownHeight}px` }"
+          @scroll="handleScroll"
         >
-          <div :style="{ transform: `translateY(${offsetTop}px)` }">
-            <div
-              v-for="(option, index) in visibleOptions"
-              :key="option.value"
-              class="select-multiple__option"
-              :class="{
-                'is-selected': selectedSet.has(option.value),
-                'is-highlighted': visibleStart + index === highlightedIndex,
-                'is-disabled': isOptionDisabled(option),
-              }"
-              :style="{ height: `${props.itemHeight}px` }"
-              :title="getOptionTitle(option)"
-              @mousedown.prevent="toggleOption(option)"
-            >
-              <span class="select-multiple__check">
-                {{ selectedSet.has(option.value) ? '✓' : '' }}
-              </span>
-              <span>{{ option.text }}</span>
+          <div
+            v-if="filteredOptions.length"
+            class="select-multiple__virtual"
+            :style="{ height: `${listHeight}px` }"
+          >
+            <div :style="{ transform: `translateY(${offsetTop}px)` }">
+              <div
+                v-for="(option, index) in visibleOptions"
+                :key="option.value"
+                class="select-multiple__option"
+                :class="{
+                  'is-selected': selectedSet.has(option.value),
+                  'is-highlighted': visibleStart + index === highlightedIndex,
+                  'is-disabled': isOptionDisabled(option),
+                }"
+                :style="{ height: `${props.itemHeight}px` }"
+                :title="getOptionTitle(option)"
+                @mousedown.prevent="toggleOption(option)"
+              >
+                <span class="select-multiple__check">
+                  {{ selectedSet.has(option.value) ? '✓' : '' }}
+                </span>
+                <span>{{ option.text }}</span>
+              </div>
             </div>
           </div>
-        </div>
-        <div
-          v-else
-          class="select-multiple__empty"
-          :style="{ height: `${props.itemHeight}px` }"
-        >
-          {{ props.notFoundText }}
+          <div
+            v-else
+            class="select-multiple__empty"
+            :style="{ height: `${props.itemHeight}px` }"
+          >
+            {{ props.notFoundText }}
+          </div>
         </div>
       </div>
-    </div>
+    </Teleport>
   </div>
 </template>
 
@@ -556,11 +601,10 @@ watch(opened, async (value) => {
 }
 
 .select-multiple__dropdown {
-  position: absolute;
-  z-index: 2000;
-  top: calc(100% + 4px);
-  left: 0;
-  width: 100%;
+  position: fixed;
+  box-sizing: border-box;
+  font-size: 14px;
+  line-height: normal;
   overflow: hidden;
   border: 1px solid #e4e7ed;
   border-radius: 4px;

@@ -1345,12 +1345,6 @@ onUnmounted(() => {
   color: #303744;
   font-size: 12px;
 }
-.agent-workspace__model-select :deep(.select__dropdown) {
-  top: auto;
-  bottom: calc(100% + 6px);
-  border-color: #d7deea;
-  border-radius: 9px;
-}
 .agent-workspace__composer-hint {
   color: #687280;
   font-size: 11px;

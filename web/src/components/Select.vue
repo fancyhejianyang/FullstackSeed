@@ -21,6 +21,7 @@ import {
 } from 'vue';
 import { useFormItem } from 'element-plus';
 import { resolveSelectDisplayValue } from './selectDisplay';
+import { useSelectDropdown } from './useSelectDropdown';
 
 defineOptions({ inheritAttrs: false });
 
@@ -75,6 +76,7 @@ const emit = defineEmits<{
 }>();
 
 const rootRef = ref<HTMLElement>();
+const dropdownRef = ref<HTMLElement>();
 const menuRef = ref<HTMLElement>();
 const inputRef = ref<HTMLInputElement>();
 const opened = ref(false);
@@ -90,7 +92,9 @@ const normalizedValue = computed(() =>
 );
 
 const selectedOption = computed(() =>
-  normalizedValue.value ? optionMap.value.get(normalizedValue.value) : undefined,
+  normalizedValue.value
+    ? optionMap.value.get(normalizedValue.value)
+    : undefined,
 );
 
 const selectedText = computed(() => {
@@ -118,8 +122,17 @@ const filteredOptions = computed(() => {
   });
 });
 
-const menuHeight = computed(() =>
-  Math.min(filteredOptions.value.length, props.visibleCount) * props.itemHeight,
+const menuHeight = computed(
+  () =>
+    Math.max(1, Math.min(filteredOptions.value.length, props.visibleCount)) *
+    props.itemHeight,
+);
+const { dropdownStyle, dropdownHeight } = useSelectDropdown(
+  rootRef,
+  dropdownRef,
+  opened,
+  menuHeight,
+  close,
 );
 const shouldVirtual = computed(
   () => props.virtual && filteredOptions.value.length > props.visibleCount,
@@ -138,7 +151,9 @@ const visibleEnd = computed(() =>
 const visibleOptions = computed(() =>
   filteredOptions.value.slice(visibleStart.value, visibleEnd.value),
 );
-const listHeight = computed(() => filteredOptions.value.length * props.itemHeight);
+const listHeight = computed(
+  () => filteredOptions.value.length * props.itemHeight,
+);
 const offsetTop = computed(() => visibleStart.value * props.itemHeight);
 
 watch(
@@ -161,7 +176,8 @@ watch(
 watch(
   () => model.value,
   (value) => {
-    if (value === null || value === undefined || typeof value === 'string') return;
+    if (value === null || value === undefined || typeof value === 'string')
+      return;
     model.value = String(value);
   },
 );
@@ -268,6 +284,10 @@ function handleKeydown(event: KeyboardEvent) {
     const option = filteredOptions.value[highlightedIndex.value];
     if (option) selectOption(option);
   } else if (event.key === 'Escape') {
+    event.preventDefault();
+    event.stopPropagation();
+    close();
+  } else if (event.key === 'Tab') {
     close();
   }
 }
@@ -280,16 +300,17 @@ function moveHighlight(step: number) {
 }
 
 function scrollHighlightedIntoView() {
-  // 键盘移动高亮项时，虚拟列表要同步滚动，保证高亮项始终可见。
-  if (!menuRef.value || !shouldVirtual.value) return;
+  // 使用实际可视高度；非虚拟列表也可能因视口边界而缩短。
+  if (!menuRef.value) return;
   const top = highlightedIndex.value * props.itemHeight;
   const bottom = top + props.itemHeight;
   const viewTop = menuRef.value.scrollTop;
-  const viewBottom = viewTop + menuHeight.value;
+  const viewHeight = menuRef.value.clientHeight;
+  const viewBottom = viewTop + viewHeight;
   if (top < viewTop) {
     menuRef.value.scrollTop = top;
   } else if (bottom > viewBottom) {
-    menuRef.value.scrollTop = bottom - menuHeight.value;
+    menuRef.value.scrollTop = bottom - viewHeight;
   }
 }
 
@@ -297,7 +318,11 @@ function getInitialHighlightIndex() {
   const selectedIndex = filteredOptions.value.findIndex(
     (option) => option.value === normalizedValue.value,
   );
-  return selectedIndex >= 0 ? selectedIndex : filteredOptions.value.length ? 0 : -1;
+  return selectedIndex >= 0
+    ? selectedIndex
+    : filteredOptions.value.length
+      ? 0
+      : -1;
 }
 
 function handleScroll(event: Event) {
@@ -310,8 +335,16 @@ function isSelected(option: SelectOption) {
 
 function handleDocumentClick(event: MouseEvent) {
   const target = event.target as Node;
-  if (!rootRef.value?.contains(target)) close();
+  if (!rootRef.value?.contains(target) && !dropdownRef.value?.contains(target))
+    close();
 }
+
+watch(
+  () => props.disabled,
+  (disabled) => {
+    if (disabled) close();
+  },
+);
 
 onMounted(() => {
   document.addEventListener('mousedown', handleDocumentClick);
@@ -363,41 +396,53 @@ watch(opened, async (value) => {
       <span class="select__arrow" />
     </div>
 
-    <div v-if="opened" class="select__dropdown">
+    <Teleport to="body">
       <div
-        ref="menuRef"
-        class="select__menu"
-        :style="{ height: `${menuHeight}px` }"
-        @scroll="handleScroll"
+        v-if="opened"
+        ref="dropdownRef"
+        class="select__dropdown"
+        :style="dropdownStyle"
+        @mousedown.prevent
       >
-        <div v-if="filteredOptions.length" class="select__virtual" :style="{ height: `${listHeight}px` }">
-          <div :style="{ transform: `translateY(${offsetTop}px)` }">
-            <div
-              v-for="(option, index) in visibleOptions"
-              :key="option.value"
-              class="select__option"
-              :class="{
-                'is-selected': isSelected(option),
-                'is-highlighted': visibleStart + index === highlightedIndex,
-                'is-disabled': option.disabled,
-              }"
-              :style="{ height: `${props.itemHeight}px` }"
-              :title="option.text"
-              @mousedown.prevent="selectOption(option)"
-            >
-              {{ option.text }}
+        <div
+          ref="menuRef"
+          class="select__menu"
+          :style="{ height: `${dropdownHeight}px` }"
+          @scroll="handleScroll"
+        >
+          <div
+            v-if="filteredOptions.length"
+            class="select__virtual"
+            :style="{ height: `${listHeight}px` }"
+          >
+            <div :style="{ transform: `translateY(${offsetTop}px)` }">
+              <div
+                v-for="(option, index) in visibleOptions"
+                :key="option.value"
+                class="select__option"
+                :class="{
+                  'is-selected': isSelected(option),
+                  'is-highlighted': visibleStart + index === highlightedIndex,
+                  'is-disabled': option.disabled,
+                }"
+                :style="{ height: `${props.itemHeight}px` }"
+                :title="option.text"
+                @mousedown.prevent="selectOption(option)"
+              >
+                {{ option.text }}
+              </div>
             </div>
           </div>
-        </div>
-        <div
-          v-else
-          class="select__empty"
-          :style="{ height: `${props.itemHeight}px` }"
-        >
-          {{ props.notFoundText }}
+          <div
+            v-else
+            class="select__empty"
+            :style="{ height: `${props.itemHeight}px` }"
+          >
+            {{ props.notFoundText }}
+          </div>
         </div>
       </div>
-    </div>
+    </Teleport>
   </div>
 </template>
 
@@ -471,11 +516,10 @@ watch(opened, async (value) => {
 }
 
 .select__dropdown {
-  position: absolute;
-  z-index: 2000;
-  top: calc(100% + 4px);
-  left: 0;
-  width: 100%;
+  position: fixed;
+  box-sizing: border-box;
+  font-size: 14px;
+  line-height: normal;
   overflow: hidden;
   border: 1px solid #e4e7ed;
   border-radius: 4px;
