@@ -37,7 +37,7 @@ function harness() {
     scope = vue.effectScope();
   const code = ts.transpileModule(
     parse(source).descriptor.scriptSetup.content +
-      '\nexport { load, preview, content, copyContent, generatedTitle, copyTitle, adopt, adoptTitle, canAdopt, adopting, adoptConfirmation, canLeave, beforeClose, requestClose, beforeUnload };',
+      '\nexport { load, preview, content, copyContent, generatedTitle, copyTitle, adopt, adoptTitle, canAdopt, adopting, adoptConfirmation, canLeave, beforeClose, requestClose, beforeUnload, originalIdea };',
     {
       compilerOptions: {
         module: ts.ModuleKind.CommonJS,
@@ -252,10 +252,10 @@ test('切换文章时迟到响应不覆盖当前文章', async () => {
   assert.equal(h.content.value, '另一篇文章');
   h.close();
 });
-test('文章列表和查看弹窗移除记录跳转、刷新及 Tab，独立记录模块保留', async () => {
+test('文章列表和查看弹窗保留精简布局，初始想法独立于正文展示', async () => {
   assert.doesNotMatch(
     source,
-    /<Tasks|v-html|<el-tabs|<el-tab-pane|records|刷新|detail\.(idea|coverUrl|content|title)/,
+    /<Tasks|v-html|<el-tabs|<el-tab-pane|records|刷新|detail\.(coverUrl|content|title)/,
   );
   assert.doesNotMatch(await read('./Edit.vue'), /<Tasks/);
   assert.match(
@@ -274,6 +274,45 @@ test('文章列表和查看弹窗移除记录跳转、刷新及 Tab，独立记�
   assert.match(source, /:confirm-text="adoptConfirmation"/);
   assert.match(source, /:before-close="beforeClose"/);
   assert.match(source, /采纳并保存/);
+  assert.match(source, /<details class="article-view__notes" open>/);
+  assert.match(source, /<summary>初始想法<\/summary>/);
+});
+
+test('查看优先显示生成时初始想法，复制正文不混入素材', async () => {
+  const h = harness();
+  h.state.response.article.idea = '后来修改的想法';
+  h.state.response.latestTask.snapshot = {
+    idea: '生成时提交的初始想法\n第二行',
+  };
+  h.visible.value = true;
+  await flush();
+  assert.equal(h.originalIdea.value, '生成时提交的初始想法\n第二行');
+  await h.copyContent();
+  assert.deepEqual(h.calls.at(-1), ['copy', '最新生成稿']);
+  h.state.response.latestTask.snapshot.idea = '';
+  await h.load();
+  assert.equal(h.originalIdea.value, '');
+  h.close();
+});
+
+test('没有任务或历史缺少想法快照时展示文章想法；任务失败也可阅读初始素材', async () => {
+  const h = harness();
+  h.state.response.article.idea = '记录的想法';
+  h.visible.value = true;
+  await flush();
+  assert.equal(h.originalIdea.value, '记录的想法');
+  h.state.response.latestTask = null;
+  await h.load();
+  assert.equal(h.originalIdea.value, '记录的想法');
+  h.state.response.latestTask = {
+    id: 21,
+    status: 'failed',
+    snapshot: { idea: '失败任务的原始素材' },
+  };
+  await h.load();
+  assert.equal(h.originalIdea.value, '失败任务的原始素材');
+  assert.equal(h.content.value, '');
+  h.close();
 });
 
 test('最新稿展示 AI 推荐标题，复制标题不混入正文或提示', async () => {

@@ -35,11 +35,16 @@ function harness() {
     result: { id: 20, status: 'pending', articleId: 1, articleVersion: 4 },
     confirm: true,
     saveError: false,
+    latestTask: null,
+    updatePermission: true,
   };
   const api = {
-    getContentArticle: async (id) => {
-      calls.push(['detail', id]);
-      return await state.detail;
+    getContentArticlePreview: async (id) => {
+      calls.push(['preview', id]);
+      return {
+        article: structuredClone(await state.detail),
+        latestTask: structuredClone(state.latestTask),
+      };
     },
     generateContentArticle: async (id, data) => {
       calls.push(['generate', id, data]);
@@ -61,7 +66,7 @@ function harness() {
   const exports = {};
   const script =
     parse(editor).descriptor.scriptSetup.content +
-    '\nexport { form, formRef, fields, version, savedId, busy, loadFailed, handleSubmit, canLeave, beforeClose, requestClose };';
+    '\nexport { form, formRef, fields, version, savedId, busy, loadFailed, handleSubmit, canLeave, beforeClose, requestClose, dirty, latestCandidate, loadedGeneratedBody, canLoadGeneratedBody, loadGeneratedBody };';
   scope.run(() =>
     new Function(
       'require',
@@ -97,7 +102,11 @@ function harness() {
         if (name === '@/api/contentTemplate')
           return { getContentTemplates: async () => ({ list: [], total: 0 }) };
         if (name === '@/stores/user')
-          return { useUserStore: () => ({ hasPermission: () => true }) };
+          return {
+            useUserStore: () => ({
+              hasPermission: () => state.updatePermission,
+            }),
+          };
         if (name === './taskState')
           return {
             isActiveTask: (task) =>
@@ -253,6 +262,198 @@ test('详情读取失败不允许保存；迟到详情不覆盖新记录', async
     h.calls.some((call) => call[0] === 'update'),
     false,
   );
+  h.close();
+});
+
+test('空正文自动回填当前版本最新生成稿，保存前不写入且仍有未保存保护', async () => {
+  const h = harness();
+  h.state.detail.content = '';
+  h.state.latestTask = {
+    id: 20,
+    articleVersion: 4,
+    status: 'succeeded',
+    result: 'AI 生成正文',
+    generatedTitle: 'AI 标题',
+  };
+  h.props.row = { id: 1 };
+  h.visible.value = true;
+  await flush();
+  assert.equal(h.form.content, 'AI 生成正文');
+  assert.equal(h.form.title, '旧标题');
+  assert.equal(h.form.idea, '原始想法');
+  assert.equal(h.dirty.value, true);
+  assert.equal(h.loadedGeneratedBody.value, true);
+  assert.deepEqual(h.calls, [['preview', 1]]);
+  h.state.confirm = false;
+  await h.requestClose();
+  assert.equal(h.visible.value, true);
+  await h.handleSubmit();
+  const saved = h.calls.find(([kind]) => kind === 'update');
+  assert.equal(saved[2].content, 'AI 生成正文');
+  assert.equal(saved[2].version, 4);
+  assert.equal(h.visible.value, false);
+  assert.equal(
+    h.calls.some(([kind]) => kind === 'generate'),
+    false,
+  );
+  h.close();
+});
+
+test('已有正文不被生成稿覆盖，可明确载入；载入后保存冲突仍保留输入', async () => {
+  const h = harness();
+  h.state.latestTask = {
+    id: 20,
+    articleVersion: 4,
+    status: 'succeeded',
+    result: '新候选正文',
+  };
+  h.props.row = { id: 1 };
+  h.visible.value = true;
+  await flush();
+  assert.equal(h.form.content, '原文');
+  assert.equal(h.dirty.value, false);
+  assert.equal(h.canLoadGeneratedBody.value, true);
+  h.form.content = '正在编辑的正文';
+  h.loadGeneratedBody();
+  assert.equal(h.form.content, '新候选正文');
+  assert.equal(h.dirty.value, true);
+  assert.equal(h.canLoadGeneratedBody.value, false);
+  assert.equal(
+    h.calls.some(([kind]) => kind === 'update'),
+    false,
+  );
+  h.form.content += '（人工修改）';
+  h.state.saveError = true;
+  await h.handleSubmit();
+  assert.equal(h.visible.value, true);
+  assert.equal(h.form.content, '新候选正文（人工修改）');
+  assert.match(editor, /confirm-text="将用最新生成正文替换编辑框中的正文/);
+  h.close();
+});
+
+test('版本变化或已采用后清空正文不自动复原，只允许手动载入', async () => {
+  for (const scenario of ['version', 'adopted']) {
+    const h = harness();
+    h.state.detail.content = '';
+    h.state.latestTask = {
+      id: 20,
+      articleVersion: scenario === 'version' ? 3 : 4,
+      status: scenario === 'adopted' ? 'adopted' : 'succeeded',
+      result: '旧素材生成稿',
+    };
+    h.props.row = { id: 1 };
+    h.visible.value = true;
+    await flush();
+    assert.equal(h.form.content, '');
+    assert.equal(h.dirty.value, false);
+    assert.equal(h.canLoadGeneratedBody.value, true);
+    h.loadGeneratedBody();
+    assert.equal(h.form.content, '旧素材生成稿');
+    assert.equal(h.version.value, 4);
+    h.close();
+  }
+});
+
+test('无任务、失败、待补充、运行和空结果不回填，也不载入异常返回内容', async () => {
+  for (const status of [
+    null,
+    'failed',
+    'needs_input',
+    'pending',
+    'running',
+    'interrupted',
+    'empty',
+  ]) {
+    const h = harness();
+    h.state.detail.content = '';
+    h.state.latestTask = status
+      ? {
+          id: 20,
+          articleVersion: 4,
+          status: status === 'empty' ? 'succeeded' : status,
+          result: status === 'empty' ? '  ' : '不可用正文',
+        }
+      : null;
+    h.props.row = { id: 1 };
+    h.visible.value = true;
+    await flush();
+    h.loadGeneratedBody();
+    assert.equal(h.form.content, '', String(status));
+    assert.equal(h.latestCandidate.value, null);
+    assert.equal(h.dirty.value, false);
+    h.close();
+  }
+});
+
+test('每次编辑重新读最新稿，不在编辑期间轮询覆盖输入；关闭或卸载后不回填', async () => {
+  const h = harness();
+  h.state.detail.content = '';
+  h.state.latestTask = {
+    id: 20,
+    articleVersion: 4,
+    status: 'succeeded',
+    result: '第一版',
+  };
+  h.props.row = { id: 1 };
+  h.visible.value = true;
+  await flush();
+  h.form.content = '人工正在修改';
+  h.state.latestTask.result = '第二版';
+  await flush();
+  assert.equal(h.form.content, '人工正在修改');
+  h.visible.value = false;
+  await flush();
+  h.visible.value = true;
+  await flush();
+  assert.equal(h.form.content, '第二版');
+  assert.equal(h.calls.filter(([kind]) => kind === 'preview').length, 2);
+  h.close();
+  for (const unmount of [false, true]) {
+    const pending = harness();
+    let resolve;
+    pending.state.detail = new Promise((done) => {
+      resolve = done;
+    });
+    pending.state.latestTask = {
+      id: 20,
+      articleVersion: 4,
+      status: 'succeeded',
+      result: '迟到正文',
+    };
+    pending.props.row = { id: 1 };
+    pending.visible.value = true;
+    await flush();
+    if (unmount) pending.close();
+    else {
+      pending.visible.value = false;
+      await flush();
+    }
+    resolve({ id: 1, title: '迟到标题', idea: '', content: '', version: 4 });
+    await flush();
+    assert.equal(pending.form.content, '');
+    assert.equal(pending.latestCandidate.value, null);
+    if (!unmount) pending.close();
+  }
+});
+
+test('无编辑权限或弹窗已关闭时不能手动载入生成正文', async () => {
+  const h = harness();
+  h.state.latestTask = {
+    id: 20,
+    articleVersion: 4,
+    status: 'succeeded',
+    result: '最新正文',
+  };
+  h.props.row = { id: 1 };
+  h.visible.value = true;
+  await flush();
+  h.state.updatePermission = false;
+  h.loadGeneratedBody();
+  assert.equal(h.form.content, '原文');
+  h.state.updatePermission = true;
+  h.visible.value = false;
+  h.loadGeneratedBody();
+  assert.equal(h.form.content, '原文');
   h.close();
 });
 

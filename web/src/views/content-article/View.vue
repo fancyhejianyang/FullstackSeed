@@ -25,6 +25,9 @@ const adoptTitle = ref(false);
 const preview = ref<ContentArticlePreview | null>(null);
 const detail = computed(() => preview.value?.article);
 const latest = computed(() => preview.value?.latestTask);
+const originalIdea = computed(
+  () => latest.value?.snapshot?.idea ?? detail.value?.idea ?? '',
+);
 const content = computed(() =>
   latest.value && ['succeeded', 'adopted'].includes(latest.value.status)
     ? latest.value.result || ''
@@ -171,6 +174,10 @@ async function copyTitle() {
   >
     <div v-loading="loading" class="article-view">
       <template v-if="detail">
+        <details class="article-view__notes" open>
+          <summary>初始想法</summary>
+          <pre>{{ originalIdea || '暂无想法' }}</pre>
+        </details>
         <template v-if="latest">
           <template v-if="generatedTitle">
             <p class="article-view__title-label">AI 推荐标题</p>

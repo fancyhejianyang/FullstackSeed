@@ -19,11 +19,12 @@ import UploadImage from '@/components/UploadImage.vue';
 import { uploadFile } from '@/api/upload';
 import {
   createContentArticle,
-  getContentArticle,
+  getContentArticlePreview,
   updateContentArticle,
   type ContentArticle,
   type ContentArticleForm,
   type ContentArticleSummary,
+  type ContentTaskDetail,
 } from '@/api/contentArticle';
 
 const props = defineProps<{ row?: ContentArticleSummary | null }>();
@@ -45,6 +46,13 @@ const loading = ref(false);
 const loadFailed = ref(false);
 const submitting = ref(false);
 const uploading = ref(false);
+const latestCandidate = ref<ContentTaskDetail | null>(null);
+const loadedGeneratedBody = ref(false);
+const canLoadGeneratedBody = computed(
+  () =>
+    !!latestCandidate.value?.result &&
+    latestCandidate.value.result !== form.content,
+);
 const baseline = ref(JSON.stringify(form));
 const dirty = computed(() => JSON.stringify(form) !== baseline.value);
 const busy = computed(
@@ -95,6 +103,8 @@ watch(
     savedId.value = id ?? null;
     loadFailed.value = false;
     loading.value = false;
+    latestCandidate.value = null;
+    loadedGeneratedBody.value = false;
     if (!open) return;
     Object.assign(form, {
       title: '',
@@ -109,9 +119,25 @@ watch(
     if (!id) return;
     loading.value = true;
     try {
-      const data = await getContentArticle(id);
+      const { article: data, latestTask } = await getContentArticlePreview(id);
       if (current !== epoch) return;
       fillSaved(data);
+      if (
+        latestTask &&
+        ['succeeded', 'adopted'].includes(latestTask.status) &&
+        latestTask.result?.trim()
+      ) {
+        latestCandidate.value = latestTask;
+        // 只填入空白且未变更版本的正文；基线仍是已保存数据，回填属于未保存草稿。
+        if (
+          !data.content?.trim() &&
+          latestTask.status === 'succeeded' &&
+          latestTask.articleVersion === data.version
+        ) {
+          form.content = latestTask.result;
+          loadedGeneratedBody.value = true;
+        }
+      }
     } catch {
       if (current === epoch) loadFailed.value = true;
     } finally {
@@ -132,6 +158,18 @@ function fillSaved(data: ContentArticle) {
   savedId.value = data.id;
   version.value = data.version;
   baseline.value = JSON.stringify(form);
+}
+function loadGeneratedBody() {
+  if (
+    busy.value ||
+    loadFailed.value ||
+    !visible.value ||
+    !user.hasPermission('ContentArticle.update') ||
+    !canLoadGeneratedBody.value
+  )
+    return;
+  form.content = latestCandidate.value!.result!;
+  loadedGeneratedBody.value = true;
 }
 async function saveDraft() {
   if (savedId.value && !dirty.value) return;
@@ -258,6 +296,25 @@ onBeforeUnmount(() => {
         </template>
         <template #field-content>
           <div class="article-editor__body">
+            <div v-if="latestCandidate" class="article-editor__body-tools">
+              <span v-if="loadedGeneratedBody"
+                >已载入生成正文，保存后生效。</span
+              >
+              <span v-else-if="canLoadGeneratedBody"
+                >保留已保存内容，可手动载入最新生成正文。</span
+              >
+              <Button
+                v-if="canLoadGeneratedBody"
+                perm="ContentArticle.update"
+                :disabled="busy"
+                link
+                :auto-icon="false"
+                confirm
+                confirm-text="将用最新生成正文替换编辑框中的正文，保存后才生效，确认载入？"
+                @click="loadGeneratedBody"
+                >载入最新生成正文</Button
+              >
+            </div>
             <Input
               v-model="form.content"
               mode="textarea"
@@ -305,5 +362,13 @@ onBeforeUnmount(() => {
 .article-editor__body {
   width: 100%;
   min-width: 0;
+}
+.article-editor__body-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: #606266;
 }
 </style>
