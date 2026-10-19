@@ -148,6 +148,16 @@ describe('system menu migration', () => {
     await service.onModuleInit();
     expect(rows.some((r) => r.path === '/system-config/menu')).toBe(false);
     expect(rows.some((r) => r.path === '/access-control')).toBe(true);
+    expect(rows.some((r) => r.path === '/ai-config')).toBe(true);
+    expect(
+      rows.some((r) =>
+        [
+          '/ai-config/features',
+          '/ai-config/commands',
+          '/ai-config/workflows',
+        ].includes(r.path ?? ''),
+      ),
+    ).toBe(false);
   });
   it('separates integrations, keeps compatibility paths and moves domain rules to knowledge', () => {
     const result = reorganizeSystemMenus([

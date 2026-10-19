@@ -313,3 +313,11 @@ test('AI 页签只挂载当前有权页面，模板不能继承文章权限', as
   await h.router.push('/content-templates');
   assert.equal(h.router.currentRoute.value.path, '/');
 });
+
+test('AI 配置页签路由在侧边栏统一激活单一入口', async () => {
+  const layout = await read('../layouts/MainLayout.vue');
+  assert.match(
+    layout,
+    /route\.path\.startsWith\(["']\/ai-config\/["']\)[\s\S]*\? ["']\/ai-config["']/,
+  );
+});

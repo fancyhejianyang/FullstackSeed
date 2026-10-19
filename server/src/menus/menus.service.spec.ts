@@ -201,7 +201,7 @@ describe('MenusService Agent menu reconciliation', () => {
     ).toBe(false);
   });
 
-  it('AI 入口迁移保留功能、指令和工作流 ID 与人工可见性', async () => {
+  it('AI 配置收敛为单一菜单并停用历史子菜单', async () => {
     rows.push(
       menu({
         id: 8,
@@ -236,21 +236,21 @@ describe('MenusService Agent menu reconciliation', () => {
       path: '/ai-config/commands',
       parentId: root.id,
       isSystem: false,
+      isActive: false,
     });
     expect(rows.find((row) => row.id === 7)).toMatchObject({
       path: '/ai-config/workflows',
       parentId: root.id,
+      isActive: false,
     });
     expect(rows.find((row) => row.id === 9)).toMatchObject({
       path: '/content-articles',
       name: '文章创作',
     });
     const tree = await service.findMine(false, ['AiCommandDefinition.read']);
-    expect(
-      tree
-        .find((row) => row.path === '/ai-config')!
-        .children.map((row) => row.path),
-    ).toEqual(['/ai-config/commands']);
+    expect(tree.find((row) => row.path === '/ai-config')).toMatchObject({
+      children: [],
+    });
   });
 
   it('reconciles debug to AgentApp.read with a stable id and the existing admin-only default', async () => {

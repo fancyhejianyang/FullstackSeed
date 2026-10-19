@@ -16,7 +16,11 @@ interface MenuExpose {
 
 const isCollapse = ref(false);
 const menuRef = ref<MenuExpose | null>(null);
-const activeMenu = computed(() => route.path);
+const activeMenu = computed(() =>
+  route.path === '/ai-config' || route.path.startsWith('/ai-config/')
+    ? '/ai-config'
+    : route.path,
+);
 const pageTitle = computed(() => String(route.meta.title || ''));
 
 // 菜单来自后端（按权限过滤，超管返回全部），由路由守卫在进入前引导加载

@@ -20,6 +20,7 @@ type SeedMenu = Partial<Menu> & {
   legacyPaths?: string[];
   reconcile?: boolean;
   preserveVisibility?: boolean;
+  retired?: boolean;
   matchByName?: boolean;
 };
 
@@ -334,6 +335,7 @@ const BASE_SEED_MENUS: SeedMenu[] = [
     legacyPaths: ['/chat-management/ai-configs'],
     reconcile: true,
     preserveVisibility: true,
+    retired: true,
   },
   {
     name: 'AI 指令集',
@@ -346,6 +348,7 @@ const BASE_SEED_MENUS: SeedMenu[] = [
     legacyPaths: ['/agent-management/commands', '/chat-management/commands'],
     reconcile: true,
     preserveVisibility: true,
+    retired: true,
   },
   {
     name: '知识库检索配置',
@@ -367,6 +370,7 @@ const BASE_SEED_MENUS: SeedMenu[] = [
     legacyPaths: ['/agent-management/workflows', '/chat-management/workflows'],
     reconcile: true,
     preserveVisibility: true,
+    retired: true,
   },
   {
     name: '知识库路由规则',
@@ -618,7 +622,6 @@ export class MenusService implements OnModuleInit {
           '/system-config',
           '/access-control',
           '/third-party-config',
-          '/ai-config',
           '/content-creation',
         ].includes(node.path) || node.children.length > 0,
     );

@@ -1,5 +1,25 @@
 # CHANGELOG
 
+### 2026-10-19 收敛 AI 功能配置侧边导航
+
+- “AI 功能配置”在侧边栏收敛为单一可点击入口，功能配置、AI 指令集和 AI 工作流继续在页面内按原权限展示页签；访问任一页签路由时统一保持该侧边入口激活。
+- 已有环境保留三个历史子菜单的数据库 ID、路径与父级，但启动协调时统一停用；全新环境不再创建重复子菜单。旧书签和兼容地址继续重定向到对应页签，未扩大任何页面或接口权限。
+- 验证：后端 TypeScript 生产配置无输出检查、变更文件 ESLint、TypeORM 实体检查及 3 套 / 17 项菜单 Jest 通过；前端 `vue-tsc --noEmit`、组件复用扫描及 10 项导航测试通过；变更代码格式与 diff 空白检查通过。按导航优化规则未 build 或启动服务，`web/components.d.ts` 用户既有改动保持不变且不纳入提交。
+
+新增文件：无。
+
+修改文件（7）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/menus/menu-structure.spec.ts`
+- `server/src/menus/menus.service.spec.ts`
+- `server/src/menus/menus.service.ts`
+- `web/src/layouts/MainLayout.vue`
+- `web/src/router/systemNavigation.test.mjs`
+
+删除文件：无。
+
 ### 2026-10-19 修复接口日志来源重复登记
 
 - 修复素材模块在同一源码文件声明两个 Controller，导致日志扫描器把任务接口误归到 `/ai-materials` 并重复生成 `GET /ai-materials` 唯一键的问题；素材生成任务 Controller 已拆分到独立文件，实际路由与日志元数据均为 `/material-generation-tasks`。
