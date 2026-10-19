@@ -159,6 +159,29 @@ describe('MenusService Agent menu reconciliation', () => {
     ]);
   });
 
+  it('seeds a single assignable content menu and requires its own read permission', async () => {
+    await service.onModuleInit();
+    await service.onModuleInit();
+    const entries = rows.filter((item) => item.path === '/content-articles');
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      name: '内容创作',
+      permissionCode: 'ContentArticle.read',
+      isSystem: false,
+    });
+    const authorized = await service.findMine(false, ['ContentArticle.read']);
+    expect(authorized.some((item) => item.path === '/content-articles')).toBe(
+      true,
+    );
+    const unauthorized = await service.findMine(false, [
+      'AgentWorkspace.read',
+      'Menu.read',
+    ]);
+    expect(unauthorized.some((item) => item.path === '/content-articles')).toBe(
+      false,
+    );
+  });
+
   it('reconciles debug to AgentApp.read with a stable id and the existing admin-only default', async () => {
     await service.onModuleInit();
     await service.onModuleInit();

@@ -8,6 +8,7 @@ import { AppService } from './app.service';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { DemoModule } from './demo/demo.module';
+import { ContentArticlesModule } from './content-articles/content-articles.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 import { RolesModule } from './roles/roles.module';
@@ -149,6 +150,7 @@ import { ThirdPartyConfigModule } from './third-party-config/third-party-config.
     MineruConfigsModule,
     KnowledgeBasesModule,
     DemoModule,
+    ContentArticlesModule,
   ],
   controllers: [AppController],
   providers: [

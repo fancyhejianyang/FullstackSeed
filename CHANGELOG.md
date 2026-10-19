@@ -1,5 +1,43 @@
 # CHANGELOG
 
+### 2026-10-19 新增四字段内容创作与 AI 正文生成
+
+- 新增独立“内容创作”业务菜单，按前后端 demo 五件套与列表/编辑/详情结构扩展。表单仅标题 `title`、封面 `coverUrl`、想法 `idea`、正文 `content` 四项，标题必填，其余可空；支持先记录想法、之后继续编辑、封面上传、正文复制及软删除/批量软删除。不增加平台、模板、状态或模型选择表单。
+- 生成正文复用已有模型供应商服务，从最新创建的已启用聊天 AI 功能配置读取账号、模型、温度和思考参数；采用独立写作提示词，不继承客服提示词、不执行工作流或业务工具。仅发送当前标题和想法，不发送封面、旧正文或其它记录；无可用配置时给出配置提示，仍可正常保存记录。默认不调用 AI，生成可能计费，单次最长 120 秒，不自动重试，同一用户在单服务进程内防重复生成。
+- AI 返回候选正文，不直接修改数据库或覆盖编辑框。用户先预览、采用（覆盖非空正文需确认），再保存；失败、空结果或过长输出不清空原文。正文使用安全纯文本/Markdown 源文显示，不执行 HTML；详情复制正文由用户点击触发。
+- 记录查询、详情、编辑、删除和已有记录生成都绑定当前用户，超管也不绕过归属隔离；菜单/路由/CRUD 权限统一 `ContentArticle.*`，新稿生成使用 create、已有稿生成使用 update 权限。列表在数据库查询阶段排除想法和正文长文本；隐藏 version 字段用于原子更新冲突检测，不增加表单字段；只改标题的 PATCH 不清空未提交字段。
+- 编辑沿用 Form/Dialog/Input/UploadImage/Button，标签置顶、正文整行、窄屏弹窗限宽、候选长文内部滚动。未保存离开确认；关闭按钮与 Esc 通过 before-close 在组件内部关闭前校验；上传/生成/保存期间阻止误关闭；详情、上传、生成的迟到响应不回填其它记录。封面沿用统一公开上传存储，不适合敏感图片；记录正文仍按用户隔离。
+- 新增幂等建表迁移 `1792368000000-CreateContentArticles`；开发环境下次正常启动按现有 synchronize 策略建表并初始化菜单，生产环境须先运行迁移再部署新代码，普通角色需分配 ContentArticle 权限。未自动启动/重启服务、运行真实数据库迁移或调用付费模型。
+- 验证：前端 84 项 Node 测试、后端 41 套 / 390 项 Jest 测试全部通过；完整 Vue 类型检查、后端类型检查、实体列检查、新增模块及其它变更后端文件 ESLint、组件复用检查、Vue 模板/scoped CSS 编译和 diff 空白检查通过。后端 `npm run build` 与前端 Vite 生产构建通过；前端为保留用户自动声明改动，采用等效构建配置并关闭 d.ts 自动写入，文件哈希确认未变。Vite 有依赖 PURE 注释及大 chunk 提示；根模块 app.module.ts 的 10 项 ESLint require/any 问题经 HEAD 基线核对为既存，未扩大本次修复范围。未进行真实模型、数据库集成或浏览器视觉验收。
+
+新增文件（12）：
+
+- `server/src/content-articles/content-articles.controller.ts`
+- `server/src/content-articles/content-articles.service.ts`
+- `server/src/content-articles/content-articles.module.ts`
+- `server/src/content-articles/content-articles.service.spec.ts`
+- `server/src/content-articles/dto/content-article.dto.ts`
+- `server/src/content-articles/entities/content-article.entity.ts`
+- `server/src/migrations/1792368000000-CreateContentArticles.ts`
+- `web/src/api/contentArticle.ts`
+- `web/src/views/content-article/Index.vue`
+- `web/src/views/content-article/Edit.vue`
+- `web/src/views/content-article/View.vue`
+- `web/src/views/content-article/contentArticle.test.mjs`
+
+修改文件（8）：
+
+- `server/src/app.module.ts`
+- `server/src/users/users.service.ts`
+- `server/src/menus/menus.service.ts`
+- `server/src/menus/menus.service.spec.ts`
+- `web/src/router/index.ts`
+- `web/src/router/systemNavigation.test.mjs`
+- `.design-spec.md`
+- `CHANGELOG.md`
+
+删除文件：无。用户原有 `web/components.d.ts` 改动保留且不纳入提交。
+
 ### 2026-10-19 Agent 调试适配当前应用配置与统一对话链路
 
 - 原调试页移除“聊天配置 / 工作流”选择及旧知识问答请求，改为复用当前 Agent 工作台对话组件的调试态，沿用 Auto/指定文本模型、独立媒体模型、图片粘贴/上传、进度、停止、业务草稿和确认写入链路；不删除底层聊天配置、工作流服务或历史数据，不引入第二套模型执行接口。

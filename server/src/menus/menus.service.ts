@@ -26,6 +26,14 @@ type SeedMenu = Partial<Menu> & {
 // isSystem=true 为系统固定菜单：仅超管可见、不可分配给角色；业务菜单 isSystem=false 可分配。
 const BASE_SEED_MENUS: SeedMenu[] = [
   {
+    name: '内容创作',
+    path: '/content-articles',
+    icon: 'EditPen',
+    sort: 73,
+    permissionCode: 'ContentArticle.read',
+    isSystem: false,
+  },
+  {
     name: 'Agent 管理',
     path: '/agent-management',
     icon: 'MagicStick',

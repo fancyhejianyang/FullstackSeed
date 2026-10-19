@@ -49,6 +49,22 @@ function routerHarness(permissions = [], isAdmin = false) {
   return { router: exports.default, user, calls };
 }
 
+test('内容创作路由仅允许 ContentArticle.read，不继承 Agent 或菜单权限', async () => {
+  for (const permissions of [
+    [],
+    ['Menu.read'],
+    ['AgentWorkspace.read'],
+    ['ContentArticle.read'],
+  ]) {
+    const h = routerHarness(permissions);
+    await h.router.push('/content-articles');
+    assert.equal(
+      h.router.currentRoute.value.path,
+      permissions.includes('ContentArticle.read') ? '/content-articles' : '/',
+    );
+  }
+});
+
 test('cold navigation to system groups waits for permissions before picking a page', async () => {
   for (const [permissions, target, expected] of [
     [['DashboardConfig.read'], '/system-config', '/system-config/home'],
