@@ -267,6 +267,7 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
       ...this.summary(task),
       snapshot: task.snapshot,
       result: task.result,
+      generatedTitle: task.generatedTitle ?? null,
       editorNotes: task.editorNotes ?? null,
     };
   }
@@ -285,7 +286,7 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
       .setParameters(latestIds.getParameters())
       .getMany();
   }
-  async adopt(id: number, version: number, userId: number) {
+  async adopt(id: number, version: number, userId: number, adoptTitle = false) {
     const task = await this.tasks.findOne({ where: { id, userId } });
     if (!task) throw new NotFoundException('生成任务不存在');
     return this.tasks.manager.transaction(async (manager) => {
@@ -309,6 +310,11 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
         throw new ConflictException(
           '文章在提交任务后已修改，不能直接覆盖；请复制候选正文后手动合并',
         );
+      if (adoptTitle && !current.generatedTitle?.trim())
+        throw new ConflictException(
+          '该任务没有生成标题，请保留原标题后采用正文',
+        );
+      if (adoptTitle) article.title = current.generatedTitle!;
       article.content = current.result;
       const saved = await articles.save(article);
       await repo.update(id, { status: 'adopted' });
@@ -356,6 +362,7 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
     this.activeAbort = new AbortController();
     let status: ContentTaskStatus = 'failed';
     let result: string | null = null;
+    let generatedTitle: string | null = null;
     let editorNotes: string[] | null = null;
     let totalTokens: number | null = null;
     let errorMessage: string | null =
@@ -381,16 +388,17 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
       );
       totalTokens = response.usage?.totalTokens ?? null;
       if (response.isSuccess) {
-        const parsed = parseContentWritingResponse(response.answer ?? '');
+        const parsed = parseContentWritingResponse(response.answer ?? '', true);
         if (parsed) {
           status =
             parsed.outcome === 'needs_input' ? 'needs_input' : 'succeeded';
           result = parsed.outcome === 'draft' ? parsed.body : null;
+          generatedTitle = parsed.outcome === 'draft' ? parsed.title : null;
           editorNotes = parsed.notes;
           errorMessage = null;
         } else {
           errorMessage =
-            '模型未返回有效的正文与编辑提示结构，未采用响应、未修改原文；可能已计费，请检查模型或提示词后手动重试';
+            '模型未返回有效的标题、正文与编辑提示结构，未采用响应、未修改原文；可能已计费，请检查模型或提示词后手动重试';
         }
       }
     } catch {
@@ -399,6 +407,7 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
     if (this.stopped) {
       status = 'interrupted';
       result = null;
+      generatedTitle = null;
       editorNotes = null;
       errorMessage = '服务停止，任务已中断；供应商可能已计费，请核实后重试';
     }
@@ -414,6 +423,7 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
       {
         status,
         result,
+        generatedTitle,
         editorNotes,
         totalTokens,
         errorMessage,

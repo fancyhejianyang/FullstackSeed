@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   ArrayNotEmpty,
   IsArray,
+  IsBoolean,
   IsInt,
   IsIn,
   IsNotEmpty,
@@ -60,12 +61,17 @@ export class UpdateContentArticleDto extends CreateContentArticleDto {
   version: number;
 }
 
-export class AdoptContentTaskDto {
+class ContentArticleVersionDto {
   @IsInt()
   @Min(1)
   version: number;
 }
-export class GenerateContentTaskDto extends AdoptContentTaskDto {
+export class AdoptContentTaskDto extends ContentArticleVersionDto {
+  @IsOptional()
+  @IsBoolean()
+  adoptTitle?: boolean;
+}
+export class GenerateContentTaskDto extends ContentArticleVersionDto {
   @IsUUID()
   requestId: string;
 

@@ -27,7 +27,7 @@ function harness() {
     scope = vue.effectScope();
   const code = ts.transpileModule(
     parse(source).descriptor.scriptSetup.content +
-      '\nexport { load, preview, pane, content, copyContent };',
+      '\nexport { load, preview, pane, content, copyContent, generatedTitle, displayedTitle, copyTitle };',
     {
       compilerOptions: {
         module: ts.ModuleKind.CommonJS,
@@ -216,4 +216,49 @@ test('文章弹窗不再嵌入历史表格，独立模块复用表格/权限并�
   const index = await read('./Index.vue');
   assert.match(index, /openRecords\(row.id\)/);
   assert.match(index, /@records="openRecords"/);
+});
+
+test('最新稿展示 AI 标题，已保存页展示原标题；复制标题不混入正文或提示', async () => {
+  const h = harness();
+  h.state.response.latestTask.generatedTitle = 'AI 发布标题';
+  h.visible.value = true;
+  await flush();
+  assert.equal(h.displayedTitle.value, 'AI 发布标题');
+  await h.copyTitle();
+  await h.copyContent();
+  assert.deepEqual(
+    h.calls.filter(([kind]) => kind === 'copy'),
+    [
+      ['copy', 'AI 发布标题'],
+      ['copy', '最新生成稿'],
+    ],
+  );
+  h.pane.value = 'saved';
+  assert.equal(h.displayedTitle.value, '标题');
+  await h.copyTitle();
+  assert.equal(h.calls.filter(([kind]) => kind === 'copy').length, 2);
+  h.close();
+});
+
+test('旧记录与最新失败结果不把原标题或错误字段当生成标题', async () => {
+  const h = harness();
+  h.visible.value = true;
+  await flush();
+  assert.equal(h.generatedTitle.value, '');
+  assert.equal(h.displayedTitle.value, '标题');
+  await h.copyTitle();
+  h.state.response.latestTask = {
+    id: 21,
+    status: 'failed',
+    generatedTitle: '不可用标题',
+    result: '不可用正文',
+  };
+  await h.load();
+  await h.copyTitle();
+  assert.equal(h.generatedTitle.value, '');
+  assert.equal(
+    h.calls.some(([kind]) => kind === 'copy'),
+    false,
+  );
+  h.close();
 });

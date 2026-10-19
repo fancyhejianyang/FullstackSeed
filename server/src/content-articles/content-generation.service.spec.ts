@@ -3,7 +3,10 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { HEADERS_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { PERMISSIONS_KEY } from '../common/decorators/require-permissions.decorator';
-import { QueryContentTaskDto } from './dto/content-article.dto';
+import {
+  AdoptContentTaskDto,
+  QueryContentTaskDto,
+} from './dto/content-article.dto';
 import { ContentGenerationService } from './content-generation.service';
 import { ContentArticle } from './entities/content-article.entity';
 import { ContentGenerationTask } from './entities/content-generation-task.entity';
@@ -68,6 +71,7 @@ function setup() {
       isSuccess: true,
       answer: JSON.stringify({
         outcome: 'draft',
+        title: '新拟的发布标题',
         body: ' 新正文 ',
         notes: ['发布前确认来源日期'],
       }),
@@ -462,6 +466,7 @@ describe('持久化文章生成任务', () => {
       expect.objectContaining({
         status: 'succeeded',
         result: '新正文',
+        generatedTitle: '新拟的发布标题',
         editorNotes: ['发布前确认来源日期'],
         totalTokens: 100,
         activeUserId: null,
@@ -470,6 +475,7 @@ describe('持久化文章生成任务', () => {
     );
     expect(h.articles.save).not.toHaveBeenCalled();
     expect(h.article.content).toBe('原文');
+    expect(h.article.title).toBe('标题');
   });
   it('实际调用带当前时间和任务提交时间，使用取消新闻审核门槛后的成稿提示', async () => {
     const h = setup();
@@ -556,7 +562,7 @@ describe('持久化文章生成任务', () => {
         editorNotes: null,
         totalTokens: 40,
         errorMessage: expect.stringContaining(
-          '有效的正文与编辑提示结构',
+          '有效的标题、正文与编辑提示结构',
         ) as unknown,
       }),
     );
@@ -570,6 +576,7 @@ describe('持久化文章生成任务', () => {
     await expect(h.service.detail(20, 7)).resolves.toMatchObject({
       result: '历史正文',
       editorNotes: null,
+      generatedTitle: null,
     });
     h.task.editorNotes = ['发布前核对'];
     await expect(h.service.detail(20, 7)).resolves.toMatchObject({
@@ -688,6 +695,99 @@ describe('持久化文章生成任务', () => {
     expect(h.tasks.update).toHaveBeenCalledWith(20, { status: 'adopted' });
     h.task.status = 'adopted';
     await expect(h.service.adopt(20, 2, 7)).rejects.toThrow('没有可采用');
+  });
+  it('选择采用标题时同事务更新标题和正文，未选择/旧客户端保持原标题', async () => {
+    for (const adoptTitle of [true, false, undefined]) {
+      const h = setup();
+      h.task.status = 'succeeded';
+      h.task.result = '候选正文';
+      h.task.generatedTitle = '发布标题';
+      h.tasks.findOne.mockResolvedValue(h.task);
+      await h.service.adopt(20, 2, 7, adoptTitle);
+      expect(h.articles.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: adoptTitle ? '发布标题' : '标题',
+          content: '候选正文',
+        }),
+      );
+      expect(h.tasks.manager.transaction).toHaveBeenCalledTimes(1);
+      expect(h.task.generatedTitle).toBe('发布标题');
+      expect(h.providers.callChat).not.toHaveBeenCalled();
+    }
+  });
+  it('历史任务误选采用标题或版本冲突时不修改标题/正文', async () => {
+    const h = setup();
+    h.task.status = 'succeeded';
+    h.task.result = '候选正文';
+    h.tasks.findOne.mockResolvedValue(h.task);
+    await expect(h.service.adopt(20, 2, 7, true)).rejects.toThrow(
+      '没有生成标题',
+    );
+    h.task.generatedTitle = '发布标题';
+    await expect(h.service.adopt(20, 3, 7, true)).rejects.toThrow(
+      '文章在提交任务后已修改',
+    );
+    expect(h.articles.save).not.toHaveBeenCalled();
+    expect(h.article).toMatchObject({ title: '标题', content: '原文' });
+  });
+  it('当前生成链路必须返回标题，失败无额外计费重试；详情才加载生成标题', async () => {
+    const h = setup();
+    h.tasks.findOne.mockResolvedValue(h.task);
+    h.providers.callChat.mockResolvedValue({
+      isSuccess: true,
+      answer: JSON.stringify({
+        outcome: 'draft',
+        body: '无标题正文',
+        notes: [],
+      }),
+      usage: { totalTokens: 30 },
+    });
+    await h.service.tick();
+    expect(h.tasks.update).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        status: 'failed',
+        result: null,
+        generatedTitle: null,
+        totalTokens: 30,
+      }),
+    );
+    expect(h.providers.callChat).toHaveBeenCalledTimes(1);
+    expect(h.articles.save).not.toHaveBeenCalled();
+    h.task.generatedTitle = '发布标题';
+    expect((await h.service.detail(20, 7)).generatedTitle).toBe('发布标题');
+    await h.service.list(3, {}, 7);
+    const [options] = h.tasks.findAndCount.mock.calls[0] as [
+      { select: Record<string, boolean> },
+    ];
+    expect(options.select).not.toHaveProperty('generatedTitle');
+  });
+  it('采用标题开关只接受布尔，缺省兼容旧调用，控制器透传且不信任客户端标题', async () => {
+    for (const adoptTitle of ['true', 'false', 1, {}]) {
+      expect(
+        (
+          await validate(
+            plainToInstance(AdoptContentTaskDto, { version: 2, adoptTitle }),
+          )
+        ).length,
+      ).toBeGreaterThan(0);
+    }
+    for (const adoptTitle of [true, false, undefined]) {
+      expect(
+        await validate(
+          plainToInstance(AdoptContentTaskDto, { version: 2, adoptTitle }),
+        ),
+      ).toHaveLength(0);
+    }
+    const generation = { adopt: jest.fn() };
+    const controller = new ContentArticlesController(
+      {} as never,
+      generation as never,
+    );
+    await controller.adopt(20, { version: 2, adoptTitle: true }, 7);
+    expect(generation.adopt).toHaveBeenCalledWith(20, 2, 7, true);
+    await controller.adopt(20, { version: 2 }, 7);
+    expect(generation.adopt).toHaveBeenLastCalledWith(20, 2, 7, false);
   });
   it('生成时选择模板需独立读取权限', () => {
     const h = setup();

@@ -79,7 +79,7 @@ function harness() {
       'window',
       compile(
         parse(source).descriptor.scriptSetup.content +
-          '\nexport { fetchTasks, showDetail, adopt, detail, tableRef, pollFailed, hasCandidate, copyResult, closeDetail, detailVisible };',
+          '\nexport { fetchTasks, showDetail, adopt, detail, tableRef, pollFailed, hasCandidate, copyResult, closeDetail, detailVisible, adoptTitle, adoptConfirmation, hasGeneratedTitle, copyTitle };',
       ),
     )(
       (name) => {
@@ -203,7 +203,7 @@ test('无写权限或版本不一致不能采用，详情读取当前版本，�
   await h.adopt();
   assert.deepEqual(
     h.calls.find((call) => call[0] === 'adopt'),
-    ['adopt', 20, 2],
+    ['adopt', 20, 2, false],
   );
   assert.equal(h.detail.value.status, 'adopted');
   assert.equal(
@@ -211,7 +211,7 @@ test('无写权限或版本不一致不能采用，详情读取当前版本，�
       .version,
     3,
   );
-  assert.match(source, /confirm-text="采用后将替换文章正文并立即保存/);
+  assert.match(source, /:confirm-text="adoptConfirmation"/);
   h.close();
 });
 test('较早详情响应不覆盖当前任务', async () => {
@@ -341,5 +341,62 @@ test('选中的活跃详情不在当前分页时仍会刷新，并且只保留�
   h.state.detail.status = 'succeeded';
   await h.fetchTasks({ page: 2 });
   assert.equal(h.timers.size, 0);
+  h.close();
+});
+
+test('生成标题与正文分开复制，采用默认携带标题，取消勾选可保留原标题', async () => {
+  const h = harness();
+  h.state.detail.generatedTitle = '发布标题';
+  await h.showDetail({ id: 20 });
+  assert.equal(h.hasGeneratedTitle.value, true);
+  assert.equal(h.adoptTitle.value, true);
+  assert.match(h.adoptConfirmation.value, /替换文章标题与正文/);
+  await h.copyTitle();
+  await h.copyResult();
+  assert.deepEqual(
+    h.calls.filter((call) => call[0] === 'copy'),
+    [
+      ['copy', '发布标题'],
+      ['copy', '候选正文'],
+    ],
+  );
+  h.adoptTitle.value = false;
+  await h.showDetail({ id: 20 }, true);
+  assert.equal(h.adoptTitle.value, false);
+  assert.doesNotMatch(h.adoptConfirmation.value, /标题与正文/);
+  await h.adopt();
+  assert.deepEqual(
+    h.calls.find((call) => call[0] === 'adopt'),
+    ['adopt', 20, 2, false],
+  );
+  h.close();
+  const withTitle = harness();
+  withTitle.state.detail.generatedTitle = '发布标题';
+  await withTitle.showDetail({ id: 20 });
+  await withTitle.adopt();
+  assert.deepEqual(
+    withTitle.calls.find((call) => call[0] === 'adopt'),
+    ['adopt', 20, 2, true],
+  );
+  withTitle.close();
+});
+
+test('旧记录不伪造生成标题；失败及待补充记录不复制标题或采用', async () => {
+  const h = harness();
+  await h.showDetail({ id: 20 });
+  assert.equal(h.hasGeneratedTitle.value, false);
+  assert.equal(h.adoptTitle.value, false);
+  await h.copyTitle();
+  for (const status of ['failed', 'needs_input', 'pending']) {
+    h.state.detail = { ...h.state.detail, status, generatedTitle: '不应使用' };
+    await h.showDetail({ id: 20 });
+    await h.copyTitle();
+    await h.adopt();
+    assert.equal(h.hasGeneratedTitle.value, false);
+  }
+  assert.equal(
+    h.calls.some((call) => ['copy', 'adopt'].includes(call[0])),
+    false,
+  );
   h.close();
 });

@@ -1,5 +1,39 @@
 # CHANGELOG
 
+### 2026-10-19 文章生成协议增加发布标题与可选采用
+
+- 模型返回协议扩展为 `outcome/title/body/notes`：输入标题作为主题或工作标题，结合正文和模板中的平台、读者、口吻要求重新拟定适合自媒体发布的标题；未指定平台时使用通用自媒体表达。标题为单行纯文本、最多 160 字符，正文不重复总标题。保留此前直接成稿规则，不恢复新闻素材强制审核门槛，不修改用户模板与 AI 配置。
+- 当前生成链路要求 draft 同时返回非空标题和正文，格式异常明确失败，不降级保存原始响应、不自动重试计费调用。解析器兼容旧无标题协议；历史任务及 needs_input 保留原有处理。任务新增可空 `generatedTitle`，详情返回、列表不加载，标题与正文分别保存，不自动覆盖文章。
+- 生成记录详情展示和复制发布标题，采用时提供默认勾选的“同时采用生成标题”，取消后仅采用正文；同一任务后台刷新保留取消选择。采用接口新增可选布尔 `adoptTitle`，缺省 false 兼容旧调用，只采用任务中的标题，不接受任意客户端标题。标题、正文、版本和采用状态在同一事务内更新，继续校验权限、归属与版本冲突。旧任务无标题时仍可仅采用正文。
+- 文章最新预览显示生成标题并标注原标题；已保存页签保持已保存标题。标题与正文独立复制，失败、待补充等状态不展示过期候选；历史无标题记录明确提示，不冒充已生成标题。复用 Checkbox / Button / Dialog，不增加文章内容字段或额外菜单。同步设计规范。
+- 新增迁移 `1792386000000-AddContentGeneratedTitle`：仅添加可空 varchar(160)，可重复检查，不回填历史、不改写正文；已有标题数据时拒绝破坏性回退。关闭自动同步的环境应先执行迁移，再统一更新前后端与任务消费者；历史任务需要用户主动重新生成才会获得新标题。本次未连接真实数据库、执行迁移或启动/重启服务。
+- 验证：后端 47 套 / 482 项 Jest、前端 128 项 Node 离线回归通过；前端无输出类型检查、变更后端 ESLint、两处 Vue 模板/scoped CSS 编译及 diff 空白检查通过。新增标题功能执行后端 build，TypeORM 实体校验与 Nest 构建通过；未执行前端产物构建、真实模型调用或浏览器视觉验收。
+- `web/components.d.ts` 原有未提交改动及 SHA256 保持不变，不纳入提交。
+
+新增文件（2）：
+
+- `server/src/migrations/1792386000000-AddContentGeneratedTitle.ts`
+- `server/src/migrations/1792386000000-AddContentGeneratedTitle.spec.ts`
+
+修改文件（14）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/content-articles/content-writing.ts`
+- `server/src/content-articles/content-writing.spec.ts`
+- `server/src/content-articles/content-generation.service.ts`
+- `server/src/content-articles/content-generation.service.spec.ts`
+- `server/src/content-articles/entities/content-generation-task.entity.ts`
+- `server/src/content-articles/dto/content-article.dto.ts`
+- `server/src/content-articles/content-articles.controller.ts`
+- `web/src/api/contentArticle.ts`
+- `web/src/views/content-article/Tasks.vue`
+- `web/src/views/content-article/View.vue`
+- `web/src/views/content-article/tasks.test.mjs`
+- `web/src/views/content-article/preview.test.mjs`
+
+删除文件：无。
+
 ### 2026-10-19 生成记录独立模块与文章最新生成稿预览
 
 - 新增“内容创作 → 生成记录”独立页面 `/content-generation`，复用 Demo 的 PageContainer / Table / Dialog 结构。支持分页、文章标题及状态筛选；文章列表顶部进入全部记录，行内及查看弹窗入口按 articleId 定位。菜单种子幂等补齐，沿用 ContentArticle.read，采用沿用 ContentArticle.update，不扩大授权。

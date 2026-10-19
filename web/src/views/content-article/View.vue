@@ -25,6 +25,18 @@ const content = computed(() => {
     ? latest.value.result || ''
     : '';
 });
+const generatedTitle = computed(() =>
+  latest.value &&
+  ['succeeded', 'adopted'].includes(latest.value.status) &&
+  latest.value.result
+    ? latest.value.generatedTitle || ''
+    : '',
+);
+const displayedTitle = computed(() =>
+  pane.value === 'latest' && generatedTitle.value
+    ? generatedTitle.value
+    : detail.value?.title || '',
+);
 let epoch = 0;
 let timer: ReturnType<typeof setTimeout> | undefined;
 async function load(initial = false, silent = false) {
@@ -72,6 +84,15 @@ async function copyContent() {
     ElMessage.warning('浏览器不支持复制，请选中正文手动复制');
   }
 }
+async function copyTitle() {
+  if (loading.value || !generatedTitle.value || pane.value !== 'latest') return;
+  try {
+    await navigator.clipboard.writeText(generatedTitle.value);
+    ElMessage.success('生成标题已复制');
+  } catch {
+    ElMessage.warning('复制失败，请选中标题手动复制');
+  }
+}
 </script>
 
 <template>
@@ -83,7 +104,13 @@ async function copyContent() {
   >
     <div v-loading="loading" class="article-view">
       <template v-if="detail">
-        <h2>{{ detail.title }}</h2>
+        <h2>{{ displayedTitle }}</h2>
+        <p
+          v-if="pane === 'latest' && generatedTitle"
+          class="article-view__title-source"
+        >
+          生成标题 · 原标题：{{ detail.title }}
+        </p>
         <el-image
           v-if="detail.coverUrl"
           class="article-view__cover"
@@ -115,6 +142,9 @@ async function copyContent() {
               </p>
               <p v-else-if="latest.status === 'succeeded'">
                 本次生成稿尚未采用。
+              </p>
+              <p v-if="content && pane === 'latest' && !generatedTitle">
+                该历史记录未生成标题，顶部显示已保存标题。
               </p>
               <p v-if="latest.errorMessage" role="alert">
                 {{ latest.errorMessage }}
@@ -178,6 +208,12 @@ async function copyContent() {
       <Button :disabled="!content || loading" @click="copyContent">{{
         pane === 'latest' ? '复制最新生成稿' : '复制已保存正文'
       }}</Button>
+      <Button
+        v-if="pane === 'latest' && generatedTitle"
+        :disabled="loading"
+        @click="copyTitle"
+        >复制生成标题</Button
+      >
       <Button @click="visible = false">关闭</Button>
     </template>
   </Dialog>
@@ -192,6 +228,10 @@ async function copyContent() {
 }
 .article-view h2 {
   margin-top: 0;
+  overflow-wrap: anywhere;
+}
+.article-view__title-source {
+  color: #606266;
   overflow-wrap: anywhere;
 }
 .article-view pre {

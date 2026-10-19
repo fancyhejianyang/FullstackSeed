@@ -74,6 +74,7 @@ export interface ContentTask {
   totalTokens: number | null;
 }
 export interface ContentTaskDetail extends ContentTask {
+  generatedTitle: string | null;
   snapshot: {
     title: string;
     idea: string;
@@ -165,9 +166,13 @@ export function getContentTask(id: number, silentError = false) {
     { silentError },
   );
 }
-export function adoptContentTask(id: number, version: number) {
+export function adoptContentTask(
+  id: number,
+  version: number,
+  adoptTitle = false,
+) {
   return request.post<unknown, ContentArticle>(
     `/content-articles/tasks/${id}/adopt`,
-    { version },
+    { version, adoptTitle },
   );
 }

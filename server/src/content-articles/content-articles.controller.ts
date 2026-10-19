@@ -179,6 +179,11 @@ export class ContentArticlesController {
     @Body() dto: AdoptContentTaskDto,
     @CurrentUser('userId') userId: number,
   ) {
-    return this.generation.adopt(id, dto.version, userId);
+    return this.generation.adopt(
+      id,
+      dto.version,
+      userId,
+      dto.adoptTitle ?? false,
+    );
   }
 }

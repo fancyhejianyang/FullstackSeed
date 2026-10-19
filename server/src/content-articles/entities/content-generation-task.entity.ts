@@ -44,6 +44,9 @@ export class ContentGenerationTask extends BaseEntity {
   activeUserId: number | null;
   @Column({ type: 'json' }) snapshot: ContentGenerationSnapshot;
   @Column({ type: 'mediumtext', nullable: true }) result: string | null;
+  @Column({ type: 'varchar', length: 160, nullable: true }) generatedTitle:
+    | string
+    | null;
   @Column({ type: 'json', nullable: true }) editorNotes: string[] | null;
   @Column({ type: 'varchar', length: 300, nullable: true }) errorMessage:
     | string

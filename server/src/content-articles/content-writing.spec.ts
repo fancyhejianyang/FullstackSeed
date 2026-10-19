@@ -88,7 +88,10 @@ describe('文章成稿协议', () => {
       body: '',
       notes: Array(6).fill('历史提示'),
     };
-    expect(parseContentWritingResponse(JSON.stringify(value))).toEqual(value);
+    expect(parseContentWritingResponse(JSON.stringify(value))).toEqual({
+      ...value,
+      title: null,
+    });
   });
   it('只提取正文与编辑提示，不将协议标记或提示加入正文', () => {
     const expected = {
@@ -96,22 +99,24 @@ describe('文章成稿协议', () => {
       body: '普通小标题\n\n第一段。\n\n第二段。',
       notes: ['核对日期'],
     };
-    expect(parseContentWritingResponse(JSON.stringify(expected))).toEqual(
-      expected,
-    );
+    expect(parseContentWritingResponse(JSON.stringify(expected))).toEqual({
+      ...expected,
+      title: null,
+    });
     const markdown = {
       outcome: 'draft',
       body: '### 小标题\n\n**正文**',
       notes: [],
     };
-    expect(parseContentWritingResponse(JSON.stringify(markdown))).toEqual(
-      markdown,
-    );
+    expect(parseContentWritingResponse(JSON.stringify(markdown))).toEqual({
+      ...markdown,
+      title: null,
+    });
     expect(
       parseContentWritingResponse(
         '\x60\x60\x60json\n' + JSON.stringify(expected) + '\n\x60\x60\x60',
       ),
-    ).toEqual(expected);
+    ).toEqual({ ...expected, title: null });
     expect(
       parseContentWritingResponse(
         JSON.stringify({
@@ -159,6 +164,101 @@ describe('文章成稿协议', () => {
     'x'.repeat(330001),
   ])('无效/超长协议拒绝，不退回原始文本 (%#)', (value) => {
     expect(parseContentWritingResponse(value)).toBeNull();
+  });
+  it('新协议要求独立发布标题，模板平台要求保留，正文不混入标题', () => {
+    const prompt = buildContentWritingPrompt({
+      ...snapshot,
+      template: {
+        id: 2,
+        name: '自媒体',
+        instruction: '面向头条读者，标题突出观点',
+      },
+    });
+    expect(prompt).toContain('outcome、title、body、notes 四个字段');
+    expect(prompt).toContain('面向头条读者，标题突出观点');
+    expect(prompt).toContain('重新拟定一个可直接用于自媒体发布的标题');
+    expect(prompt).toContain('body 不重复总标题');
+    expect(prompt).toContain('title 为单行纯文本');
+    const answer = {
+      outcome: 'draft',
+      title: '  新拟的发布标题  ',
+      body: ' 正文 ',
+      notes: [],
+    };
+    expect(parseContentWritingResponse(JSON.stringify(answer), true)).toEqual({
+      ...answer,
+      title: '新拟的发布标题',
+      body: '正文',
+    });
+    const legacy = JSON.stringify({
+      outcome: 'draft',
+      body: '旧正文',
+      notes: [],
+    });
+    expect(parseContentWritingResponse(legacy)).toMatchObject({
+      title: null,
+      body: '旧正文',
+    });
+    expect(parseContentWritingResponse(legacy, true)).toBeNull();
+    expect(
+      parseContentWritingResponse(
+        JSON.stringify({
+          outcome: 'draft',
+          title: '中'.repeat(160),
+          body: '正文',
+          notes: [],
+        }),
+        true,
+      )?.title,
+    ).toHaveLength(160);
+  });
+  it.each([
+    null,
+    123,
+    [],
+    {},
+    '',
+    '  ',
+    '中'.repeat(161),
+    '标题\n另一行',
+    '标题\r另一行',
+    '标题\u2028另一行',
+  ])('无效标题拒绝 (%#)，不会自动截断或提取正文首行', (title) => {
+    expect(
+      parseContentWritingResponse(
+        JSON.stringify({ outcome: 'draft', title, body: '正文', notes: [] }),
+        true,
+      ),
+    ).toBeNull();
+  });
+  it('待补充不会携带候选标题，提示仍与正文分离', () => {
+    expect(
+      parseContentWritingResponse(
+        JSON.stringify({
+          outcome: 'needs_input',
+          title: '',
+          body: '',
+          notes: ['请说明主题'],
+        }),
+        true,
+      ),
+    ).toEqual({
+      outcome: 'needs_input',
+      title: null,
+      body: '',
+      notes: ['请说明主题'],
+    });
+    expect(
+      parseContentWritingResponse(
+        JSON.stringify({
+          outcome: 'needs_input',
+          title: '非空标题',
+          body: '',
+          notes: ['请说明主题'],
+        }),
+        true,
+      ),
+    ).toBeNull();
   });
   it('迁移仅新增可空提示列，可重复执行，回退不丢弃已有提示', async () => {
     const runner = {
