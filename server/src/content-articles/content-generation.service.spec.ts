@@ -13,6 +13,8 @@ function setup() {
     title: '标题',
     idea: '想法',
     content: '原文',
+    aiConfigId: 5 as number | null,
+    templateId: 8 as number | null,
   };
   const config = {
     id: 5,
@@ -117,6 +119,40 @@ function setup() {
 }
 
 describe('持久化文章生成任务', () => {
+  it('首次选择与任务在同一事务中保存，递增版本但不写正文', async () => {
+    const h = setup();
+    h.article.aiConfigId = null;
+    h.article.templateId = null;
+    const task = await h.service.submit(3, h.dto, 7);
+    expect(task.articleVersion).toBe(3);
+    expect(h.articles.update).toHaveBeenCalledWith(
+      { id: 3, userId: 7, version: 2 },
+      { aiConfigId: 5, templateId: 8, version: 3 },
+    );
+    expect(h.tasks.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        snapshot: expect.objectContaining({ requestVersion: 2 }) as unknown,
+      }),
+    );
+    expect(h.tasks.manager.transaction).toHaveBeenCalledTimes(1);
+    expect(h.providers.callChat).not.toHaveBeenCalled();
+    h.task.articleVersion = 3;
+    h.task.snapshot.requestVersion = 2;
+    h.tasks.findOne.mockResolvedValue(h.task);
+    await expect(h.service.submit(3, h.dto, 7)).resolves.toMatchObject({
+      id: 20,
+      articleVersion: 3,
+    });
+    expect(h.tasks.save).toHaveBeenCalledTimes(1);
+  });
+
+  it('复用已保存设置不递增文章版本，不影响候选采用', async () => {
+    const h = setup();
+    await expect(h.service.submit(3, h.dto, 7)).resolves.toMatchObject({
+      articleVersion: 2,
+    });
+    expect(h.articles.update).not.toHaveBeenCalled();
+  });
   it('先落库快照返回任务 ID，不在请求中调用计费 API，也不保存秘密', async () => {
     const h = setup();
     await expect(h.service.submit(3, h.dto, 7)).resolves.toMatchObject({

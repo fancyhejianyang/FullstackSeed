@@ -19,6 +19,12 @@ export class ContentArticle extends BaseEntity {
   @Column({ type: 'mediumtext' })
   content: string;
 
+  @Column({ type: 'int', nullable: true })
+  aiConfigId: number | null;
+
+  @Column({ type: 'int', nullable: true })
+  templateId: number | null;
+
   @VersionColumn()
   version: number;
 }

@@ -9,6 +9,7 @@ export type ContentTaskStatus =
   | 'interrupted'
   | 'adopted';
 export interface ContentGenerationSnapshot {
+  requestVersion?: number; // 首次记住生成偏好可能递增文章版本，重试仍绑定原请求版本。
   title: string;
   idea: string;
   template: { id: number | null; name: string; instruction: string };

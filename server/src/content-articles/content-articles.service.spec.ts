@@ -34,14 +34,110 @@ function setup() {
     softDelete: jest.fn().mockResolvedValue({ affected: 1 }),
   };
   const generation = { latest: jest.fn().mockResolvedValue([]) };
+  const configs = {
+    findUsableContentCreationConfig: jest.fn().mockResolvedValue({ id: 5 }),
+  };
+  const templates = { findOne: jest.fn().mockResolvedValue({ id: 8 }) };
   const service = new ContentArticlesService(
     repository as never,
     generation as never,
+    configs as never,
+    templates as never,
   );
-  return { service, repository, generation, article };
+  return { service, repository, generation, article, configs, templates };
 }
 
 describe('内容创作 CRUD 与 AI 生成', () => {
+  it('编辑记住 AI 配置和本人模板，清空或省略设置含义不同', async () => {
+    const h = setup();
+    await h.service.update(
+      3,
+      { title: '标题', version: 2, aiConfigId: 5, templateId: 8 },
+      7,
+      true,
+    );
+    expect(h.configs.findUsableContentCreationConfig).toHaveBeenCalledWith(5);
+    expect(h.templates.findOne).toHaveBeenCalledWith(8, 7);
+    expect(h.repository.update).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ aiConfigId: 5, templateId: 8, version: 3 }),
+    );
+    await h.service.update(
+      3,
+      { title: '标题', version: 2, aiConfigId: null, templateId: null },
+      7,
+    );
+    expect(h.repository.update).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ aiConfigId: null, templateId: null }),
+    );
+    expect(h.templates.findOne).toHaveBeenCalledTimes(1);
+  });
+
+  it('新选择失效配置、他人模板或无模板权限时不写入', async () => {
+    const h = setup();
+    await expect(
+      h.service.update(3, { title: '标题', version: 2, templateId: 8 }, 7),
+    ).rejects.toThrow('无权使用写作模板');
+    h.templates.findOne.mockRejectedValue(new Error('写作模板不存在'));
+    await expect(
+      h.service.update(
+        3,
+        { title: '标题', version: 2, templateId: 8 },
+        7,
+        true,
+      ),
+    ).rejects.toThrow('不存在');
+    h.configs.findUsableContentCreationConfig.mockRejectedValue(
+      new Error('配置已停用'),
+    );
+    await expect(
+      h.service.update(3, { title: '标题', version: 2, aiConfigId: 5 }, 7),
+    ).rejects.toThrow('停用');
+    expect(h.repository.update).not.toHaveBeenCalled();
+  });
+
+  it('未更改的失效偏好不阻止保存正文，但不重新查阅模板', async () => {
+    const h = setup();
+    Object.assign(h.article, { aiConfigId: 5, templateId: 8 });
+    await h.service.update(
+      3,
+      {
+        title: '标题',
+        content: '修改正文',
+        version: 2,
+        aiConfigId: 5,
+        templateId: 8,
+      },
+      7,
+    );
+    expect(h.repository.update).toHaveBeenCalled();
+    expect(h.configs.findUsableContentCreationConfig).not.toHaveBeenCalled();
+    expect(h.templates.findOne).not.toHaveBeenCalled();
+  });
+
+  it('偏好 DTO 允许空值，拒绝非正整数及字符串 ID', async () => {
+    for (const key of ['aiConfigId', 'templateId']) {
+      for (const value of [0, -1, 1.5, '2'])
+        expect(
+          await validate(
+            plainToInstance(CreateContentArticleDto, {
+              title: '标题',
+              [key]: value,
+            }),
+          ),
+        ).not.toHaveLength(0);
+      for (const value of [null, undefined, 5])
+        expect(
+          await validate(
+            plainToInstance(CreateContentArticleDto, {
+              title: '标题',
+              [key]: value,
+            }),
+          ),
+        ).toHaveLength(0);
+    }
+  });
   it('列表仅查询本人概要，不读取大段想法和正文', async () => {
     const h = setup();
     await expect(

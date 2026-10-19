@@ -5,6 +5,8 @@ export interface ContentArticleForm {
   coverUrl: string;
   idea: string;
   content: string;
+  aiConfigId: number | null;
+  templateId: number | null;
 }
 export interface ContentArticle extends ContentArticleForm {
   id: number;

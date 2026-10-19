@@ -1,5 +1,44 @@
 # CHANGELOG
 
+### 2026-10-19 文章记住生成设置与一键重新生成
+
+- 文章新增可空 `aiConfigId/templateId`，前后端字段一致。已有配置时，列表行内和顶部单选“AI 生成”读取最新已保存文章后直接提交后台任务，不再重复弹出选择窗口；未配置时仍先选择，点击“开始生成”才写入。可选的通用写作也记住 AI 配置，不引入批量生成或自动调用。
+- 编辑页保留标题、封面、想法、正文四个内容字段，增加独立“生成设置”区，复用 Form/Select/Button 更换 AI 配置（含模型/正文格式）及本人写作模板。保存设置不调用模型，清空配置下次重新选择，清空模板使用通用写作；读取失败、搜索和分页不静默清空已保存项，设置变化纳入未保存离开保护。
+- 首次生成将选择与任务在同一事务内持久化；偏好变化递增文章版本，候选稿绑定变化后的版本，快照保留原 `requestVersion` 以正确重放网络重试。复用相同设置不更新文章版本或正文。保留用户/文章活跃任务唯一约束、本人隔离、模板读取权限、配置有效性及版本冲突检查；不静默替换模型/模板，不自动重试计费请求。
+- 直接生成期间禁重复点击与误离开；网络/服务端回执不确定时再次点击复用原请求及参数，明确拒绝后允许修正设置再提交。保存时只校验新选择的配置/模板，历史失效偏好不阻止单纯编辑正文；真正生成时始终重新校验，权限撤销不能回退到通用模板悄悄生成。未覆盖原有候选采用及后台任务生命周期。
+- 新增迁移 `1792382400000-RememberContentGenerationSettings`：可空整数列，首次新增配置列时按同一用户最近未删除任务回填选择；重复执行不覆盖后来清空的设置。回退遇到已有设置先拒绝，避免丢失偏好。应先执行迁移，再统一部署前后端与任务消费者；本次未执行真实数据库迁移或启动/重启服务。
+- 验证：后端 46 套 / 451 项 Jest、前端 113 项 Node 离线回归通过；前后端无输出类型检查、变更后端 ESLint、TypeORM 列检查、源码离线 MySQL 元数据检查、Vue 模板/scoped CSS 编译、组件复用检查、diff 空白检查通过。按既有生成交互优化范围未运行 build；未连接真实数据库、调用真实模型或开展浏览器视觉验收。
+- 已有未提交的 `web/components.d.ts` 保持原样并校验哈希，不纳入本次提交。未改动新闻联网能力、用户模板正文或 AI 账号配置。
+
+新增文件（5）：
+
+- `server/src/migrations/1792382400000-RememberContentGenerationSettings.ts`
+- `server/src/migrations/1792382400000-RememberContentGenerationSettings.spec.ts`
+- `web/src/views/content-article/GenerationSettings.vue`
+- `web/src/views/content-article/generationRequest.ts`
+- `web/src/views/content-article/generationSettings.test.mjs`
+
+修改文件（16）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/content-articles/content-articles.controller.ts`
+- `server/src/content-articles/content-articles.service.ts`
+- `server/src/content-articles/content-articles.service.spec.ts`
+- `server/src/content-articles/content-generation.service.ts`
+- `server/src/content-articles/content-generation.service.spec.ts`
+- `server/src/content-articles/dto/content-article.dto.ts`
+- `server/src/content-articles/entities/content-article.entity.ts`
+- `server/src/content-articles/entities/content-generation-task.entity.ts`
+- `web/src/api/contentArticle.ts`
+- `web/src/views/content-article/Edit.vue`
+- `web/src/views/content-article/Generate.vue`
+- `web/src/views/content-article/Index.vue`
+- `web/src/views/content-article/contentArticle.test.mjs`
+- `web/src/views/content-article/generate.test.mjs`
+
+删除文件：无。
+
 ### 2026-10-19 修正内容创作格式与成稿、编辑提示分离
 
 - 内容创作的“正文格式”开放纯文本 / Markdown，新建或用户切换到内容创作类型时默认纯文本；移除前端禁用、提交强制值和后端 Markdown 覆盖。已有配置保留原格式，若需纯文本须在 AI 功能配置中明确修改并保存，不批量改动用户配置或历史文章。聊天、文档解析、OCR、重排的既有格式行为不变；创作配置拒绝 JSON 正文。

@@ -101,6 +101,7 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
       ? await this.templates.findOne(dto.templateId, userId)
       : null;
     const snapshot = {
+      requestVersion: dto.version,
       title: article.title,
       idea: article.idea,
       template: template
@@ -126,19 +127,34 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
     };
     try {
       return await this.tasks.manager.transaction(async (manager) => {
-        const current = await manager.getRepository(ContentArticle).findOne({
+        const articleRepo = manager.getRepository(ContentArticle);
+        const current = await articleRepo.findOne({
           where: { id: articleId, userId },
           lock: { mode: 'pessimistic_write' },
         });
         if (!current || current.version !== dto.version)
           throw new ConflictException('文章已更新或删除，请重新打开后生成');
+        const preferencesChanged =
+          current.aiConfigId !== dto.aiConfigId ||
+          (current.templateId ?? null) !== (dto.templateId ?? null);
+        const articleVersion = current.version + (preferencesChanged ? 1 : 0);
+        if (preferencesChanged) {
+          await articleRepo.update(
+            { id: articleId, userId, version: current.version },
+            {
+              aiConfigId: dto.aiConfigId,
+              templateId: dto.templateId ?? null,
+              version: articleVersion,
+            },
+          );
+        }
         const repo = manager.getRepository(ContentGenerationTask);
         return this.summary(
           await repo.save(
             repo.create({
               articleId,
               userId,
-              articleVersion: current.version,
+              articleVersion,
               requestId: dto.requestId,
               status: 'pending',
               activeArticleId: articleId,
@@ -173,7 +189,7 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
     if (task.articleId !== articleId)
       throw new ConflictException('请求号已用于其它文章');
     if (
-      task.articleVersion !== dto.version ||
+      (task.snapshot.requestVersion ?? task.articleVersion) !== dto.version ||
       task.snapshot.config.id !== dto.aiConfigId ||
       task.snapshot.template.id !== (dto.templateId ?? null)
     )

@@ -146,6 +146,8 @@ test('表单仅四字段，打开新记录不调用模型，正文可空保存',
     coverUrl: '',
     idea: '一些想法',
     content: '',
+    aiConfigId: null,
+    templateId: null,
   });
   assert.equal(h.visible.value, false);
   h.close();
@@ -165,6 +167,28 @@ test('保存冲突时不关闭，仍保留窗口和编辑正文', async () => {
     false,
   );
   assert.equal(h.visible.value, true);
+  h.close();
+});
+
+test('编辑回显保存的配置/模板，更换后随正文保存，不调用 AI', async () => {
+  const h = harness();
+  Object.assign(h.state.detail, { aiConfigId: 5, templateId: 8 });
+  h.props.row = { id: 1 };
+  h.visible.value = true;
+  await flush();
+  assert.equal(h.form.aiConfigId, 5);
+  assert.equal(h.form.templateId, 8);
+  h.form.aiConfigId = 9;
+  h.form.templateId = null;
+  await h.handleSubmit();
+  const data = h.calls.find((call) => call[0] === 'update')[2];
+  assert.equal(data.aiConfigId, 9);
+  assert.equal(data.templateId, null);
+  assert.equal(data.version, 4);
+  assert.equal(
+    h.calls.some((call) => call[0] === 'generate'),
+    false,
+  );
   h.close();
 });
 
@@ -236,6 +260,7 @@ test('创作页面模板与样式可编译，不执行生成 HTML', async () => 
   for (const filename of [
     'Index.vue',
     'Generate.vue',
+    'GenerationSettings.vue',
     'Edit.vue',
     'View.vue',
     'Tasks.vue',

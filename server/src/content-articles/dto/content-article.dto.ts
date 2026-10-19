@@ -40,9 +40,19 @@ export class CreateContentArticleDto {
   @IsString()
   @MaxLength(50000)
   content?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  aiConfigId?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  templateId?: number | null;
 }
 
-// 编辑发送四个业务字段；version 由客户端透明携带，防止多窗口覆盖。
+// 编辑同时保存生成偏好；version 由客户端透明携带，防止多窗口覆盖。
 export class UpdateContentArticleDto extends CreateContentArticleDto {
   @IsInt()
   @Min(1)

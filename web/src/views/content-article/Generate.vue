@@ -148,7 +148,13 @@ watch(
         getContentArticle(id),
         fetchConfigs('', true),
       ]);
-      if (current === epoch) article.value = detail;
+      if (current === epoch) {
+        article.value = detail;
+        if (detail.aiConfigId != null)
+          form.aiConfigId = String(detail.aiConfigId);
+        form.templateId =
+          detail.templateId == null ? null : String(detail.templateId);
+      }
     } catch {
       if (current === epoch) loadFailed.value = true;
     } finally {
@@ -192,6 +198,10 @@ async function generate() {
     !form.aiConfigId
   )
     return;
+  if (form.templateId && !canReadTemplates.value) {
+    ElMessage.warning('无权使用已保存的写作模板，请在编辑中清除或联系管理员');
+    return;
+  }
   submitting.value = true;
   const id = article.value.id;
   const version = article.value.version;
@@ -324,6 +334,9 @@ onBeforeUnmount(() => {
             >
           </template>
         </Form>
+        <p class="article-generate__hint">
+          本次选择将保存到文章，下次点击“AI 生成”直接运行；可在文章编辑中更换。
+        </p>
         <p class="article-generate__hint">
           使用已保存的标题和想法生成，调用可能计费，不会自动覆盖正文。新闻类请先在想法中提供来源、日期和关键事实，系统不会自动检索或读取链接；素材不足时在生成记录中提示补充。
         </p>

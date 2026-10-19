@@ -64,11 +64,12 @@ export class ContentArticlesController {
   @Post()
   @RequirePermissions('ContentArticle.create')
   @ApiOperation({ summary: '创建内容' })
-  create(
-    @Body() dto: CreateContentArticleDto,
-    @CurrentUser('userId') userId: number,
-  ) {
-    return this.service.create(dto, userId);
+  create(@Body() dto: CreateContentArticleDto, @CurrentUser() user: AuthUser) {
+    return this.service.create(
+      dto,
+      user.userId,
+      user.isAdmin || user.permissions.includes('ContentTemplate.read'),
+    );
   }
 
   @Patch(':id')
@@ -77,9 +78,14 @@ export class ContentArticlesController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateContentArticleDto,
-    @CurrentUser('userId') userId: number,
+    @CurrentUser() user: AuthUser,
   ) {
-    return this.service.update(id, dto, userId);
+    return this.service.update(
+      id,
+      dto,
+      user.userId,
+      user.isAdmin || user.permissions.includes('ContentTemplate.read'),
+    );
   }
 
   @Delete(':id')

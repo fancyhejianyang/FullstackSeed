@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { onBeforeRouteLeave } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { useUserStore } from '@/stores/user';
 import { taskColor, taskLabel, isActiveTask } from './taskState';
@@ -10,6 +11,7 @@ import type { FormField } from '@/components/Form.vue';
 import { formatDateTime } from '@/utils/format';
 import {
   getContentArticles,
+  getContentArticle,
   deleteContentArticle,
   batchDeleteContentArticles,
   type ContentArticleSummary,
@@ -17,6 +19,7 @@ import {
 import Generate from './Generate.vue';
 import Edit from './Edit.vue';
 import View from './View.vue';
+import { createGenerationSubmitter } from './generationRequest';
 
 const user = useUserStore();
 const tableRef = ref<{
@@ -68,19 +71,75 @@ const searchFields: FormField[] = [
 ];
 const generateVisible = ref(false);
 const generatingRow = ref<ContentArticleSummary | null>(null);
+const generatingId = ref<number | null>(null);
+const submitSaved = createGenerationSubmitter();
 function canGenerate(rows: ContentArticleSummary[]) {
-  return rows.length === 1 && !isActiveTask(rows[0]?.latestTask);
+  return (
+    generatingId.value === null &&
+    !generateVisible.value &&
+    rows.length === 1 &&
+    !isActiveTask(rows[0]?.latestTask)
+  );
 }
-function openGenerate(rows: ContentArticleSummary[]) {
+async function openGenerate(rows: ContentArticleSummary[]) {
   if (!user.hasPermission('ContentArticle.update')) return;
   if (rows.length !== 1) {
     ElMessage.warning('请选中一篇文章后生成');
     return;
   }
   if (!canGenerate(rows)) return;
-  generatingRow.value = rows[0]!;
-  generateVisible.value = true;
+  const row = rows[0]!;
+  generatingId.value = row.id;
+  try {
+    const accepted = await submitSaved(row.id, async () => {
+      const article = await getContentArticle(row.id);
+      if (!alive) return null;
+      if (!article.aiConfigId) {
+        generatingRow.value = row;
+        generateVisible.value = true;
+        return null;
+      }
+      if (!article.idea.trim()) {
+        ElMessage.warning('请先编辑文章，填写并保存想法');
+        return null;
+      }
+      if (article.templateId && !user.hasPermission('ContentTemplate.read')) {
+        ElMessage.warning(
+          '无权使用已保存的写作模板，请在编辑中清除或联系管理员',
+        );
+        return null;
+      }
+      return {
+        version: article.version,
+        aiConfigId: article.aiConfigId,
+        templateId: article.templateId ?? undefined,
+      };
+    });
+    if (accepted && alive) {
+      ElMessage.success('已提交后台生成，可在该文章的“生成记录”查看进度');
+      submitted();
+    }
+  } catch {
+    // 后端再次校验配置/模板与版本，不静默更换配置、不自动重试。
+    if (alive) void tableRef.value?.refresh().catch(() => undefined);
+  } finally {
+    generatingId.value = null;
+  }
 }
+function canLeave() {
+  if (generatingId.value === null) return true;
+  ElMessage.warning('正在提交任务，请稍候');
+  return false;
+}
+function beforeUnload(event: BeforeUnloadEvent) {
+  if (generatingId.value !== null) {
+    event.preventDefault();
+    event.returnValue = '';
+  }
+}
+onBeforeRouteLeave(canLeave);
+onMounted(() => window.addEventListener('beforeunload', beforeUnload));
+onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload));
 function submitted() {
   tableRef.value?.clearSelection();
   void tableRef.value?.refresh().catch(() => undefined);
@@ -138,7 +197,8 @@ function batchDeleteRequest({ ids }: { ids: Array<string | number> }) {
           perm="ContentArticle.update"
           icon="MagicStick"
           :disabled="!canGenerate(selectedRows)"
-          title="选中一篇文章，选择模板与 AI 配置后生成"
+          :loading="generatingId !== null"
+          title="使用已保存的模板与 AI 配置直接生成，调用可能计费；更换设置请编辑文章"
           @click="openGenerate(selectedRows)"
           >AI 生成</Button
         >
@@ -154,7 +214,9 @@ function batchDeleteRequest({ ids }: { ids: Array<string | number> }) {
           perm="ContentArticle.update"
           link
           :auto-icon="false"
-          :disabled="isActiveTask(row.latestTask)"
+          :disabled="!canGenerate([row])"
+          :loading="generatingId === row.id"
+          title="按已保存设置生成，调用可能计费；更换设置请编辑文章"
           @click="openGenerate([row])"
           >AI 生成</Button
         >

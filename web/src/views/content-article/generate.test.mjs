@@ -8,6 +8,7 @@ import ts from 'typescript';
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
 const generator = await read('./Generate.vue');
 const index = await read('./Index.vue');
+const requestHelper = await read('./generationRequest.ts');
 async function flush() {
   for (let i = 0; i < 16; i++) await Promise.resolve();
   await vue.nextTick();
@@ -65,7 +66,7 @@ function harness(list = false) {
   const script =
     parse(list ? index : generator).descriptor.scriptSetup.content +
     (list
-      ? '\nexport { canGenerate, openGenerate, generateVisible, generatingRow, submitted, tableRef };'
+      ? '\nexport { canGenerate, openGenerate, generateVisible, generatingRow, generatingId, submitted, tableRef };'
       : '\nexport { form, formRef, fields, article, ready, loadFailed, submitting, configOptions, templateOptions, fetchConfigs, fetchTemplates, generate, canLeave, requestClose, beforeClose };');
   const js = ts.transpileModule(script, {
     compilerOptions: {
@@ -99,6 +100,17 @@ function harness(list = false) {
             },
           };
         if (name === '@/api/contentArticle') return api;
+        if (name === './generationRequest') {
+          const module = {};
+          const code = ts.transpileModule(requestHelper, {
+            compilerOptions: {
+              module: ts.ModuleKind.CommonJS,
+              target: ts.ScriptTarget.ES2022,
+            },
+          }).outputText;
+          new Function('require', 'exports', code)(() => api, module);
+          return module;
+        }
         if (name === '@/api/contentTemplate')
           return {
             getContentTemplates: async (query) => {
@@ -274,7 +286,7 @@ test('提交期间禁重复与误关闭，任务落库后可离开', async () =>
   h.close();
 });
 
-test('无模板读取权限不请求模板；生成采用通用写作', async () => {
+test('无模板读取权限不请求模板；不得静默丢弃已保存模板', async () => {
   const h = harness();
   h.state.templatePermission = false;
   await h.open();
@@ -287,6 +299,12 @@ test('无模板读取权限不请求模板；生成采用通用写作', async ()
     ['aiConfigId'],
   );
   h.form.templateId = '8';
+  await h.generate();
+  assert.equal(
+    h.calls.some((call) => call[0] === 'generate'),
+    false,
+  );
+  h.form.templateId = null;
   await h.generate();
   assert.equal(
     h.calls.find((call) => call[0] === 'generate')[2].templateId,
@@ -348,7 +366,7 @@ test('卸载后任务响应不再发出刷新或成功事件', async () => {
   );
 });
 
-test('行内和顶部共用入口；零选/多选/活跃任务/无权限均不打开生成', () => {
+test('行内和顶部共用入口；零选/多选/活跃任务/无权限均不打开生成', async () => {
   const h = harness(true);
   const row = { id: 1, latestTask: null };
   for (const rows of [
@@ -357,14 +375,14 @@ test('行内和顶部共用入口；零选/多选/活跃任务/无权限均不�
     [{ ...row, latestTask: { status: 'pending' } }],
   ]) {
     assert.equal(h.canGenerate(rows), false);
-    h.openGenerate(rows);
+    await h.openGenerate(rows);
     assert.equal(h.generateVisible.value, false);
   }
   h.state.updatePermission = false;
-  h.openGenerate([row]);
+  await h.openGenerate([row]);
   assert.equal(h.generateVisible.value, false);
   h.state.updatePermission = true;
-  h.openGenerate([row]);
+  await h.openGenerate([row]);
   assert.equal(h.generateVisible.value, true);
   assert.equal(h.generatingRow.value.id, 1);
   assert.match(index, /#toolbar="\{ selectedRows \}"/);
@@ -374,11 +392,79 @@ test('行内和顶部共用入口；零选/多选/活跃任务/无权限均不�
   h.close();
 });
 
-test('编辑页只负责四字段编辑，不保留隐藏的模板或生成入口', async () => {
+test('编辑页保留内容字段、生成设置和任务记录，但保存不生成', async () => {
   const editor = await read('./Edit.vue');
   assert.doesNotMatch(
     editor,
     /generateContentArticle|保存并生成|getContentTemplates/,
   );
   assert.match(editor, /<Tasks/);
+  assert.match(editor, /<GenerationSettings/);
+});
+
+test('已记住的配置和模板直接提交最新文章版本，不再弹窗或加载选项', async () => {
+  const h = harness(true);
+  Object.assign(h.state.detail, { aiConfigId: 5, templateId: 8 });
+  await h.openGenerate([{ id: 1, latestTask: null }]);
+  assert.equal(h.generateVisible.value, false);
+  const request = h.calls.find((call) => call[0] === 'generate')[2];
+  assert.equal(request.aiConfigId, 5);
+  assert.equal(request.templateId, 8);
+  assert.equal(request.version, 4);
+  assert.equal(
+    h.calls.some((call) => ['configs', 'templates'].includes(call[0])),
+    false,
+  );
+  h.close();
+});
+
+test('通用写作也记住配置；模板权限撤销不回退通用模板', async () => {
+  for (const templateId of [null, 8]) {
+    const h = harness(true);
+    Object.assign(h.state.detail, { aiConfigId: 5, templateId });
+    h.state.templatePermission = false;
+    await h.openGenerate([{ id: 1, latestTask: null }]);
+    assert.equal(
+      h.calls.some((call) => call[0] === 'generate'),
+      templateId === null,
+    );
+    h.close();
+  }
+});
+
+test('直接生成期间阻止重复点击；网络失败后重放相同版本和请求号', async () => {
+  const h = harness(true);
+  Object.assign(h.state.detail, { aiConfigId: 5, templateId: 8 });
+  const wait = deferred();
+  h.state.result = wait.promise;
+  const row = { id: 1, latestTask: null };
+  const first = h.openGenerate([row]);
+  await flush();
+  await h.openGenerate([row]);
+  assert.equal(h.calls.filter((call) => call[0] === 'generate').length, 1);
+  wait.resolve({ id: 20, status: 'pending' });
+  await first;
+  h.state.submitError = true;
+  await h.openGenerate([row]);
+  h.state.detail.version = 5;
+  await h.openGenerate([row]);
+  const requests = h.calls
+    .filter((call) => call[0] === 'generate')
+    .map((call) => call[2]);
+  assert.deepEqual(requests[1], requests[2]);
+  assert.notEqual(requests[0].requestId, requests[1].requestId);
+  assert.equal(h.generatingId.value, null);
+  h.close();
+});
+
+test('直接生成配置失效时保留设置，不改选其它模型或自动重试', async () => {
+  const h = harness(true);
+  Object.assign(h.state.detail, { aiConfigId: 9, templateId: 8 });
+  h.state.submitError = true;
+  await h.openGenerate([{ id: 1, latestTask: null }]);
+  assert.equal(h.calls.filter((call) => call[0] === 'generate').length, 1);
+  assert.equal(h.calls.find((call) => call[0] === 'generate')[2].aiConfigId, 9);
+  assert.equal(h.state.detail.aiConfigId, 9);
+  assert.equal(h.generateVisible.value, false);
+  h.close();
 });

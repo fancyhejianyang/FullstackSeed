@@ -14,6 +14,7 @@ import Dialog from '@/components/Dialog.vue';
 import Button from '@/components/Button.vue';
 import Input from '@/components/Input.vue';
 import Tasks from './Tasks.vue';
+import GenerationSettings from './GenerationSettings.vue';
 import { useUserStore } from '@/stores/user';
 import UploadImage from '@/components/UploadImage.vue';
 import { uploadFile } from '@/api/upload';
@@ -35,6 +36,8 @@ const form = reactive<ContentArticleForm>({
   coverUrl: '',
   idea: '',
   content: '',
+  aiConfigId: null,
+  templateId: null,
 });
 const user = useUserStore();
 const version = ref(1);
@@ -95,7 +98,14 @@ watch(
     loadFailed.value = false;
     loading.value = false;
     if (!open) return;
-    Object.assign(form, { title: '', coverUrl: '', idea: '', content: '' });
+    Object.assign(form, {
+      title: '',
+      coverUrl: '',
+      idea: '',
+      content: '',
+      aiConfigId: null,
+      templateId: null,
+    });
     baseline.value = JSON.stringify(form);
     version.value = 1;
     if (!id) return;
@@ -118,6 +128,8 @@ function fillSaved(data: ContentArticle) {
     coverUrl: data.coverUrl,
     idea: data.idea,
     content: data.content,
+    aiConfigId: data.aiConfigId ?? null,
+    templateId: data.templateId ?? null,
   });
   savedId.value = data.id;
   version.value = data.version;
@@ -264,6 +276,19 @@ onBeforeUnmount(() => {
           </div>
         </template>
       </Form>
+      <GenerationSettings
+        v-if="
+          visible &&
+          savedId &&
+          !loading &&
+          !loadFailed &&
+          user.hasPermission('ContentArticle.update')
+        "
+        :key="savedId"
+        v-model:ai-config-id="form.aiConfigId"
+        v-model:template-id="form.templateId"
+        :disabled="busy"
+      />
       <Tasks
         v-if="
           visible &&

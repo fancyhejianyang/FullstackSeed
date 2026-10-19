@@ -1,11 +1,14 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Like, Repository } from 'typeorm';
 import { ContentGenerationService } from './content-generation.service';
+import { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-configs.service';
+import { ContentTemplatesService } from '../content-templates/content-templates.service';
 import { ContentArticle } from './entities/content-article.entity';
 import {
   CreateContentArticleDto,
@@ -19,6 +22,8 @@ export class ContentArticlesService {
     @InjectRepository(ContentArticle)
     private readonly repository: Repository<ContentArticle>,
     private readonly generation: ContentGenerationService,
+    private readonly configs: AiFeatureConfigsService,
+    private readonly templates: ContentTemplatesService,
   ) {}
 
   async findAll(query: QueryContentArticleDto, userId: number) {
@@ -57,17 +62,39 @@ export class ContentArticlesService {
     return article;
   }
 
-  create(dto: CreateContentArticleDto, userId: number) {
+  async create(
+    dto: CreateContentArticleDto,
+    userId: number,
+    canUseTemplates = false,
+  ) {
+    const preferences = await this.preferences(
+      dto,
+      null,
+      userId,
+      canUseTemplates,
+    );
     return this.repository.save(
-      this.repository.create({ ...this.fields(dto), userId }),
+      this.repository.create({ ...this.fields(dto), ...preferences, userId }),
     );
   }
 
-  async update(id: number, dto: UpdateContentArticleDto, userId: number) {
-    await this.findOne(id, userId);
+  async update(
+    id: number,
+    dto: UpdateContentArticleDto,
+    userId: number,
+    canUseTemplates = false,
+  ) {
+    const article = await this.findOne(id, userId);
+    const preferences = await this.preferences(
+      dto,
+      article,
+      userId,
+      canUseTemplates,
+    );
     const result = await this.repository.update(
       { id, userId, version: dto.version, deletedAt: IsNull() },
       {
+        ...preferences,
         title: dto.title.trim(),
         ...(dto.coverUrl !== undefined ? { coverUrl: dto.coverUrl ?? '' } : {}),
         ...(dto.idea !== undefined ? { idea: dto.idea ?? '' } : {}),
@@ -106,5 +133,28 @@ export class ContentArticlesService {
       idea: dto.idea ?? '',
       content: dto.content ?? '',
     };
+  }
+
+  private async preferences(
+    dto: CreateContentArticleDto,
+    current: ContentArticle | null,
+    userId: number,
+    canUseTemplates: boolean,
+  ) {
+    const fields: Pick<CreateContentArticleDto, 'aiConfigId' | 'templateId'> =
+      {};
+    if (dto.aiConfigId !== undefined) {
+      if (dto.aiConfigId !== null && dto.aiConfigId !== current?.aiConfigId)
+        await this.configs.findUsableContentCreationConfig(dto.aiConfigId);
+      fields.aiConfigId = dto.aiConfigId;
+    }
+    if (dto.templateId !== undefined) {
+      if (dto.templateId !== null && dto.templateId !== current?.templateId) {
+        if (!canUseTemplates) throw new ForbiddenException('无权使用写作模板');
+        await this.templates.findOne(dto.templateId, userId);
+      }
+      fields.templateId = dto.templateId;
+    }
+    return fields;
   }
 }
