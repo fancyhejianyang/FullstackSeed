@@ -5,7 +5,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, Like, Repository } from 'typeorm';
+import { randomUUID } from 'node:crypto';
+import { EntityManager, In, IsNull, Like, Repository } from 'typeorm';
 import { ContentGenerationService } from './content-generation.service';
 import { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-configs.service';
 import { ContentTemplatesService } from '../content-templates/content-templates.service';
@@ -25,6 +26,14 @@ export class ContentArticlesService {
     private readonly configs: AiFeatureConfigsService,
     private readonly templates: ContentTemplatesService,
   ) {}
+
+  generationConfigOptions(query: QueryContentArticleDto = {}) {
+    return this.generation.configOptions(query);
+  }
+
+  templateOptions(query: QueryContentArticleDto, userId: number) {
+    return this.templates.findAll(query, userId);
+  }
 
   async findAll(query: QueryContentArticleDto, userId: number) {
     const keyword = query.keyword?.trim();
@@ -66,6 +75,7 @@ export class ContentArticlesService {
     dto: CreateContentArticleDto,
     userId: number,
     canUseTemplates = false,
+    manager?: EntityManager,
   ) {
     const preferences = await this.preferences(
       dto,
@@ -73,9 +83,37 @@ export class ContentArticlesService {
       userId,
       canUseTemplates,
     );
-    return this.repository.save(
-      this.repository.create({ ...this.fields(dto), ...preferences, userId }),
+    const repository =
+      manager?.getRepository(ContentArticle) ?? this.repository;
+    return repository.save(
+      repository.create({ ...this.fields(dto), ...preferences, userId }),
     );
+  }
+
+  /** 创建文章并在同一事务内登记异步生成任务，供 Agent 等复合入口调用。 */
+  async createAndQueueGeneration(
+    dto: CreateContentArticleDto & { aiConfigId: number },
+    userId: number,
+    canUseTemplates: boolean,
+    manager: EntityManager,
+  ) {
+    const article = await this.create(dto, userId, canUseTemplates, manager);
+    const task = await this.generation.submitWithManager(
+      article.id,
+      {
+        version: article.version,
+        requestId: randomUUID(),
+        aiConfigId: dto.aiConfigId,
+        ...(dto.templateId ? { templateId: dto.templateId } : {}),
+      },
+      userId,
+      manager,
+    );
+    return {
+      id: article.id,
+      taskId: task.id,
+      taskStatus: task.status,
+    };
   }
 
   async update(

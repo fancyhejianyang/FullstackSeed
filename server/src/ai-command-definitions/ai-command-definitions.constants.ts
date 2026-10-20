@@ -528,6 +528,60 @@ export const AI_BUSINESS_COMMAND_CATALOG: AiCommandCatalogItem[] = [
       batchDelete: 'batchRemoveSkus',
     },
   }),
+  {
+    commandKey: 'contentArticle.generate',
+    name: '创建并生成文章',
+    action: 'create',
+    executionMode: 'service',
+    handlerKey: 'contentArticle.generate',
+    executionTarget: 'ContentArticlesService.createAndQueueGeneration',
+    apiMethod: 'POST',
+    apiPath: 'service://content-articles/create-and-generate',
+    requestSchema: toJson({
+      type: 'object',
+      required: ['idea', 'aiConfigId'],
+      properties: {
+        title: {
+          type: 'string',
+          title: '工作标题',
+          maxLength: 160,
+          description: '可选；未填写时根据想法自动生成简短工作标题。',
+        },
+        idea: {
+          type: 'string',
+          title: '想法',
+          minLength: 1,
+          maxLength: 20000,
+        },
+        aiConfigId: {
+          type: 'integer',
+          title: 'AI 配置',
+          minimum: 1,
+        },
+        templateId: {
+          type: 'integer',
+          title: '写作模板',
+          minimum: 1,
+        },
+      },
+    }),
+    contextBindings: toJson({
+      requiredPermissions: ['ContentArticle.create', 'ContentArticle.update'],
+      operatorId: '$operator.id',
+      source: 'agent-confirmed-content-generation',
+    }),
+    chatCallable: true,
+    requireApproval: true,
+    semanticKeywords: [
+      '写文章',
+      '生成文章',
+      '内容创作',
+      '文章创作',
+      '根据想法写作',
+    ],
+    description:
+      '根据员工提供的想法创建文章并登记异步生成任务；只生成待确认草稿，人工确认后才提交。',
+  },
 ];
 
 /**

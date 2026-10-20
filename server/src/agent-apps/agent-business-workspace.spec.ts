@@ -174,6 +174,9 @@ function harness(
   const business = {
     permissionError: jest.fn().mockReturnValue(null),
     form: jest.fn().mockResolvedValue({ name: '示例数据', fields: [] }),
+    prepare: jest.fn((_key: string, data: Record<string, unknown>) =>
+      Promise.resolve(data),
+    ),
     create: jest.fn().mockResolvedValue({ id: 99 }),
     query: jest.fn().mockResolvedValue({
       toolKey: 'demo.list',

@@ -1,5 +1,33 @@
 # CHANGELOG
 
+### 2026-10-20 Agent 接入文章异步生成任务
+
+- 新增受控业务指令 `contentArticle.generate`，Agent 可把员工提供的想法整理为文章生成草稿；仍须在 Agent 应用中授权该工具、开启写入总开关，并由员工人工确认后才会执行，不允许模型直接写入或宣称成功。
+- 草稿字段仅包含工作标题、想法、AI 配置和可选写作模板。未提供标题时根据想法首行生成工作标题；只有一个可用内容创作配置时自动选中，存在多个配置时要求员工明确选择，模板只向有模板读取权限的员工展示。
+- 确认草稿后，在同一数据库事务内创建文章并登记持久化异步生成任务；配置、模板、文章归属和版本继续复用文章创作模块的既有校验。任一步失败都会整体回滚，避免留下没有任务的半成品文章。
+- Agent 回执新增文章 ID、生成任务 ID 和后台排队状态，可从文章创作或生成记录页面查看后续结果；既有 HTTP 生成接口仍保留事务内二次版本复核与请求号幂等保护。
+- 验证：TypeORM 实体检查、17 套 / 303 项 Agent、文章创作及指令集测试、后端目标文件 ESLint、Nest 生产构建通过。未启动服务、执行数据库迁移或调用真实 AI。
+
+新增文件：无。
+
+修改文件（13）：
+
+- `CHANGELOG.md`
+- `server/src/agent-apps/agent-apps.module.ts`
+- `server/src/agent-apps/agent-business-workspace.spec.ts`
+- `server/src/agent-apps/agent-business.registry.ts`
+- `server/src/agent-apps/agent-business.service.spec.ts`
+- `server/src/agent-apps/agent-business.service.ts`
+- `server/src/agent-apps/agent-workspace.service.ts`
+- `server/src/ai-command-definitions/ai-command-definitions.constants.spec.ts`
+- `server/src/ai-command-definitions/ai-command-definitions.constants.ts`
+- `server/src/content-articles/content-articles.module.ts`
+- `server/src/content-articles/content-articles.service.spec.ts`
+- `server/src/content-articles/content-articles.service.ts`
+- `server/src/content-articles/content-generation.service.ts`
+
+删除文件：无。
+
 ### 2026-10-20 视觉提示词 AI 调用改为持久异步任务
 
 - 将视觉提示词模板 AI 提炼、模板直接转换及 ComfyUI 工作流提示词转换统一改为持久异步任务：提交接口只保存任务并立即返回，前端通过短轮询读取状态与结果，不再让单个 HTTP 请求等待 AI，从根本上规避全局 Axios 15 秒超时。

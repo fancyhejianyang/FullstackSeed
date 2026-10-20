@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'node:crypto';
-import { IsNull, LessThan, MoreThan, Repository } from 'typeorm';
+import { EntityManager, IsNull, LessThan, MoreThan, Repository } from 'typeorm';
 import { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-configs.service';
 import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
 import { ContentTemplatesService } from '../content-templates/content-templates.service';
@@ -88,11 +88,103 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
       await this.article(articleId, userId);
       return this.summary(existing);
     }
+    // HTTP 入口先快速反馈归属、版本和必填问题，事务内仍会加锁复核，避免校验后被并发修改。
     const article = await this.article(articleId, userId);
     if (article.version !== dto.version)
       throw new ConflictException('文章已更新，请重新打开后生成');
     if (!article.idea.trim())
       throw new BadRequestException('请先填写并保存想法');
+    try {
+      return await this.tasks.manager.transaction((manager) =>
+        this.submitWithManager(articleId, dto, userId, manager),
+      );
+    } catch (error) {
+      if ((error as { code?: string }).code === 'ER_DUP_ENTRY') {
+        const retried = await this.tasks.findOne({
+          where: { userId, requestId: dto.requestId, articleId },
+        });
+        if (retried) {
+          this.assertSameRequest(retried, articleId, dto);
+          return this.summary(retried);
+        }
+        throw new ConflictException(
+          '已有文章正在排队或生成，请等待完成后再提交',
+        );
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * 供需要“业务记录 + 异步任务”原子提交的内部流程复用。
+   * 调用方必须传入已开启事务的 EntityManager，不能绕过文章归属和配置校验。
+   */
+  async submitWithManager(
+    articleId: number,
+    dto: GenerateContentTaskDto,
+    userId: number,
+    manager: EntityManager,
+  ) {
+    const repo = manager.getRepository(ContentGenerationTask);
+    const existing = await repo.findOne({
+      where: { userId, requestId: dto.requestId },
+    });
+    if (existing) {
+      this.assertSameRequest(existing, articleId, dto);
+      const owned = await manager.getRepository(ContentArticle).findOne({
+        where: { id: articleId, userId },
+      });
+      if (!owned) throw new NotFoundException('内容不存在');
+      return this.summary(existing);
+    }
+
+    const articleRepo = manager.getRepository(ContentArticle);
+    const current = await articleRepo.findOne({
+      where: { id: articleId, userId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!current) throw new NotFoundException('内容不存在');
+    if (current.version !== dto.version)
+      throw new ConflictException('文章已更新或删除，请重新打开后生成');
+    if (!current.idea.trim())
+      throw new BadRequestException('请先填写并保存想法');
+
+    const snapshot = await this.buildSnapshot(current, dto, userId);
+    const preferencesChanged =
+      current.aiConfigId !== dto.aiConfigId ||
+      (current.templateId ?? null) !== (dto.templateId ?? null);
+    const articleVersion = current.version + (preferencesChanged ? 1 : 0);
+    if (preferencesChanged) {
+      await articleRepo.update(
+        { id: articleId, userId, version: current.version },
+        {
+          aiConfigId: dto.aiConfigId,
+          templateId: dto.templateId ?? null,
+          version: articleVersion,
+        },
+      );
+    }
+    return this.summary(
+      await repo.save(
+        repo.create({
+          articleId,
+          userId,
+          articleVersion,
+          requestId: dto.requestId,
+          status: 'pending',
+          activeArticleId: articleId,
+          activeUserId: userId,
+          snapshot,
+        }),
+      ),
+    );
+  }
+
+  private async buildSnapshot(
+    article: ContentArticle,
+    dto: GenerateContentTaskDto,
+    userId: number,
+  ) {
     const config = await this.configs.findUsableContentCreationConfig(
       dto.aiConfigId,
     );
@@ -104,7 +196,7 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
     const template = dto.templateId
       ? await this.templates.findOne(dto.templateId, userId)
       : null;
-    const snapshot = {
+    return {
       coverRequested: true,
       requestVersion: dto.version,
       title: article.title,
@@ -130,60 +222,6 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
         responseFormat: config.responseFormat as 'text' | 'markdown',
       },
     };
-    try {
-      return await this.tasks.manager.transaction(async (manager) => {
-        const articleRepo = manager.getRepository(ContentArticle);
-        const current = await articleRepo.findOne({
-          where: { id: articleId, userId },
-          lock: { mode: 'pessimistic_write' },
-        });
-        if (!current || current.version !== dto.version)
-          throw new ConflictException('文章已更新或删除，请重新打开后生成');
-        const preferencesChanged =
-          current.aiConfigId !== dto.aiConfigId ||
-          (current.templateId ?? null) !== (dto.templateId ?? null);
-        const articleVersion = current.version + (preferencesChanged ? 1 : 0);
-        if (preferencesChanged) {
-          await articleRepo.update(
-            { id: articleId, userId, version: current.version },
-            {
-              aiConfigId: dto.aiConfigId,
-              templateId: dto.templateId ?? null,
-              version: articleVersion,
-            },
-          );
-        }
-        const repo = manager.getRepository(ContentGenerationTask);
-        return this.summary(
-          await repo.save(
-            repo.create({
-              articleId,
-              userId,
-              articleVersion,
-              requestId: dto.requestId,
-              status: 'pending',
-              activeArticleId: articleId,
-              activeUserId: userId,
-              snapshot,
-            }),
-          ),
-        );
-      });
-    } catch (error) {
-      if ((error as { code?: string }).code === 'ER_DUP_ENTRY') {
-        const retried = await this.tasks.findOne({
-          where: { userId, requestId: dto.requestId, articleId },
-        });
-        if (retried) {
-          this.assertSameRequest(retried, articleId, dto);
-          return this.summary(retried);
-        }
-        throw new ConflictException(
-          '已有文章正在排队或生成，请等待完成后再提交',
-        );
-      }
-      throw error;
-    }
   }
 
   private assertSameRequest(

@@ -25,5 +25,6 @@ import { UploadsModule } from '../uploads/uploads.module';
     ContentGenerationService,
     ContentCoverService,
   ],
+  exports: [ContentArticlesService, ContentGenerationService],
 })
 export class ContentArticlesModule {}

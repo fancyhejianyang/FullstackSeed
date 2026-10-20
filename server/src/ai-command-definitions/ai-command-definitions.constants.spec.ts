@@ -9,11 +9,11 @@ describe('AI command catalog', () => {
     expect(AI_COMMAND_CATALOG_MAP.size).toBe(AI_COMMAND_CATALOG.length);
   });
 
-  it('registers six business/content modules with explicit CRUD contracts', () => {
+  it('registers controlled business/content commands with explicit contracts', () => {
     const keys = new Set(
       AI_BUSINESS_COMMAND_CATALOG.map((item) => item.commandKey),
     );
-    expect(keys.size).toBe(39);
+    expect(keys.size).toBe(40);
 
     for (const moduleKey of [
       'demo',
@@ -34,20 +34,33 @@ describe('AI command catalog', () => {
         expect(keys).toContain(`${moduleKey}.${suffix}`);
       }
     }
+    expect(keys).toContain('contentArticle.generate');
   });
 
   it('binds every business command to a concrete API and permission', () => {
     for (const command of AI_BUSINESS_COMMAND_CATALOG) {
       const bindings = JSON.parse(command.contextBindings) as {
         requiredPermission?: string;
+        requiredPermissions?: string[];
         operatorId?: string;
       };
 
-      expect(command.executionMode).toBe('api');
-      expect(command.apiPath).toMatch(/^\/api\//);
-      expect(bindings.requiredPermission).toMatch(
-        /^(Demo|Product|ProductSku|KnowledgeStandardQa|KnowledgeColloquialTerm|KnowledgeBase)\.(read|create|update|delete|batchDelete)$/,
-      );
+      if (command.commandKey === 'contentArticle.generate') {
+        expect(command.executionMode).toBe('service');
+        expect(command.apiPath).toBe(
+          'service://content-articles/create-and-generate',
+        );
+        expect(bindings.requiredPermissions).toEqual([
+          'ContentArticle.create',
+          'ContentArticle.update',
+        ]);
+      } else {
+        expect(command.executionMode).toBe('api');
+        expect(command.apiPath).toMatch(/^\/api\//);
+        expect(bindings.requiredPermission).toMatch(
+          /^(Demo|Product|ProductSku|KnowledgeStandardQa|KnowledgeColloquialTerm|KnowledgeBase)\.(read|create|update|delete|batchDelete)$/,
+        );
+      }
       expect(bindings.operatorId).toBe('$operator.id');
     }
   });
@@ -64,6 +77,7 @@ describe('AI command catalog', () => {
       'demo.create',
       'product.create',
       'productSku.create',
+      'contentArticle.generate',
     ]);
     expect(chatWrites.every((item) => item.requireApproval)).toBe(true);
 

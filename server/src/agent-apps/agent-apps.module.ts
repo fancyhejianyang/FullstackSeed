@@ -8,6 +8,7 @@ import { DemoModule } from '../demo/demo.module';
 import { KnowledgeStandardQasModule } from '../knowledge-standard-qas/knowledge-standard-qas.module';
 import { KnowledgeColloquialTermsModule } from '../knowledge-colloquial-terms/knowledge-colloquial-terms.module';
 import { KnowledgeBasesModule } from '../knowledge-bases/knowledge-bases.module';
+import { ContentArticlesModule } from '../content-articles/content-articles.module';
 import { AgentBusinessService } from './agent-business.service';
 import { AgentModelRouterService } from './agent-model-router.service';
 import { AgentAppsController } from './agent-apps.controller';
@@ -42,6 +43,7 @@ import { AgentExecutionRuntimeService } from './agent-execution-runtime.service'
     KnowledgeStandardQasModule,
     KnowledgeColloquialTermsModule,
     KnowledgeBasesModule,
+    ContentArticlesModule,
   ],
   controllers: [AgentAppsController, AgentWorkspaceController],
   providers: [

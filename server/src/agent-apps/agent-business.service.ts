@@ -33,6 +33,11 @@ import {
   CreateKnowledgeBaseCategoryDto,
   QueryKnowledgeBaseCategoryPageDto,
 } from '../knowledge-bases/dto/knowledge-base.dto';
+import { ContentArticlesService } from '../content-articles/content-articles.service';
+import {
+  CreateContentArticleDto,
+  QueryContentArticleDto,
+} from '../content-articles/dto/content-article.dto';
 import {
   AGENT_BUSINESS_TOOLS,
   AGENT_BUSINESS_READ_FIELDS,
@@ -47,12 +52,18 @@ interface BusinessAdapter {
   queryDto: ClassConstructor<object>;
   list: (
     data: Record<string, unknown>,
+    user: AuthUser,
   ) => Promise<{ list: object[]; total: number }>;
-  detail: (id: number) => Promise<object>;
+  detail: (id: number, user: AuthUser) => Promise<object>;
   create?: (
     data: Record<string, unknown>,
     manager: EntityManager,
-  ) => Promise<{ id: number }>;
+    user: AuthUser,
+  ) => Promise<{
+    id: number;
+    taskId?: number;
+    taskStatus?: string;
+  }>;
 }
 
 @Injectable()
@@ -65,6 +76,7 @@ export class AgentBusinessService {
     qa: KnowledgeStandardQasService,
     terms: KnowledgeColloquialTermsService,
     private readonly knowledge: KnowledgeBasesService,
+    private readonly articles: ContentArticlesService,
   ) {
     // 唯一服务绑定表。新增模块只声明 DTO、服务绑定和目录字段，不复制对话/草稿/确认流程。
     this.adapters = {
@@ -133,6 +145,19 @@ export class AgentBusinessService {
             m,
           ),
       },
+      contentArticle: {
+        createDto: CreateContentArticleDto,
+        queryDto: QueryContentArticleDto,
+        list: (d, user) => articles.findAll(d, user.userId),
+        detail: (id, user) => articles.findOne(id, user.userId),
+        create: (d, m, user) =>
+          articles.createAndQueueGeneration(
+            d as unknown as CreateContentArticleDto & { aiConfigId: number },
+            user.userId,
+            user.isAdmin || user.permissions.includes('ContentTemplate.read'),
+            m,
+          ),
+      },
     };
     for (const tool of AGENT_BUSINESS_TOOLS) {
       if (!this.adapters[tool.moduleKey])
@@ -153,7 +178,7 @@ export class AgentBusinessService {
 
   async form(key: string, user: AuthUser): Promise<AgentBusinessForm> {
     const tool = this.requireTool(key, user);
-    const fields = tool.fields.map((field) => ({ ...field }));
+    let fields = tool.fields.map((field) => ({ ...field }));
     const product = fields.find((field) => field.prop === 'productId');
     if (
       product &&
@@ -175,6 +200,36 @@ export class AgentBusinessService {
       category.options = (await this.knowledge.findCategories({})).map(
         (item) => ({ value: item.id, label: item.name }),
       );
+    }
+    if (tool.commandKey === 'contentArticle.generate') {
+      const config = fields.find((field) => field.prop === 'aiConfigId');
+      if (config) {
+        const options = await this.articles.generationConfigOptions({
+          page: 1,
+          pageSize: 100,
+        });
+        config.options = options.list.map((item) => ({
+          value: item.id,
+          label: `${item.name} · ${item.model}`,
+        }));
+      }
+      const canUseTemplates =
+        user.isAdmin || user.permissions.includes('ContentTemplate.read');
+      if (!canUseTemplates) {
+        fields = fields.filter((field) => field.prop !== 'templateId');
+      } else {
+        const template = fields.find((field) => field.prop === 'templateId');
+        if (template) {
+          const options = await this.articles.templateOptions(
+            { page: 1, pageSize: 100 },
+            user.userId,
+          );
+          template.options = options.list.map((item) => ({
+            value: item.id,
+            label: item.name,
+          }));
+        }
+      }
     }
     return {
       name: tool.name,
@@ -237,6 +292,29 @@ export class AgentBusinessService {
     return { data, missingFields, validationErrors };
   }
 
+  async prepare(key: string, input: Record<string, unknown>, user: AuthUser) {
+    this.requireTool(key, user);
+    if (key !== 'contentArticle.generate') return { ...input };
+    const data = { ...input };
+    const idea = typeof data.idea === 'string' ? data.idea.trim() : '';
+    if (!(typeof data.title === 'string' && data.title.trim()) && idea) {
+      const firstLine = idea
+        .split(/\r?\n/)
+        .map((line) => line.replace(/^\s*#{1,6}\s*/, '').trim())
+        .find(Boolean)!;
+      data.title =
+        firstLine.length > 60 ? `${firstLine.slice(0, 59)}…` : firstLine;
+    }
+    if (data.aiConfigId === undefined || data.aiConfigId === null) {
+      const options = await this.articles.generationConfigOptions({
+        page: 1,
+        pageSize: 2,
+      });
+      if (options.total === 1) data.aiConfigId = options.list[0].id;
+    }
+    return data;
+  }
+
   async query(key: string, input: Record<string, unknown>, user: AuthUser) {
     const tool = this.requireTool(key, user);
     if (tool.operation === 'create')
@@ -245,8 +323,8 @@ export class AgentBusinessService {
     const adapter = this.adapters[tool.moduleKey];
     const result =
       tool.operation === 'list'
-        ? await adapter.list(data)
-        : { list: [await adapter.detail(Number(data.id))], total: 1 };
+        ? await adapter.list(data, user)
+        : { list: [await adapter.detail(Number(data.id), user)], total: 1 };
     // 只投影登记的业务字段；不把实体新增的内部/敏感列自动返回给模型或浏览器。
     const fields = [
       { prop: 'id', label: 'ID' },
@@ -292,7 +370,8 @@ export class AgentBusinessService {
     const create = this.adapters[tool.moduleKey].create;
     if (tool.operation !== 'create' || !create)
       throw new BadRequestException('此工具不能通过通用写入入口调用');
-    return create(this.validated(key, input), manager);
+    const prepared = await this.prepare(key, input, user);
+    return create(this.validated(key, prepared), manager, user);
   }
 
   private requireTool(key: string, user: AuthUser) {

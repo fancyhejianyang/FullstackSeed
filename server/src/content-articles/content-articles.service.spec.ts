@@ -33,7 +33,12 @@ function setup() {
     count: jest.fn().mockResolvedValue(2),
     softDelete: jest.fn().mockResolvedValue({ affected: 1 }),
   };
-  const generation = { latest: jest.fn().mockResolvedValue([]) };
+  const generation = {
+    latest: jest.fn().mockResolvedValue([]),
+    submitWithManager: jest
+      .fn()
+      .mockResolvedValue({ id: 21, status: 'pending' }),
+  };
   const configs = {
     findUsableContentCreationConfig: jest.fn().mockResolvedValue({ id: 5 }),
   };
@@ -176,6 +181,41 @@ describe('内容创作 CRUD 与 AI 生成', () => {
       content: '',
       userId: 7,
     });
+  });
+
+  it('Agent 复合入口使用同一事务创建文章并登记异步任务', async () => {
+    const h = setup();
+    const transactionRepository = {
+      create: jest.fn((value: object) => ({ ...value, id: 12, version: 1 })),
+      save: jest.fn((value: object) => Promise.resolve(value)),
+    };
+    const manager = {
+      getRepository: jest.fn().mockReturnValue(transactionRepository),
+    };
+    await expect(
+      h.service.createAndQueueGeneration(
+        {
+          title: '工作标题',
+          idea: '我的想法',
+          aiConfigId: 5,
+          templateId: 8,
+        },
+        7,
+        true,
+        manager as never,
+      ),
+    ).resolves.toEqual({ id: 12, taskId: 21, taskStatus: 'pending' });
+    expect(h.generation.submitWithManager).toHaveBeenCalledWith(
+      12,
+      expect.objectContaining({
+        version: 1,
+        requestId: expect.any(String) as unknown,
+        aiConfigId: 5,
+        templateId: 8,
+      }),
+      7,
+      manager,
+    );
   });
 
   it('详情及所有按 ID 操作拒绝别人的记录，生成也不调用模型', async () => {

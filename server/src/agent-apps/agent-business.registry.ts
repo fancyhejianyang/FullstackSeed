@@ -40,6 +40,12 @@ export const AGENT_BUSINESS_MODULES = {
     path: '/knowledge-bases/categories',
     note: '仅新增分类，不移动、删除分类；上级为空表示顶级分类，编码可选。',
   },
+  contentArticle: {
+    name: '文章生成任务',
+    permission: 'ContentArticle',
+    path: '/content-articles',
+    note: '确认后会创建文章并提交后台生成任务；可到“文章创作”或“生成记录”查看进度与结果。',
+  },
 } as const;
 
 export type AgentBusinessModuleKey = keyof typeof AGENT_BUSINESS_MODULES;
@@ -95,18 +101,26 @@ const labels: Record<string, string> = {
   page: '页码',
   pageSize: '每页条数',
   keyword: '关键词',
+  title: '工作标题',
+  idea: '想法',
+  aiConfigId: 'AI 配置',
+  templateId: '写作模板',
 };
 
 export const AGENT_BUSINESS_TOOLS = AI_BUSINESS_COMMAND_CATALOG.filter(
   (item) =>
     item.chatCallable &&
     Object.hasOwn(AGENT_BUSINESS_MODULES, item.commandKey.split('.')[0]) &&
-    ['list', 'detail', 'create'].includes(item.commandKey.split('.')[1]),
+    ['list', 'detail', 'create', 'generate'].includes(
+      item.commandKey.split('.')[1],
+    ),
 ).map((item) => {
-  const [moduleKey, operation] = item.commandKey.split('.') as [
+  const [moduleKey, commandOperation] = item.commandKey.split('.') as [
     AgentBusinessModuleKey,
-    'list' | 'detail' | 'create',
+    'list' | 'detail' | 'create' | 'generate',
   ];
+  const operation =
+    commandOperation === 'generate' ? 'create' : commandOperation;
   const module = AGENT_BUSINESS_MODULES[moduleKey];
   const schema = JSON.parse(item.requestSchema) as {
     properties: Record<string, AgentFieldSchema>;
@@ -124,12 +138,14 @@ export const AGENT_BUSINESS_TOOLS = AI_BUSINESS_COMMAND_CATALOG.filter(
     permission: `${module.permission}.${operation === 'create' ? 'create' : 'read'}`,
     // 外键选择也需要读取所属业务的权限。
     extraPermissions:
-      operation === 'create' && moduleKey === 'productSku'
-        ? ['Product.read']
-        : operation === 'create' &&
-            ['knowledgeBase', 'knowledgeCategory'].includes(moduleKey)
-          ? ['KnowledgeBase.read']
-          : [],
+      item.commandKey === 'contentArticle.generate'
+        ? ['ContentArticle.update']
+        : operation === 'create' && moduleKey === 'productSku'
+          ? ['Product.read']
+          : operation === 'create' &&
+              ['knowledgeBase', 'knowledgeCategory'].includes(moduleKey)
+            ? ['KnowledgeBase.read']
+            : [],
     detailPath: module.path,
     note: module.note,
     fields: Object.entries(schema.properties).map(

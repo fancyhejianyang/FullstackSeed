@@ -5,6 +5,7 @@ import type { ProductCatalogService } from '../product-catalog/product-catalog.s
 import type { KnowledgeStandardQasService } from '../knowledge-standard-qas/knowledge-standard-qas.service';
 import type { KnowledgeColloquialTermsService } from '../knowledge-colloquial-terms/knowledge-colloquial-terms.service';
 import type { KnowledgeBasesService } from '../knowledge-bases/knowledge-bases.service';
+import type { ContentArticlesService } from '../content-articles/content-articles.service';
 import { AgentBusinessService } from './agent-business.service';
 import { AGENT_BUSINESS_TOOLS } from './agent-business.registry';
 import { parseAgentBusinessPlan } from './agent-business-plan';
@@ -46,17 +47,40 @@ describe('Agent reusable business adapters', () => {
     findCategory: jest.fn().mockResolvedValue({ id: 7, name: '售前' }),
     createCategory: jest.fn().mockResolvedValue({ id: 8 }),
   };
+  const articles = {
+    findAll: jest.fn().mockResolvedValue({ list: [], total: 0 }),
+    findOne: jest.fn().mockResolvedValue({ id: 1 }),
+    generationConfigOptions: jest.fn().mockResolvedValue({
+      list: [
+        {
+          id: 6,
+          name: '文章助手',
+          model: 'qwen-plus',
+          responseFormat: 'text',
+        },
+      ],
+      total: 1,
+    }),
+    templateOptions: jest.fn().mockResolvedValue({
+      list: [{ id: 8, name: '热点解读' }],
+      total: 1,
+    }),
+    createAndQueueGeneration: jest
+      .fn()
+      .mockResolvedValue({ id: 18, taskId: 29, taskStatus: 'pending' }),
+  };
   const service = new AgentBusinessService(
     demo as unknown as DemoService,
     products as unknown as ProductCatalogService,
     qa as unknown as KnowledgeStandardQasService,
     terms as unknown as KnowledgeColloquialTermsService,
     knowledge as unknown as KnowledgeBasesService,
+    articles as unknown as ContentArticlesService,
   );
   beforeEach(() => jest.clearAllMocks());
 
-  it('registers list/detail/create for seven business modules, not arbitrary controllers', () => {
-    expect(AGENT_BUSINESS_TOOLS).toHaveLength(21);
+  it('registers controlled business tools for eight modules, not arbitrary controllers', () => {
+    expect(AGENT_BUSINESS_TOOLS).toHaveLength(22);
     for (const key of [
       'user.create',
       'role.list',
@@ -65,6 +89,7 @@ describe('Agent reusable business adapters', () => {
       'knowledgeBase.index',
       'knowledgeCategory.update',
       'knowledgeCategory.delete',
+      'contentArticle.delete',
     ])
       expect(
         AGENT_BUSINESS_TOOLS.find((tool) => tool.commandKey === key),
@@ -216,6 +241,40 @@ describe('Agent reusable business adapters', () => {
       form.fields.find((field) => field.prop === 'contentText')?.required,
     ).toBe(true);
     expect(form.note).toContain('索引须在知识库页面执行');
+  });
+
+  it('prepares an article generation draft and queues it only through confirmation', async () => {
+    const prepared = await service.prepare(
+      'contentArticle.generate',
+      { idea: '这是我的文章想法\n后续素材' },
+      admin,
+    );
+    expect(prepared).toEqual(
+      expect.objectContaining({
+        title: '这是我的文章想法',
+        aiConfigId: 6,
+      }),
+    );
+    const form = await service.form('contentArticle.generate', admin);
+    expect(
+      form.fields.find((field) => field.prop === 'aiConfigId')?.options,
+    ).toEqual([{ label: '文章助手 · qwen-plus', value: 6 }]);
+    expect(
+      form.fields.find((field) => field.prop === 'templateId')?.options,
+    ).toEqual([{ label: '热点解读', value: 8 }]);
+    const manager = {} as EntityManager;
+    await expect(
+      service.create('contentArticle.generate', prepared, admin, manager),
+    ).resolves.toEqual({ id: 18, taskId: 29, taskStatus: 'pending' });
+    expect(articles.createAndQueueGeneration).toHaveBeenCalledWith(
+      expect.objectContaining({
+        idea: '这是我的文章想法\n后续素材',
+        aiConfigId: 6,
+      }),
+      admin.userId,
+      true,
+      manager,
+    );
   });
 
   it('creates categories only with valid fields and the confirmation transaction manager', async () => {
