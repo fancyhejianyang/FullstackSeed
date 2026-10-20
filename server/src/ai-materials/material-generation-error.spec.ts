@@ -1,0 +1,71 @@
+import {
+  AI_MATERIAL_GENERATION_TIMEOUT_MS,
+  AI_MATERIAL_TASK_LEASE_MS,
+  describeMaterialGenerationFailure,
+  MaterialProviderHttpError,
+} from './material-generation-error';
+
+const context = {
+  phase: 'requestingProvider' as const,
+  serviceStopped: false,
+  manuallyAborted: false,
+};
+
+describe('material generation errors', () => {
+  it('固定生成上限为 5 分钟，并为结果落盘保留租约缓冲', () => {
+    expect(AI_MATERIAL_GENERATION_TIMEOUT_MS).toBe(300_000);
+    expect(AI_MATERIAL_TASK_LEASE_MS).toBe(330_000);
+  });
+
+  it('明确标记五分钟超时且不建议自动重试', () => {
+    const result = describeMaterialGenerationFailure(
+      new DOMException(
+        'The operation was aborted due to timeout',
+        'TimeoutError',
+      ),
+      context,
+    );
+    expect(result.status).toBe('interrupted');
+    expect(result.message).toContain('5 分钟');
+    expect(result.message).toContain('不会自动重试');
+  });
+
+  it.each([
+    [401, '鉴权失败'],
+    [404, '接口或模型不存在'],
+    [429, '限流或额度不足'],
+    [503, '供应商服务异常'],
+  ])('将供应商 HTTP %s 映射为明确原因', (statusCode, expected) => {
+    const result = describeMaterialGenerationFailure(
+      new MaterialProviderHttpError(statusCode),
+      context,
+    );
+    expect(result.status).toBe('failed');
+    expect(result.message).toContain(expected);
+    expect(result.message).toContain(`HTTP ${statusCode}`);
+  });
+
+  it('区分已生成图片后的存储失败', () => {
+    const result = describeMaterialGenerationFailure(
+      new Error('对象存储不可用'),
+      {
+        ...context,
+        phase: 'storingImage',
+      },
+    );
+    expect(result.status).toBe('failed');
+    expect(result.message).toContain('图片已生成，但文件保存失败');
+    expect(result.message).toContain('对象存储不可用');
+  });
+
+  it('将图片下载自身的超时保留为下载失败，不冒充五分钟执行超时', () => {
+    const result = describeMaterialGenerationFailure(
+      new Error('生成图片下载超时'),
+      { ...context, phase: 'downloadingImage' },
+    );
+    expect(result.status).toBe('failed');
+    expect(result.message).toContain('生成图片下载失败');
+    expect(result.message).toContain('生成图片下载超时');
+    expect(result.message).not.toContain('5 分钟');
+  });
+});

@@ -82,9 +82,7 @@ function download() {
             }}</el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="生成模式">
-            {{
-              detail.generationMode === "imageToImage" ? "图生图" : "文生图"
-            }}
+            {{ detail.generationMode === "imageToImage" ? "图生图" : "文生图" }}
           </el-descriptions-item>
           <el-descriptions-item
             v-if="detail.generationMode === 'imageToImage'"
@@ -110,7 +108,7 @@ function download() {
           <el-descriptions-item label="生图配置">
             {{ detail.aiConfigName }} · {{ detail.aiModel }}
           </el-descriptions-item>
-          <el-descriptions-item v-if="detail.generationError" label="最近结果">
+          <el-descriptions-item v-if="detail.generationError" label="失败原因">
             {{ detail.generationError }}
           </el-descriptions-item>
           <el-descriptions-item label="更新时间">

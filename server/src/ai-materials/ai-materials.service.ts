@@ -42,6 +42,14 @@ import {
   MaterialGenerationTask,
   type MaterialTaskStatus,
 } from './entities/material-generation-task.entity';
+import {
+  AI_MATERIAL_GENERATION_TIMEOUT_MS,
+  AI_MATERIAL_TASK_LEASE_MS,
+  describeMaterialGenerationFailure,
+  materialLeaseExpiredMessage,
+  MaterialProviderHttpError,
+  type MaterialGenerationPhase,
+} from './material-generation-error';
 
 const ACTIVE_STATUSES: MaterialTaskStatus[] = ['pending', 'running', 'storing'];
 const MAX_REFERENCE_IMAGE_SIZE = 5 * 1024 * 1024;
@@ -457,7 +465,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
           status: 'running',
           workerId: this.workerId,
           startedAt: new Date(),
-          leaseExpiresAt: new Date(Date.now() + 150000),
+          leaseExpiresAt: new Date(Date.now() + AI_MATERIAL_TASK_LEASE_MS),
         },
       );
       if (claim.affected !== 1) return;
@@ -476,10 +484,11 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
     if (!task) return;
     this.activeAbort = new AbortController();
     let resultFileId: number | null = null;
+    let phase: MaterialGenerationPhase = 'resolvingConfig';
     try {
       const signal = AbortSignal.any([
         this.activeAbort.signal,
-        AbortSignal.timeout(120000),
+        AbortSignal.timeout(AI_MATERIAL_GENERATION_TIMEOUT_MS),
       ]);
       const target = await this.providers.resolveMediaTarget(
         task.snapshot.config.providerId,
@@ -487,6 +496,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
         'imageGeneration',
       );
       const generationMode = task.snapshot.generationMode ?? 'textToImage';
+      phase = 'readingReference';
       const reference =
         generationMode === 'imageToImage'
           ? await this.managedFiles.readMaterialImage(
@@ -497,6 +507,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
       const referenceImageDataUrl = reference
         ? `data:${reference.mimeType};base64,${reference.buffer.toString('base64')}`
         : undefined;
+      phase = 'requestingProvider';
       const response = await fetch(target.url, {
         method: 'POST',
         redirect: 'error',
@@ -515,13 +526,16 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
         ),
       });
       if (!response.ok) {
+        const statusCode = response.status;
         await response.body?.cancel();
-        throw new Error('provider_failed');
+        throw new MaterialProviderHttpError(statusCode);
       }
+      phase = 'parsingResponse';
       const generated = generationResult(
         await readMediaJson(response),
         target.protocol,
       );
+      phase = 'downloadingImage';
       const buffer =
         generated.data ?? (await downloadGeneratedImage(generated.url, signal));
       const mime = imageMime(buffer);
@@ -538,6 +552,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
         { id: task.materialId, userId: task.userId },
         { generationStatus: 'storing' },
       );
+      phase = 'storingImage';
       const file = await this.managedFiles.stageAndStore(
         {
           originalname: `ai-material.${extension}`,
@@ -552,6 +567,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
         },
       );
       resultFileId = file.id;
+      phase = 'attachingResult';
       const attached = await this.tasks.manager.transaction(async (manager) => {
         const tasks = manager.getRepository(MaterialGenerationTask);
         const materials = manager.getRepository(AiMaterial);
@@ -599,14 +615,13 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
       });
       if (!attached) throw new Error('version_conflict');
     } catch (error) {
-      const interrupted = this.stopped || this.activeAbort.signal.aborted;
-      const message =
-        error instanceof Error && error.message === 'version_conflict'
-          ? '素材生成期间已被修改，新图未覆盖当前结果'
-          : interrupted
-            ? '生成已中断，供应商可能已计费；原素材未修改'
-            : '生成失败，供应商可能已计费；原素材未修改，请检查配置后重试';
-      const status: MaterialTaskStatus = interrupted ? 'interrupted' : 'failed';
+      const failure = describeMaterialGenerationFailure(error, {
+        phase,
+        serviceStopped: this.stopped,
+        manuallyAborted: this.activeAbort.signal.aborted,
+      });
+      const status: MaterialTaskStatus = failure.status;
+      const message = failure.message;
       await this.tasks.update(
         {
           id: task.id,
@@ -658,7 +673,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
           activeMaterialId: null,
           activeUserId: null,
           leaseExpiresAt: null,
-          errorMessage: '执行中断或超时，供应商可能已计费；不会自动重试',
+          errorMessage: materialLeaseExpiredMessage(),
         },
       );
       if (result.affected === 1)
@@ -670,7 +685,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
           },
           {
             generationStatus: 'interrupted',
-            generationError: '执行中断或超时，原素材未修改',
+            generationError: materialLeaseExpiredMessage(),
           },
         );
     }

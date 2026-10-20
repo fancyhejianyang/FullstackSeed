@@ -72,9 +72,7 @@ const modeLabels = {
   imageToImage: "图生图",
 } as const;
 function modeLabel(mode: unknown) {
-  return (
-    modeLabels[mode as keyof typeof modeLabels] ?? String(mode || "-")
-  );
+  return modeLabels[mode as keyof typeof modeLabels] ?? String(mode || "-");
 }
 const statusLabels: Record<AiMaterialStatus, string> = {
   idle: "待生成",
@@ -222,12 +220,23 @@ function statusLabel(status: unknown) {
         styleLabels[row.styleKey] || row.styleKey
       }}</template>
       <template #column-generationMode="{ row }">
-        <el-tag :type="row.generationMode === 'imageToImage' ? 'primary' : 'info'">
+        <el-tag
+          :type="row.generationMode === 'imageToImage' ? 'primary' : 'info'"
+        >
           {{ modeLabel(row.generationMode) }}
         </el-tag>
       </template>
       <template #column-generationStatus="{ row }">
-        <el-tooltip v-if="row.generationError" :content="row.generationError">
+        <el-tooltip
+          v-if="row.generationError"
+          placement="top"
+          popper-class="material-error-tooltip"
+        >
+          <template #content>
+            <div class="material-error-tooltip__content">
+              <strong>失败原因：</strong>{{ row.generationError }}
+            </div>
+          </template>
           <el-tag :type="statusType(row.generationStatus)">{{
             statusLabel(row.generationStatus)
           }}</el-tag>
@@ -258,5 +267,10 @@ function statusLabel(status: unknown) {
   height: 40px;
   border-radius: 4px;
   background: #f0f2f5;
+}
+:global(.material-error-tooltip .material-error-tooltip__content) {
+  max-width: 420px;
+  line-height: 1.55;
+  white-space: normal;
 }
 </style>
