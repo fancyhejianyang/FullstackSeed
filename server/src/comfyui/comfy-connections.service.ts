@@ -66,7 +66,7 @@ export class ComfyConnectionsService {
       throw new ConflictException('配置名称已存在');
     }
     const isDefault = dto.isDefault || !(await this.connections.count());
-    if (isDefault) await this.connections.update({}, { isDefault: false });
+    if (isDefault) await this.clearDefaultConnection();
     const saved = await this.connections.save(
       this.connections.create({
         ...dto,
@@ -101,7 +101,7 @@ export class ComfyConnectionsService {
       ? undefined
       : dto.secret?.trim() || current.secret || undefined;
     this.validateAuth(authType, username, secret);
-    if (dto.isDefault) await this.connections.update({}, { isDefault: false });
+    if (dto.isDefault) await this.clearDefaultConnection();
     Object.assign(current, {
       ...dto,
       ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
@@ -245,6 +245,10 @@ export class ComfyConnectionsService {
     if (authType === 'bearer' && !secret?.trim()) {
       throw new BadRequestException('Bearer 认证需要访问令牌');
     }
+  }
+
+  private async clearDefaultConnection() {
+    await this.connections.update({ isDefault: true }, { isDefault: false });
   }
 
   private summarizeCapabilities(stats: Record<string, unknown>) {
