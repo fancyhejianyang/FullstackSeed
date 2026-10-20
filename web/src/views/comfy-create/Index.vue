@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
 import { useRouter } from "vue-router";
+import { useUserStore } from "@/stores/user";
 import PageContainer from "@/components/PageContainer.vue";
 import Button from "@/components/Button.vue";
 import Input from "@/components/Input.vue";
@@ -15,8 +16,14 @@ import {
   type ComfyMaterial,
   type ComfyWorkflowOption,
 } from "@/api/comfyUi";
+import {
+  composeVisualPromptTemplate,
+  getVisualPromptTemplateOptions,
+  type VisualPromptTemplateOption,
+} from "@/api/visualPromptTemplate";
 
 const router = useRouter();
+const user = useUserStore();
 const loading = ref(false);
 const submitting = ref(false);
 const workflows = ref<ComfyWorkflowOption[]>([]);
@@ -24,6 +31,12 @@ const materials = ref<ComfyMaterial[]>([]);
 const workflowId = ref<string | null>("");
 const parameters = reactive<Record<string, unknown>>({});
 const createdTaskId = ref<number | null>(null);
+const visualTemplates = ref<VisualPromptTemplateOption[]>([]);
+const visualTemplateId = ref<string>("");
+const creativeIdea = ref("");
+const composing = ref(false);
+const composeNotes = ref("");
+let templateLoadSequence = 0;
 const materialOptions = computed(() =>
   materials.value.map((item) => ({
     value: String(item.id),
@@ -35,15 +48,86 @@ const current = computed(
     workflows.value.find((item) => item.id === Number(workflowId.value)) ||
     null,
 );
+const promptBindings = computed(() =>
+  (current.value?.inputBindings || []).filter((binding) =>
+    ["positivePrompt", "negativePrompt"].includes(
+      binding.semanticRole || "normal",
+    ),
+  ),
+);
+const visualTemplateOptions = computed(() =>
+  visualTemplates.value.map((item) => ({
+    value: String(item.id),
+    text: `${item.name}${item.targetModel ? ` · ${item.targetModel}` : " · 通用"}`,
+  })),
+);
 
-watch(workflowId, () => {
+watch(workflowId, async () => {
   Object.keys(parameters).forEach((key) => delete parameters[key]);
   for (const binding of current.value?.inputBindings || []) {
     parameters[binding.key] =
       binding.defaultValue ?? (binding.type === "boolean" ? false : "");
   }
   createdTaskId.value = null;
+  visualTemplates.value = [];
+  visualTemplateId.value = "";
+  creativeIdea.value = "";
+  composeNotes.value = "";
+  const sequence = ++templateLoadSequence;
+  if (
+    !current.value ||
+    !promptBindings.value.length ||
+    !user.hasPermission("VisualPromptTemplate.read")
+  )
+    return;
+  try {
+    const options = await getVisualPromptTemplateOptions({
+      mediaType: current.value.outputType,
+      targetModel: current.value.targetModel || undefined,
+    });
+    if (sequence !== templateLoadSequence) return;
+    visualTemplates.value = options;
+    visualTemplateId.value = options[0] ? String(options[0].id) : "";
+  } catch {
+    if (sequence === templateLoadSequence) {
+      visualTemplates.value = [];
+      visualTemplateId.value = "";
+    }
+  }
 });
+
+async function composePrompt() {
+  if (!visualTemplateId.value) {
+    ElMessage.warning("请选择视觉提示词模板");
+    return;
+  }
+  if (!creativeIdea.value.trim()) {
+    ElMessage.warning("请输入本次创作想法");
+    return;
+  }
+  composing.value = true;
+  try {
+    const result = await composeVisualPromptTemplate(
+      Number(visualTemplateId.value),
+      {
+        idea: creativeIdea.value.trim(),
+        targetModel: current.value?.targetModel || undefined,
+      },
+    );
+    for (const binding of promptBindings.value) {
+      if (binding.semanticRole === "positivePrompt") {
+        parameters[binding.key] = result.positivePrompt;
+      }
+      if (binding.semanticRole === "negativePrompt") {
+        parameters[binding.key] = result.negativePrompt;
+      }
+    }
+    composeNotes.value = result.notes;
+    ElMessage.success("正向与负向提示词已生成，可继续手动调整");
+  } finally {
+    composing.value = false;
+  }
+}
 async function load() {
   loading.value = true;
   try {
@@ -259,6 +343,63 @@ onMounted(load);
               <span>开放参数</span>
             </div>
           </div>
+
+          <section v-if="promptBindings.length" class="prompt-composer">
+            <div class="prompt-composer__heading">
+              <div>
+                <h4>AI 视觉提示词</h4>
+                <p>
+                  按
+                  {{ current?.targetModel || "通用模型" }}
+                  的规则生成正向、负向提示词，并只回填已绑定的工作流参数。
+                </p>
+              </div>
+              <Button
+                v-if="user.hasPermission('VisualPromptTemplate.read')"
+                :confirm="false"
+                icon="MagicStick"
+                :loading="composing"
+                @click="composePrompt"
+                >生成提示词</Button
+              >
+            </div>
+            <template v-if="user.hasPermission('VisualPromptTemplate.read')">
+              <div v-if="visualTemplates.length" class="prompt-composer__form">
+                <div>
+                  <label>视觉模板</label>
+                  <Select
+                    v-model="visualTemplateId"
+                    :options="visualTemplateOptions"
+                    :clearable="false"
+                  />
+                </div>
+                <div class="prompt-composer__idea">
+                  <label>创作想法</label>
+                  <Input
+                    v-model="creativeIdea"
+                    mode="textarea"
+                    :rows="3"
+                    placeholder="描述主体、场景、风格、情绪或镜头运动；AI 会按目标模型规则整理"
+                  />
+                </div>
+              </div>
+              <div v-else class="prompt-composer__empty">
+                当前媒体类型和模型没有匹配的模板。
+                <Button
+                  link
+                  :confirm="false"
+                  @click="router.push('/visual-prompt-templates')"
+                  >去配置视觉提示词</Button
+                >
+              </div>
+              <p v-if="composeNotes" class="prompt-composer__notes">
+                {{ composeNotes }}
+              </p>
+            </template>
+            <div v-else class="prompt-composer__empty">
+              当前账号没有视觉提示词模板查看权限，仍可手动填写下方参数。
+            </div>
+          </section>
 
           <div v-if="current?.inputBindings.length" class="parameter-list">
             <div
@@ -737,6 +878,64 @@ onMounted(load);
   line-height: 1.2;
 }
 
+.prompt-composer {
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid #c6e2ff;
+  border-radius: var(--radius-lg);
+  background: #f5f9ff;
+}
+
+.prompt-composer__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.prompt-composer h4,
+.prompt-composer p {
+  margin: 0;
+}
+
+.prompt-composer h4 {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-base);
+}
+
+.prompt-composer__heading p,
+.prompt-composer__notes,
+.prompt-composer__empty {
+  margin-top: 5px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+}
+
+.prompt-composer__form {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.7fr) minmax(0, 1.3fr);
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.prompt-composer__form > div {
+  display: grid;
+  align-content: start;
+  gap: var(--space-sm);
+}
+
+.prompt-composer__form label {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+}
+
+.prompt-composer__notes {
+  padding-top: 10px;
+  border-top: 1px dashed #c6e2ff;
+}
+
 .parameter-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -865,6 +1064,10 @@ onMounted(load);
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .prompt-composer__form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .parameter-item--full {
     grid-column: auto;
   }
@@ -884,6 +1087,11 @@ onMounted(load);
   .submit-bar,
   .task-created,
   .selected-workflow {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .prompt-composer__heading {
     align-items: stretch;
     flex-direction: column;
   }

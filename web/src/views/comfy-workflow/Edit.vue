@@ -48,6 +48,7 @@ const form = reactive<EditorForm>({
   name: "",
   connectionId: 0,
   outputType: "image",
+  targetModel: "",
   description: "",
   apiWorkflow: "",
   inputBindings: [],
@@ -106,6 +107,13 @@ const fields = computed<FormField[]>(() => [
       { label: "图片", value: "image" },
       { label: "视频", value: "video" },
     ],
+  },
+  {
+    prop: "targetModel",
+    label: "目标模型",
+    type: "input",
+    placeholder: "如 flux1-dev、sdxl_base_1.0",
+    hint: "填写工作流实际加载的模型标识，用于匹配对应提示词模板和模型规则。",
   },
   { prop: "description", label: "使用说明", type: "textarea", rows: 2 },
   {
@@ -172,6 +180,13 @@ const bindingTypes = [
   { value: "seed", text: "随机种子" },
   { value: "outputPrefix", text: "系统输出前缀" },
 ];
+const semanticRoleOptions = [
+  { value: "normal", text: "普通参数" },
+  { value: "positivePrompt", text: "正向提示词" },
+  { value: "negativePrompt", text: "负向提示词" },
+  { value: "videoMotion", text: "视频运动描述" },
+  { value: "cameraMotion", text: "镜头运动描述" },
+];
 
 function reset() {
   Object.assign(form, {
@@ -181,6 +196,7 @@ function reset() {
       connections.value[0]?.id ||
       0,
     outputType: "image",
+    targetModel: "",
     description: "",
     apiWorkflow: "",
     inputBindings: [],
@@ -202,10 +218,12 @@ watch(visible, async (open) => {
       name: detail.name,
       connectionId: detail.connectionId,
       outputType: detail.outputType,
+      targetModel: detail.targetModel || "",
       description: detail.description || "",
       apiWorkflow: detail.apiWorkflow || "",
       inputBindings: detail.inputBindings.map((binding) => ({
         ...binding,
+        semanticRole: binding.semanticRole || "normal",
         defaultValue:
           binding.defaultValue === null || binding.defaultValue === undefined
             ? ""
@@ -233,6 +251,7 @@ function addBinding() {
     nodeId: first,
     inputKey: inputOptions(first)[0]?.value || "",
     required: false,
+    semanticRole: "normal",
     defaultValue: "",
     optionsText: "",
   });
@@ -247,6 +266,11 @@ function handleNodeChange(binding: EditorBinding) {
     )
   ) {
     binding.inputKey = inputOptions(binding.nodeId)[0]?.value || "";
+  }
+}
+function handleBindingTypeChange(binding: EditorBinding) {
+  if (!["text", "textarea"].includes(binding.type)) {
+    binding.semanticRole = "normal";
   }
 }
 async function importFile(event: Event) {
@@ -299,6 +323,7 @@ async function submit() {
     name: form.name,
     connectionId: Number(form.connectionId),
     outputType: form.outputType,
+    targetModel: form.targetModel,
     description: form.description,
     apiWorkflow: form.apiWorkflow,
     inputBindings: form.inputBindings.map(({ optionsText, ...binding }) => ({
@@ -438,6 +463,16 @@ async function submit() {
               <Select
                 v-model="binding.type"
                 :options="bindingTypes"
+                :clearable="false"
+                @change="handleBindingTypeChange(binding)"
+              />
+              <Select
+                v-model="binding.semanticRole"
+                :options="
+                  ['text', 'textarea'].includes(binding.type)
+                    ? semanticRoleOptions
+                    : semanticRoleOptions.slice(0, 1)
+                "
                 :clearable="false"
               />
               <Select
@@ -606,7 +641,7 @@ async function submit() {
 
 .binding-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 140px 1.3fr 1fr 1fr 90px auto;
+  grid-template-columns: 1fr 1fr 140px 150px 1.3fr 1fr 1fr 90px auto;
   gap: var(--space-sm);
   align-items: center;
   padding: 12px;

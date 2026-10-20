@@ -3,6 +3,7 @@ import request from "@/utils/request";
 export type AiFeatureType =
   | "chat"
   | "contentCreation"
+  | "visualPrompt"
   | "imageGeneration"
   | "videoGeneration"
   | "documentParse"

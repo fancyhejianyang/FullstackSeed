@@ -11,6 +11,12 @@ export type ComfyBindingType =
   | "image"
   | "seed"
   | "outputPrefix";
+export type ComfyBindingSemanticRole =
+  | "normal"
+  | "positivePrompt"
+  | "negativePrompt"
+  | "videoMotion"
+  | "cameraMotion";
 
 export interface ComfyConnection {
   id: number;
@@ -57,6 +63,7 @@ export interface ComfyInputBinding {
   type: ComfyBindingType;
   nodeId: string;
   inputKey: string;
+  semanticRole?: ComfyBindingSemanticRole;
   required?: boolean;
   defaultValue?: string | number | boolean | null;
   min?: number;
@@ -71,6 +78,7 @@ export interface ComfyWorkflow {
   connectionId: number;
   connectionName?: string;
   outputType: ComfyOutputType;
+  targetModel: string | null;
   description: string | null;
   apiWorkflow?: string;
   inputBindings: ComfyInputBinding[];
@@ -98,6 +106,7 @@ export interface ComfyWorkflowOption {
   id: number;
   name: string;
   outputType: ComfyOutputType;
+  targetModel: string | null;
   description: string | null;
   version: number;
   inputBindings: ComfyInputBinding[];

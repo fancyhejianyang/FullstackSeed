@@ -157,6 +157,16 @@ export class ComfyInputBindingDto {
   @MaxLength(120)
   inputKey: string;
 
+  @IsIn([
+    'normal',
+    'positivePrompt',
+    'negativePrompt',
+    'videoMotion',
+    'cameraMotion',
+  ])
+  @IsOptional()
+  semanticRole?: string = 'normal';
+
   @IsBoolean()
   @IsOptional()
   required?: boolean;
@@ -197,6 +207,11 @@ export class CreateComfyWorkflowDto {
 
   @IsIn(['image', 'video'])
   outputType: 'image' | 'video';
+
+  @IsString()
+  @MaxLength(120)
+  @IsOptional()
+  targetModel?: string;
 
   @IsString()
   @MaxLength(500)

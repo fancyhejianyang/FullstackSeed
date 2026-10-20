@@ -108,6 +108,7 @@ export class ComfyWorkflowsService {
         id: item.id,
         name: item.name,
         outputType: item.outputType,
+        targetModel: item.targetModel,
         description: item.description,
         version: item.version,
         inputBindings: item.inputBindings.filter(
@@ -128,6 +129,7 @@ export class ComfyWorkflowsService {
           ...dto,
           name: dto.name.trim(),
           description: dto.description?.trim() || null,
+          targetModel: dto.targetModel?.trim() || null,
           apiWorkflow: JSON.stringify(graph),
           inputBindings: bindings,
           outputNodeIds: dto.outputNodeIds?.length ? dto.outputNodeIds : null,
@@ -163,6 +165,9 @@ export class ComfyWorkflowsService {
           ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
           ...(dto.description !== undefined
             ? { description: dto.description.trim() || null }
+            : {}),
+          ...(dto.targetModel !== undefined
+            ? { targetModel: dto.targetModel.trim() || null }
             : {}),
           apiWorkflow: JSON.stringify(graph),
           inputBindings: bindings,
@@ -248,6 +253,7 @@ export class ComfyWorkflowsService {
     outputNodeIds: string[],
   ) {
     const keys = new Set<string>();
+    const semanticRoles = new Set<string>();
     for (const binding of bindings) {
       if (!/^[A-Za-z][A-Za-z0-9_]{0,79}$/.test(binding.key)) {
         throw new BadRequestException(`参数键 ${binding.key} 格式无效`);
@@ -256,6 +262,24 @@ export class ComfyWorkflowsService {
         throw new BadRequestException(`参数键 ${binding.key} 重复`);
       }
       keys.add(binding.key);
+      const semanticRole = binding.semanticRole ?? 'normal';
+      if (
+        semanticRole !== 'normal' &&
+        !['text', 'textarea'].includes(binding.type)
+      ) {
+        throw new BadRequestException(
+          `参数 ${binding.label} 的语义角色仅支持文本类型`,
+        );
+      }
+      if (
+        ['positivePrompt', 'negativePrompt'].includes(semanticRole) &&
+        semanticRoles.has(semanticRole)
+      ) {
+        throw new BadRequestException(
+          `${semanticRole === 'positivePrompt' ? '正向' : '负向'}提示词只能绑定一个开放参数`,
+        );
+      }
+      semanticRoles.add(semanticRole);
       const node = graph[binding.nodeId];
       if (!node || !(binding.inputKey in node.inputs)) {
         throw new BadRequestException(
@@ -304,6 +328,7 @@ export class ComfyWorkflowsService {
         connectionId: workflow.connectionId,
         name: workflow.name,
         outputType: workflow.outputType,
+        targetModel: workflow.targetModel,
         apiWorkflow: workflow.apiWorkflow,
         inputBindings: workflow.inputBindings,
         outputNodeIds: workflow.outputNodeIds,

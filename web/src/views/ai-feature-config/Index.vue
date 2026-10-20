@@ -23,6 +23,7 @@ const tableRef = ref<{
 const featureTypeOptions = [
   { label: '聊天', value: 'chat' },
   { label: '内容创作', value: 'contentCreation' },
+  { label: '视觉提示词', value: 'visualPrompt' },
   { label: '图片生成', value: 'imageGeneration' },
   { label: '视频生成', value: 'videoGeneration' },
   { label: '文档解析', value: 'documentParse' },
@@ -174,9 +175,12 @@ function getFeatureLabel(value: AiFeatureType) {
       <template #column-enableThinking="{ row }">
         <el-tag
           :type="
-            ['rerank', 'imageGeneration', 'videoGeneration'].includes(
-              row.featureType,
-            )
+            [
+              'rerank',
+              'visualPrompt',
+              'imageGeneration',
+              'videoGeneration',
+            ].includes(row.featureType)
               ? 'info'
               : row.enableThinking
                 ? 'success'
@@ -184,9 +188,12 @@ function getFeatureLabel(value: AiFeatureType) {
           "
         >
           {{
-            ['rerank', 'imageGeneration', 'videoGeneration'].includes(
-              row.featureType,
-            )
+            [
+              'rerank',
+              'visualPrompt',
+              'imageGeneration',
+              'videoGeneration',
+            ].includes(row.featureType)
               ? '不适用'
               : row.enableThinking
                 ? '开启'
@@ -199,7 +206,7 @@ function getFeatureLabel(value: AiFeatureType) {
         {{
           ['imageGeneration', 'videoGeneration'].includes(row.featureType)
             ? '不适用'
-            : row.featureType === 'rerank'
+            : ['rerank', 'visualPrompt'].includes(row.featureType)
               ? 'JSON（固定）'
               : responseFormatMap[row.responseFormat] || row.responseFormat
         }}

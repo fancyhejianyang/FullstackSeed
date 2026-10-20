@@ -74,6 +74,7 @@ export interface ValidateKnowledgeAiProviderModelPayload {
   featureType:
     | "chat"
     | "contentCreation"
+    | "visualPrompt"
     | "documentParse"
     | "ocr"
     | "rerank"

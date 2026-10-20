@@ -138,6 +138,17 @@ export class AiFeatureConfigsService {
     return config;
   }
 
+  async findUsableVisualPromptConfig(id: number) {
+    const config = await this.findOne(id);
+    if (config.featureType !== 'visualPrompt')
+      throw new BadRequestException('请选择视觉提示词类型的 AI 功能配置');
+    if (!config.isEnabled)
+      throw new BadRequestException('该视觉提示词配置未启用');
+    if (!config.providerId || !config.model?.trim())
+      throw new BadRequestException('视觉提示词配置缺少大模型账号或模型');
+    return config;
+  }
+
   async findUsableImageGenerationConfig(
     id: number,
     generationMode: AiMaterialGenerationMode = 'textToImage',
@@ -258,6 +269,16 @@ export class AiFeatureConfigsService {
       })),
       total,
     };
+  }
+
+  async visualPromptOptions() {
+    const rows = await this.configRepository.find({
+      select: { id: true, name: true, model: true },
+      where: { featureType: 'visualPrompt', isEnabled: true },
+      order: { id: 'DESC' },
+      take: 100,
+    });
+    return rows;
   }
 
   async remove(id: number) {
@@ -388,6 +409,14 @@ export class AiFeatureConfigsService {
       config.responseFormat ??= 'text';
       if (!['text', 'markdown'].includes(config.responseFormat))
         throw new BadRequestException('内容创作仅支持纯文本或 Markdown 正文');
+    }
+    if (config.featureType === 'visualPrompt') {
+      config.enableThinking = false;
+      config.thinkingParameters = null;
+      config.useMineru = false;
+      config.mineruConfigId = null;
+      config.mineruConfigName = null;
+      config.responseFormat = 'json';
     }
     if (config.useMineru && config.featureType === 'ocr')
       config.responseFormat = 'markdown';

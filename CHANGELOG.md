@@ -1,5 +1,57 @@
 # CHANGELOG
 
+### 2026-10-20 新增模型感知的视觉提示词与 ComfyUI 正负提示词注入
+
+- 内容创作新增“视觉提示词”模块，按当前用户维护图片/视频模板、目标模型、正向与负向示例、提炼结果、风格摘要、模型规则和变量；目标模型留空时作为通用模板，填写后仅匹配同模型工作流。
+- AI 功能配置新增“视觉提示词”类型，使用账号下的文本模型，以固定 JSON 协议提炼官方示例或生成正向/负向提示词；不调用 Agent、不自动生成媒体，AI 提炼失败不会覆盖已有模板。
+- ComfyUI 工作流新增目标模型字段，开放文本参数可声明普通、正向提示词、负向提示词、视频运动和镜头运动语义；后端限制正向与负向各最多一个绑定，且非文本参数不能承担提示词语义，版本快照同步保留模型和映射。
+- ComfyUI 创作页检测到正负提示词绑定后展示 AI 提示词区，按媒体类型和目标模型筛选模板；用户明确点击后才生成，并分别回填到受控参数，仍可手工修改且不会自动提交任务或改动未开放节点。
+- 新增迁移 `1792656000000-AddVisualPromptTemplates`，创建个人视觉提示词模板表，并为 ComfyUI 工作流及版本表补充目标模型列；同步菜单、路由、权限和设计规范。
+- 验证：TypeORM 实体检查、7 套 / 40 项定向后端测试、Nest 生产构建、前端 13 项导航测试、Vue 类型检查、组件复用扫描和 Vite 生产构建通过；新增后端与相关服务定向 ESLint、改动文件 Prettier 及 Git 差异检查通过。未执行数据库迁移、启动服务或调用真实 AI / ComfyUI，模型提示词效果和供应商计费需使用测试账号验收。
+
+新增文件（14）：
+
+- `server/src/migrations/1792656000000-AddVisualPromptTemplates.spec.ts`
+- `server/src/migrations/1792656000000-AddVisualPromptTemplates.ts`
+- `server/src/comfyui/comfy-workflows.service.spec.ts`
+- `server/src/visual-prompt-templates/dto/visual-prompt-template.dto.ts`
+- `server/src/visual-prompt-templates/entities/visual-prompt-template.entity.ts`
+- `server/src/visual-prompt-templates/visual-prompt-templates.controller.ts`
+- `server/src/visual-prompt-templates/visual-prompt-templates.module.ts`
+- `server/src/visual-prompt-templates/visual-prompt-templates.service.ts`
+- `server/src/visual-prompt-templates/visual-prompt.protocol.spec.ts`
+- `server/src/visual-prompt-templates/visual-prompt.protocol.ts`
+- `web/src/api/visualPromptTemplate.ts`
+- `web/src/views/visual-prompt-template/Edit.vue`
+- `web/src/views/visual-prompt-template/Index.vue`
+- `web/src/views/visual-prompt-template/View.vue`
+
+修改文件（21）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/ai-feature-configs/ai-feature-config.constants.ts`
+- `server/src/ai-feature-configs/ai-feature-configs.service.ts`
+- `server/src/app.module.ts`
+- `server/src/comfyui/comfy-workflows.service.ts`
+- `server/src/comfyui/dto/comfyui.dto.ts`
+- `server/src/comfyui/entities/comfy-workflow-version.entity.ts`
+- `server/src/comfyui/entities/comfy-workflow.entity.ts`
+- `server/src/menus/menus.service.ts`
+- `server/src/users/users.service.ts`
+- `web/src/api/aiFeatureConfig.ts`
+- `web/src/api/comfyUi.ts`
+- `web/src/api/knowledgeAiProvider.ts`
+- `web/src/router/index.ts`
+- `web/src/router/systemNavigation.test.mjs`
+- `web/src/views/ai-feature-config/Edit.vue`
+- `web/src/views/ai-feature-config/Index.vue`
+- `web/src/views/comfy-create/Index.vue`
+- `web/src/views/comfy-workflow/Edit.vue`
+- `web/src/views/comfy-workflow/Index.vue`
+
+删除文件：无。
+
 ### 2026-10-20 重构 ComfyUI 创作工作台界面
 
 - 创作页新增轻量引导头部，集中展示可用工作流、输入素材数量以及素材库和生成记录入口。

@@ -72,6 +72,15 @@ const routes: RouteRecordRaw[] = [
         meta: { title: "素材管理", permission: "AiMaterial.read" },
       },
       {
+        path: "visual-prompt-templates",
+        name: "visual-prompt-templates",
+        component: () => import("@/views/visual-prompt-template/Index.vue"),
+        meta: {
+          title: "视觉提示词",
+          permission: "VisualPromptTemplate.read",
+        },
+      },
+      {
         path: "comfyui",
         component: { render: () => null },
         meta: { title: "ComfyUI" },
@@ -498,6 +507,7 @@ router.beforeEach(async (to) => {
               ["/content-articles", "ContentArticle.read"],
               ["/content-templates", "ContentTemplate.read"],
               ["/ai-materials", "AiMaterial.read"],
+              ["/visual-prompt-templates", "VisualPromptTemplate.read"],
             ]
           : [
               ["/comfyui/create", "ComfyTask.read"],

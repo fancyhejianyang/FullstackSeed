@@ -11,6 +11,12 @@ export type ComfyBindingType =
   | 'image'
   | 'seed'
   | 'outputPrefix';
+export type ComfyBindingSemanticRole =
+  | 'normal'
+  | 'positivePrompt'
+  | 'negativePrompt'
+  | 'videoMotion'
+  | 'cameraMotion';
 
 export interface ComfyInputBinding {
   key: string;
@@ -18,6 +24,7 @@ export interface ComfyInputBinding {
   type: ComfyBindingType;
   nodeId: string;
   inputKey: string;
+  semanticRole?: ComfyBindingSemanticRole;
   required?: boolean;
   defaultValue?: string | number | boolean | null;
   min?: number;
@@ -33,6 +40,8 @@ export class ComfyWorkflow extends BaseEntity {
   @Column({ type: 'int' }) connectionId: number;
   @Column({ type: 'varchar', length: 20, default: 'image' })
   outputType: ComfyOutputType;
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  targetModel: string | null;
   @Column({ type: 'varchar', length: 500, nullable: true })
   description: string | null;
   @Column({ type: 'longtext', select: false }) apiWorkflow: string;

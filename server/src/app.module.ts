@@ -43,6 +43,7 @@ import { ThirdPartyConfigModule } from './third-party-config/third-party-config.
 import { ManagedFilesModule } from './managed-files/managed-files.module';
 import { AiMaterialsModule } from './ai-materials/ai-materials.module';
 import { ComfyUiModule } from './comfyui/comfyui.module';
+import { VisualPromptTemplatesModule } from './visual-prompt-templates/visual-prompt-templates.module';
 
 @Module({
   imports: [
@@ -140,6 +141,7 @@ import { ComfyUiModule } from './comfyui/comfyui.module';
     ManagedFilesModule,
     AiMaterialsModule,
     ComfyUiModule,
+    VisualPromptTemplatesModule,
     KnowledgeRetrievalConfigsModule,
     KnowledgeRoutingRulesModule,
     KnowledgeStandardQasModule,

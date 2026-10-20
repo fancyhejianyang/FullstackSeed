@@ -26,6 +26,7 @@ const ADMIN_PERMISSION_MODULES = [
   'Demo',
   'ContentArticle',
   'ContentTemplate',
+  'VisualPromptTemplate',
   'AiMaterial',
   'ComfyConnection',
   'ComfyWorkflow',

@@ -23,6 +23,7 @@ const columns: TableColumn[] = [
   { prop: "name", label: "工作流模板", minWidth: 180 },
   { prop: "connectionName", label: "执行服务", minWidth: 150 },
   { prop: "outputType", label: "输出类型", width: 100, slot: true },
+  { prop: "targetModel", label: "目标模型", minWidth: 160 },
   { prop: "bindingCount", label: "开放参数", width: 100, slot: true },
   { prop: "version", label: "版本", width: 80, slot: true },
   { prop: "isPublished", label: "发布状态", width: 110, slot: true },

@@ -15,6 +15,8 @@ export class ComfyWorkflowVersion extends BaseEntity {
   @Column({ type: 'int' }) connectionId: number;
   @Column({ type: 'varchar', length: 120 }) name: string;
   @Column({ type: 'varchar', length: 20 }) outputType: ComfyOutputType;
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  targetModel: string | null;
   @Column({ type: 'longtext' }) apiWorkflow: string;
   @Column({ type: 'simple-json' }) inputBindings: ComfyInputBinding[];
   @Column({ type: 'simple-json', nullable: true })

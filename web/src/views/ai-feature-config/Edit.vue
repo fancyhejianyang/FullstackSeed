@@ -63,6 +63,7 @@ const form = reactive<AiFeatureConfigEditForm>({
 const featureTypeOptions = [
   { label: "聊天", value: "chat" },
   { label: "内容创作", value: "contentCreation" },
+  { label: "视觉提示词", value: "visualPrompt" },
   { label: "图片生成", value: "imageGeneration" },
   { label: "视频生成", value: "videoGeneration" },
   { label: "文档解析", value: "documentParse" },
@@ -96,6 +97,9 @@ const isMineruOcrFeature = computed(
   () => isOcrFeature.value && !!form.useMineru,
 );
 const isWritingFeature = computed(() => form.featureType === "contentCreation");
+const isVisualPromptFeature = computed(
+  () => form.featureType === "visualPrompt",
+);
 const isImageGenerationFeature = computed(
   () => form.featureType === "imageGeneration",
 );
@@ -150,15 +154,17 @@ const fields = computed<FormField[]>(() => {
           ? "当前为聊天：所选模型负责生成对话与知识库问答的最终回复。"
           : form.featureType === "contentCreation"
             ? "用于文章后台生成；可启用多个配置，生成时选择使用哪一个。"
-            : form.featureType === "imageGeneration"
-              ? "用于素材管理直接生成图片；只使用账号的生图模型目录和完整生图端点。"
-              : form.featureType === "videoGeneration"
-                ? "用于素材管理异步生成视频；只使用账号的视频模型目录和完整 DashScope 视频端点。"
-                : form.featureType === "rerank"
-                  ? "当前为 LLM 重排：模型只给召回的知识片段评分和排序，不参与最终回答。"
-                  : form.featureType === "ocr"
-                    ? "当前为 OCR：仅处理图片或 PDF，可使用视觉模型或 MinerU 引擎。"
-                    : "当前为文档解析：仅处理文本/TXT/Word，由大模型按提示词整理为结构化 Markdown。",
+            : form.featureType === "visualPrompt"
+              ? "用于提炼视觉示例并按具体模型生成正向、负向提示词；固定返回 JSON，不调用 Agent。"
+              : form.featureType === "imageGeneration"
+                ? "用于素材管理直接生成图片；只使用账号的生图模型目录和完整生图端点。"
+                : form.featureType === "videoGeneration"
+                  ? "用于素材管理异步生成视频；只使用账号的视频模型目录和完整 DashScope 视频端点。"
+                  : form.featureType === "rerank"
+                    ? "当前为 LLM 重排：模型只给召回的知识片段评分和排序，不参与最终回答。"
+                    : form.featureType === "ocr"
+                      ? "当前为 OCR：仅处理图片或 PDF，可使用视觉模型或 MinerU 引擎。"
+                      : "当前为文档解析：仅处理文本/TXT/Word，由大模型按提示词整理为结构化 Markdown。",
     },
   ];
 
@@ -254,18 +260,22 @@ const fields = computed<FormField[]>(() => {
       prop: "systemPrompt",
       label: isMediaGenerationFeature.value
         ? "默认画面要求"
-        : isMineruOcrFeature.value
-          ? "整理提示词"
-          : "提示词",
+        : isVisualPromptFeature.value
+          ? "提炼偏好"
+          : isMineruOcrFeature.value
+            ? "整理提示词"
+            : "提示词",
       type: "textarea",
       rows: 5,
       placeholder: isMediaGenerationFeature.value
         ? "如：主体清晰、构图简洁、无文字、无水印"
-        : isStructuredParseFeature.value
-          ? "可补充业务术语、标题规则或保留项；系统会固定追加 Markdown 结构化输出要求"
-          : isWritingFeature.value
-            ? "填写默认写作口吻或偏好；模板决定文章结构，正文格式以所选格式为准"
-            : "该功能默认系统提示词，可被测试请求临时覆盖",
+        : isVisualPromptFeature.value
+          ? "可补充默认语言、标签顺序或希望保留的模型专用语法；系统仍固定输出正向/负向 JSON 结构"
+          : isStructuredParseFeature.value
+            ? "可补充业务术语、标题规则或保留项；系统会固定追加 Markdown 结构化输出要求"
+            : isWritingFeature.value
+              ? "填写默认写作口吻或偏好；模板决定文章结构，正文格式以所选格式为准"
+              : "该功能默认系统提示词，可被测试请求临时覆盖",
       hint: (() => {
         const prompt = form.systemPrompt?.trim() ?? "";
         if (isMediaGenerationFeature.value)
@@ -289,21 +299,24 @@ const fields = computed<FormField[]>(() => {
         prop: "responseFormat",
         label: isWritingFeature.value ? "正文格式" : "返回格式",
         type: "select",
-        options: isMarkdownFeature.value
-          ? [{ label: "Markdown（固定）", value: "markdown" }]
-          : isWritingFeature.value
-            ? [
-                { label: "纯文本", value: "text" },
-                { label: "Markdown", value: "markdown" },
-              ]
-            : [
-                { label: "文本", value: "text" },
-                { label: "JSON", value: "json" },
-                { label: "Markdown", value: "markdown" },
-              ],
-        componentProps: isMarkdownFeature.value
-          ? { disabled: true }
-          : undefined,
+        options: isVisualPromptFeature.value
+          ? [{ label: "JSON（固定）", value: "json" }]
+          : isMarkdownFeature.value
+            ? [{ label: "Markdown（固定）", value: "markdown" }]
+            : isWritingFeature.value
+              ? [
+                  { label: "纯文本", value: "text" },
+                  { label: "Markdown", value: "markdown" },
+                ]
+              : [
+                  { label: "文本", value: "text" },
+                  { label: "JSON", value: "json" },
+                  { label: "Markdown", value: "markdown" },
+                ],
+        componentProps:
+          isMarkdownFeature.value || isVisualPromptFeature.value
+            ? { disabled: true }
+            : undefined,
         hint: isWritingFeature.value
           ? "仅控制文章正文格式，优先于模板中的格式描述；编辑提示单独展示。纯文本适合复制到发布平台。"
           : isStructuredParseFeature.value
@@ -443,6 +456,12 @@ watch(
       form.temperature = 0;
       form.responseFormat = "json";
     }
+    if (isVisualPromptFeature.value) {
+      form.enableThinking = false;
+      form.thinkingParametersText = "";
+      form.useMineru = false;
+      form.responseFormat = "json";
+    }
     if (isMediaGenerationFeature.value) {
       form.temperature = 0;
       form.responseFormat = "text";
@@ -537,13 +556,14 @@ function buildPayload(): AiFeatureConfigForm {
       isRerankFeature.value || isMediaGenerationFeature.value
         ? 0
         : Number(form.temperature),
-    responseFormat: isRerankFeature.value
-      ? "json"
-      : isMediaGenerationFeature.value
-        ? "text"
-        : isMarkdownFeature.value
-          ? "markdown"
-          : form.responseFormat,
+    responseFormat:
+      isRerankFeature.value || isVisualPromptFeature.value
+        ? "json"
+        : isMediaGenerationFeature.value
+          ? "text"
+          : isMarkdownFeature.value
+            ? "markdown"
+            : form.responseFormat,
     supportsImageToImage:
       isImageGenerationFeature.value && !!form.supportsImageToImage,
     supportsImageToVideo:
@@ -610,6 +630,7 @@ function getModelText(
   if (
     featureType === "chat" ||
     featureType === "contentCreation" ||
+    featureType === "visualPrompt" ||
     featureType === "documentParse" ||
     featureType === "rerank"
   ) {
