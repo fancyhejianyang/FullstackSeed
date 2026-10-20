@@ -453,8 +453,8 @@ async function submit() {
     v-model="visible"
     class="workflow-dialog"
     :title="row ? '编辑 ComfyUI 工作流' : '导入 ComfyUI 工作流'"
-    width="1040px"
-    body-max-height="76vh"
+    width="calc(100vw - 32px)"
+    body-max-height="calc(100vh - 180px)"
     :confirm-loading="submitting"
     @confirm="submit"
   >
@@ -650,6 +650,8 @@ async function submit() {
 <style scoped>
 .workflow-editor {
   width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
 }
 
 .workflow-editor__heading {
@@ -753,7 +755,10 @@ async function submit() {
 
 .binding-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 140px 150px 1.3fr 1fr 1fr 90px auto;
+  grid-template-columns:
+    minmax(140px, 0.9fr) minmax(120px, 0.9fr) minmax(132px, 0.75fr)
+    minmax(145px, 0.8fr) minmax(180px, 1.2fr) minmax(135px, 0.8fr)
+    minmax(140px, 0.9fr) 88px 80px;
   gap: var(--space-sm);
   align-items: center;
   padding: 12px;
@@ -761,6 +766,10 @@ async function submit() {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-bg-container);
+}
+
+.binding-row > * {
+  min-width: 0;
 }
 .binding-row__options {
   grid-column: 1 / -1;
@@ -793,9 +802,15 @@ async function submit() {
   }
 }
 
+@media (max-width: 1360px) {
+  .binding-row {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 900px) {
   .binding-row {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .binding-row__options {
     grid-column: 1 / -1;
