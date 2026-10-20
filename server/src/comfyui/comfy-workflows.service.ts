@@ -125,6 +125,8 @@ export class ComfyWorkflowsService {
     );
     const { graph, bindings } = sanitized;
     this.validateBindings(graph, bindings, dto.outputNodeIds ?? []);
+    const apiWorkflow = JSON.stringify(graph);
+    const outputNodeIds = dto.outputNodeIds?.length ? dto.outputNodeIds : null;
     const id = await this.workflows.manager.transaction(async (manager) => {
       const repo = manager.getRepository(ComfyWorkflow);
       const saved = await repo.save(
@@ -133,9 +135,9 @@ export class ComfyWorkflowsService {
           name: dto.name.trim(),
           description: dto.description?.trim() || null,
           targetModel: dto.targetModel?.trim() || null,
-          apiWorkflow: JSON.stringify(graph),
+          apiWorkflow,
           inputBindings: bindings,
-          outputNodeIds: dto.outputNodeIds?.length ? dto.outputNodeIds : null,
+          outputNodeIds,
           dependencyNotes: dto.dependencyNotes?.trim() || null,
           version: 1,
         }),
@@ -143,6 +145,9 @@ export class ComfyWorkflowsService {
       await this.saveVersion(
         manager.getRepository(ComfyWorkflowVersion),
         saved,
+        apiWorkflow,
+        bindings,
+        outputNodeIds,
       );
       return saved.id;
     });
@@ -160,6 +165,8 @@ export class ComfyWorkflowsService {
     const { graph, bindings } = sanitized;
     const outputNodeIds = dto.outputNodeIds ?? current.outputNodeIds ?? [];
     this.validateBindings(graph, bindings, outputNodeIds);
+    const apiWorkflow = JSON.stringify(graph);
+    const savedOutputNodeIds = outputNodeIds.length ? outputNodeIds : null;
     const savedId = await this.workflows.manager.transaction(
       async (manager) => {
         Object.assign(current, {
@@ -172,9 +179,9 @@ export class ComfyWorkflowsService {
           ...(dto.targetModel !== undefined
             ? { targetModel: dto.targetModel.trim() || null }
             : {}),
-          apiWorkflow: JSON.stringify(graph),
+          apiWorkflow,
           inputBindings: bindings,
-          outputNodeIds: outputNodeIds.length ? outputNodeIds : null,
+          outputNodeIds: savedOutputNodeIds,
           ...(dto.dependencyNotes !== undefined
             ? { dependencyNotes: dto.dependencyNotes.trim() || null }
             : {}),
@@ -184,6 +191,9 @@ export class ComfyWorkflowsService {
         await this.saveVersion(
           manager.getRepository(ComfyWorkflowVersion),
           saved,
+          apiWorkflow,
+          bindings,
+          savedOutputNodeIds,
         );
         return saved.id;
       },
@@ -323,6 +333,9 @@ export class ComfyWorkflowsService {
   private saveVersion(
     repository: Repository<ComfyWorkflowVersion>,
     workflow: ComfyWorkflow,
+    apiWorkflow: string,
+    inputBindings: ComfyInputBinding[],
+    outputNodeIds: string[] | null,
   ) {
     return repository.save(
       repository.create({
@@ -332,9 +345,9 @@ export class ComfyWorkflowsService {
         name: workflow.name,
         outputType: workflow.outputType,
         targetModel: workflow.targetModel,
-        apiWorkflow: workflow.apiWorkflow,
-        inputBindings: workflow.inputBindings,
-        outputNodeIds: workflow.outputNodeIds,
+        apiWorkflow,
+        inputBindings,
+        outputNodeIds,
       }),
     );
   }

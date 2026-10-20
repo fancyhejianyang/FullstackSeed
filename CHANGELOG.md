@@ -1,5 +1,22 @@
 # CHANGELOG
 
+### 2026-10-20 修复 ComfyUI 工作流版本缺少 JSON
+
+- 修复导入或编辑 ComfyUI 工作流时，主记录保存后因 `apiWorkflow` 为隐藏查询列、ORM 返回对象未携带该字段，导致版本快照插入报 `Field 'apiWorkflow' doesn't have a default value` 的问题。
+- 创建和更新工作流时显式把已校验、已清理的 API JSON、参数映射及输出节点传给版本快照，不再依赖主记录保存后的隐式字段回传。
+- 新增回归测试模拟 ORM 丢失 `select: false` 字段的场景，确认版本记录仍保存完整工作流 JSON。
+- 验证：TypeORM 实体检查、2 套 / 6 项 ComfyUI 工作流定向测试及改动文件 ESLint 通过；本次为缺陷修复，按规则未执行生产构建或启动服务。
+
+新增文件：无。
+
+修改文件（3）：
+
+- `CHANGELOG.md`
+- `server/src/comfyui/comfy-workflows.service.spec.ts`
+- `server/src/comfyui/comfy-workflows.service.ts`
+
+删除文件：无。
+
 ### 2026-10-20 分离 ComfyUI 工作流模板与创作任务提示词
 
 - 工作流导入自动识别仍保留正向/负向提示词的节点映射，但不再把 JSON 自带的示例文本作为参数默认值；后端在创建、更新和生成版本快照前统一清空提示词节点及映射默认值。
