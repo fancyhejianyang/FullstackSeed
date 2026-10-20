@@ -41,6 +41,7 @@ const connections = ref<
 >([]);
 const fileInput = ref<HTMLInputElement>();
 const detectionSummary = ref("");
+const showAdvanced = ref(false);
 const form = reactive<EditorForm>({
   name: "",
   connectionId: 0,
@@ -95,78 +96,90 @@ function inputOptions(nodeId: string) {
 const connectionOptions = computed(() =>
   connections.value.map((item) => ({ label: item.name, value: item.id })),
 );
-const fields = computed<FormField[]>(() => [
-  {
-    prop: "name",
-    label: "模板名称",
-    type: "input",
-    placeholder: "如 SDXL 商品主图",
-  },
-  {
-    prop: "connectionId",
-    label: "执行服务",
-    type: "select",
-    options: connectionOptions,
-  },
-  {
-    prop: "outputType",
-    label: "输出类型",
-    type: "select",
-    options: [
-      { label: "图片", value: "image" },
-      { label: "视频", value: "video" },
-    ],
-  },
-  {
-    prop: "targetModel",
-    label: "目标模型",
-    type: "input",
-    placeholder: "如 flux1-dev、sdxl_base_1.0",
-    hint: "填写工作流实际加载的模型标识，用于匹配对应提示词模板和模型规则。",
-  },
-  { prop: "description", label: "使用说明", type: "textarea", rows: 2 },
-  {
-    prop: "apiWorkflow",
-    label: "API 工作流 JSON",
-    slot: true,
-    span: 2,
-    labelPosition: "top",
-  },
-  {
-    prop: "inputBindings",
-    label: "开放参数与节点映射",
-    slot: true,
-    span: 2,
-    labelPosition: "top",
-  },
-  {
-    prop: "outputNodeIdsText",
-    label: "输出节点",
-    type: "input",
-    placeholder: "可选；多个节点 ID 使用英文逗号分隔",
-    span: 2,
-    hint: "留空时归档历史结果中的全部文件；填写后仅归档指定节点。",
-  },
-  {
-    prop: "dependencyNotes",
-    label: "依赖说明",
-    type: "textarea",
-    rows: 3,
-    span: 2,
-  },
-  {
-    prop: "isPublished",
-    label: "发布状态",
-    component: "Switch",
-    componentProps: { activeText: "已发布", inactiveText: "草稿" },
-  },
-  {
-    prop: "isEnabled",
-    label: "是否启用",
-    component: "Switch",
-    componentProps: { activeText: "启用", inactiveText: "停用" },
-  },
-]);
+const creativeBindings = computed(() =>
+  form.inputBindings.filter((binding) => binding.type !== "outputPrefix"),
+);
+const fields = computed<FormField[]>(() => {
+  const result: FormField[] = [
+    {
+      prop: "name",
+      label: "模板名称",
+      type: "input",
+      placeholder: "如 SDXL 商品主图",
+    },
+    {
+      prop: "connectionId",
+      label: "执行服务",
+      type: "select",
+      options: connectionOptions,
+    },
+    {
+      prop: "outputType",
+      label: "输出类型",
+      type: "select",
+      options: [
+        { label: "图片", value: "image" },
+        { label: "视频", value: "video" },
+      ],
+    },
+    {
+      prop: "targetModel",
+      label: "目标模型",
+      type: "input",
+      placeholder: "如 flux1-dev、sdxl_base_1.0",
+      hint: "填写工作流实际加载的模型标识，用于匹配对应提示词模板和模型规则。",
+    },
+    { prop: "description", label: "使用说明", type: "textarea", rows: 2 },
+    {
+      prop: "apiWorkflow",
+      label: "API 工作流 JSON",
+      slot: true,
+      span: 2,
+      labelPosition: "top",
+    },
+    {
+      prop: "inputBindings",
+      label: "开放参数与节点映射",
+      slot: true,
+      span: 2,
+      labelPosition: "top",
+    },
+  ];
+  if (showAdvanced.value) {
+    result.push(
+      {
+        prop: "outputNodeIdsText",
+        label: "输出节点",
+        type: "input",
+        placeholder: "可选；多个节点 ID 使用英文逗号分隔",
+        span: 2,
+        hint: "留空时归档历史结果中的全部文件；填写后仅归档指定节点。",
+      },
+      {
+        prop: "dependencyNotes",
+        label: "依赖说明",
+        type: "textarea",
+        rows: 3,
+        span: 2,
+      },
+    );
+  }
+  result.push(
+    {
+      prop: "isPublished",
+      label: "发布状态",
+      component: "Switch",
+      componentProps: { activeText: "已发布", inactiveText: "草稿" },
+    },
+    {
+      prop: "isEnabled",
+      label: "是否启用",
+      component: "Switch",
+      componentProps: { activeText: "启用", inactiveText: "停用" },
+    },
+  );
+  return result;
+});
 const rules: FormRules = {
   name: [{ required: true, message: "请输入模板名称", trigger: "blur" }],
   connectionId: [
@@ -196,6 +209,12 @@ const semanticRoleOptions = [
   { value: "videoMotion", text: "视频运动描述" },
   { value: "cameraMotion", text: "镜头运动描述" },
 ];
+function optionLabel(
+  options: { value: string; text: string }[],
+  value?: string,
+) {
+  return options.find((option) => option.value === value)?.text || value || "—";
+}
 
 function reset() {
   Object.assign(form, {
@@ -215,6 +234,7 @@ function reset() {
     isEnabled: true,
   });
   detectionSummary.value = "";
+  showAdvanced.value = false;
 }
 watch(visible, async (open) => {
   if (!open) return;
@@ -453,17 +473,27 @@ async function submit() {
     v-model="visible"
     class="workflow-dialog"
     :title="row ? '编辑 ComfyUI 工作流' : '导入 ComfyUI 工作流'"
-    width="calc(100vw - 32px)"
-    body-max-height="calc(100vh - 180px)"
+    width="1040px"
+    body-max-height="76vh"
     :confirm-loading="submitting"
     @confirm="submit"
   >
     <div v-loading="loading" class="workflow-editor">
       <div class="workflow-editor__heading">
-        <span class="workflow-editor__heading-title">基础信息</span>
-        <span class="workflow-editor__heading-description">
-          选择工作流的执行服务与输出类型
-        </span>
+        <div>
+          <span class="workflow-editor__heading-title">基础信息</span>
+          <span class="workflow-editor__heading-description">
+            导入并保存工作流，发布后即可在 ComfyUI 创作中调用
+          </span>
+        </div>
+        <Button
+          class="workflow-editor__advanced-toggle"
+          :confirm="false"
+          :icon="showAdvanced ? 'ArrowUp' : 'Setting'"
+          @click="showAdvanced = !showAdvanced"
+        >
+          {{ showAdvanced ? "收起高级配置" : "高级配置" }}
+        </Button>
       </div>
       <Form
         ref="formRef"
@@ -522,6 +552,7 @@ async function submit() {
               />
             </div>
             <Input
+              v-if="showAdvanced"
               v-model="form.apiWorkflow"
               mode="textarea"
               :rows="7"
@@ -529,6 +560,41 @@ async function submit() {
               :clearable="false"
               placeholder="粘贴或导入 ComfyUI API 工作流 JSON"
             />
+            <div
+              v-else
+              class="workflow-json__summary"
+              :class="{ 'is-empty': !graph }"
+            >
+              <template v-if="graph">
+                <div class="workflow-json__summary-item">
+                  <strong>{{ Object.keys(graph).length }}</strong>
+                  <span>节点</span>
+                </div>
+                <div class="workflow-json__summary-item">
+                  <strong>{{
+                    form.outputType === "video" ? "视频" : "图片"
+                  }}</strong>
+                  <span>输出类型</span>
+                </div>
+                <div
+                  class="workflow-json__summary-item workflow-json__summary-item--model"
+                >
+                  <strong>{{ form.targetModel || "待确认" }}</strong>
+                  <span>目标模型</span>
+                </div>
+                <div class="workflow-json__summary-item">
+                  <strong>{{
+                    form.outputNodeIdsText
+                      ? form.outputNodeIdsText.split(",").filter(Boolean).length
+                      : 0
+                  }}</strong>
+                  <span>输出节点</span>
+                </div>
+              </template>
+              <span v-else
+                >请选择 JSON 文件；如需手动粘贴，请打开高级配置。</span
+              >
+            </div>
             <p v-if="detectionSummary" class="workflow-json__detection">
               {{ detectionSummary }}
             </p>
@@ -539,27 +605,70 @@ async function submit() {
             <div class="workflow-section__header">
               <div>
                 <div class="workflow-section__title">
-                  开放参数
+                  创作参数
                   <span class="workflow-section__count">
-                    {{ form.inputBindings.length }} 项
+                    {{ creativeBindings.length }} 项
                   </span>
                 </div>
                 <div class="workflow-section__description">
-                  仅开放这里映射的参数，运行时不会接受任意节点修改
+                  保存后，这些参数会出现在 ComfyUI 创作表单中
                 </div>
               </div>
-              <Button :confirm="false" icon="Plus" @click="addBinding">
+              <Button
+                v-if="showAdvanced"
+                :confirm="false"
+                icon="Plus"
+                @click="addBinding"
+              >
                 添加参数
+              </Button>
+              <Button
+                v-else
+                :confirm="false"
+                icon="Setting"
+                @click="showAdvanced = true"
+              >
+                调整参数
               </Button>
             </div>
             <el-empty
-              v-if="!form.inputBindings.length"
+              v-if="!creativeBindings.length && !showAdvanced"
+              class="binding-editor__empty"
+              description="该工作流没有需要在创作时填写的参数"
+              :image-size="42"
+            />
+            <div v-else-if="!showAdvanced" class="binding-summary">
+              <div
+                v-for="binding in creativeBindings"
+                :key="`${binding.nodeId}:${binding.inputKey}`"
+                class="binding-summary__item"
+              >
+                <div class="binding-summary__content">
+                  <strong>{{ binding.label }}</strong>
+                  <span v-if="binding.hint">{{ binding.hint }}</span>
+                </div>
+                <div class="binding-summary__meta">
+                  <span>{{ optionLabel(bindingTypes, binding.type) }}</span>
+                  <span
+                    v-if="
+                      binding.semanticRole && binding.semanticRole !== 'normal'
+                    "
+                  >
+                    {{ optionLabel(semanticRoleOptions, binding.semanticRole) }}
+                  </span>
+                  <span>{{ binding.required ? "必填" : "可选" }}</span>
+                </div>
+              </div>
+            </div>
+            <el-empty
+              v-else-if="!form.inputBindings.length"
               class="binding-editor__empty"
               description="暂无开放参数，工作流将使用节点内的默认值"
               :image-size="42"
             />
             <div
               v-for="(binding, index) in form.inputBindings"
+              v-show="showAdvanced"
               :key="index"
               class="binding-row"
             >
@@ -650,15 +759,24 @@ async function submit() {
 <style scoped>
 .workflow-editor {
   width: 100%;
-  max-width: 1600px;
-  margin: 0 auto;
 }
 
 .workflow-editor__heading {
   display: flex;
   align-items: baseline;
+  justify-content: space-between;
   gap: var(--space-sm);
   margin-bottom: var(--space-md);
+}
+
+.workflow-editor__heading > div {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+}
+
+.workflow-editor__advanced-toggle {
+  flex-shrink: 0;
 }
 
 .workflow-editor__heading-title {
@@ -745,6 +863,46 @@ async function submit() {
   line-height: 1.5;
 }
 
+.workflow-json__summary {
+  display: grid;
+  grid-template-columns: 90px 110px minmax(180px, 1fr) 100px;
+  gap: var(--space-sm);
+}
+
+.workflow-json__summary.is-empty {
+  display: block;
+  padding: 18px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-container);
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.workflow-json__summary-item {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-container);
+}
+
+.workflow-json__summary-item strong {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-base);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workflow-json__summary-item span {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
 .binding-editor__empty {
   padding: 12px 0 4px;
 }
@@ -753,12 +911,66 @@ async function submit() {
   margin-top: var(--space-xs);
 }
 
+.binding-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-sm);
+}
+
+.binding-summary__item {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-container);
+}
+
+.binding-summary__content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.binding-summary__content strong,
+.binding-summary__content span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.binding-summary__content strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+}
+
+.binding-summary__content span {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.binding-summary__meta {
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
+}
+
+.binding-summary__meta span {
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  background: #ecf5ff;
+  color: var(--color-primary);
+  font-size: 11px;
+  line-height: 18px;
+}
+
 .binding-row {
   display: grid;
-  grid-template-columns:
-    minmax(140px, 0.9fr) minmax(120px, 0.9fr) minmax(132px, 0.75fr)
-    minmax(145px, 0.8fr) minmax(180px, 1.2fr) minmax(135px, 0.8fr)
-    minmax(140px, 0.9fr) 88px 80px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--space-sm);
   align-items: center;
   padding: 12px;
@@ -800,11 +1012,19 @@ async function submit() {
   .workflow-section {
     padding: 12px;
   }
-}
 
-@media (max-width: 1360px) {
-  .binding-row {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+  .workflow-editor__heading > div {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .workflow-editor__advanced-toggle {
+    margin-left: 0;
+  }
+
+  .workflow-json__summary,
+  .binding-summary {
+    grid-template-columns: 1fr;
   }
 }
 
