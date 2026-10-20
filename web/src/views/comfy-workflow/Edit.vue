@@ -8,6 +8,7 @@ import Input from "@/components/Input.vue";
 import InputNumber from "@/components/InputNumber.vue";
 import Select from "@/components/Select.vue";
 import Switch from "@/components/Switch.vue";
+import { detectComfyWorkflow, type ComfyApiNode } from "./workflowDetection";
 import {
   createComfyWorkflow,
   getComfyConnectionOptions,
@@ -20,11 +21,6 @@ import {
   type ComfyWorkflowForm,
 } from "@/api/comfyUi";
 
-type ApiNode = {
-  class_type: string;
-  inputs: Record<string, unknown>;
-  _meta?: { title?: string };
-};
 type EditorBinding = Omit<ComfyInputBinding, "defaultValue"> & {
   defaultValue: string;
   optionsText: string;
@@ -44,6 +40,7 @@ const connections = ref<
   Pick<ComfyConnection, "id" | "name" | "isDefault" | "lastTestStatus">[]
 >([]);
 const fileInput = ref<HTMLInputElement>();
+const detectionSummary = ref("");
 const form = reactive<EditorForm>({
   name: "",
   connectionId: 0,
@@ -58,15 +55,27 @@ const form = reactive<EditorForm>({
   isEnabled: true,
 });
 
-const graph = computed<Record<string, ApiNode> | null>(() => {
+const graph = computed<Record<string, ComfyApiNode> | null>(() => {
   try {
-    const value = JSON.parse(form.apiWorkflow || "{}") as Record<
-      string,
-      ApiNode
-    >;
-    return value && typeof value === "object" && Object.keys(value).length
-      ? value
-      : null;
+    const value = JSON.parse(form.apiWorkflow || "{}") as unknown;
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      return null;
+    const entries = Object.entries(value);
+    if (
+      !entries.length ||
+      entries.some(
+        ([, node]) =>
+          !node ||
+          typeof node !== "object" ||
+          typeof (node as Partial<ComfyApiNode>).class_type !== "string" ||
+          !(node as Partial<ComfyApiNode>).inputs ||
+          typeof (node as Partial<ComfyApiNode>).inputs !== "object" ||
+          Array.isArray((node as Partial<ComfyApiNode>).inputs),
+      )
+    ) {
+      return null;
+    }
+    return value as Record<string, ComfyApiNode>;
   } catch {
     return null;
   }
@@ -205,6 +214,7 @@ function reset() {
     isPublished: false,
     isEnabled: true,
   });
+  detectionSummary.value = "";
 }
 watch(visible, async (open) => {
   if (!open) return;
@@ -273,27 +283,95 @@ function handleBindingTypeChange(binding: EditorBinding) {
     binding.semanticRole = "normal";
   }
 }
-async function importFile(event: Event) {
-  const file = (event.target as HTMLInputElement).files?.[0];
-  if (!file) return;
-  if (file.size > 2 * 1024 * 1024) {
-    ElMessage.error("工作流 JSON 不能超过 2MB");
-    return;
-  }
-  form.apiWorkflow = await file.text();
+function uniqueEditorKey(baseKey: string) {
+  const used = new Set(form.inputBindings.map((binding) => binding.key));
+  if (!used.has(baseKey)) return baseKey;
+  let suffix = 2;
+  while (used.has(`${baseKey}${suffix}`)) suffix += 1;
+  return `${baseKey}${suffix}`;
+}
+function applyWorkflowDetection(fileName = "") {
   const nodes = graph.value;
   if (!nodes) {
-    ElMessage.error("文件不是有效的 ComfyUI API 工作流 JSON");
+    ElMessage.error("请先导入有效的 ComfyUI API 工作流 JSON");
     return;
   }
-  const outputIds = Object.entries(nodes)
-    .filter(([, node]) =>
-      /save(image|video|animated|webm|gif)/i.test(node.class_type),
-    )
-    .map(([id]) => id);
-  if (!form.outputNodeIdsText) form.outputNodeIdsText = outputIds.join(",");
-  ElMessage.success(`已识别 ${Object.keys(nodes).length} 个节点`);
-  (event.target as HTMLInputElement).value = "";
+  const detected = detectComfyWorkflow(nodes, fileName);
+  const filled: string[] = [];
+  if (!form.name.trim() && detected.suggestedName) {
+    form.name = detected.suggestedName;
+    filled.push("模板名称");
+  }
+  if (detected.outputType && form.outputType !== detected.outputType) {
+    form.outputType = detected.outputType;
+    filled.push("输出类型");
+  }
+  if (!(form.targetModel || "").trim() && detected.targetModel) {
+    form.targetModel = detected.targetModel;
+    filled.push("目标模型");
+  }
+  if (!(form.dependencyNotes || "").trim() && detected.dependencyNotes) {
+    form.dependencyNotes = detected.dependencyNotes;
+    filled.push("模型依赖");
+  }
+  if (!form.outputNodeIdsText.trim() && detected.outputNodeIds.length) {
+    form.outputNodeIdsText = detected.outputNodeIds.join(",");
+    filled.push("输出节点");
+  }
+
+  let addedBindings = 0;
+  for (const binding of detected.bindings) {
+    const alreadyMapped = form.inputBindings.some(
+      (item) =>
+        (item.nodeId === binding.nodeId &&
+          item.inputKey === binding.inputKey) ||
+        (binding.semanticRole !== "normal" &&
+          item.semanticRole === binding.semanticRole),
+    );
+    if (alreadyMapped) continue;
+    form.inputBindings.push({
+      ...binding,
+      key: uniqueEditorKey(binding.key),
+      defaultValue:
+        binding.defaultValue === null || binding.defaultValue === undefined
+          ? ""
+          : String(binding.defaultValue),
+      optionsText: "",
+    });
+    addedBindings += 1;
+  }
+  if (addedBindings) filled.push(`${addedBindings} 个开放参数`);
+
+  const modelText = detected.targetModel
+    ? ` · ${detected.targetModel}`
+    : " · 未识别主模型";
+  detectionSummary.value = `自动识别：${Object.keys(nodes).length} 个节点${modelText} · 新增 ${addedBindings} 个参数`;
+  if (filled.length) {
+    ElMessage.success(`已自动补充：${filled.join("、")}`);
+  } else {
+    ElMessage.info("未发现新的可补充字段，已有配置保持不变");
+  }
+}
+async function importFile(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
+  try {
+    if (file.size > 2 * 1024 * 1024) {
+      ElMessage.error("工作流 JSON 不能超过 2MB");
+      return;
+    }
+    form.apiWorkflow = await file.text();
+    if (!graph.value) {
+      ElMessage.error("文件不是有效的 ComfyUI API 工作流 JSON");
+      return;
+    }
+    applyWorkflowDetection(file.name);
+  } catch {
+    ElMessage.error("工作流 JSON 文件读取失败，请重新选择");
+  } finally {
+    input.value = "";
+  }
 }
 function bindingOptions(text: string) {
   return text
@@ -319,6 +397,16 @@ async function submit() {
     ElMessage.error("请完整填写参数名称、节点和输入字段");
     return;
   }
+  const invalidNumericDefault = form.inputBindings.find(
+    (binding) =>
+      ["number", "seed"].includes(binding.type) &&
+      binding.defaultValue.trim() &&
+      !Number.isFinite(Number(binding.defaultValue)),
+  );
+  if (invalidNumericDefault) {
+    ElMessage.error(`${invalidNumericDefault.label} 的默认值必须是数字`);
+    return;
+  }
   const payload: ComfyWorkflowForm = {
     name: form.name,
     connectionId: Number(form.connectionId),
@@ -326,12 +414,19 @@ async function submit() {
     targetModel: form.targetModel,
     description: form.description,
     apiWorkflow: form.apiWorkflow,
-    inputBindings: form.inputBindings.map(({ optionsText, ...binding }) => ({
-      ...binding,
-      type: binding.type as ComfyBindingType,
-      options:
-        binding.type === "select" ? bindingOptions(optionsText) : undefined,
-    })),
+    inputBindings: form.inputBindings.map(({ optionsText, ...binding }) => {
+      const numericDefault = ["number", "seed"].includes(binding.type);
+      return {
+        ...binding,
+        type: binding.type as ComfyBindingType,
+        defaultValue:
+          numericDefault && binding.defaultValue.trim()
+            ? Number(binding.defaultValue)
+            : binding.defaultValue,
+        options:
+          binding.type === "select" ? bindingOptions(optionsText) : undefined,
+      };
+    }),
     outputNodeIds: form.outputNodeIdsText
       .split(",")
       .map((item) => item.trim())
@@ -406,6 +501,13 @@ async function submit() {
                 </span>
                 <Button
                   :confirm="false"
+                  icon="MagicStick"
+                  :disabled="!graph"
+                  @click="applyWorkflowDetection()"
+                  >自动识别</Button
+                >
+                <Button
+                  :confirm="false"
                   icon="Upload"
                   @click="fileInput?.click()"
                   >选择 JSON 文件</Button
@@ -427,6 +529,9 @@ async function submit() {
               :clearable="false"
               placeholder="粘贴或导入 ComfyUI API 工作流 JSON"
             />
+            <p v-if="detectionSummary" class="workflow-json__detection">
+              {{ detectionSummary }}
+            </p>
           </section>
         </template>
         <template #field-inputBindings>
@@ -629,6 +734,13 @@ async function submit() {
 
 .workflow-json__status.is-ready {
   color: var(--color-success);
+}
+
+.workflow-json__detection {
+  margin: var(--space-sm) 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
 }
 
 .binding-editor__empty {
