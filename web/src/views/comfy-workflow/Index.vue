@@ -26,7 +26,7 @@ const columns: TableColumn[] = [
   { prop: "targetModel", label: "目标模型", minWidth: 160 },
   { prop: "bindingCount", label: "开放参数", width: 100, slot: true },
   { prop: "version", label: "版本", width: 80, slot: true },
-  { prop: "isPublished", label: "发布状态", width: 110, slot: true },
+  { prop: "isEnabled", label: "使用状态", width: 100, slot: true },
   { prop: "updatedAt", label: "更新时间", width: 180, slot: true },
 ];
 const searchFields: FormField[] = [
@@ -94,15 +94,9 @@ function openEdit(row: ComfyWorkflow) {
         >{{ row.bindingCount ?? row.inputBindings.length }} 个</template
       >
       <template #column-version="{ row }">v{{ row.version }}</template>
-      <template #column-isPublished="{ row }">
-        <el-tag :type="row.isPublished && row.isEnabled ? 'success' : 'info'">
-          {{
-            row.isPublished && row.isEnabled
-              ? "可使用"
-              : row.isPublished
-                ? "已停用"
-                : "草稿"
-          }}
+      <template #column-isEnabled="{ row }">
+        <el-tag :type="row.isEnabled ? 'success' : 'info'">
+          {{ row.isEnabled ? "可使用" : "已停用" }}
         </el-tag>
       </template>
       <template #column-updatedAt="{ row }">{{

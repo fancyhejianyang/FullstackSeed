@@ -50,6 +50,6 @@ export class ComfyWorkflow extends BaseEntity {
   outputNodeIds: string[] | null;
   @Column({ type: 'text', nullable: true }) dependencyNotes: string | null;
   @Column({ type: 'int', default: 1 }) version: number;
-  @Column({ type: 'boolean', default: false }) isPublished: boolean;
+  @Column({ type: 'boolean', default: true }) isPublished: boolean;
   @Column({ type: 'boolean', default: true }) isEnabled: boolean;
 }

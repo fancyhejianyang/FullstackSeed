@@ -52,7 +52,6 @@ const form = reactive<EditorForm>({
   inputBindings: [],
   outputNodeIdsText: "",
   dependencyNotes: "",
-  isPublished: false,
   isEnabled: true,
 });
 
@@ -164,20 +163,12 @@ const fields = computed<FormField[]>(() => {
       },
     );
   }
-  result.push(
-    {
-      prop: "isPublished",
-      label: "发布状态",
-      component: "Switch",
-      componentProps: { activeText: "已发布", inactiveText: "草稿" },
-    },
-    {
-      prop: "isEnabled",
-      label: "是否启用",
-      component: "Switch",
-      componentProps: { activeText: "启用", inactiveText: "停用" },
-    },
-  );
+  result.push({
+    prop: "isEnabled",
+    label: "是否启用",
+    component: "Switch",
+    componentProps: { activeText: "启用", inactiveText: "停用" },
+  });
   return result;
 });
 const rules: FormRules = {
@@ -230,7 +221,6 @@ function reset() {
     inputBindings: [],
     outputNodeIdsText: "",
     dependencyNotes: "",
-    isPublished: false,
     isEnabled: true,
   });
   detectionSummary.value = "";
@@ -264,7 +254,6 @@ watch(visible, async (open) => {
       })),
       outputNodeIdsText: (detail.outputNodeIds || []).join(","),
       dependencyNotes: detail.dependencyNotes || "",
-      isPublished: detail.isPublished,
       isEnabled: detail.isEnabled,
     });
   } finally {
@@ -452,7 +441,6 @@ async function submit() {
       .map((item) => item.trim())
       .filter(Boolean),
     dependencyNotes: form.dependencyNotes,
-    isPublished: form.isPublished,
     isEnabled: form.isEnabled,
   };
   submitting.value = true;
@@ -483,7 +471,7 @@ async function submit() {
         <div>
           <span class="workflow-editor__heading-title">基础信息</span>
           <span class="workflow-editor__heading-description">
-            导入并保存工作流，发布后即可在 ComfyUI 创作中调用
+            导入并保存工作流，启用后即可在 ComfyUI 创作中调用
           </span>
         </div>
         <Button

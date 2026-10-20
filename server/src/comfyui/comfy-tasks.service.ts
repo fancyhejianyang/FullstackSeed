@@ -121,7 +121,7 @@ export class ComfyTasksService implements OnModuleInit, OnModuleDestroy {
     const requestId = dto.requestId?.trim() || randomUUID();
     const existing = await this.tasks.findOne({ where: { userId, requestId } });
     if (existing) return existing;
-    const { workflow, version } = await this.workflows.getPublishedVersion(
+    const { workflow, version } = await this.workflows.getRunnableVersion(
       dto.workflowId,
     );
     const connection = await this.connections.getWithSecret(

@@ -154,7 +154,7 @@ async function load() {
 }
 async function submit() {
   if (!current.value) {
-    ElMessage.warning("请选择已发布的工作流");
+    ElMessage.warning("请选择可用的工作流");
     return;
   }
   const missing = current.value.inputBindings.find(
@@ -209,7 +209,7 @@ onMounted(load);
             <div>
               <h3>还没有可用于创作的工作流</h3>
               <p>
-                完成服务连接并发布一个 API 工作流后，就可以在这里提交生成任务。
+                完成服务连接并保存一个 API 工作流后，就可以在这里提交生成任务。
               </p>
             </div>
           </div>
@@ -224,7 +224,7 @@ onMounted(load);
             <div class="setup-step">
               <span>2</span>
               <div>
-                <strong>导入并发布工作流</strong>
+                <strong>导入并保存工作流</strong>
                 <p>从 ComfyUI 导出 API JSON，配置开放参数</p>
               </div>
             </div>
@@ -260,7 +260,7 @@ onMounted(load);
             <div class="panel-heading">
               <div>
                 <h3>工作流模板</h3>
-                <p>选择一个已发布模板</p>
+                <p>选择一个可用模板</p>
               </div>
               <span>{{ workflows.length }}</span>
             </div>

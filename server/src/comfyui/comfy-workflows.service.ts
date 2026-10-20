@@ -99,7 +99,7 @@ export class ComfyWorkflowsService {
     });
     const connectionIds = new Set(connections.map((item) => item.id));
     const workflows = await this.workflows.find({
-      where: { isEnabled: true, isPublished: true },
+      where: { isEnabled: true },
       order: { id: 'DESC' },
     });
     return workflows
@@ -140,6 +140,7 @@ export class ComfyWorkflowsService {
           outputNodeIds,
           dependencyNotes: dto.dependencyNotes?.trim() || null,
           version: 1,
+          isPublished: true,
         }),
       );
       await this.saveVersion(
@@ -186,6 +187,7 @@ export class ComfyWorkflowsService {
             ? { dependencyNotes: dto.dependencyNotes.trim() || null }
             : {}),
           version: current.version + 1,
+          isPublished: true,
         });
         const saved = await manager.getRepository(ComfyWorkflow).save(current);
         await this.saveVersion(
@@ -216,10 +218,10 @@ export class ComfyWorkflowsService {
     return { ids: uniqueIds };
   }
 
-  async getPublishedVersion(workflowId: number) {
+  async getRunnableVersion(workflowId: number) {
     const workflow = await this.findOne(workflowId);
-    if (!workflow.isEnabled || !workflow.isPublished) {
-      throw new BadRequestException('工作流未启用或尚未发布');
+    if (!workflow.isEnabled) {
+      throw new BadRequestException('工作流已停用');
     }
     const version = await this.versions.findOne({
       where: { workflowId, version: workflow.version },

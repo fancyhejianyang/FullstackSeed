@@ -1,5 +1,30 @@
 # CHANGELOG
 
+### 2026-10-20 取消 ComfyUI 工作流草稿状态
+
+- ComfyUI 工作流保存后只要处于启用状态且执行服务可用，即可直接用于创作；不再区分草稿与已发布，也不因工作流来自本机或云端而增加发布步骤。
+- 工作流编辑弹窗移除发布开关，列表将发布状态简化为“可使用 / 已停用”；创作页的空状态、选择提示和引导文案统一改为保存后使用。
+- 后端创作选项与任务提交只校验启用状态；历史数据即使 `isPublished=false` 也能直接使用，新建和编辑时仍写入兼容值 `true`，避免立即删除旧字段造成数据库升级风险。
+- 新增旧草稿可选与任务可执行回归测试；验证 2 套 / 8 项 ComfyUI 工作流定向测试、TypeORM 实体检查、后端定向 ESLint、Vue 类型检查、目标页面组件复用扫描和改动文件格式检查通过。本次为既有交互简化，按规则未执行生产构建或启动服务。
+
+新增文件：无。
+
+修改文件（11）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/comfyui/comfy-tasks.service.ts`
+- `server/src/comfyui/comfy-workflows.service.spec.ts`
+- `server/src/comfyui/comfy-workflows.service.ts`
+- `server/src/comfyui/dto/comfyui.dto.ts`
+- `server/src/comfyui/entities/comfy-workflow.entity.ts`
+- `web/src/api/comfyUi.ts`
+- `web/src/views/comfy-create/Index.vue`
+- `web/src/views/comfy-workflow/Edit.vue`
+- `web/src/views/comfy-workflow/Index.vue`
+
+删除文件：无。
+
 ### 2026-10-20 修复 ComfyUI 工作流版本缺少 JSON
 
 - 修复导入或编辑 ComfyUI 工作流时，主记录保存后因 `apiWorkflow` 为隐藏查询列、ORM 返回对象未携带该字段，导致版本快照插入报 `Field 'apiWorkflow' doesn't have a default value` 的问题。

@@ -143,10 +143,12 @@ describe('ComfyUI 工作流版本快照保存', () => {
       }),
       inputBindings: [],
       outputNodeIds: ['1'],
-      isPublished: true,
       isEnabled: true,
     });
 
+    expect(workflowRepository.create.mock.calls[0]?.[0]).toMatchObject({
+      isPublished: true,
+    });
     expect(manager.getRepository).toHaveBeenCalledWith(ComfyWorkflowVersion);
     const versionValue = versionRepository.create.mock.calls[0]?.[0];
     expect(versionValue).toMatchObject({
@@ -155,5 +157,63 @@ describe('ComfyUI 工作流版本快照保存', () => {
       outputNodeIds: ['1'],
     });
     expect(versionValue?.apiWorkflow).toContain('SaveImage');
+  });
+});
+
+describe('ComfyUI 工作流可用状态', () => {
+  it('保存过但处于旧草稿状态的工作流也会出现在创作选项中', async () => {
+    const workflows = {
+      find: jest.fn().mockResolvedValue([
+        {
+          id: 1,
+          name: '本机工作流',
+          connectionId: 2,
+          outputType: 'image',
+          targetModel: null,
+          description: null,
+          version: 1,
+          inputBindings: [],
+          isEnabled: true,
+          isPublished: false,
+        },
+      ]),
+    };
+    const service = new ComfyWorkflowsService(
+      workflows as never,
+      {} as never,
+      { find: jest.fn().mockResolvedValue([{ id: 2 }]) } as never,
+      {} as never,
+    );
+
+    const options = await service.options();
+    expect(options).toHaveLength(1);
+    expect(options[0]?.id).toBe(1);
+    expect(options[0]?.name).toBe('本机工作流');
+    expect(workflows.find).toHaveBeenCalledWith({
+      where: { isEnabled: true },
+      order: { id: 'DESC' },
+    });
+  });
+
+  it('任务执行只校验工作流是否启用', async () => {
+    const versions = {
+      findOne: jest.fn().mockResolvedValue({ id: 3, workflowId: 1 }),
+    };
+    const service = new ComfyWorkflowsService(
+      {} as never,
+      versions as never,
+      {} as never,
+      {} as never,
+    );
+    jest.spyOn(service, 'findOne').mockResolvedValue({
+      id: 1,
+      version: 2,
+      isEnabled: true,
+      isPublished: false,
+    } as ComfyWorkflow);
+
+    const result = await service.getRunnableVersion(1);
+    expect(result.workflow.id).toBe(1);
+    expect(result.version.id).toBe(3);
   });
 });

@@ -97,6 +97,7 @@ export type ComfyWorkflowForm = Omit<
   | "id"
   | "connectionName"
   | "bindingCount"
+  | "isPublished"
   | "version"
   | "createdAt"
   | "updatedAt"
