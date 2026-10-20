@@ -42,6 +42,7 @@ test('installed ECharts renders all registered chart shapes', () => {
     'catalog.distribution',
     'customer.taskTrend',
     'content.generationTrend',
+    'generation.health',
     'knowledge.health',
   ]) {
     const data = previewWidget({
@@ -100,6 +101,10 @@ test('catalog is horizontal, customer statuses stack, knowledge uses a donut', (
     dashboardChart('customer.taskTrend', data).series[0].stack,
     'tasks',
   );
+  assert.equal(
+    dashboardChart('generation.health', data).series[0].stack,
+    'tasks',
+  );
   assert.equal(dashboardChart('knowledge.health', data).series[0].type, 'pie');
 });
 test('static previews honor metric, period and visibility parameters', () => {
@@ -145,6 +150,9 @@ test('every selectable quick action has a preview without navigating', () => {
     'articles',
     'contentGeneration',
     'materials',
+    'comfyCreate',
+    'comfyMaterials',
+    'comfyTasks',
   ];
   for (const key of keys) {
     const items = previewWidget(widget('quick.actions', { links: [key] })).data

@@ -25,6 +25,14 @@ describe('dashboard registry boundary', () => {
   it('accepts every built-in widget and does not share mutable defaults', () => {
     const first = defaultWidgets();
     expect(validateWidgets(first)).toEqual(first);
+    expect(first).toHaveLength(12);
+    expect(
+      first
+        .filter((widget) =>
+          ['generation.health', 'creation.recent'].includes(widget.widgetKey),
+        )
+        .every((widget) => widget.enabled === false),
+    ).toBe(true);
     (first[0].params.metrics as string[]).push('invalid');
     expect(() => validateWidgets(defaultWidgets())).not.toThrow();
   });

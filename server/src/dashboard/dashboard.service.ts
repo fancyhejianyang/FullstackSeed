@@ -14,6 +14,8 @@ import { ContentArticle } from '../content-articles/entities/content-article.ent
 import { ContentGenerationTask } from '../content-articles/entities/content-generation-task.entity';
 import { AiMaterial } from '../ai-materials/entities/ai-material.entity';
 import { MaterialGenerationTask } from '../ai-materials/entities/material-generation-task.entity';
+import { ComfyTask } from '../comfyui/entities/comfy-task.entity';
+import { ComfyMaterial } from '../comfyui/entities/comfy-material.entity';
 import { DashboardConfigService } from './dashboard-config.service';
 import {
   DASHBOARD_LINKS,
@@ -33,6 +35,17 @@ import type { QueryDashboardDto } from './dto/dashboard.dto';
 
 const n = (value: unknown) => Number(value ?? 0);
 const EXEC_PATH = '/agent-management/executions';
+type GenerationSource = 'content' | 'aiMaterial' | 'comfyui';
+type GenerationMediaType = 'article' | 'image' | 'video';
+interface GenerationAggregateRow {
+  source: GenerationSource;
+  mediaType: GenerationMediaType;
+  date: string;
+  status: string;
+  count: number;
+  durationSeconds: number;
+  durationCoverage: number;
+}
 export function shanghaiRange(days: number, now = new Date()) {
   const endDay = new Date(now.getTime() + 480 * 60000)
     .toISOString()
@@ -153,6 +166,30 @@ export class DashboardService {
               user,
               Number(w.params.days),
               now,
+              {
+                viewMode: String(w.params.viewMode),
+                source: String(w.params.source),
+                mediaType: String(w.params.mediaType),
+              },
+            );
+            break;
+          case 'generation.health':
+            data = await this.generationHealth(
+              user,
+              Number(w.params.days),
+              now,
+              {
+                source: String(w.params.source),
+                mediaType: String(w.params.mediaType),
+              },
+            );
+            break;
+          case 'creation.recent':
+            data = await this.recentCreations(
+              user,
+              String(w.params.source),
+              String(w.params.mediaType),
+              Number(w.params.limit),
             );
             break;
           case 'knowledge.health':
@@ -292,6 +329,7 @@ export class DashboardService {
     }
     const contentAccess = allowed(user, 'ContentArticle.read');
     const materialAccess = allowed(user, 'AiMaterial.read');
+    const comfyTaskAccess = allowed(user, 'ComfyTask.read');
     if (!all && contentAccess && need('contentTotal')) {
       metrics.push({
         key: 'contentTotal',
@@ -305,18 +343,32 @@ export class DashboardService {
       });
     }
     if (!all && materialAccess && need('materialTotal')) {
+      const materials = await this.query(AiMaterial)
+        .select('COUNT(*)', 'total')
+        .addSelect(
+          "SUM(COALESCE(r.currentMediaType, r.mediaType) = 'image')",
+          'images',
+        )
+        .addSelect(
+          "SUM(COALESCE(r.currentMediaType, r.mediaType) = 'video')",
+          'videos',
+        )
+        .where('r.userId = :userId', { userId: user.userId })
+        .getRawOne<{ total: string; images: string; videos: string }>();
       metrics.push({
         key: 'materialTotal',
         label: 'AI 素材数',
-        value: await this.query(AiMaterial)
-          .where('r.userId = :userId', { userId: user.userId })
-          .getCount(),
+        value: n(materials?.total),
         unit: '份',
-        hint: '仅当前用户',
+        hint: `图片 ${n(materials?.images)} · 视频 ${n(materials?.videos)}`,
         path: '/ai-materials',
       });
     }
-    if (!all && (contentAccess || materialAccess) && need('generationTotal')) {
+    if (
+      !all &&
+      (contentAccess || materialAccess || comfyTaskAccess) &&
+      need('generationTotal')
+    ) {
       const articleTasks = contentAccess
         ? await this.query(ContentGenerationTask)
             .where('r.userId = :userId', { userId: user.userId })
@@ -327,16 +379,27 @@ export class DashboardService {
             .where('r.userId = :userId', { userId: user.userId })
             .getCount()
         : 0;
+      const comfyTasks = comfyTaskAccess
+        ? await this.query(ComfyTask)
+            .where('r.userId = :userId', { userId: user.userId })
+            .getCount()
+        : 0;
+      const hints = [
+        contentAccess ? '文章 ' + articleTasks : '',
+        materialAccess ? '云端素材 ' + materialTasks : '',
+        comfyTaskAccess ? 'ComfyUI ' + comfyTasks : '',
+      ].filter(Boolean);
       metrics.push({
         key: 'generationTotal',
         label: '生成记录数',
-        value: articleTasks + materialTasks,
+        value: articleTasks + materialTasks + comfyTasks,
         unit: '次',
-        hint:
-          (contentAccess ? '文章 ' + articleTasks : '') +
-          (contentAccess && materialAccess ? ' · ' : '') +
-          (materialAccess ? '素材 ' + materialTasks : ''),
-        path: contentAccess ? '/content-generation' : '/ai-materials',
+        hint: hints.join(' · '),
+        path: contentAccess
+          ? '/content-generation'
+          : materialAccess
+            ? '/ai-materials'
+            : '/comfyui/tasks',
       });
     }
     if (all && allowed(user, 'KnowledgeBase.read')) {
@@ -557,82 +620,93 @@ export class DashboardService {
     user: AuthUser,
     days: number,
     now: Date,
+    options: {
+      viewMode?: string;
+      source?: string;
+      mediaType?: string;
+    } = {},
   ): Promise<WidgetData> {
     const range = shanghaiRange(days, now);
-    const contentAccess = allowed(user, 'ContentArticle.read');
-    const materialAccess = allowed(user, 'AiMaterial.read');
-    const rows: Array<{
-      source: 'content' | 'material';
-      date: string;
-      status: string;
-      count: string;
-    }> = [];
-    const load = async (
-      entity: EntityTarget<ObjectLiteral>,
-      source: 'content' | 'material',
-    ) => {
-      const day = this.dayExpression('r');
-      const result = await this.query(entity)
-        .select(day, 'date')
-        .addSelect('r.status', 'status')
-        .addSelect('COUNT(*)', 'count')
-        .where('r.userId = :userId', { userId: user.userId })
-        .andWhere(
-          'r.createdAt >= FROM_UNIXTIME(:startEpoch) AND r.createdAt <= FROM_UNIXTIME(:endEpoch)',
-          {
-            startEpoch: range.start.getTime() / 1000,
-            endEpoch: range.end.getTime() / 1000,
-          },
-        )
-        .groupBy(day)
-        .addGroupBy('r.status')
-        .getRawMany<{ date: string; status: string; count: string }>();
-      rows.push(...result.map((row) => ({ ...row, source })));
-    };
-    if (contentAccess) await load(ContentGenerationTask, 'content');
-    if (materialAccess) await load(MaterialGenerationTask, 'material');
-    const count = (source: 'content' | 'material', date?: string) =>
+    const rows = this.filterGenerationRows(
+      await this.generationRows(user, range),
+      options.source,
+      options.mediaType,
+    );
+    const count = (
+      predicate: (row: GenerationAggregateRow) => boolean,
+      date?: string,
+    ) =>
       rows
-        .filter((row) => row.source === source && (!date || row.date === date))
-        .reduce((total, row) => total + n(row.count), 0);
+        .filter((row) => predicate(row) && (!date || row.date === date))
+        .reduce((total, row) => total + row.count, 0);
     const successStatuses = new Set(['succeeded', 'adopted']);
     const terminalStatuses = new Set([
       'succeeded',
       'adopted',
       'failed',
       'interrupted',
+      'cancelled',
       'unknown',
     ]);
     const waitingStatuses = new Set([
       'pending',
+      'submitting',
+      'queued',
       'running',
       'storing',
+      'archiving',
       'needs_input',
     ]);
     const succeeded = rows
       .filter((row) => successStatuses.has(row.status))
-      .reduce((total, row) => total + n(row.count), 0);
+      .reduce((total, row) => total + row.count, 0);
     const terminal = rows
       .filter((row) => terminalStatuses.has(row.status))
-      .reduce((total, row) => total + n(row.count), 0);
+      .reduce((total, row) => total + row.count, 0);
     const waiting = rows
       .filter((row) => waitingStatuses.has(row.status))
-      .reduce((total, row) => total + n(row.count), 0);
-    const articleTasks = count('content');
-    const materialTasks = count('material');
-    const series = [];
-    if (contentAccess)
-      series.push({
-        name: '文章生成',
-        values: range.dates.map((date) => count('content', date)),
+      .reduce((total, row) => total + row.count, 0);
+    const sourceSeries: Array<{
+      key: GenerationSource;
+      name: string;
+    }> = [
+      { key: 'content', name: '文章创作' },
+      { key: 'aiMaterial', name: '云端 AI 素材' },
+      { key: 'comfyui', name: 'ComfyUI' },
+    ];
+    const mediaSeries: Array<{
+      key: GenerationMediaType;
+      name: string;
+    }> = [
+      { key: 'article', name: '文章' },
+      { key: 'image', name: '图片' },
+      { key: 'video', name: '视频' },
+    ];
+    const dimensions =
+      options.viewMode === 'mediaType' ? mediaSeries : sourceSeries;
+    const series = dimensions
+      .filter(({ key }) =>
+        rows.some((row) =>
+          options.viewMode === 'mediaType'
+            ? row.mediaType === key
+            : row.source === key,
+        ),
+      )
+      .map(({ key, name }) => ({
+        name,
+        values: range.dates.map((date) =>
+          count(
+            (row) =>
+              (options.viewMode === 'mediaType'
+                ? row.mediaType
+                : row.source) === key,
+            date,
+          ),
+        ),
         kind: 'bar' as const,
-      });
-    if (materialAccess)
-      series.push({
-        name: '素材生成',
-        values: range.dates.map((date) => count('material', date)),
-        kind: 'bar' as const,
-      });
+      }));
+    const total = rows.reduce((sum, row) => sum + row.count, 0);
+    const path = this.generationPath(options.source, user);
     return {
       labels: range.dates,
       series,
@@ -640,10 +714,10 @@ export class DashboardService {
         {
           key: 'generationTotal',
           label: '生成记录',
-          value: articleTasks + materialTasks,
+          value: total,
           unit: '次',
           hint: `${days} 天内`,
-          path: contentAccess ? '/content-generation' : '/ai-materials',
+          path,
         },
         {
           key: 'generationRate',
@@ -657,11 +731,356 @@ export class DashboardService {
           label: '待处理任务',
           value: waiting,
           unit: '个',
-          hint: '含待补充素材',
+          hint: '含排队、存储与待补充任务',
         },
       ],
-      note: '仅统计当前用户按任务创建日产生的记录；成功率不包含运行中、排队中、存储中和待补充任务。',
+      note: '仅统计当前用户按任务创建日产生的记录；成功率不包含运行中、排队中、存储中和待补充任务。筛选只影响本板块。',
     };
+  }
+  async generationHealth(
+    user: AuthUser,
+    days: number,
+    now: Date,
+    options: { source?: string; mediaType?: string } = {},
+  ): Promise<WidgetData> {
+    const range = shanghaiRange(days, now);
+    const rows = this.filterGenerationRows(
+      await this.generationRows(user, range),
+      options.source,
+      options.mediaType,
+    );
+    const buckets = [
+      {
+        label: '等待',
+        statuses: new Set(['pending', 'submitting', 'queued']),
+      },
+      { label: '运行', statuses: new Set(['running']) },
+      { label: '存储 / 归档', statuses: new Set(['storing', 'archiving']) },
+      { label: '待补充', statuses: new Set(['needs_input']) },
+      { label: '成功', statuses: new Set(['succeeded', 'adopted']) },
+      {
+        label: '失败 / 中断',
+        statuses: new Set(['failed', 'interrupted', 'cancelled']),
+      },
+      { label: '未识别', statuses: new Set(['unknown']) },
+    ];
+    const known = new Set(buckets.flatMap((bucket) => [...bucket.statuses]));
+    const sources: Array<{ key: GenerationSource; name: string }> = [
+      { key: 'content', name: '文章创作' },
+      { key: 'aiMaterial', name: '云端 AI 素材' },
+      { key: 'comfyui', name: 'ComfyUI' },
+    ];
+    const bucketCount = (source: GenerationSource, index: number) =>
+      rows
+        .filter(
+          (row) =>
+            row.source === source &&
+            (index === buckets.length - 1
+              ? buckets[index].statuses.has(row.status) ||
+                !known.has(row.status)
+              : buckets[index].statuses.has(row.status)),
+        )
+        .reduce((sum, row) => sum + row.count, 0);
+    const series = sources
+      .filter(({ key }) => rows.some((row) => row.source === key))
+      .map(({ key, name }) => ({
+        name,
+        values: buckets.map((_, index) => bucketCount(key, index)),
+        kind: 'bar' as const,
+      }));
+    const activeStatuses = new Set([
+      'pending',
+      'submitting',
+      'queued',
+      'running',
+      'storing',
+      'archiving',
+    ]);
+    const successStatuses = new Set(['succeeded', 'adopted']);
+    const failedStatuses = new Set([
+      'failed',
+      'interrupted',
+      'cancelled',
+      'unknown',
+    ]);
+    const sumStatuses = (statuses: Set<string>) =>
+      rows
+        .filter((row) => statuses.has(row.status))
+        .reduce((sum, row) => sum + row.count, 0);
+    const active = sumStatuses(activeStatuses);
+    const succeeded = sumStatuses(successStatuses);
+    const failed =
+      sumStatuses(failedStatuses) +
+      rows
+        .filter((row) => !known.has(row.status))
+        .reduce((sum, row) => sum + row.count, 0);
+    const durationSeconds = rows.reduce(
+      (sum, row) => sum + row.durationSeconds,
+      0,
+    );
+    const durationCoverage = rows.reduce(
+      (sum, row) => sum + row.durationCoverage,
+      0,
+    );
+    return {
+      labels: buckets.map((bucket) => bucket.label),
+      series,
+      metrics: [
+        {
+          key: 'activeGeneration',
+          label: '处理中',
+          value: active,
+          unit: '个',
+          hint: '等待、运行、存储或归档',
+          path: this.generationPath(options.source, user),
+        },
+        {
+          key: 'failedGeneration',
+          label: '失败与异常',
+          value: failed,
+          unit: '个',
+          hint: `${days} 天内`,
+        },
+        {
+          key: 'generationRate',
+          label: '终态成功率',
+          value: successRate(succeeded, failed),
+          unit: '%',
+          hint: `成功 ${succeeded} · 失败 ${failed}`,
+        },
+        {
+          key: 'generationDuration',
+          label: '平均任务耗时',
+          value: durationCoverage
+            ? Math.round((durationSeconds / durationCoverage) * 10) / 10
+            : null,
+          unit: '秒',
+          hint: `已记录 ${durationCoverage} 个终态任务`,
+        },
+      ],
+      note: `按近 ${days} 天创建的任务统计当前状态；耗时仅计算同时记录开始与完成时间的任务。`,
+    };
+  }
+  async recentCreations(
+    user: AuthUser,
+    source = 'all',
+    mediaType = 'all',
+    limit = 8,
+  ): Promise<WidgetData> {
+    const items: NonNullable<WidgetData['items']> = [];
+    const accepts = (expectedSource: string, expectedMedia: string) =>
+      (source === 'all' || source === expectedSource) &&
+      (mediaType === 'all' || mediaType === expectedMedia);
+    if (allowed(user, 'ContentArticle.read') && accepts('content', 'article')) {
+      const articles = await this.query(ContentArticle)
+        .select('r.id', 'id')
+        .addSelect('r.title', 'title')
+        .addSelect('r.coverUrl', 'thumbnailUrl')
+        .addSelect('r.updatedAt', 'updatedAt')
+        .where('r.userId = :userId', { userId: user.userId })
+        .andWhere("r.content <> ''")
+        .orderBy('r.updatedAt', 'DESC')
+        .take(limit)
+        .getRawMany<{
+          id: number;
+          title: string;
+          thumbnailUrl: string;
+          updatedAt: Date | string;
+        }>();
+      items.push(
+        ...articles.map((row) => ({
+          id: `article-${row.id}`,
+          title: row.title,
+          detail: '文章创作 · 已保存正文',
+          time: this.isoTime(row.updatedAt),
+          path: '/content-articles',
+          thumbnailUrl: row.thumbnailUrl || undefined,
+          mediaType: 'article' as const,
+        })),
+      );
+    }
+    if (
+      allowed(user, 'AiMaterial.read') &&
+      (source === 'all' || source === 'aiMaterial') &&
+      mediaType !== 'article'
+    ) {
+      const materials = await this.query(AiMaterial)
+        .select('r.id', 'id')
+        .addSelect('LEFT(r.prompt, 80)', 'title')
+        .addSelect('r.currentImageUrl', 'fileUrl')
+        .addSelect('COALESCE(r.currentMediaType, r.mediaType)', 'mediaType')
+        .addSelect('r.updatedAt', 'updatedAt')
+        .where('r.userId = :userId', { userId: user.userId })
+        .andWhere('r.generationStatus = :status', { status: 'succeeded' })
+        .andWhere('r.currentFileId IS NOT NULL')
+        .andWhere('r.currentImageUrl IS NOT NULL')
+        .orderBy('r.updatedAt', 'DESC')
+        .take(limit)
+        .getRawMany<{
+          id: number;
+          title: string;
+          fileUrl: string;
+          mediaType: GenerationMediaType;
+          updatedAt: Date | string;
+        }>();
+      items.push(
+        ...materials
+          .filter((row) => mediaType === 'all' || row.mediaType === mediaType)
+          .map((row) => ({
+            id: `ai-material-${row.id}`,
+            title: row.title || `AI 素材 #${row.id}`,
+            detail: `云端 AI · ${row.mediaType === 'video' ? '视频' : '图片'}`,
+            time: this.isoTime(row.updatedAt),
+            path: '/ai-materials',
+            thumbnailUrl: row.mediaType === 'image' ? row.fileUrl : undefined,
+            mediaType: this.generationMediaType('aiMaterial', row.mediaType),
+          })),
+      );
+    }
+    if (
+      allowed(user, 'ComfyMaterial.read') &&
+      (source === 'all' || source === 'comfyui') &&
+      mediaType !== 'article'
+    ) {
+      const materials = await this.query(ComfyMaterial)
+        .select('r.id', 'id')
+        .addSelect('r.name', 'title')
+        .addSelect('r.fileUrl', 'fileUrl')
+        .addSelect('r.mediaType', 'mediaType')
+        .addSelect('r.updatedAt', 'updatedAt')
+        .where('r.userId = :userId', { userId: user.userId })
+        .andWhere("r.sourceType = 'output'")
+        .andWhere('r.fileUrl IS NOT NULL')
+        .andWhere("r.mediaType IN ('image', 'video')")
+        .orderBy('r.updatedAt', 'DESC')
+        .take(limit)
+        .getRawMany<{
+          id: number;
+          title: string;
+          fileUrl: string;
+          mediaType: GenerationMediaType;
+          updatedAt: Date | string;
+        }>();
+      items.push(
+        ...materials
+          .filter((row) => mediaType === 'all' || row.mediaType === mediaType)
+          .map((row) => ({
+            id: `comfy-material-${row.id}`,
+            title: row.title,
+            detail: `ComfyUI · ${row.mediaType === 'video' ? '视频' : '图片'}`,
+            time: this.isoTime(row.updatedAt),
+            path: '/comfyui/materials',
+            thumbnailUrl: row.mediaType === 'image' ? row.fileUrl : undefined,
+            mediaType: this.generationMediaType('comfyui', row.mediaType),
+          })),
+      );
+    }
+    return {
+      items: items
+        .sort(
+          (a, b) =>
+            new Date(b.time ?? 0).getTime() - new Date(a.time ?? 0).getTime(),
+        )
+        .slice(0, limit),
+      note: '文章只展示已保存正文；素材只展示当前成功成果，不返回正文、完整提示词或工作流参数。',
+    };
+  }
+  private async generationRows(
+    user: AuthUser,
+    range: ReturnType<typeof shanghaiRange>,
+  ): Promise<GenerationAggregateRow[]> {
+    const rows: GenerationAggregateRow[] = [];
+    const load = async (
+      entity: EntityTarget<ObjectLiteral>,
+      source: GenerationSource,
+      mediaExpression: string,
+    ) => {
+      const day = this.dayExpression('r');
+      const result = await this.query(entity)
+        .select(day, 'date')
+        .addSelect('r.status', 'status')
+        .addSelect(mediaExpression, 'mediaType')
+        .addSelect('COUNT(*)', 'count')
+        .addSelect(
+          'COALESCE(SUM(CASE WHEN r.startedAt IS NOT NULL AND r.finishedAt IS NOT NULL THEN TIMESTAMPDIFF(SECOND, r.startedAt, r.finishedAt) ELSE 0 END), 0)',
+          'durationSeconds',
+        )
+        .addSelect(
+          'SUM(r.startedAt IS NOT NULL AND r.finishedAt IS NOT NULL)',
+          'durationCoverage',
+        )
+        .where('r.userId = :userId', { userId: user.userId })
+        .andWhere(
+          'r.createdAt >= FROM_UNIXTIME(:startEpoch) AND r.createdAt <= FROM_UNIXTIME(:endEpoch)',
+          {
+            startEpoch: range.start.getTime() / 1000,
+            endEpoch: range.end.getTime() / 1000,
+          },
+        )
+        .groupBy(day)
+        .addGroupBy('r.status')
+        .addGroupBy(mediaExpression)
+        .getRawMany<{
+          date: string;
+          status: string;
+          mediaType: string;
+          count: string;
+          durationSeconds: string;
+          durationCoverage: string;
+        }>();
+      rows.push(
+        ...result.map((row) => ({
+          source,
+          mediaType: this.generationMediaType(source, row.mediaType),
+          date: row.date,
+          status: row.status,
+          count: n(row.count),
+          durationSeconds: n(row.durationSeconds),
+          durationCoverage: n(row.durationCoverage),
+        })),
+      );
+    };
+    if (allowed(user, 'ContentArticle.read'))
+      await load(ContentGenerationTask, 'content', "'article'");
+    if (allowed(user, 'AiMaterial.read'))
+      await load(
+        MaterialGenerationTask,
+        'aiMaterial',
+        "COALESCE(JSON_UNQUOTE(JSON_EXTRACT(r.snapshot, '$.mediaType')), 'image')",
+      );
+    if (allowed(user, 'ComfyTask.read'))
+      await load(ComfyTask, 'comfyui', "COALESCE(r.outputType, 'image')");
+    return rows;
+  }
+  private filterGenerationRows(
+    rows: GenerationAggregateRow[],
+    source?: string,
+    mediaType?: string,
+  ) {
+    return rows.filter(
+      (row) =>
+        (!source || source === 'all' || row.source === source) &&
+        (!mediaType || mediaType === 'all' || row.mediaType === mediaType),
+    );
+  }
+  private generationMediaType(
+    source: GenerationSource,
+    value: string,
+  ): GenerationMediaType {
+    if (source === 'content') return 'article';
+    return value === 'video' ? 'video' : 'image';
+  }
+  private generationPath(source: string | undefined, user: AuthUser) {
+    if (source === 'comfyui') return '/comfyui/tasks';
+    if (source === 'aiMaterial') return '/ai-materials';
+    if (source === 'content') return '/content-generation';
+    if (allowed(user, 'ContentArticle.read')) return '/content-generation';
+    if (allowed(user, 'AiMaterial.read')) return '/ai-materials';
+    return '/comfyui/tasks';
+  }
+  private isoTime(value: Date | string) {
+    const date = value instanceof Date ? value : new Date(value);
+    return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
   }
   private async knowledge(): Promise<WidgetData> {
     const rows = await this.query(KnowledgeBase)

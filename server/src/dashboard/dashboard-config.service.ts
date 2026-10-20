@@ -61,7 +61,7 @@ export class DashboardConfigService {
         throw new ConflictException('配置已被其他管理员更新，请刷新后重试');
       if (action === 'rollback') {
         if (!row.previous) throw new BadRequestException('暂无可回退版本');
-        const previous = validateWidgets(row.previous);
+        const previous = validateWidgets(resolveWidgets(row.previous));
         row.previous = row.published;
         row.published = previous;
         row.draft = previous;

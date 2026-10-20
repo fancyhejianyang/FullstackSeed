@@ -20,7 +20,12 @@ export function previewWidget(widget: WidgetConfig): DashboardWidget {
           { key: 'productTotal', label: '产品总数', value: 86 },
           { key: 'skuTotal', label: 'SKU 总数', value: 412 },
           { key: 'contentTotal', label: '内容创作数', value: 24 },
-          { key: 'materialTotal', label: 'AI 素材数', value: 38 },
+          {
+            key: 'materialTotal',
+            label: 'AI 素材数',
+            value: 38,
+            hint: '图片 29 · 视频 9',
+          },
           { key: 'generationTotal', label: '生成记录数', value: 67 },
         ].filter((x) => (widget.params.metrics as string[]).includes(x.key)),
       };
@@ -85,7 +90,58 @@ export function previewWidget(widget: WidgetConfig): DashboardWidget {
         ],
       };
       break;
-    case 'content.generationTrend':
+    case 'content.generationTrend': {
+      const source = String(widget.params.source ?? 'all');
+      const mediaType = String(widget.params.mediaType ?? 'all');
+      const byMedia = widget.params.viewMode === 'mediaType';
+      const sourceSeries = [
+        {
+          key: 'content',
+          name: '文章创作',
+          media: 'article',
+          values: samples([3, 5, 4, 8, 6, 7, 9]),
+        },
+        {
+          key: 'aiMaterial',
+          name: '云端 AI 素材',
+          media: 'image',
+          values: samples([2, 4, 3, 5, 4, 6, 7]),
+        },
+        {
+          key: 'comfyui',
+          name: 'ComfyUI',
+          media: 'video',
+          values: samples([1, 2, 1, 3, 2, 4, 3]),
+        },
+      ].filter(
+        (item) =>
+          (source === 'all' || source === item.key) &&
+          (mediaType === 'all' || mediaType === item.media),
+      );
+      const mediaSeries = [
+        {
+          key: 'article',
+          name: '文章',
+          values: samples([3, 5, 4, 8, 6, 7, 9]),
+        },
+        {
+          key: 'image',
+          name: '图片',
+          values: samples([2, 4, 3, 5, 4, 6, 7]),
+        },
+        {
+          key: 'video',
+          name: '视频',
+          values: samples([1, 2, 1, 3, 2, 4, 3]),
+        },
+      ].filter(
+        (item) =>
+          (mediaType === 'all' || mediaType === item.key) &&
+          (source === 'all' ||
+            (source === 'content'
+              ? item.key === 'article'
+              : item.key !== 'article')),
+      );
       data = {
         labels,
         metrics: [
@@ -111,20 +167,124 @@ export function previewWidget(widget: WidgetConfig): DashboardWidget {
             hint: '含待补充素材',
           },
         ],
-        series: [
-          {
-            name: '文章生成',
-            values: samples([3, 5, 4, 8, 6, 7, 9]),
-            kind: 'bar',
-          },
-          {
-            name: '素材生成',
-            values: samples([2, 4, 3, 5, 4, 6, 7]),
-            kind: 'bar',
-          },
-        ],
+        series: (byMedia ? mediaSeries : sourceSeries).map((item) => ({
+          name: item.name,
+          values: item.values,
+          kind: 'bar',
+        })),
       };
       break;
+    }
+    case 'generation.health': {
+      const source = String(widget.params.source ?? 'all');
+      const mediaType = String(widget.params.mediaType ?? 'all');
+      data = {
+        labels: [
+          '等待',
+          '运行',
+          '存储 / 归档',
+          '待补充',
+          '成功',
+          '失败 / 中断',
+          '未识别',
+        ],
+        metrics: [
+          {
+            key: 'activeGeneration',
+            label: '处理中',
+            value: 5,
+            unit: '个',
+          },
+          {
+            key: 'failedGeneration',
+            label: '失败与异常',
+            value: 2,
+            unit: '个',
+          },
+          {
+            key: 'generationRate',
+            label: '终态成功率',
+            value: 94.1,
+            unit: '%',
+          },
+          {
+            key: 'generationDuration',
+            label: '平均任务耗时',
+            value: 38.5,
+            unit: '秒',
+          },
+        ],
+        series: [
+          {
+            key: 'content',
+            media: 'article',
+            name: '文章创作',
+            values: [1, 1, 0, 1, 23, 1, 0],
+          },
+          {
+            key: 'aiMaterial',
+            media: 'image',
+            name: '云端 AI 素材',
+            values: [1, 1, 1, 0, 18, 1, 0],
+          },
+          {
+            key: 'comfyui',
+            media: 'video',
+            name: 'ComfyUI',
+            values: [1, 1, 0, 0, 9, 0, 0],
+          },
+        ]
+          .filter(
+            (item) =>
+              (source === 'all' || source === item.key) &&
+              (mediaType === 'all' || mediaType === item.media),
+          )
+          .map((item) => ({ name: item.name, values: item.values })),
+      };
+      break;
+    }
+    case 'creation.recent': {
+      const source = String(widget.params.source ?? 'all');
+      const mediaType = String(widget.params.mediaType ?? 'all');
+      data = {
+        items: [
+          {
+            id: 'article-1',
+            title: '品牌内容运营的新思路',
+            detail: '文章创作 · 已保存正文',
+            source: 'content',
+            mediaType: 'article' as const,
+          },
+          {
+            id: 'ai-material-1',
+            title: '城市夜景中的科技感主视觉',
+            detail: '云端 AI · 图片',
+            source: 'aiMaterial',
+            mediaType: 'image' as const,
+          },
+          {
+            id: 'comfy-material-1',
+            title: '产品展示短视频',
+            detail: 'ComfyUI · 视频',
+            source: 'comfyui',
+            mediaType: 'video' as const,
+          },
+        ]
+          .filter(
+            (item) =>
+              (source === 'all' || source === item.source) &&
+              (mediaType === 'all' || mediaType === item.mediaType),
+          )
+          .map((item) => ({
+            id: item.id,
+            title: item.title,
+            detail: item.detail,
+            mediaType: item.mediaType,
+          }))
+          .slice(0, Number(widget.params.limit ?? 8)),
+      };
+      break;
+    }
     case 'knowledge.health':
       data = {
         labels: ['可用', '处理中', '待处理 / 停用', '异常', '未识别'],
@@ -184,6 +344,17 @@ export function previewWidget(widget: WidgetConfig): DashboardWidget {
             detail: '进入模块',
           },
           { id: 'materials', title: '素材管理', detail: '进入模块' },
+          { id: 'comfyCreate', title: 'ComfyUI 创作', detail: '进入模块' },
+          {
+            id: 'comfyMaterials',
+            title: 'ComfyUI 素材',
+            detail: '进入模块',
+          },
+          {
+            id: 'comfyTasks',
+            title: 'ComfyUI 生成记录',
+            detail: '进入模块',
+          },
         ].filter((x) => (widget.params.links as string[]).includes(x.id)),
       };
   }

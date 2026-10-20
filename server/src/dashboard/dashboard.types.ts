@@ -25,6 +25,7 @@ export interface WidgetDefinition {
   permissionCodes: string[];
   allowedSpans: Array<4 | 6 | 8 | 12>;
   defaultSpan: 4 | 6 | 8 | 12;
+  defaultEnabled?: boolean;
   parameters: WidgetParameter[];
   schemaVersion: number;
 }
@@ -42,6 +43,8 @@ export interface DashboardItem {
   detail: string;
   time?: string;
   path?: string;
+  thumbnailUrl?: string;
+  mediaType?: 'article' | 'image' | 'video';
 }
 export interface DashboardSeries {
   name: string;

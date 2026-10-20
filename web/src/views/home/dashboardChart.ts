@@ -93,7 +93,10 @@ export function dashboardChart(key: string, data: WidgetData): EChartsOption {
       data: s.values,
       ...(!horizontal ? { yAxisIndex: s.percent ? 1 : 0 } : {}),
       barMaxWidth: 24,
-      stack: key === 'customer.taskTrend' ? 'tasks' : undefined,
+      stack:
+        key === 'customer.taskTrend' || key === 'generation.health'
+          ? 'tasks'
+          : undefined,
       smooth: false,
       connectNulls: false,
     })),

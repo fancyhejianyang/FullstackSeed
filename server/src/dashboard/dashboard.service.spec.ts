@@ -26,6 +26,7 @@ function fixture() {
     groupBy: jest.fn().mockReturnThis(),
     addGroupBy: jest.fn().mockReturnThis(),
     orderBy: jest.fn().mockReturnThis(),
+    take: jest.fn().mockReturnThis(),
     getRawMany: jest.fn().mockResolvedValue([]),
     getRawOne: jest.fn().mockResolvedValue({ total: '12', enabled: '8' }),
     getCount: jest.fn().mockResolvedValue(0),
@@ -155,6 +156,105 @@ describe('homepage data boundaries', () => {
       75,
     );
     expect(qb.where).toHaveBeenCalledWith('r.userId = :userId', { userId: 1 });
+  });
+  it('includes ComfyUI and supports media-oriented generation trends', async () => {
+    const { service, qb } = fixture();
+    const date = shanghaiRange(7, new Date('2026-10-19T03:00:00Z')).dates.at(
+      -1,
+    );
+    qb.getRawMany.mockResolvedValue([
+      {
+        date,
+        mediaType: 'video',
+        status: 'succeeded',
+        count: '2',
+        durationSeconds: '20',
+        durationCoverage: '2',
+      },
+    ]);
+    const data = await service.contentGeneration(
+      user(['ContentArticle.read', 'AiMaterial.read', 'ComfyTask.read']),
+      7,
+      new Date('2026-10-19T03:00:00Z'),
+      { viewMode: 'mediaType', source: 'all', mediaType: 'video' },
+    );
+    expect(data.series?.map((series) => series.name)).toEqual(['视频']);
+    expect(data.metrics?.find((m) => m.key === 'generationTotal')?.value).toBe(
+      4,
+    );
+  });
+  it('summarizes active, failed and duration generation health', async () => {
+    const { service, qb } = fixture();
+    const date = shanghaiRange(7, new Date('2026-10-19T03:00:00Z')).dates.at(
+      -1,
+    );
+    qb.getRawMany.mockResolvedValue([
+      {
+        date,
+        mediaType: 'image',
+        status: 'running',
+        count: '2',
+        durationSeconds: '0',
+        durationCoverage: '0',
+      },
+      {
+        date,
+        mediaType: 'image',
+        status: 'succeeded',
+        count: '3',
+        durationSeconds: '90',
+        durationCoverage: '3',
+      },
+      {
+        date,
+        mediaType: 'image',
+        status: 'failed',
+        count: '1',
+        durationSeconds: '20',
+        durationCoverage: '1',
+      },
+    ]);
+    const data = await service.generationHealth(
+      user(['AiMaterial.read']),
+      7,
+      new Date('2026-10-19T03:00:00Z'),
+    );
+    expect(data.metrics?.find((m) => m.key === 'activeGeneration')?.value).toBe(
+      2,
+    );
+    expect(data.metrics?.find((m) => m.key === 'generationRate')?.value).toBe(
+      75,
+    );
+    expect(
+      data.metrics?.find((m) => m.key === 'generationDuration')?.value,
+    ).toBe(27.5);
+  });
+  it('returns only lightweight current-user recent creations', async () => {
+    const { service, qb } = fixture();
+    qb.getRawMany.mockResolvedValue([
+      {
+        id: 7,
+        title: '已保存文章',
+        thumbnailUrl: '',
+        updatedAt: new Date('2026-10-19T03:00:00Z'),
+      },
+    ]);
+    const data = await service.recentCreations(
+      user(['ContentArticle.read']),
+      'content',
+      'article',
+      5,
+    );
+    expect(data.items).toEqual([
+      expect.objectContaining({
+        id: 'article-7',
+        title: '已保存文章',
+        mediaType: 'article',
+      }),
+    ]);
+    expect(qb.take).toHaveBeenCalledWith(5);
+    expect(data.items?.[0]).not.toHaveProperty('content');
+    expect(data.items?.[0]).not.toHaveProperty('prompt');
   });
   it('isolates failing widgets', async () => {
     const logger = jest

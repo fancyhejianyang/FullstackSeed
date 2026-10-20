@@ -1,5 +1,35 @@
 # CHANGELOG
 
+### 2026-10-20 扩展首页内容与媒体运营板块
+
+- 首页注册表扩展为十二种受控板块：升级“内容与媒体生成趋势”，支持 7/30 天、生成来源、文章/图片/视频筛选以及按来源/媒体类型展示；新增“生成任务健康度”和“最近创作成果”，两者默认关闭，仅进入首页配置目录供管理员预览、勾选和发布。
+- 生成趋势和健康度纳入文章生成、云端 AI 图片/视频与 ComfyUI 图片/视频任务，继续按当前用户及 `ContentArticle.read`、`AiMaterial.read`、`ComfyTask.read` 权限裁剪；健康度展示等待、运行、存储/归档、待补充、成功、失败/中断和未识别状态，并仅依据真实起止时间计算平均耗时。
+- 最近成果只返回已保存正文的文章、云端 AI 当前成功素材和 ComfyUI 输出素材的轻量字段；图片以 44×44px 缩略图展示，视频使用类型占位且不自动播放，不加载正文、完整提示词、工作流快照或第三方服务信息。
+- 核心数据中的 AI 素材提示拆分图片/视频，生成记录总数纳入 ComfyUI；快捷入口增加 ComfyUI 创作、素材和生成记录，但已有配置不会自动选中新增入口。旧版生成趋势和历史回退配置会安全升级，新板块不会被自动开启。
+- 验证：TypeORM 实体检查、3 套 / 29 项 Dashboard 后端测试、Nest 生产构建、6 项首页 ECharts/契约测试、前端组件复用扫描和 Vite 生产构建通过。未连接真实数据库、启动服务或修改首页已发布配置，新增板块需在“首页配置”手动发布。
+
+新增文件：无。
+
+修改文件（15）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `MD/首页改版设计方案.md`
+- `server/src/dashboard/dashboard-config.service.spec.ts`
+- `server/src/dashboard/dashboard-config.service.ts`
+- `server/src/dashboard/dashboard.registry.spec.ts`
+- `server/src/dashboard/dashboard.registry.ts`
+- `server/src/dashboard/dashboard.service.spec.ts`
+- `server/src/dashboard/dashboard.service.ts`
+- `server/src/dashboard/dashboard.types.ts`
+- `web/src/api/dashboard.ts`
+- `web/src/views/home/components/DashboardWidgetCard.vue`
+- `web/src/views/home/dashboard.test.mjs`
+- `web/src/views/home/dashboardChart.ts`
+- `web/src/views/home/dashboardPreview.ts`
+
+删除文件：无。
+
 ### 2026-10-20 拆分 ComfyUI 菜单并扩展 AI 视频素材生成
 
 - 将 ComfyUI 创作、素材、工作流和生成记录从“内容创作”移入独立一级“ComfyUI”菜单组；ComfyUI 服务连接继续保留在“第三方配置”，历史菜单按既有路径自动迁移父级，不改变权限码和业务路由。

@@ -36,6 +36,7 @@ const corePermissions = [
   ...businessPermissions,
   'ContentArticle.read',
   'AiMaterial.read',
+  'ComfyTask.read',
 ];
 export const DASHBOARD_LINKS = [
   {
@@ -97,6 +98,24 @@ export const DASHBOARD_LINKS = [
     label: '素材管理',
     path: '/ai-materials',
     permission: 'AiMaterial.read',
+  },
+  {
+    key: 'comfyCreate',
+    label: 'ComfyUI 创作',
+    path: '/comfyui/create',
+    permission: 'ComfyTask.read',
+  },
+  {
+    key: 'comfyMaterials',
+    label: 'ComfyUI 素材',
+    path: '/comfyui/materials',
+    permission: 'ComfyMaterial.read',
+  },
+  {
+    key: 'comfyTasks',
+    label: 'ComfyUI 生成记录',
+    path: '/comfyui/tasks',
+    permission: 'ComfyTask.read',
   },
 ];
 const metricOptions = [
@@ -208,14 +227,138 @@ export const DASHBOARD_WIDGETS: WidgetDefinition[] = [
   },
   {
     key: 'content.generationTrend',
-    name: '内容与素材生成趋势',
-    description: '当前用户的文章与素材生成任务趋势及完成情况',
+    name: '内容与媒体生成趋势',
+    description: '按来源或媒体类型观察文章、云端 AI 与 ComfyUI 生成趋势',
     category: 'chart',
-    permissionCodes: ['ContentArticle.read', 'AiMaterial.read'],
+    permissionCodes: [
+      'ContentArticle.read',
+      'AiMaterial.read',
+      'ComfyTask.read',
+    ],
     allowedSpans: [6, 8, 12],
     defaultSpan: 6,
+    schemaVersion: 2,
+    parameters: [
+      days,
+      {
+        key: 'viewMode',
+        label: '展示维度',
+        type: 'select',
+        defaultValue: 'source',
+        options: [
+          { label: '按生成来源', value: 'source' },
+          { label: '按媒体类型', value: 'mediaType' },
+        ],
+      },
+      {
+        key: 'source',
+        label: '生成来源',
+        type: 'select',
+        defaultValue: 'all',
+        options: [
+          { label: '全部来源', value: 'all' },
+          { label: '文章创作', value: 'content' },
+          { label: '云端 AI 素材', value: 'aiMaterial' },
+          { label: 'ComfyUI', value: 'comfyui' },
+        ],
+      },
+      {
+        key: 'mediaType',
+        label: '内容类型',
+        type: 'select',
+        defaultValue: 'all',
+        options: [
+          { label: '全部类型', value: 'all' },
+          { label: '文章', value: 'article' },
+          { label: '图片', value: 'image' },
+          { label: '视频', value: 'video' },
+        ],
+      },
+    ],
+  },
+  {
+    key: 'generation.health',
+    name: '生成任务健康度',
+    description: '汇总文章、云端 AI 与 ComfyUI 任务状态、失败和耗时',
+    category: 'chart',
+    permissionCodes: [
+      'ContentArticle.read',
+      'AiMaterial.read',
+      'ComfyTask.read',
+    ],
+    allowedSpans: [6, 8, 12],
+    defaultSpan: 6,
+    defaultEnabled: false,
     schemaVersion: 1,
-    parameters: [days],
+    parameters: [
+      days,
+      {
+        key: 'source',
+        label: '生成来源',
+        type: 'select',
+        defaultValue: 'all',
+        options: [
+          { label: '全部来源', value: 'all' },
+          { label: '文章创作', value: 'content' },
+          { label: '云端 AI 素材', value: 'aiMaterial' },
+          { label: 'ComfyUI', value: 'comfyui' },
+        ],
+      },
+      {
+        key: 'mediaType',
+        label: '内容类型',
+        type: 'select',
+        defaultValue: 'all',
+        options: [
+          { label: '全部类型', value: 'all' },
+          { label: '文章', value: 'article' },
+          { label: '图片', value: 'image' },
+          { label: '视频', value: 'video' },
+        ],
+      },
+    ],
+  },
+  {
+    key: 'creation.recent',
+    name: '最近创作成果',
+    description: '展示当前用户最近保存的文章、AI 素材和 ComfyUI 输出',
+    category: 'list',
+    permissionCodes: [
+      'ContentArticle.read',
+      'AiMaterial.read',
+      'ComfyMaterial.read',
+    ],
+    allowedSpans: [6, 8, 12],
+    defaultSpan: 6,
+    defaultEnabled: false,
+    schemaVersion: 1,
+    parameters: [
+      {
+        key: 'source',
+        label: '成果来源',
+        type: 'select',
+        defaultValue: 'all',
+        options: [
+          { label: '全部来源', value: 'all' },
+          { label: '文章创作', value: 'content' },
+          { label: '云端 AI 素材', value: 'aiMaterial' },
+          { label: 'ComfyUI', value: 'comfyui' },
+        ],
+      },
+      {
+        key: 'mediaType',
+        label: '成果类型',
+        type: 'select',
+        defaultValue: 'all',
+        options: [
+          { label: '全部类型', value: 'all' },
+          { label: '文章', value: 'article' },
+          { label: '图片', value: 'image' },
+          { label: '视频', value: 'video' },
+        ],
+      },
+      limit,
+    ],
   },
   {
     key: 'knowledge.health',
@@ -289,7 +432,7 @@ export function defaultWidgets(): WidgetConfig[] {
     instanceId: d.key,
     widgetKey: d.key,
     schemaVersion: d.schemaVersion,
-    enabled: true,
+    enabled: d.defaultEnabled !== false,
     title: d.name,
     layout: { order: i * 10, span: d.defaultSpan },
     params: Object.fromEntries(

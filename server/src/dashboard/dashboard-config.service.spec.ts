@@ -113,4 +113,32 @@ describe('dashboard draft, publication and rollback', () => {
     ).rejects.toThrow('暂无可回退版本');
     expect(repo.save).not.toHaveBeenCalled();
   });
+  it('upgrades an older saved widget schema during rollback', async () => {
+    const { service, row } = fixture();
+    row.previous = defaultWidgets()
+      .filter(
+        (widget) =>
+          !['generation.health', 'creation.recent'].includes(widget.widgetKey),
+      )
+      .map((widget) =>
+        widget.widgetKey === 'content.generationTrend'
+          ? { ...widget, schemaVersion: 1, params: { days: 7 } }
+          : widget,
+      );
+    await expect(
+      service.change({ revision: 0 }, 'rollback', user),
+    ).resolves.toBeDefined();
+    expect(row.published).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          widgetKey: 'content.generationTrend',
+          schemaVersion: 2,
+        }),
+        expect.objectContaining({
+          widgetKey: 'generation.health',
+          enabled: false,
+        }),
+      ]),
+    );
+  });
 });

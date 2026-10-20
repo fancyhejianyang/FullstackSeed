@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent } from 'vue';
+import { computed, defineAsyncComponent, reactive } from 'vue';
 import { useRouter } from 'vue-router';
 import Button from '@/components/Button.vue';
 import type { DashboardWidget } from '@/api/dashboard';
@@ -15,6 +15,7 @@ const props = defineProps<{
 defineEmits<{ retry: [instanceId: string] }>();
 const router = useRouter();
 const data = computed(() => props.widget.data);
+const failedThumbnails = reactive<Record<string, boolean>>({});
 const chartEmpty = computed(
   () =>
     !data.value?.series?.some((s) =>
@@ -81,7 +82,33 @@ function format(value: number | null) {
           widget.widgetKey === 'quick.actions' ? 'quick-grid' : 'item-list'
         "
       >
-        <div v-for="item in data.items" :key="item.id" class="list-item">
+        <div
+          v-for="item in data.items"
+          :key="item.id"
+          class="list-item"
+          :class="{
+            'list-item--creation': widget.widgetKey === 'creation.recent',
+          }"
+        >
+          <div
+            v-if="widget.widgetKey === 'creation.recent'"
+            class="creation-thumbnail"
+            :class="`creation-thumbnail--${item.mediaType ?? 'article'}`"
+          >
+            <img
+              v-if="item.thumbnailUrl && !failedThumbnails[item.id]"
+              :src="item.thumbnailUrl"
+              alt=""
+              @error="failedThumbnails[item.id] = true"
+            />
+            <span v-else>{{
+              item.mediaType === 'video'
+                ? '视'
+                : item.mediaType === 'image'
+                  ? '图'
+                  : '文'
+            }}</span>
+          </div>
           <div>
             <b>{{ item.title }}</b>
             <p>{{ item.detail }}</p>
@@ -207,6 +234,37 @@ h3 {
 }
 .list-item > div {
   min-width: 0;
+}
+.list-item--creation {
+  align-items: center;
+}
+.list-item--creation > div:nth-child(2) {
+  flex: 1;
+}
+.creation-thumbnail {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  border-radius: 8px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  color: #526880;
+  background: #edf3fb;
+  font-size: 13px;
+}
+.creation-thumbnail--image {
+  color: #287c45;
+  background: #edf8f0;
+}
+.creation-thumbnail--video {
+  color: #8a6116;
+  background: #fff6e6;
+}
+.creation-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .list-item b {
   display: block;
