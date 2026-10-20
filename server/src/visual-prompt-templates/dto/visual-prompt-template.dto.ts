@@ -87,6 +87,19 @@ export class ComposeVisualPromptDto {
   @MaxLength(120)
   @IsOptional()
   targetModel?: string;
+  @Transform(trim)
+  @IsString()
+  @MaxLength(80)
+  @IsOptional()
+  requestId?: string;
+}
+
+export class SubmitVisualPromptTaskDto {
+  @Transform(trim)
+  @IsString()
+  @MaxLength(80)
+  @IsOptional()
+  requestId?: string;
 }
 
 export class BatchDeleteVisualPromptTemplateDto {

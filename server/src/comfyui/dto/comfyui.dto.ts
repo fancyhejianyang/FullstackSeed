@@ -312,6 +312,11 @@ export class ComposeComfyWorkflowPromptDto {
   @IsNotEmpty()
   @MaxLength(12000)
   idea: string;
+
+  @IsString()
+  @MaxLength(80)
+  @IsOptional()
+  requestId?: string;
 }
 
 export class QueryComfyTaskDto extends PageQueryDto {

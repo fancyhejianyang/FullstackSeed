@@ -10,6 +10,7 @@ import {
   batchDeleteVisualPromptTemplates,
   deleteVisualPromptTemplate,
   extractVisualPromptTemplate,
+  getVisualPromptExtractTask,
   getVisualPromptTemplates,
   type VisualPromptTemplateSummary,
 } from "@/api/visualPromptTemplate";
@@ -25,6 +26,7 @@ const viewVisible = ref(false);
 const editingRow = ref<VisualPromptTemplateSummary | null>(null);
 const viewingRow = ref<VisualPromptTemplateSummary | null>(null);
 const extractingId = ref<number | null>(null);
+const extractStage = ref("");
 const columns: TableColumn[] = [
   { prop: "name", label: "模板名称", minWidth: 180 },
   { prop: "mediaType", label: "媒体", width: 90, slot: true },
@@ -76,12 +78,23 @@ async function extract(row: VisualPromptTemplateSummary) {
     return;
   }
   extractingId.value = row.id;
+  extractStage.value = "正在提交";
   try {
-    await extractVisualPromptTemplate(row.id);
+    let task = await extractVisualPromptTemplate(row.id, crypto.randomUUID());
+    while (["pending", "running"].includes(task.status)) {
+      extractStage.value = task.stage;
+      await new Promise((resolve) => window.setTimeout(resolve, 1200));
+      task = await getVisualPromptExtractTask(task.id);
+    }
+    if (task.status !== "succeeded") {
+      ElMessage.error(task.errorMessage || "AI 提炼失败，请检查配置后重试");
+      return;
+    }
     ElMessage.success("模型规则与正负提示词模板已更新");
     await tableRef.value?.refresh();
   } finally {
     extractingId.value = null;
+    extractStage.value = "";
   }
 }
 </script>
@@ -122,7 +135,9 @@ async function extract(row: VisualPromptTemplateSummary) {
           :confirm="false"
           :loading="extractingId === row.id"
           @click="extract(row)"
-          >AI 提炼</Button
+          >{{
+            extractingId === row.id ? extractStage || "AI 提炼中" : "AI 提炼"
+          }}</Button
         >
       </template>
       <template #column-mediaType="{ row }">

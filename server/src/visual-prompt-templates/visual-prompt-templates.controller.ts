@@ -17,6 +17,7 @@ import {
   ComposeVisualPromptDto,
   QueryVisualPromptTemplateDto,
   SaveVisualPromptTemplateDto,
+  SubmitVisualPromptTaskDto,
 } from './dto/visual-prompt-template.dto';
 import { VisualPromptTemplatesService } from './visual-prompt-templates.service';
 
@@ -45,6 +46,22 @@ export class VisualPromptTemplatesController {
   @RequirePermissions('VisualPromptTemplate.read')
   aiConfigOptions() {
     return this.service.aiConfigOptions();
+  }
+  @Get('extract-tasks/:taskId')
+  @RequirePermissions('VisualPromptTemplate.read')
+  extractTask(
+    @Param('taskId', ParseIntPipe) taskId: number,
+    @CurrentUser('userId') userId: number,
+  ) {
+    return this.service.taskDetail(taskId, userId, 'extract');
+  }
+  @Get('compose-tasks/:taskId')
+  @RequirePermissions('VisualPromptTemplate.read')
+  composeTask(
+    @Param('taskId', ParseIntPipe) taskId: number,
+    @CurrentUser('userId') userId: number,
+  ) {
+    return this.service.taskDetail(taskId, userId, 'compose');
   }
   @Get(':id')
   @RequirePermissions('VisualPromptTemplate.read')
@@ -75,9 +92,10 @@ export class VisualPromptTemplatesController {
   @RequirePermissions('VisualPromptTemplate.update')
   extract(
     @Param('id', ParseIntPipe) id: number,
+    @Body() dto: SubmitVisualPromptTaskDto,
     @CurrentUser('userId') userId: number,
   ) {
-    return this.service.extract(id, userId);
+    return this.service.submitExtraction(id, userId, dto.requestId);
   }
   @Post(':id/compose')
   @RequirePermissions('VisualPromptTemplate.read')
@@ -86,7 +104,7 @@ export class VisualPromptTemplatesController {
     @Body() dto: ComposeVisualPromptDto,
     @CurrentUser('userId') userId: number,
   ) {
-    return this.service.compose(id, dto, userId);
+    return this.service.submitComposition(id, dto, userId, dto.requestId);
   }
   @Post('batch-delete')
   @RequirePermissions('VisualPromptTemplate.batchDelete')

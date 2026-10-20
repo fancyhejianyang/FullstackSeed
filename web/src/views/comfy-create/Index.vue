@@ -14,6 +14,7 @@ import {
   composeComfyWorkflowPrompt,
   createComfyTask,
   getComfyMaterialOptions,
+  getComfyWorkflowPromptTask,
   getComfyWorkflowOptions,
   type ComfyMaterial,
   type ComfyWorkflowOption,
@@ -30,7 +31,9 @@ const workflowId = ref<string | null>("");
 const parameters = reactive<Record<string, unknown>>({});
 const creativeIdea = ref("");
 const composing = ref(false);
+const composeStage = ref("");
 const composeNotes = ref("");
+let composeRunToken = 0;
 const materialOptions = computed(() =>
   materials.value.map((item) => ({
     value: String(item.id),
@@ -50,6 +53,9 @@ const promptBindings = computed(() =>
   ),
 );
 function initializeDraft() {
+  composeRunToken += 1;
+  composing.value = false;
+  composeStage.value = "";
   Object.keys(parameters).forEach((key) => delete parameters[key]);
   for (const binding of current.value?.inputBindings || []) {
     parameters[binding.key] = ["positivePrompt", "negativePrompt"].includes(
@@ -78,23 +84,50 @@ async function composePrompt() {
     ElMessage.warning("请输入本次创作想法");
     return;
   }
+  const runToken = ++composeRunToken;
   composing.value = true;
+  composeStage.value = "正在提交";
   try {
-    const result = await composeComfyWorkflowPrompt(current.value.id, {
+    let task = await composeComfyWorkflowPrompt(current.value.id, {
       idea: creativeIdea.value.trim(),
+      requestId: crypto.randomUUID(),
     });
+    while (["pending", "running"].includes(task.status)) {
+      if (runToken !== composeRunToken) return;
+      composeStage.value = task.stage;
+      await new Promise((resolve) => window.setTimeout(resolve, 1200));
+      task = await getComfyWorkflowPromptTask(task.id);
+    }
+    if (runToken !== composeRunToken) return;
+    if (task.status !== "succeeded") {
+      ElMessage.error(task.errorMessage || "提示词转换失败，请检查配置后重试");
+      return;
+    }
+    const result = task.result;
+    if (
+      !result ||
+      !("positivePrompt" in result) ||
+      typeof result.positivePrompt !== "string" ||
+      !result.positivePrompt.trim()
+    ) {
+      ElMessage.error("提示词任务没有返回可用结果，请重新生成");
+      return;
+    }
     for (const binding of promptBindings.value) {
       if (binding.semanticRole === "positivePrompt") {
         parameters[binding.key] = result.positivePrompt;
       }
       if (binding.semanticRole === "negativePrompt") {
-        parameters[binding.key] = result.negativePrompt;
+        parameters[binding.key] = result.negativePrompt || "";
       }
     }
-    composeNotes.value = result.notes;
+    composeNotes.value = result.notes || "";
     ElMessage.success("正向与负向提示词已生成，可继续手动调整");
   } finally {
-    composing.value = false;
+    if (runToken === composeRunToken) {
+      composing.value = false;
+      composeStage.value = "";
+    }
   }
 }
 async function load() {
@@ -323,7 +356,9 @@ onMounted(load);
                   icon="MagicStick"
                   :loading="composing"
                   @click="composePrompt"
-                  >转换提示词</Button
+                  >{{
+                    composing ? composeStage || "转换中" : "转换提示词"
+                  }}</Button
                 >
               </div>
               <div

@@ -325,9 +325,9 @@ describe('ComfyUI 工作流可用状态', () => {
 
   it('创作提示词直接使用工作流绑定模板和目标模型', async () => {
     const visualPromptTemplates = {
-      composeBound: jest.fn().mockResolvedValue({
-        positivePrompt: 'converted positive',
-        negativePrompt: 'converted negative',
+      submitBoundComposition: jest.fn().mockResolvedValue({
+        id: 31,
+        status: 'pending',
       }),
     };
     const service = new ComfyWorkflowsService(
@@ -344,12 +344,22 @@ describe('ComfyUI 工作流可用状态', () => {
       visualPromptTemplateId: 21,
     } as ComfyWorkflow);
 
-    const result = await service.composePrompt(1, { idea: '雨夜城市街道' });
+    const result = await service.composePrompt(
+      1,
+      { idea: '雨夜城市街道', requestId: 'compose-request' },
+      7,
+    );
 
-    expect(visualPromptTemplates.composeBound).toHaveBeenCalledWith(21, {
-      idea: '雨夜城市街道',
-      targetModel: 'flux-dev',
-    });
-    expect(result.positivePrompt).toBe('converted positive');
+    expect(visualPromptTemplates.submitBoundComposition).toHaveBeenCalledWith(
+      21,
+      {
+        idea: '雨夜城市街道',
+        targetModel: 'flux-dev',
+      },
+      7,
+      1,
+      'compose-request',
+    );
+    expect(result.status).toBe('pending');
   });
 });

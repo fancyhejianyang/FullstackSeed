@@ -39,6 +39,15 @@ export class ComfyWorkflowsController {
     return this.service.options();
   }
 
+  @Get('compose-tasks/:taskId')
+  @RequirePermissions('ComfyTask.read')
+  composeTask(
+    @Param('taskId', ParseIntPipe) taskId: number,
+    @CurrentUser('userId') userId: number,
+  ) {
+    return this.service.composeTask(taskId, userId);
+  }
+
   @Get(':id')
   @RequirePermissions('ComfyWorkflow.read')
   findOne(@Param('id', ParseIntPipe) id: number) {
@@ -59,8 +68,9 @@ export class ComfyWorkflowsController {
   composePrompt(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: ComposeComfyWorkflowPromptDto,
+    @CurrentUser('userId') userId: number,
   ) {
-    return this.service.composePrompt(id, dto);
+    return this.service.composePrompt(id, dto, userId);
   }
 
   @Patch(':id')

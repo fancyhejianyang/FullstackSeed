@@ -279,7 +279,11 @@ export class ComfyWorkflowsService {
     return { workflow, version };
   }
 
-  async composePrompt(workflowId: number, dto: ComposeComfyWorkflowPromptDto) {
+  async composePrompt(
+    workflowId: number,
+    dto: ComposeComfyWorkflowPromptDto,
+    userId: number,
+  ) {
     const workflow = await this.findOne(workflowId);
     if (!workflow.isEnabled) throw new BadRequestException('工作流已停用');
     if (!workflow.visualPromptTemplateId) {
@@ -287,13 +291,20 @@ export class ComfyWorkflowsService {
         '该工作流尚未绑定视觉提示词模板，请重新导入包含正向示例的 API 工作流',
       );
     }
-    return this.visualPromptTemplates.composeBound(
+    return this.visualPromptTemplates.submitBoundComposition(
       workflow.visualPromptTemplateId,
       {
         idea: dto.idea.trim(),
         targetModel: workflow.targetModel || undefined,
       },
+      userId,
+      workflow.id,
+      dto.requestId,
     );
+  }
+
+  composeTask(taskId: number, userId: number) {
+    return this.visualPromptTemplates.taskDetail(taskId, userId, 'compose');
   }
 
   private parseAndValidateGraph(value: string) {

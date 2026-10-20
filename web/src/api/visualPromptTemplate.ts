@@ -68,6 +68,35 @@ export interface VisualPromptComposeResult {
   targetModel: string;
 }
 
+export type VisualPromptTaskStatus =
+  | "pending"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "interrupted";
+
+export interface VisualPromptTask {
+  id: number;
+  taskType: "extract" | "compose";
+  templateId: number;
+  workflowId: number | null;
+  requestId: string;
+  status: VisualPromptTaskStatus;
+  stage: string;
+  result:
+    | VisualPromptComposeResult
+    | {
+        templateId: number;
+        templateVersion: number;
+        extractedAt: string;
+      }
+    | null;
+  errorMessage: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
 export function getVisualPromptTemplates(params: Record<string, unknown>) {
   return request.get<
     unknown,
@@ -109,18 +138,29 @@ export function updateVisualPromptTemplate(
     data,
   );
 }
-export function extractVisualPromptTemplate(id: number) {
-  return request.post<unknown, VisualPromptTemplate>(
+export function extractVisualPromptTemplate(id: number, requestId: string) {
+  return request.post<unknown, VisualPromptTask>(
     `/visual-prompt-templates/${id}/extract`,
+    { requestId },
+  );
+}
+export function getVisualPromptExtractTask(taskId: number) {
+  return request.get<unknown, VisualPromptTask>(
+    `/visual-prompt-templates/extract-tasks/${taskId}`,
   );
 }
 export function composeVisualPromptTemplate(
   id: number,
-  data: { idea: string; targetModel?: string },
+  data: { idea: string; targetModel?: string; requestId?: string },
 ) {
-  return request.post<unknown, VisualPromptComposeResult>(
+  return request.post<unknown, VisualPromptTask>(
     `/visual-prompt-templates/${id}/compose`,
     data,
+  );
+}
+export function getVisualPromptComposeTask(taskId: number) {
+  return request.get<unknown, VisualPromptTask>(
+    `/visual-prompt-templates/compose-tasks/${taskId}`,
   );
 }
 export function deleteVisualPromptTemplate(id: number) {

@@ -1,4 +1,5 @@
 import request from "@/utils/request";
+import type { VisualPromptTask } from "@/api/visualPromptTemplate";
 
 export type PageResult<T> = { list: T[]; total: number };
 export type ComfyOutputType = "image" | "video";
@@ -239,18 +240,19 @@ export function updateComfyWorkflow(
     data,
   );
 }
-export function composeComfyWorkflowPrompt(id: number, data: { idea: string }) {
-  return request.post<
-    unknown,
-    {
-      positivePrompt: string;
-      negativePrompt: string;
-      notes: string;
-      templateId: number;
-      templateVersion: number;
-      targetModel: string;
-    }
-  >(`/comfyui/workflows/${id}/compose-prompt`, data);
+export function composeComfyWorkflowPrompt(
+  id: number,
+  data: { idea: string; requestId: string },
+) {
+  return request.post<unknown, VisualPromptTask>(
+    `/comfyui/workflows/${id}/compose-prompt`,
+    data,
+  );
+}
+export function getComfyWorkflowPromptTask(taskId: number) {
+  return request.get<unknown, VisualPromptTask>(
+    `/comfyui/workflows/compose-tasks/${taskId}`,
+  );
 }
 export function deleteComfyWorkflow(id: number) {
   return request.delete(`/comfyui/workflows/${id}`);

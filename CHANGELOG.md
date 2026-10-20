@@ -1,5 +1,38 @@
 # CHANGELOG
 
+### 2026-10-20 视觉提示词 AI 调用改为持久异步任务
+
+- 将视觉提示词模板 AI 提炼、模板直接转换及 ComfyUI 工作流提示词转换统一改为持久异步任务：提交接口只保存任务并立即返回，前端通过短轮询读取状态与结果，不再让单个 HTTP 请求等待 AI，从根本上规避全局 Axios 15 秒超时。
+- 新增 `visual_prompt_tasks` 任务表、幂等请求号、同一模板 / 工作流活跃任务互斥、执行阶段、结果、明确错误、工作节点与 150 秒租约；后台 AI 单次执行仍限制为 120 秒，服务停止或租约过期时标记“中断”且不自动重试，避免供应商重复计费。
+- 提炼任务提交时记录模板版本，AI 回写前再次执行乐观版本校验；模板在排队或执行期间被编辑时不会用旧结果覆盖新配置。ComfyUI 转换任务同样绑定提交时的模板版本和目标模型。
+- 视觉提示词列表与 ComfyUI 创作弹窗展示后台阶段并轮询任务；成功后分别刷新模板或回填正向、负向提示词，失败 / 中断时直接展示任务保存的具体原因。工作流切换会停止旧页面结果回填，但不会取消已经提交的后台任务。
+- 验证：TypeORM 实体检查、3 套 / 12 项后端定向测试、后端目标文件 ESLint、Vue 类型检查、目标页面组件复用扫描、Nest 生产构建和 Vite 生产构建通过；Vite 仅保留既有依赖 PURE 注释与大分块提示。未执行数据库迁移、启动服务或调用真实 AI / ComfyUI。
+
+新增文件（4）：
+
+- `server/src/migrations/1792828800000-AddVisualPromptTasks.spec.ts`
+- `server/src/migrations/1792828800000-AddVisualPromptTasks.ts`
+- `server/src/visual-prompt-templates/entities/visual-prompt-task.entity.ts`
+- `server/src/visual-prompt-templates/visual-prompt-templates.service.spec.ts`
+
+修改文件（13）：
+
+- `CHANGELOG.md`
+- `server/src/comfyui/comfy-workflows.controller.ts`
+- `server/src/comfyui/comfy-workflows.service.spec.ts`
+- `server/src/comfyui/comfy-workflows.service.ts`
+- `server/src/comfyui/dto/comfyui.dto.ts`
+- `server/src/visual-prompt-templates/dto/visual-prompt-template.dto.ts`
+- `server/src/visual-prompt-templates/visual-prompt-templates.controller.ts`
+- `server/src/visual-prompt-templates/visual-prompt-templates.module.ts`
+- `server/src/visual-prompt-templates/visual-prompt-templates.service.ts`
+- `web/src/api/comfyUi.ts`
+- `web/src/api/visualPromptTemplate.ts`
+- `web/src/views/comfy-create/Index.vue`
+- `web/src/views/visual-prompt-template/Index.vue`
+
+删除文件：无。
+
 ### 2026-10-20 串联 ComfyUI 工作流视觉提示词
 
 - ComfyUI 工作流导入识别结果新增正向、负向示例；服务端在清理工作流提示词之前读取示例，并使用最新可用的“视觉提示词”AI 配置自动创建或更新绑定模板。保存阶段只复制格式示例，不调用 AI、Agent 或付费媒体接口，缺少示例或可用配置时仍允许保存并降级为手工提示词。
