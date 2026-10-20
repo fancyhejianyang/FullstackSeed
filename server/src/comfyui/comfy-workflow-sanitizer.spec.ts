@@ -1,4 +1,5 @@
 import {
+  extractPromptExamples,
   sanitizeComfyWorkflow,
   withoutPromptBindingDefaults,
 } from './comfy-workflow-sanitizer';
@@ -43,35 +44,38 @@ describe('ComfyUI 工作流提示词清理', () => {
   });
 
   it('清空直接输入和连线上游文本节点中的示例提示词', () => {
-    const result = sanitizeComfyWorkflow(
-      {
-        '67': {
-          class_type: 'CLIPTextEncode',
-          inputs: { text: 'cinematic portrait', clip: ['62', 0] },
-        },
-        '70': {
-          class_type: 'KSampler',
-          inputs: {
-            positive: ['67', 0],
-            negative: ['71', 0],
-            steps: 8,
-          },
-        },
-        '71': {
-          class_type: 'CLIPTextEncode',
-          inputs: { text: 'low quality', clip: ['62', 0] },
-        },
-        '80': {
-          class_type: 'CustomPromptNode',
-          inputs: {
-            positive_prompt: 'direct positive',
-            negative_prompt: 'direct negative',
-            model_name: 'model.safetensors',
-          },
+    const graph = {
+      '67': {
+        class_type: 'CLIPTextEncode',
+        inputs: { text: 'cinematic portrait', clip: ['62', 0] },
+      },
+      '70': {
+        class_type: 'KSampler',
+        inputs: {
+          positive: ['67', 0],
+          negative: ['71', 0],
+          steps: 8,
         },
       },
-      bindings,
-    );
+      '71': {
+        class_type: 'CLIPTextEncode',
+        inputs: { text: 'low quality', clip: ['62', 0] },
+      },
+      '80': {
+        class_type: 'CustomPromptNode',
+        inputs: {
+          positive_prompt: 'direct positive',
+          negative_prompt: 'direct negative',
+          model_name: 'model.safetensors',
+        },
+      },
+    };
+    expect(extractPromptExamples(graph, bindings)).toEqual({
+      positivePrompt: 'cinematic portrait',
+      negativePrompt: 'low quality',
+    });
+
+    const result = sanitizeComfyWorkflow(graph, bindings);
 
     expect(result.graph['67'].inputs.text).toBe('');
     expect(result.graph['71'].inputs.text).toBe('');

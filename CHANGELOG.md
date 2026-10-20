@@ -1,5 +1,41 @@
 # CHANGELOG
 
+### 2026-10-20 串联 ComfyUI 工作流视觉提示词
+
+- ComfyUI 工作流导入识别结果新增正向、负向示例；服务端在清理工作流提示词之前读取示例，并使用最新可用的“视觉提示词”AI 配置自动创建或更新绑定模板。保存阶段只复制格式示例，不调用 AI、Agent 或付费媒体接口，缺少示例或可用配置时仍允许保存并降级为手工提示词。
+- 工作流主记录新增可空 `visualPromptTemplateId`，并提供幂等迁移；列表展示模板绑定状态，导入弹窗明确说明自动建立、已绑定和未识别三种状态。工作流及版本快照仍只保存清空示例后的执行 JSON，避免示例内容进入后续任务。
+- 新增工作流级提示词转换接口，按绑定模板、目标模型及模板自身 AI 配置，将用户自然语言想法转换为正向与负向提示词；协议明确只借鉴示例的语言、结构、顺序和模型语法，不照抄示例主体或场景。
+- “ComfyUI 创作”移除视觉模板重复选择，改为选择工作流后输入创作想法、点击“转换提示词”、预览并可编辑正负提示词，最后再提交任务；未绑定模板时保留手工填写兜底，转换失败不会提交空提示词任务。
+- 验证：TypeORM 实体检查、4 套 / 15 项后端定向测试、3 项工作流识别测试、后端定向 ESLint、Vue 类型检查、目标页面组件复用扫描、Nest 生产构建和 Vite 生产构建通过；Vite 仅保留既有依赖 PURE 注释与大分块提示。未执行数据库迁移、启动服务、调用真实 AI / ComfyUI 或提交计费任务。
+
+新增文件（2）：
+
+- `server/src/migrations/1792742400000-LinkComfyWorkflowVisualPrompt.spec.ts`
+- `server/src/migrations/1792742400000-LinkComfyWorkflowVisualPrompt.ts`
+
+修改文件（18）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/comfyui/comfy-workflow-sanitizer.spec.ts`
+- `server/src/comfyui/comfy-workflow-sanitizer.ts`
+- `server/src/comfyui/comfy-workflows.controller.ts`
+- `server/src/comfyui/comfy-workflows.service.spec.ts`
+- `server/src/comfyui/comfy-workflows.service.ts`
+- `server/src/comfyui/comfyui.module.ts`
+- `server/src/comfyui/dto/comfyui.dto.ts`
+- `server/src/comfyui/entities/comfy-workflow.entity.ts`
+- `server/src/visual-prompt-templates/visual-prompt-templates.service.ts`
+- `server/src/visual-prompt-templates/visual-prompt.protocol.ts`
+- `web/src/api/comfyUi.ts`
+- `web/src/views/comfy-create/Index.vue`
+- `web/src/views/comfy-workflow/Edit.vue`
+- `web/src/views/comfy-workflow/Index.vue`
+- `web/src/views/comfy-workflow/workflowDetection.test.mjs`
+- `web/src/views/comfy-workflow/workflowDetection.ts`
+
+删除文件：无。
+
 ### 2026-10-20 取消 ComfyUI 工作流草稿状态
 
 - ComfyUI 工作流保存后只要处于启用状态且执行服务可用，即可直接用于创作；不再区分草稿与已发布，也不因工作流来自本机或云端而增加发布步骤。

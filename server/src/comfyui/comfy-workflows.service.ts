@@ -7,10 +7,12 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
+  ComposeComfyWorkflowPromptDto,
   CreateComfyWorkflowDto,
   QueryComfyWorkflowDto,
   UpdateComfyWorkflowDto,
 } from './dto/comfyui.dto';
+import { VisualPromptTemplatesService } from '../visual-prompt-templates/visual-prompt-templates.service';
 import { ComfyConnection } from './entities/comfy-connection.entity';
 import {
   ComfyWorkflow,
@@ -19,6 +21,7 @@ import {
 import { ComfyWorkflowVersion } from './entities/comfy-workflow-version.entity';
 import { ComfyTask } from './entities/comfy-task.entity';
 import {
+  extractPromptExamples,
   sanitizeComfyWorkflow,
   withoutPromptBindingDefaults,
   type ComfyApiGraph,
@@ -36,6 +39,7 @@ export class ComfyWorkflowsService {
     private readonly connections: Repository<ComfyConnection>,
     @InjectRepository(ComfyTask)
     private readonly tasks: Repository<ComfyTask>,
+    private readonly visualPromptTemplates: VisualPromptTemplatesService,
   ) {}
 
   async findAll(query: QueryComfyWorkflowDto) {
@@ -109,6 +113,7 @@ export class ComfyWorkflowsService {
         name: item.name,
         outputType: item.outputType,
         targetModel: item.targetModel,
+        visualPromptTemplateId: item.visualPromptTemplateId,
         description: item.description,
         version: item.version,
         inputBindings: withoutPromptBindingDefaults(item.inputBindings).filter(
@@ -117,10 +122,15 @@ export class ComfyWorkflowsService {
       }));
   }
 
-  async create(dto: CreateComfyWorkflowDto) {
+  async create(dto: CreateComfyWorkflowDto, userId: number) {
     await this.assertConnection(dto.connectionId);
+    const sourceGraph = this.parseAndValidateGraph(dto.apiWorkflow);
+    const promptExamples = extractPromptExamples(
+      sourceGraph,
+      dto.inputBindings as ComfyInputBinding[],
+    );
     const sanitized = sanitizeComfyWorkflow(
-      this.parseAndValidateGraph(dto.apiWorkflow),
+      sourceGraph,
       dto.inputBindings as ComfyInputBinding[],
     );
     const { graph, bindings } = sanitized;
@@ -143,6 +153,23 @@ export class ComfyWorkflowsService {
           isPublished: true,
         }),
       );
+      if (promptExamples.positivePrompt) {
+        const template = await this.visualPromptTemplates.syncFromComfyWorkflow(
+          {
+            workflowName: saved.name,
+            mediaType: saved.outputType,
+            targetModel: saved.targetModel,
+            positivePrompt: promptExamples.positivePrompt,
+            negativePrompt: promptExamples.negativePrompt,
+          },
+          userId,
+          manager,
+        );
+        if (template) {
+          saved.visualPromptTemplateId = template.id;
+          await repo.save(saved);
+        }
+      }
       await this.saveVersion(
         manager.getRepository(ComfyWorkflowVersion),
         saved,
@@ -155,14 +182,17 @@ export class ComfyWorkflowsService {
     return this.findOne(id);
   }
 
-  async update(id: number, dto: UpdateComfyWorkflowDto) {
+  async update(id: number, dto: UpdateComfyWorkflowDto, userId: number) {
     const current = await this.findOne(id);
     const connectionId = dto.connectionId ?? current.connectionId;
     await this.assertConnection(connectionId);
-    const sanitized = sanitizeComfyWorkflow(
-      this.parseAndValidateGraph(dto.apiWorkflow ?? current.apiWorkflow),
-      (dto.inputBindings ?? current.inputBindings) as ComfyInputBinding[],
+    const sourceGraph = this.parseAndValidateGraph(
+      dto.apiWorkflow ?? current.apiWorkflow,
     );
+    const inputBindings = (dto.inputBindings ??
+      current.inputBindings) as ComfyInputBinding[];
+    const promptExamples = extractPromptExamples(sourceGraph, inputBindings);
+    const sanitized = sanitizeComfyWorkflow(sourceGraph, inputBindings);
     const { graph, bindings } = sanitized;
     const outputNodeIds = dto.outputNodeIds ?? current.outputNodeIds ?? [];
     this.validateBindings(graph, bindings, outputNodeIds);
@@ -190,6 +220,25 @@ export class ComfyWorkflowsService {
           isPublished: true,
         });
         const saved = await manager.getRepository(ComfyWorkflow).save(current);
+        if (promptExamples.positivePrompt) {
+          const template =
+            await this.visualPromptTemplates.syncFromComfyWorkflow(
+              {
+                templateId: saved.visualPromptTemplateId,
+                workflowName: saved.name,
+                mediaType: saved.outputType,
+                targetModel: saved.targetModel,
+                positivePrompt: promptExamples.positivePrompt,
+                negativePrompt: promptExamples.negativePrompt,
+              },
+              userId,
+              manager,
+            );
+          if (template) {
+            saved.visualPromptTemplateId = template.id;
+            await manager.getRepository(ComfyWorkflow).save(saved);
+          }
+        }
         await this.saveVersion(
           manager.getRepository(ComfyWorkflowVersion),
           saved,
@@ -228,6 +277,23 @@ export class ComfyWorkflowsService {
     });
     if (!version) throw new BadRequestException('工作流发布版本不存在');
     return { workflow, version };
+  }
+
+  async composePrompt(workflowId: number, dto: ComposeComfyWorkflowPromptDto) {
+    const workflow = await this.findOne(workflowId);
+    if (!workflow.isEnabled) throw new BadRequestException('工作流已停用');
+    if (!workflow.visualPromptTemplateId) {
+      throw new BadRequestException(
+        '该工作流尚未绑定视觉提示词模板，请重新导入包含正向示例的 API 工作流',
+      );
+    }
+    return this.visualPromptTemplates.composeBound(
+      workflow.visualPromptTemplateId,
+      {
+        idea: dto.idea.trim(),
+        targetModel: workflow.targetModel || undefined,
+      },
+    );
   }
 
   private parseAndValidateGraph(value: string) {

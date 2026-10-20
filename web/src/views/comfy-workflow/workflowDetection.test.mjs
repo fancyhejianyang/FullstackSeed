@@ -93,6 +93,8 @@ test("识别 ComfyUI 生图样本的模型、输出、提示词和常用参数",
   assert.equal(result.suggestedName, "测试工作流-生图");
   assert.equal(result.outputType, "image");
   assert.equal(result.targetModel, "z_image_turbo_bf16.safetensors");
+  assert.equal(result.sourcePrompt, "anime RPG game style");
+  assert.equal(result.sourceNegativePrompt, "low quality, bad anatomy");
   assert.deepEqual(result.outputNodeIds, ["9"]);
   assert.match(result.dependencyNotes, /qwen_3_4b\.safetensors/);
   assert.match(result.dependencyNotes, /ae\.safetensors/);
@@ -173,6 +175,8 @@ test("直接提示词可以映射，且 CLIP/VAE 依赖不会被误判为主模�
     },
   });
   assert.equal(result.targetModel, "");
+  assert.equal(result.sourcePrompt, "cinematic lighting");
+  assert.equal(result.sourceNegativePrompt, "low quality");
   const positive = result.bindings.find(
     (binding) => binding.semanticRole === "positivePrompt",
   );

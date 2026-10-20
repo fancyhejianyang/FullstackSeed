@@ -24,6 +24,12 @@ const columns: TableColumn[] = [
   { prop: "connectionName", label: "执行服务", minWidth: 150 },
   { prop: "outputType", label: "输出类型", width: 100, slot: true },
   { prop: "targetModel", label: "目标模型", minWidth: 160 },
+  {
+    prop: "visualPromptTemplateId",
+    label: "提示词模板",
+    width: 110,
+    slot: true,
+  },
   { prop: "bindingCount", label: "开放参数", width: 100, slot: true },
   { prop: "version", label: "版本", width: 80, slot: true },
   { prop: "isEnabled", label: "使用状态", width: 100, slot: true },
@@ -93,6 +99,11 @@ function openEdit(row: ComfyWorkflow) {
       <template #column-bindingCount="{ row }"
         >{{ row.bindingCount ?? row.inputBindings.length }} 个</template
       >
+      <template #column-visualPromptTemplateId="{ row }">
+        <el-tag :type="row.visualPromptTemplateId ? 'success' : 'info'">
+          {{ row.visualPromptTemplateId ? "已自动绑定" : "未绑定" }}
+        </el-tag>
+      </template>
       <template #column-version="{ row }">v{{ row.version }}</template>
       <template #column-isEnabled="{ row }">
         <el-tag :type="row.isEnabled ? 'success' : 'info'">

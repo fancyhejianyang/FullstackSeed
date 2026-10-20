@@ -8,6 +8,11 @@ export interface ComfyApiNode {
 
 export type ComfyApiGraph = Record<string, ComfyApiNode>;
 
+export interface ComfyPromptExamples {
+  positivePrompt: string;
+  negativePrompt: string;
+}
+
 const PROMPT_VALUE_KEYS = new Set([
   'text',
   'prompt',
@@ -62,6 +67,28 @@ export function withoutPromptBindingDefaults(bindings: ComfyInputBinding[]) {
       ? { ...binding, defaultValue: '' }
       : { ...binding },
   );
+}
+
+export function extractPromptExamples(
+  graph: ComfyApiGraph,
+  bindings: ComfyInputBinding[],
+): ComfyPromptExamples {
+  const examples: ComfyPromptExamples = {
+    positivePrompt: '',
+    negativePrompt: '',
+  };
+  for (const binding of bindings) {
+    const semanticRole = binding.semanticRole ?? 'normal';
+    if (!['positivePrompt', 'negativePrompt'].includes(semanticRole)) continue;
+    const value = graph[binding.nodeId]?.inputs?.[binding.inputKey];
+    if (typeof value !== 'string' || !value.trim()) continue;
+    if (semanticRole === 'positivePrompt') {
+      examples.positivePrompt = value.trim();
+    } else if (semanticRole === 'negativePrompt') {
+      examples.negativePrompt = value.trim();
+    }
+  }
+  return examples;
 }
 
 export function sanitizeComfyWorkflow(

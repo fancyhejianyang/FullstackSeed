@@ -79,6 +79,7 @@ export interface ComfyWorkflow {
   connectionName?: string;
   outputType: ComfyOutputType;
   targetModel: string | null;
+  visualPromptTemplateId: number | null;
   description: string | null;
   apiWorkflow?: string;
   inputBindings: ComfyInputBinding[];
@@ -97,6 +98,7 @@ export type ComfyWorkflowForm = Omit<
   | "id"
   | "connectionName"
   | "bindingCount"
+  | "visualPromptTemplateId"
   | "isPublished"
   | "version"
   | "createdAt"
@@ -108,6 +110,7 @@ export interface ComfyWorkflowOption {
   name: string;
   outputType: ComfyOutputType;
   targetModel: string | null;
+  visualPromptTemplateId: number | null;
   description: string | null;
   version: number;
   inputBindings: ComfyInputBinding[];
@@ -235,6 +238,19 @@ export function updateComfyWorkflow(
     `/comfyui/workflows/${id}`,
     data,
   );
+}
+export function composeComfyWorkflowPrompt(id: number, data: { idea: string }) {
+  return request.post<
+    unknown,
+    {
+      positivePrompt: string;
+      negativePrompt: string;
+      notes: string;
+      templateId: number;
+      templateVersion: number;
+      targetModel: string;
+    }
+  >(`/comfyui/workflows/${id}/compose-prompt`, data);
 }
 export function deleteComfyWorkflow(id: number) {
   return request.delete(`/comfyui/workflows/${id}`);

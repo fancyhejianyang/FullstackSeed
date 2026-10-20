@@ -41,6 +41,9 @@ const connections = ref<
 >([]);
 const fileInput = ref<HTMLInputElement>();
 const detectionSummary = ref("");
+const detectedSourcePrompt = ref("");
+const detectedNegativePrompt = ref("");
+const boundVisualTemplateId = ref<number | null>(null);
 const showAdvanced = ref(false);
 const form = reactive<EditorForm>({
   name: "",
@@ -224,6 +227,9 @@ function reset() {
     isEnabled: true,
   });
   detectionSummary.value = "";
+  detectedSourcePrompt.value = "";
+  detectedNegativePrompt.value = "";
+  boundVisualTemplateId.value = null;
   showAdvanced.value = false;
 }
 watch(visible, async (open) => {
@@ -256,6 +262,7 @@ watch(visible, async (open) => {
       dependencyNotes: detail.dependencyNotes || "",
       isEnabled: detail.isEnabled,
     });
+    boundVisualTemplateId.value = detail.visualPromptTemplateId;
   } finally {
     loading.value = false;
   }
@@ -306,6 +313,8 @@ function applyWorkflowDetection(fileName = "") {
     return;
   }
   const detected = detectComfyWorkflow(nodes, fileName);
+  detectedSourcePrompt.value = detected.sourcePrompt;
+  detectedNegativePrompt.value = detected.sourceNegativePrompt;
   const filled: string[] = [];
   if (!form.name.trim() && detected.suggestedName) {
     form.name = detected.suggestedName;
@@ -445,9 +454,24 @@ async function submit() {
   };
   submitting.value = true;
   try {
-    if (props.row) await updateComfyWorkflow(props.row.id, payload);
-    else await createComfyWorkflow(payload);
-    ElMessage.success(props.row ? "工作流已保存并生成新版本" : "工作流已导入");
+    const saved = props.row
+      ? await updateComfyWorkflow(props.row.id, payload)
+      : await createComfyWorkflow(payload);
+    if (detectedSourcePrompt.value && !saved.visualPromptTemplateId) {
+      ElMessage.warning(
+        "工作流已保存，但没有可用的“视觉提示词”AI 配置，暂未建立提示词模板",
+      );
+    } else {
+      ElMessage.success(
+        saved.visualPromptTemplateId
+          ? props.row
+            ? "工作流与视觉提示词模板已更新"
+            : "工作流已导入，并自动建立视觉提示词模板"
+          : props.row
+            ? "工作流已保存并生成新版本"
+            : "工作流已导入",
+      );
+    }
     visible.value = false;
     emit("success");
   } finally {
@@ -586,6 +610,29 @@ async function submit() {
             <p v-if="detectionSummary" class="workflow-json__detection">
               {{ detectionSummary }}
             </p>
+            <div
+              class="workflow-prompt-template"
+              :class="{
+                'is-ready': !!detectedSourcePrompt || !!boundVisualTemplateId,
+              }"
+            >
+              <el-icon><MagicStick /></el-icon>
+              <div>
+                <strong>视觉提示词模板</strong>
+                <span v-if="detectedSourcePrompt">
+                  已从工作流识别正向示例{{
+                    detectedNegativePrompt ? "和负向示例" : ""
+                  }}，保存时会自动建立或更新绑定模板。
+                </span>
+                <span v-else-if="boundVisualTemplateId">
+                  当前工作流已绑定模板；重新导入包含示例提示词的 JSON
+                  后会自动更新。
+                </span>
+                <span v-else>
+                  未识别到正向示例，仍可保存，但创作时需要手工填写提示词。
+                </span>
+              </div>
+            </div>
           </section>
         </template>
         <template #field-inputBindings>
@@ -847,6 +894,44 @@ async function submit() {
 .workflow-json__detection {
   margin: var(--space-sm) 0 0;
   color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}
+
+.workflow-prompt-template {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: var(--space-sm);
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-container);
+  color: var(--color-text-secondary);
+}
+
+.workflow-prompt-template.is-ready {
+  border-color: #b3e19d;
+  background: #f0f9eb;
+  color: var(--color-success);
+}
+
+.workflow-prompt-template > .el-icon {
+  margin-top: 2px;
+  flex: 0 0 auto;
+}
+
+.workflow-prompt-template > div {
+  display: grid;
+  gap: 3px;
+}
+
+.workflow-prompt-template strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xs);
+}
+
+.workflow-prompt-template span {
   font-size: var(--font-size-xs);
   line-height: 1.5;
 }

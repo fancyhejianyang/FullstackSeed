@@ -307,6 +307,13 @@ export class CreateComfyTaskDto {
   requestId?: string;
 }
 
+export class ComposeComfyWorkflowPromptDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(12000)
+  idea: string;
+}
+
 export class QueryComfyTaskDto extends PageQueryDto {
   @IsIn([
     'pending',

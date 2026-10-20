@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Like, Repository } from 'typeorm';
+import { EntityManager, In, Like, Repository } from 'typeorm';
 import { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-configs.service';
 import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
 import {
@@ -118,6 +118,69 @@ export class VisualPromptTemplatesService {
     );
   }
 
+  async syncFromComfyWorkflow(
+    input: {
+      templateId?: number | null;
+      workflowName: string;
+      mediaType: 'image' | 'video';
+      targetModel?: string | null;
+      positivePrompt: string;
+      negativePrompt?: string | null;
+    },
+    userId: number,
+    manager: EntityManager,
+  ) {
+    const sourcePrompt = input.positivePrompt.trim();
+    if (!sourcePrompt) return null;
+    const repository = manager.getRepository(VisualPromptTemplate);
+    const existing = input.templateId
+      ? await repository.findOne({ where: { id: input.templateId } })
+      : null;
+    let configCandidate = existing
+      ? await this.configs
+          .findUsableVisualPromptConfig(existing.aiConfigId)
+          .catch(() => null)
+      : null;
+    configCandidate ??= await this.configs.findEnabledByFeature('visualPrompt');
+    if (!configCandidate?.id) return null;
+    const config = await this.configs
+      .findUsableVisualPromptConfig(configCandidate.id)
+      .catch(() => null);
+    if (!config?.id || !config.name) return null;
+
+    const name = `${input.workflowName.trim()} · 工作流提示词`.slice(0, 120);
+    const negativePrompt = input.negativePrompt?.trim() || null;
+    const targetModel = input.targetModel?.trim() || null;
+    const common = {
+      userId: existing?.userId ?? userId,
+      name,
+      mediaType: input.mediaType,
+      targetModel,
+      sourcePlatform: 'ComfyUI 工作流',
+      aiConfigId: config.id,
+      aiConfigName: config.name,
+      sourcePrompt,
+      sourceNegativePrompt: negativePrompt,
+      positiveTemplate: sourcePrompt,
+      negativeTemplate: negativePrompt,
+      styleSummary: `从 ComfyUI 工作流“${input.workflowName.trim()}”的示例提示词自动建立`,
+      modelRules: null,
+      variables: null,
+      isEnabled: true,
+      extractedAt: null,
+    };
+    if (existing) {
+      Object.assign(existing, common, { version: existing.version + 1 });
+      return repository.save(existing);
+    }
+    return repository.save(
+      repository.create({
+        ...common,
+        version: 1,
+      }),
+    );
+  }
+
   async update(id: number, dto: SaveVisualPromptTemplateDto, userId: number) {
     const row = await this.findOne(id, userId);
     const config = await this.configs.findUsableVisualPromptConfig(
@@ -157,6 +220,19 @@ export class VisualPromptTemplatesService {
 
   async compose(id: number, dto: ComposeVisualPromptDto, userId: number) {
     const row = await this.findOne(id, userId);
+    return this.composeRow(row, dto);
+  }
+
+  async composeBound(id: number, dto: ComposeVisualPromptDto) {
+    const row = await this.repository.findOne({ where: { id } });
+    if (!row) throw new NotFoundException('工作流绑定的视觉提示词模板不存在');
+    return this.composeRow(row, dto);
+  }
+
+  private async composeRow(
+    row: VisualPromptTemplate,
+    dto: ComposeVisualPromptDto,
+  ) {
     if (!row.isEnabled) throw new BadRequestException('该视觉提示词模板已停用');
     const targetModel =
       dto.targetModel?.trim() || row.targetModel || '通用模型';

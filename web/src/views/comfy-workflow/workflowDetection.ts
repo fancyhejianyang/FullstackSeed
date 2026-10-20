@@ -31,9 +31,14 @@ export interface WorkflowDetectionResult {
   dependencyNotes: string;
   outputNodeIds: string[];
   bindings: DetectedWorkflowBinding[];
+  sourcePrompt: string;
+  sourceNegativePrompt: string;
 }
 
 type TextInput = { nodeId: string; inputKey: string; value: string };
+type PromptInputs = Partial<
+  Record<"positivePrompt" | "negativePrompt", TextInput>
+>;
 
 const MODEL_INPUT_PRIORITIES: Record<string, number> = {
   unet_name: 100,
@@ -181,8 +186,7 @@ function traceTextInput(
 }
 
 function detectPromptInputs(graph: Record<string, ComfyApiNode>) {
-  const found: Partial<Record<"positivePrompt" | "negativePrompt", TextInput>> =
-    {};
+  const found: PromptInputs = {};
   for (const [nodeId, node] of nodeEntries(graph)) {
     for (const [inputKey, value] of Object.entries(node.inputs || {})) {
       const normalized = inputKey.toLowerCase();
@@ -231,7 +235,10 @@ function uniqueBindingKey(
   return `${baseKey}${suffix}`;
 }
 
-function detectBindings(graph: Record<string, ComfyApiNode>) {
+function detectBindings(
+  graph: Record<string, ComfyApiNode>,
+  prompts: PromptInputs,
+) {
   const bindings: DetectedWorkflowBinding[] = [];
   const mappedInputs = new Set<string>();
   const add = (
@@ -246,7 +253,6 @@ function detectBindings(graph: Record<string, ComfyApiNode>) {
     });
   };
 
-  const prompts = detectPromptInputs(graph);
   if (prompts.positivePrompt) {
     const prompt = prompts.positivePrompt;
     add({
@@ -423,12 +429,15 @@ export function detectComfyWorkflow(
   fileName = "",
 ): WorkflowDetectionResult {
   const outputs = detectOutputs(graph);
+  const prompts = detectPromptInputs(graph);
   return {
     suggestedName: suggestName(fileName),
     outputType: outputs.outputType,
     targetModel: detectTargetModel(graph),
     dependencyNotes: detectDependencies(graph),
     outputNodeIds: outputs.outputNodeIds,
-    bindings: detectBindings(graph),
+    bindings: detectBindings(graph, prompts),
+    sourcePrompt: prompts.positivePrompt?.value.trim() || "",
+    sourceNegativePrompt: prompts.negativePrompt?.value.trim() || "",
   };
 }

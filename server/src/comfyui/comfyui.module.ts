@@ -4,6 +4,7 @@ import { ManagedFile } from '../managed-files/entities/managed-file.entity';
 import { ManagedFileReference } from '../managed-files/entities/managed-file-reference.entity';
 import { StoredFilesModule } from '../stored-files/stored-files.module';
 import { UploadsModule } from '../uploads/uploads.module';
+import { VisualPromptTemplatesModule } from '../visual-prompt-templates/visual-prompt-templates.module';
 import { ComfyClientService } from './comfy-client.service';
 import { ComfyConnectionsController } from './comfy-connections.controller';
 import { ComfyConnectionsService } from './comfy-connections.service';
@@ -35,6 +36,7 @@ import { ComfyWorkflow } from './entities/comfy-workflow.entity';
     ]),
     UploadsModule,
     StoredFilesModule,
+    VisualPromptTemplatesModule,
   ],
   controllers: [
     ComfyConnectionsController,

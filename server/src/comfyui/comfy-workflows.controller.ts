@@ -11,9 +11,11 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { ComfyWorkflowsService } from './comfy-workflows.service';
 import {
   BatchIdsDto,
+  ComposeComfyWorkflowPromptDto,
   CreateComfyWorkflowDto,
   QueryComfyWorkflowDto,
   UpdateComfyWorkflowDto,
@@ -45,8 +47,20 @@ export class ComfyWorkflowsController {
 
   @Post()
   @RequirePermissions('ComfyWorkflow.create')
-  create(@Body() dto: CreateComfyWorkflowDto) {
-    return this.service.create(dto);
+  create(
+    @Body() dto: CreateComfyWorkflowDto,
+    @CurrentUser('userId') userId: number,
+  ) {
+    return this.service.create(dto, userId);
+  }
+
+  @Post(':id/compose-prompt')
+  @RequirePermissions('ComfyTask.create')
+  composePrompt(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ComposeComfyWorkflowPromptDto,
+  ) {
+    return this.service.composePrompt(id, dto);
   }
 
   @Patch(':id')
@@ -54,8 +68,9 @@ export class ComfyWorkflowsController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateComfyWorkflowDto,
+    @CurrentUser('userId') userId: number,
   ) {
-    return this.service.update(id, dto);
+    return this.service.update(id, dto, userId);
   }
 
   @Delete('batch')

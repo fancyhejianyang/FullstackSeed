@@ -42,6 +42,8 @@ export class ComfyWorkflow extends BaseEntity {
   outputType: ComfyOutputType;
   @Column({ type: 'varchar', length: 120, nullable: true })
   targetModel: string | null;
+  @Column({ type: 'int', nullable: true })
+  visualPromptTemplateId: number | null;
   @Column({ type: 'varchar', length: 500, nullable: true })
   description: string | null;
   @Column({ type: 'longtext', select: false }) apiWorkflow: string;

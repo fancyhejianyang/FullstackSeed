@@ -12,6 +12,7 @@ describe('ComfyUI 工作流提示词语义绑定', () => {
     {} as never,
     {} as never,
     {} as never,
+    {} as never,
   );
   const validate = (bindings: ComfyInputBinding[]): void =>
     (
@@ -129,22 +130,26 @@ describe('ComfyUI 工作流版本快照保存', () => {
       {} as never,
       { exists: jest.fn().mockResolvedValue(true) } as never,
       {} as never,
+      {} as never,
     );
     jest
       .spyOn(service, 'findOne')
       .mockResolvedValue({ id: 9 } as ComfyWorkflow);
 
-    await service.create({
-      name: '测试工作流',
-      connectionId: 1,
-      outputType: 'image',
-      apiWorkflow: JSON.stringify({
-        '1': { class_type: 'SaveImage', inputs: { images: ['2', 0] } },
-      }),
-      inputBindings: [],
-      outputNodeIds: ['1'],
-      isEnabled: true,
-    });
+    await service.create(
+      {
+        name: '测试工作流',
+        connectionId: 1,
+        outputType: 'image',
+        apiWorkflow: JSON.stringify({
+          '1': { class_type: 'SaveImage', inputs: { images: ['2', 0] } },
+        }),
+        inputBindings: [],
+        outputNodeIds: ['1'],
+        isEnabled: true,
+      },
+      1,
+    );
 
     expect(workflowRepository.create.mock.calls[0]?.[0]).toMatchObject({
       isPublished: true,
@@ -157,6 +162,105 @@ describe('ComfyUI 工作流版本快照保存', () => {
       outputNodeIds: ['1'],
     });
     expect(versionValue?.apiWorkflow).toContain('SaveImage');
+  });
+
+  it('保存前提取示例提示词并绑定自动模板，快照仍保存清空后的工作流', async () => {
+    const workflowRepository = {
+      create: jest.fn((value: Record<string, unknown>) => value),
+      save: jest.fn((value: Record<string, unknown>) =>
+        Promise.resolve({ ...value, id: 12 }),
+      ),
+    };
+    const versionRepository = {
+      create: jest.fn((value: Record<string, unknown>) => value),
+      save: jest.fn((value: Record<string, unknown>) => Promise.resolve(value)),
+    };
+    const manager = {
+      getRepository: jest.fn((entity: unknown) =>
+        entity === ComfyWorkflow ? workflowRepository : versionRepository,
+      ),
+    };
+    const visualPromptTemplates = {
+      syncFromComfyWorkflow: jest.fn().mockResolvedValue({ id: 21 }),
+    };
+    const service = new ComfyWorkflowsService(
+      {
+        manager: {
+          transaction: jest.fn(
+            (callback: (value: typeof manager) => Promise<number>) =>
+              callback(manager),
+          ),
+        },
+      } as never,
+      {} as never,
+      { exists: jest.fn().mockResolvedValue(true) } as never,
+      {} as never,
+      visualPromptTemplates as never,
+    );
+    jest
+      .spyOn(service, 'findOne')
+      .mockResolvedValue({ id: 12 } as ComfyWorkflow);
+
+    await service.create(
+      {
+        name: '示例工作流',
+        connectionId: 1,
+        outputType: 'image',
+        targetModel: 'flux-dev',
+        apiWorkflow: JSON.stringify({
+          '1': {
+            class_type: 'CLIPTextEncode',
+            inputs: { text: 'cinematic cat' },
+          },
+          '2': {
+            class_type: 'CLIPTextEncode',
+            inputs: { text: 'blur, watermark' },
+          },
+          '3': { class_type: 'SaveImage', inputs: { images: ['4', 0] } },
+        }),
+        inputBindings: [
+          {
+            key: 'positivePrompt',
+            label: '正向提示词',
+            type: 'textarea',
+            nodeId: '1',
+            inputKey: 'text',
+            semanticRole: 'positivePrompt',
+          },
+          {
+            key: 'negativePrompt',
+            label: '负向提示词',
+            type: 'textarea',
+            nodeId: '2',
+            inputKey: 'text',
+            semanticRole: 'negativePrompt',
+          },
+        ],
+        outputNodeIds: ['3'],
+      },
+      7,
+    );
+
+    expect(visualPromptTemplates.syncFromComfyWorkflow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workflowName: '示例工作流',
+        targetModel: 'flux-dev',
+        positivePrompt: 'cinematic cat',
+        negativePrompt: 'blur, watermark',
+      }),
+      7,
+      manager,
+    );
+    expect(workflowRepository.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({ visualPromptTemplateId: 21 }),
+    );
+    const versionValue = versionRepository.create.mock.calls[0]?.[0];
+    const graph = JSON.parse(String(versionValue?.apiWorkflow)) as Record<
+      string,
+      { inputs: Record<string, unknown> }
+    >;
+    expect(graph['1'].inputs.text).toBe('');
+    expect(graph['2'].inputs.text).toBe('');
   });
 });
 
@@ -183,6 +287,7 @@ describe('ComfyUI 工作流可用状态', () => {
       {} as never,
       { find: jest.fn().mockResolvedValue([{ id: 2 }]) } as never,
       {} as never,
+      {} as never,
     );
 
     const options = await service.options();
@@ -204,6 +309,7 @@ describe('ComfyUI 工作流可用状态', () => {
       versions as never,
       {} as never,
       {} as never,
+      {} as never,
     );
     jest.spyOn(service, 'findOne').mockResolvedValue({
       id: 1,
@@ -215,5 +321,35 @@ describe('ComfyUI 工作流可用状态', () => {
     const result = await service.getRunnableVersion(1);
     expect(result.workflow.id).toBe(1);
     expect(result.version.id).toBe(3);
+  });
+
+  it('创作提示词直接使用工作流绑定模板和目标模型', async () => {
+    const visualPromptTemplates = {
+      composeBound: jest.fn().mockResolvedValue({
+        positivePrompt: 'converted positive',
+        negativePrompt: 'converted negative',
+      }),
+    };
+    const service = new ComfyWorkflowsService(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      visualPromptTemplates as never,
+    );
+    jest.spyOn(service, 'findOne').mockResolvedValue({
+      id: 1,
+      isEnabled: true,
+      targetModel: 'flux-dev',
+      visualPromptTemplateId: 21,
+    } as ComfyWorkflow);
+
+    const result = await service.composePrompt(1, { idea: '雨夜城市街道' });
+
+    expect(visualPromptTemplates.composeBound).toHaveBeenCalledWith(21, {
+      idea: '雨夜城市街道',
+      targetModel: 'flux-dev',
+    });
+    expect(result.positivePrompt).toBe('converted positive');
   });
 });
