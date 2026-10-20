@@ -24,12 +24,6 @@ const materials = ref<ComfyMaterial[]>([]);
 const workflowId = ref<string | null>("");
 const parameters = reactive<Record<string, unknown>>({});
 const createdTaskId = ref<number | null>(null);
-const workflowOptions = computed(() =>
-  workflows.value.map((item) => ({
-    value: String(item.id),
-    text: `${item.name} · ${item.outputType === "video" ? "视频" : "图片"} · v${item.version}`,
-  })),
-);
 const materialOptions = computed(() =>
   materials.value.map((item) => ({
     value: String(item.id),
@@ -94,49 +88,201 @@ onMounted(load);
 
 <template>
   <PageContainer title="ComfyUI 创作">
-    <div v-loading="loading" class="create-layout">
-      <section class="create-card">
-        <div class="section-heading">
-          <div>
-            <h2>选择工作流</h2>
-            <p>只显示管理员已发布、且执行服务处于启用状态的工作流模板。</p>
+    <div v-loading="loading" class="create-page">
+      <header class="create-hero">
+        <div class="create-hero__content">
+          <div class="create-hero__icon" aria-hidden="true">
+            <el-icon><MagicStick /></el-icon>
           </div>
-          <Button @click="router.push('/comfyui/tasks')">查看生成记录</Button>
+          <div>
+            <div class="create-hero__eyebrow">本机生成工作台</div>
+            <h2>选择工作流，开始你的下一次创作</h2>
+            <p>
+              调用已发布的 ComfyUI
+              工作流生成图片或视频，任务提交后会在后台持续运行。
+            </p>
+          </div>
         </div>
-        <el-empty
-          v-if="!workflows.length"
-          description="暂无可用工作流，请先配置 ComfyUI 服务并发布工作流"
-        />
-        <template v-else>
-          <Select
-            v-model="workflowId"
-            :options="workflowOptions"
-            :clearable="false"
-            placeholder="请选择工作流"
-          />
-          <p v-if="current?.description" class="workflow-description">
-            {{ current.description }}
-          </p>
-          <div class="parameter-list">
+        <div class="create-hero__actions">
+          <div class="create-hero__summary">
+            <span
+              ><strong>{{ workflows.length }}</strong> 个工作流</span
+            >
+            <span
+              ><strong>{{ materials.length }}</strong> 个输入素材</span
+            >
+          </div>
+          <div class="create-hero__links">
+            <Button
+              perm="ComfyMaterial.read"
+              icon="Picture"
+              @click="router.push('/comfyui/materials')"
+            >
+              素材库
+            </Button>
+            <Button
+              perm="ComfyTask.read"
+              icon="Clock"
+              @click="router.push('/comfyui/tasks')"
+            >
+              生成记录
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      <section v-if="!workflows.length" class="setup-empty">
+        <div class="setup-empty__header">
+          <div class="setup-empty__mark" aria-hidden="true">
+            <el-icon><Connection /></el-icon>
+          </div>
+          <div>
+            <h3>还没有可用于创作的工作流</h3>
+            <p>
+              完成服务连接并发布一个 API 工作流后，就可以在这里提交生成任务。
+            </p>
+          </div>
+        </div>
+        <div class="setup-steps">
+          <div class="setup-step">
+            <span>1</span>
+            <div>
+              <strong>连接本机服务</strong>
+              <p>配置 ComfyUI 地址并确认连接可用</p>
+            </div>
+          </div>
+          <div class="setup-step">
+            <span>2</span>
+            <div>
+              <strong>导入并发布工作流</strong>
+              <p>从 ComfyUI 导出 API JSON，配置开放参数</p>
+            </div>
+          </div>
+          <div class="setup-step">
+            <span>3</span>
+            <div>
+              <strong>填写参数开始创作</strong>
+              <p>任务在后台执行，结果自动进入素材库</p>
+            </div>
+          </div>
+        </div>
+        <div class="setup-empty__actions">
+          <Button
+            perm="ComfyConnection.read"
+            icon="Connection"
+            @click="router.push('/third-party-config/comfyui')"
+          >
+            配置服务
+          </Button>
+          <Button
+            perm="ComfyWorkflow.read"
+            icon="Upload"
+            @click="router.push('/comfyui/workflows')"
+          >
+            导入工作流
+          </Button>
+          <span>没有配置权限时，请联系管理员完成前两步。</span>
+        </div>
+      </section>
+
+      <section v-else class="creation-workspace">
+        <aside class="workflow-panel">
+          <div class="panel-heading">
+            <div>
+              <h3>工作流模板</h3>
+              <p>选择一个已发布模板</p>
+            </div>
+            <span>{{ workflows.length }}</span>
+          </div>
+          <div class="workflow-list" role="radiogroup" aria-label="工作流模板">
+            <button
+              v-for="workflow in workflows"
+              :key="workflow.id"
+              type="button"
+              role="radio"
+              class="workflow-card"
+              :class="{ 'is-active': workflow.id === current?.id }"
+              :aria-checked="workflow.id === current?.id"
+              @click="workflowId = String(workflow.id)"
+            >
+              <span
+                class="workflow-card__icon"
+                :class="`is-${workflow.outputType}`"
+              >
+                <el-icon>
+                  <VideoPlay v-if="workflow.outputType === 'video'" />
+                  <Picture v-else />
+                </el-icon>
+              </span>
+              <span class="workflow-card__content">
+                <strong>{{ workflow.name }}</strong>
+                <small>
+                  {{ workflow.outputType === "video" ? "视频" : "图片" }} ·
+                  {{ workflow.inputBindings.length }} 个参数 · v{{
+                    workflow.version
+                  }}
+                </small>
+              </span>
+              <el-icon
+                v-if="workflow.id === current?.id"
+                class="workflow-card__check"
+              >
+                <CircleCheckFilled />
+              </el-icon>
+            </button>
+          </div>
+        </aside>
+
+        <main class="parameter-panel">
+          <div class="selected-workflow">
+            <div>
+              <div class="selected-workflow__meta">
+                <span
+                  class="output-badge"
+                  :class="`is-${current?.outputType || 'image'}`"
+                >
+                  {{
+                    current?.outputType === "video" ? "视频生成" : "图片生成"
+                  }}
+                </span>
+                <span>版本 v{{ current?.version }}</span>
+              </div>
+              <h3>{{ current?.name }}</h3>
+              <p>
+                {{
+                  current?.description || "按照模板填写参数后即可提交生成任务。"
+                }}
+              </p>
+            </div>
+            <div class="selected-workflow__parameter-count">
+              <strong>{{ current?.inputBindings.length || 0 }}</strong>
+              <span>开放参数</span>
+            </div>
+          </div>
+
+          <div v-if="current?.inputBindings.length" class="parameter-list">
             <div
-              v-for="binding in current?.inputBindings || []"
+              v-for="binding in current.inputBindings"
               :key="binding.key"
               class="parameter-item"
+              :class="{
+                'parameter-item--full': binding.type === 'textarea',
+              }"
             >
               <label>{{ binding.label }}<i v-if="binding.required">*</i></label>
               <Input
                 v-if="binding.type === 'text'"
                 :model-value="String(parameters[binding.key] ?? '')"
-                @update:model-value="parameters[binding.key] = $event"
                 :placeholder="binding.hint || `请输入${binding.label}`"
+                @update:model-value="parameters[binding.key] = $event"
               />
               <Input
                 v-else-if="binding.type === 'textarea'"
                 :model-value="String(parameters[binding.key] ?? '')"
-                @update:model-value="parameters[binding.key] = $event"
                 mode="textarea"
                 :rows="6"
                 :placeholder="binding.hint || `请输入${binding.label}`"
+                @update:model-value="parameters[binding.key] = $event"
               />
               <InputNumber
                 v-else-if="binding.type === 'number' || binding.type === 'seed'"
@@ -145,7 +291,6 @@ onMounted(load);
                     ? (parameters[binding.key] as number)
                     : null
                 "
-                @update:model-value="parameters[binding.key] = $event"
                 mode="integer"
                 :min="binding.min"
                 :max="binding.max"
@@ -154,18 +299,18 @@ onMounted(load);
                     ? '留空则每次随机'
                     : `请输入${binding.label}`
                 "
+                @update:model-value="parameters[binding.key] = $event"
               />
               <Switch
                 v-else-if="binding.type === 'boolean'"
                 :model-value="parameters[binding.key] === true"
-                @update:model-value="parameters[binding.key] = $event"
                 active-text="是"
                 inactive-text="否"
+                @update:model-value="parameters[binding.key] = $event"
               />
               <Select
                 v-else-if="binding.type === 'select'"
                 :model-value="String(parameters[binding.key] ?? '')"
-                @update:model-value="parameters[binding.key] = $event"
                 :options="
                   (binding.options || []).map((item) => ({
                     value: String(item.value),
@@ -173,23 +318,34 @@ onMounted(load);
                   }))
                 "
                 :placeholder="`请选择${binding.label}`"
+                @update:model-value="parameters[binding.key] = $event"
               />
               <Select
                 v-else-if="binding.type === 'image'"
                 :model-value="String(parameters[binding.key] ?? '')"
-                @update:model-value="parameters[binding.key] = $event"
                 :options="materialOptions"
                 :placeholder="
                   materials.length
                     ? `请选择${binding.label}`
                     : '请先到 ComfyUI 素材上传图片'
                 "
+                @update:model-value="parameters[binding.key] = $event"
               />
               <small v-if="binding.hint">{{ binding.hint }}</small>
             </div>
           </div>
+          <div v-else class="parameter-empty">
+            <el-icon><Setting /></el-icon>
+            <div>
+              <strong>此工作流无需填写参数</strong>
+              <p>将直接使用工作流节点中保存的默认值执行。</p>
+            </div>
+          </div>
+
           <div class="submit-bar">
-            <span>提交后任务在后台继续执行，关闭页面不会中断 ComfyUI。</span>
+            <span
+              >关闭页面不会中断任务，生成结果会自动保存到 ComfyUI 素材库。</span
+            >
             <Button
               perm="ComfyTask.create"
               icon="MagicStick"
@@ -200,6 +356,9 @@ onMounted(load);
             </Button>
           </div>
           <div v-if="createdTaskId" class="task-created">
+            <span class="task-created__icon"
+              ><el-icon><CircleCheck /></el-icon
+            ></span>
             <div>
               <strong>任务已进入处理队列</strong>
               <p>
@@ -208,108 +367,547 @@ onMounted(load);
             </div>
             <Button @click="router.push('/comfyui/tasks')">查看任务进度</Button>
           </div>
-        </template>
+        </main>
       </section>
     </div>
   </PageContainer>
 </template>
 
 <style scoped>
-.create-layout {
-  max-width: 980px;
+.create-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  width: 100%;
+  max-width: 1180px;
   margin: 0 auto;
 }
-.create-card {
-  border: 1px solid #dce3ed;
-  border-radius: 12px;
-  padding: 24px;
-  background: #fff;
+
+.create-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  padding: 22px 24px;
+  border: 1px solid #dce8f7;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #f3f8ff 0%, #f8fbff 52%, #ffffff 100%);
 }
-.section-heading {
+
+.create-hero__content,
+.create-hero__actions,
+.create-hero__links,
+.create-hero__summary {
+  display: flex;
+  align-items: center;
+}
+
+.create-hero__content {
+  min-width: 0;
+  gap: var(--space-md);
+}
+
+.create-hero__icon {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  place-items: center;
+  border-radius: 14px;
+  background: var(--color-primary);
+  box-shadow: 0 8px 20px rgba(64, 158, 255, 0.2);
+  color: #fff;
+  font-size: 25px;
+}
+
+.create-hero__eyebrow {
+  margin-bottom: 4px;
+  color: var(--color-primary);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.create-hero h2,
+.create-hero p,
+.setup-empty h3,
+.setup-empty p,
+.panel-heading h3,
+.panel-heading p,
+.selected-workflow h3,
+.selected-workflow p,
+.parameter-empty p,
+.setup-step p {
+  margin: 0;
+}
+
+.create-hero h2 {
+  color: var(--color-text-primary);
+  font-size: 20px;
+  line-height: 1.4;
+}
+
+.create-hero p {
+  margin-top: 4px;
+  color: var(--color-text-regular);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+}
+
+.create-hero__actions {
+  flex-shrink: 0;
+  gap: var(--space-md);
+}
+
+.create-hero__summary {
+  gap: 14px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+
+.create-hero__summary strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-base);
+}
+
+.create-hero__links {
+  gap: var(--space-sm);
+}
+
+.setup-empty {
+  padding: 28px;
+  border: 1px solid var(--color-border-light);
+  border-radius: 14px;
+  background: var(--color-bg-container);
+}
+
+.setup-empty__header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.setup-empty__mark {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  place-items: center;
+  border-radius: 12px;
+  background: #ecf5ff;
+  color: var(--color-primary);
+  font-size: 22px;
+}
+
+.setup-empty h3,
+.panel-heading h3,
+.selected-workflow h3 {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-lg);
+}
+
+.setup-empty__header p,
+.panel-heading p,
+.selected-workflow p,
+.parameter-empty p,
+.setup-step p {
+  margin-top: 5px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+}
+
+.setup-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.setup-step {
+  display: flex;
+  min-width: 0;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: #fafcff;
+}
+
+.setup-step > span {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  place-items: center;
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
+  color: #fff;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+}
+
+.setup-step strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+}
+
+.setup-empty__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--color-border-light);
+}
+
+.setup-empty__actions > span {
+  margin-left: 4px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.creation-workspace {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  min-height: 460px;
+  overflow: hidden;
+  border: 1px solid var(--color-border-light);
+  border-radius: 14px;
+  background: var(--color-bg-container);
+}
+
+.workflow-panel {
+  min-width: 0;
+  padding: 20px;
+  border-right: 1px solid var(--color-border-light);
+  background: #f7f9fc;
+}
+
+.panel-heading {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 20px;
+  gap: 10px;
+  margin-bottom: 14px;
 }
-.section-heading h2 {
-  margin: 0 0 7px;
+
+.panel-heading > span {
+  min-width: 24px;
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  background: #e9eef6;
+  color: var(--color-text-regular);
+  font-size: var(--font-size-xs);
+  text-align: center;
+}
+
+.workflow-list {
+  display: grid;
+  gap: var(--space-sm);
+  max-height: 560px;
+  overflow-y: auto;
+}
+
+.workflow-card {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.workflow-card:hover {
+  border-color: #c6e2ff;
+  background: var(--color-bg-container);
+}
+
+.workflow-card.is-active {
+  border-color: #a0cfff;
+  background: var(--color-bg-container);
+  box-shadow: var(--shadow-sm);
+}
+
+.workflow-card__icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 10px;
+  background: #ecf5ff;
+  color: var(--color-primary);
   font-size: 18px;
 }
-.section-heading p,
-.workflow-description {
-  margin: 0;
-  color: #606266;
-  line-height: 1.6;
+
+.workflow-card__icon.is-video {
+  background: #fdf6ec;
+  color: var(--color-warning);
 }
-.workflow-description {
-  margin-top: 12px;
-  padding: 10px 12px;
-  background: #f5f7fa;
-  border-radius: 7px;
+
+.workflow-card__content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
 }
+
+.workflow-card__content strong {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workflow-card__content small {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workflow-card__check {
+  color: var(--color-primary);
+}
+
+.parameter-panel {
+  min-width: 0;
+  padding: 24px;
+}
+
+.selected-workflow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.selected-workflow h3 {
+  margin-top: var(--space-sm);
+}
+
+.selected-workflow__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.output-badge {
+  padding: 3px 9px;
+  border-radius: var(--radius-full);
+  background: #ecf5ff;
+  color: var(--color-primary);
+}
+
+.output-badge.is-video {
+  background: #fdf6ec;
+  color: var(--color-warning);
+}
+
+.selected-workflow__parameter-count {
+  display: flex;
+  min-width: 68px;
+  flex-direction: column;
+  align-items: flex-end;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.selected-workflow__parameter-count strong {
+  color: var(--color-primary);
+  font-size: 24px;
+  line-height: 1.2;
+}
+
 .parameter-list {
   display: grid;
-  gap: 18px;
-  margin-top: 24px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 20px;
+  margin-top: 22px;
 }
+
 .parameter-item {
   display: grid;
-  gap: 8px;
+  min-width: 0;
+  align-content: start;
+  gap: var(--space-sm);
 }
+
+.parameter-item--full {
+  grid-column: 1 / -1;
+}
+
 .parameter-item label {
-  font-size: 14px;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
   font-weight: 600;
-  color: #303133;
 }
+
 .parameter-item label i {
-  color: #f56c6c;
-  font-style: normal;
   margin-left: 4px;
+  color: var(--color-danger);
+  font-style: normal;
 }
+
 .parameter-item small {
-  color: #909399;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
 }
+
+.parameter-empty {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 22px;
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  background: #f7f9fc;
+}
+
+.parameter-empty > .el-icon {
+  color: var(--color-primary);
+  font-size: 22px;
+}
+
+.parameter-empty strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+}
+
 .submit-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
-  margin-top: 28px;
+  gap: var(--space-md);
+  margin-top: 24px;
   padding-top: 18px;
-  border-top: 1px solid #ebeef5;
+  border-top: 1px solid var(--color-border-light);
 }
+
 .submit-bar span {
-  color: #909399;
-  font-size: 13px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
 }
+
 .task-created {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-top: 20px;
-  padding: 16px;
+  gap: 12px;
+  margin-top: var(--space-md);
+  padding: 14px 16px;
   border: 1px solid #b3e19d;
-  border-radius: 9px;
+  border-radius: var(--radius-lg);
   background: #f0f9eb;
 }
+
+.task-created__icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  border-radius: var(--radius-full);
+  background: #e1f3d8;
+  color: var(--color-success);
+}
+
+.task-created > div {
+  min-width: 0;
+  flex: 1;
+}
+
 .task-created strong {
   color: #529b2e;
 }
+
 .task-created p {
   margin: 6px 0 0;
-  color: #606266;
+  color: var(--color-text-regular);
+  font-size: var(--font-size-xs);
 }
-@media (max-width: 680px) {
-  .section-heading,
-  .submit-bar {
+
+@media (max-width: 960px) {
+  .create-hero {
+    align-items: flex-start;
     flex-direction: column;
-    align-items: stretch;
   }
-  .task-created {
+
+  .create-hero__actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .creation-workspace {
+    grid-template-columns: 240px minmax(0, 1fr);
+  }
+
+  .parameter-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .parameter-item--full {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .create-hero,
+  .setup-empty,
+  .parameter-panel,
+  .workflow-panel {
+    padding: var(--space-md);
+  }
+
+  .create-hero__actions,
+  .create-hero__links,
+  .setup-empty__actions,
+  .submit-bar,
+  .task-created,
+  .selected-workflow {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .create-hero__summary {
+    justify-content: space-between;
+  }
+
+  .setup-steps,
+  .creation-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workflow-panel {
+    border-right: 0;
+    border-bottom: 1px solid var(--color-border-light);
+  }
+
+  .workflow-list {
+    max-height: 260px;
+  }
+
+  .selected-workflow__parameter-count {
+    align-items: flex-start;
   }
 }
 </style>
