@@ -232,8 +232,8 @@ export class ManagedFilesService {
   }
 
   async cleanupPreview(scope = 'ai-materials', limit = 100) {
-    if (scope !== 'ai-materials')
-      throw new BadRequestException('当前仅支持 AI 素材清理范围');
+    if (!['ai-materials', 'comfyui'].includes(scope))
+      throw new BadRequestException('受管文件清理范围无效');
     const environment = this.environmentName();
     const candidates = await this.files.find({
       where: [
@@ -279,7 +279,9 @@ export class ManagedFilesService {
     };
   }
 
-  async cleanup(fileIds: number[]) {
+  async cleanup(fileIds: number[], scope = 'ai-materials') {
+    if (!['ai-materials', 'comfyui'].includes(scope))
+      throw new BadRequestException('受管文件清理范围无效');
     const ids = Array.from(new Set(fileIds)).slice(0, 200);
     let deleted = 0;
     let failed = 0;
@@ -290,7 +292,7 @@ export class ManagedFilesService {
         const file = await files.findOne({
           where: {
             id,
-            scope: 'ai-materials',
+            scope,
             environment: this.environmentName(),
           },
           lock: { mode: 'pessimistic_write' },

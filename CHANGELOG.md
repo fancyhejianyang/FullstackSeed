@@ -1,5 +1,64 @@
 # CHANGELOG
 
+### 2026-10-20 接入本机 ComfyUI 独立创作子系统
+
+- 在现有“第三方配置”大菜单下新增“ComfyUI 服务”，支持同机回环、Docker 宿主机及私有网段地址，无认证 / Basic / Bearer 三种认证方式、默认服务、请求与任务时限、启停和只读连接检测；密钥不进入列表、业务选项或任务快照，普通创作端不暴露服务地址。
+- 在“内容创作”下新增 ComfyUI 创作、ComfyUI 素材、ComfyUI 工作流、ComfyUI 生成记录四个独立入口。现有“素材管理”及 `AiMaterial` 数据和接口保持不变；ComfyUI 输入与输出使用独立 `ComfyMaterial`、权限和页面。
+- 工作流只接收 ComfyUI API 格式 JSON，解析节点并通过白名单维护 `参数键 → nodeId → inputKey` 映射；支持文本、数字、开关、选项、种子、图片素材和系统输出前缀。每次保存生成不可变工作流版本，运行任务冻结工作流、映射和用户参数，不允许客户端任意修改节点图。
+- 新增 MySQL 持久化任务调度：提交 `/prompt` 后通过 `/queue` 与 `/history/{promptId}` 对账，展示等待、提交、排队、执行、归档及终态；输入图片先上传 ComfyUI，图片/视频输出通过 `/view` 下载后写入受管存储和 ComfyUI 素材库。任务列表不返回图 JSON或绑定快照，详情按需读取参数与多文件输出；共享实例只允许取消尚未提交的本系统任务，不调用全局 interrupt。
+- ComfyUI 文件统一写入 `comfyui/<环境>/objects/...`，使用独立文件引用并沿用至少 24 小时延迟清理。媒体存储清理接口增加 `comfyui` 范围，ComfyUI 素材页提供到期无引用文件的预览和精确清理；不会扫描或删除模型、插件、手工输出及现有 AI 素材目录。
+- 新增迁移 `1792483200000-CreateComfyUiIntegration`，同步补齐四个权限模块、菜单种子、第三方服务概览、前端路由、设计规范和实施文档。基础版采用 HTTP 队列/历史轮询；WebSocket 节点级实时进度、多实例租约和归档独立重试保留为后续增强，不虚构百分比。
+- 验证：后端 TypeORM 实体检查、变更文件 ESLint、Nest 生产构建、3 套 / 17 项菜单测试及 1 套 / 5 项第三方配置测试通过；前端 `vue-tsc --noEmit`、组件复用扫描和 Vite 生产构建通过。未连接数据库、执行迁移、启动服务或调用真实 ComfyUI；`web/components.d.ts` 用户既有未提交差异保持不纳入提交。
+
+新增文件（28）：
+
+- `server/src/comfyui/comfy-client.service.ts`
+- `server/src/comfyui/comfy-connections.controller.ts`
+- `server/src/comfyui/comfy-connections.service.ts`
+- `server/src/comfyui/comfy-files.service.ts`
+- `server/src/comfyui/comfy-materials.controller.ts`
+- `server/src/comfyui/comfy-materials.service.ts`
+- `server/src/comfyui/comfy-tasks.controller.ts`
+- `server/src/comfyui/comfy-tasks.service.ts`
+- `server/src/comfyui/comfy-workflows.controller.ts`
+- `server/src/comfyui/comfy-workflows.service.ts`
+- `server/src/comfyui/comfyui.module.ts`
+- `server/src/comfyui/dto/comfyui.dto.ts`
+- `server/src/comfyui/entities/comfy-connection.entity.ts`
+- `server/src/comfyui/entities/comfy-material.entity.ts`
+- `server/src/comfyui/entities/comfy-task-output.entity.ts`
+- `server/src/comfyui/entities/comfy-task.entity.ts`
+- `server/src/comfyui/entities/comfy-workflow-version.entity.ts`
+- `server/src/comfyui/entities/comfy-workflow.entity.ts`
+- `server/src/migrations/1792483200000-CreateComfyUiIntegration.ts`
+- `web/src/api/comfyUi.ts`
+- `web/src/views/comfy-connection/Edit.vue`
+- `web/src/views/comfy-connection/Index.vue`
+- `web/src/views/comfy-create/Index.vue`
+- `web/src/views/comfy-material/Index.vue`
+- `web/src/views/comfy-task/Index.vue`
+- `web/src/views/comfy-task/View.vue`
+- `web/src/views/comfy-workflow/Edit.vue`
+- `web/src/views/comfy-workflow/Index.vue`
+
+修改文件（13）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `MD/ComfyUI本机工作流接入设计方案.md`
+- `server/src/app.module.ts`
+- `server/src/managed-files/dto/managed-file.dto.ts`
+- `server/src/managed-files/managed-files.controller.ts`
+- `server/src/managed-files/managed-files.service.ts`
+- `server/src/menus/menu-structure.ts`
+- `server/src/menus/menus.service.ts`
+- `server/src/third-party-config/third-party-config.service.ts`
+- `server/src/users/users.service.ts`
+- `web/src/api/storageConfig.ts`
+- `web/src/router/index.ts`
+
+删除文件：无。
+
 ### 2026-10-19 首页补充内容创作与素材生成统计
 
 - 首页核心数据由六项扩展为九项，新增当前用户的内容创作数、AI 素材数和生成记录数；按 `ContentArticle.read` / `AiMaterial.read` 独立裁剪，生成记录在同时授权时汇总文章与素材任务，并提供文章创作、生成记录、素材管理三个快捷入口。

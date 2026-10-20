@@ -6,6 +6,7 @@ import { MineruConfig } from '../mineru-configs/entities/mineru-config.entity';
 import { VectorConfig } from '../vector-configs/entities/vector-config.entity';
 import { StorageConfigService } from '../storage-config/storage-config.service';
 import { THIRD_PARTY_MENUS } from '../menus/menu-structure';
+import { ComfyConnection } from '../comfyui/entities/comfy-connection.entity';
 
 export interface ThirdPartySummary {
   key: string;
@@ -95,6 +96,7 @@ export class ThirdPartyConfigService {
             ai: KnowledgeAiProvider,
             mineru: MineruConfig,
             vector: VectorConfig,
+            comfyui: ComfyConnection,
           };
           // 只查询聚合元信息，密钥、地址及模型参数不进入概览响应。
           const row = await this.db

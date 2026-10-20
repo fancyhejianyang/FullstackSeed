@@ -72,6 +72,30 @@ const routes: RouteRecordRaw[] = [
         meta: { title: "素材管理", permission: "AiMaterial.read" },
       },
       {
+        path: "comfyui/create",
+        name: "comfyui-create",
+        component: () => import("@/views/comfy-create/Index.vue"),
+        meta: { title: "ComfyUI 创作", permission: "ComfyTask.read" },
+      },
+      {
+        path: "comfyui/materials",
+        name: "comfyui-materials",
+        component: () => import("@/views/comfy-material/Index.vue"),
+        meta: { title: "ComfyUI 素材", permission: "ComfyMaterial.read" },
+      },
+      {
+        path: "comfyui/workflows",
+        name: "comfyui-workflows",
+        component: () => import("@/views/comfy-workflow/Index.vue"),
+        meta: { title: "ComfyUI 工作流", permission: "ComfyWorkflow.read" },
+      },
+      {
+        path: "comfyui/tasks",
+        name: "comfyui-tasks",
+        component: () => import("@/views/comfy-task/Index.vue"),
+        meta: { title: "ComfyUI 生成记录", permission: "ComfyTask.read" },
+      },
+      {
         path: "knowledge-bases",
         name: "knowledge-bases",
         redirect: "/knowledge-bases/categories",
@@ -184,6 +208,15 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: "AI 大模型账号",
           permission: "KnowledgeAiProvider.read",
+        },
+      },
+      {
+        path: "third-party-config/comfyui",
+        name: "third-party-config-comfyui",
+        component: () => import("@/views/comfy-connection/Index.vue"),
+        meta: {
+          title: "ComfyUI 服务配置",
+          permission: "ComfyConnection.read",
         },
       },
       {
@@ -396,10 +429,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import("@/views/document-parse-rule/Index.vue"),
         meta: { title: "文档解析规则", permission: "KnowledgeBase.read" },
       },
-      ...["ai", "wechat", "storage", "mineru", "vector"].map((key) => ({
-        path: "system-config/" + key,
-        redirect: "/third-party-config/" + key,
-      })),
+      ...["ai", "wechat", "storage", "mineru", "vector", "comfyui"].map(
+        (key) => ({
+          path: "system-config/" + key,
+          redirect: "/third-party-config/" + key,
+        }),
+      ),
       {
         path: "system-config/document-parse",
         redirect: "/knowledge-bases/document-parse",
@@ -453,6 +488,9 @@ router.beforeEach(async (to) => {
             ["/content-articles", "ContentArticle.read"],
             ["/content-templates", "ContentTemplate.read"],
             ["/ai-materials", "AiMaterial.read"],
+            ["/comfyui/create", "ComfyTask.read"],
+            ["/comfyui/materials", "ComfyMaterial.read"],
+            ["/comfyui/workflows", "ComfyWorkflow.read"],
           ];
     return (
       entries.find(([, permission]) =>

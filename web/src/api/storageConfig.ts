@@ -45,16 +45,16 @@ export interface ManagedCleanupPreview {
   }>;
 }
 
-export function getManagedCleanupPreview() {
+export function getManagedCleanupPreview(scope = "ai-materials") {
   return request.get<unknown, ManagedCleanupPreview>(
     "/media-storage/cleanup-preview",
-    { params: { scope: "ai-materials", limit: 100 } },
+    { params: { scope, limit: 100 } },
   );
 }
 
-export function cleanupManagedFiles(fileIds: number[]) {
+export function cleanupManagedFiles(fileIds: number[], scope = "ai-materials") {
   return request.post<
     unknown,
     { requested: number; deleted: number; failed: number }
-  >("/media-storage/cleanup", { fileIds });
+  >("/media-storage/cleanup", { fileIds, scope });
 }

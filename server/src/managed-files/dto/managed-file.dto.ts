@@ -1,15 +1,8 @@
 import { Type } from 'class-transformer';
-import {
-  IsArray,
-  IsInt,
-  IsOptional,
-  IsString,
-  Max,
-  Min,
-} from 'class-validator';
+import { IsArray, IsInt, IsIn, IsOptional, Max, Min } from 'class-validator';
 
 export class CleanupPreviewDto {
-  @IsString()
+  @IsIn(['ai-materials', 'comfyui'])
   @IsOptional()
   scope?: string = 'ai-materials';
 
@@ -22,6 +15,10 @@ export class CleanupPreviewDto {
 }
 
 export class CleanupManagedFilesDto {
+  @IsIn(['ai-materials', 'comfyui'])
+  @IsOptional()
+  scope?: string = 'ai-materials';
+
   @IsArray()
   @Type(() => Number)
   @IsInt({ each: true })

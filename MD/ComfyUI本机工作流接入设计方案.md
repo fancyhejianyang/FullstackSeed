@@ -1,6 +1,6 @@
 # ComfyUI 本机工作流接入设计方案
 
-> 状态：待确认方案，未实现业务代码。日期：2026-10-19。
+> 状态：基础闭环已实现。首次方案日期：2026-10-19，实施确认：2026-10-20。
 >
 > 已确认部署：ComfyUI 与 NestJS 后端在同一台电脑，本期采用后端直连，不建设本机连接器或设备配对。
 >
@@ -10,11 +10,11 @@
 
 将 ComfyUI 作为独立的媒体执行服务接入，不伪装成 OpenAI 图片模型，也不调用 Agent。管理员在 ComfyUI 中维护图形工作流，在本系统导入 API 格式工作流并绑定可开放的参数；普通用户只填写提示词、选定参数和输入图片。
 
-采用三个相互独立的管理对象：连接配置、工作流模板、运行任务。业务端以异步提交和查询为主；后端通过 HTTP 提交与取结果，通过 WebSocket 接收节点事件，再把统一进度提供给前端。
+采用五个相互独立的管理对象：连接配置、工作流模板与版本、ComfyUI 素材、运行任务、任务输出。业务端以异步提交和查询为主；基础闭环通过 HTTP 提交、队列与历史轮询获取阶段状态，后续再增加 WebSocket 节点级实时进度。
 
 首期支持一个本机直连配置、一份已验证的文生图工作流；图片闭环完成后增加一份明确的视频工作流及视频归档。连接器、设备配对和公网接入不属于本期范围。不要一开始承诺执行任意网上下载的工作流、自动安装插件或在系统里重造 ComfyUI 画布。
 
-文件归档复用 [AI 素材方案](./AI素材生成与存储清理设计方案.md)的文件登记与清理机制，但使用 `comfyui` 专用 scope。ComfyUI 运行任务保留各次结果，不自动覆盖其它任务；将来从“素材重新生成”调用它时，才遵循素材版本替换规则。
+现有“素材管理”只负责云端 AI 素材，实体、接口和页面保持不变。ComfyUI 使用独立 `ComfyMaterial` 素材库和 `comfyui` 受管存储 scope，仅复用底层文件登记、引用、OSS/CDN 与延迟清理能力。ComfyUI 运行任务保留各次结果，不覆盖现有 AI 素材或其它任务输出。
 
 ## 2. 已确认采用同机直连
 
@@ -72,9 +72,9 @@ ComfyUI 与 NestJS 已确认部署在同一台电脑。后端直接访问管理�
 
 ## 4. 功能入口和配置
 
-### 4.1 第三方配置中的 ComfyUI 连接
+### 4.1 独立第三方配置菜单中的 ComfyUI 连接
 
-新增“第三方配置 → ComfyUI”，权限前缀 `ComfyConnection`。常用字段仅名称、服务地址、启用状态；连接方式固定为同机直连，不提供设备配对或连接器选项。高级项放在折叠区。
+项目已经存在独立“第三方配置”大菜单组，在该分组下新增“ComfyUI 服务”，权限前缀 `ComfyConnection`，不再创建新的系统管理分组。字段包括名称、服务地址、无认证/Basic/Bearer 认证、请求时限、任务观察时限、默认服务、启用状态和连接检测结果；连接方式固定为同机直连，不提供设备配对或连接器选项。
 
 高级配置包括：允许的用户/角色、最大并发、排队时限、执行时限、归档时限、代理鉴权引用、工作流白名单和输出限制。普通使用者不需要输入任何端口或 Token。
 
@@ -84,17 +84,17 @@ ComfyUI 与 NestJS 已确认部署在同一台电脑。后端直接访问管理�
 
 记录实际服务版本和能力探测结果，不仅记录地址能否访问。新版本能力先进入适配配置，再启用，不能通过向真实任务发送取消请求来探测接口是否存在。
 
-### 4.2 AI 功能配置中的 ComfyUI 工作流
+### 4.2 内容创作中的 ComfyUI 工作流
 
-新增独立“ComfyUI 工作流”入口，可作为现有 AI 配置分组的新页面，不与问答“AI 工作流”的数据库或画布合并。
+在“内容创作”分组下新增独立“ComfyUI 工作流”入口，不放入 AI 功能配置，也不与问答“AI 工作流”的数据库或画布合并。
 
 管理员维护：名称、连接、输出类型（图片/视频）、API 工作流文件、参数映射、输出节点映射、依赖说明、启用状态。工作流修改生成新版本，运行任务绑定具体版本，后续编辑不影响已排队任务。
 
 普通用户从已发布工作流选项中选择，只读接口返回名称、输出类型、参数 schema 和运行条件，不返回地址、凭据、未审查的节点图或其他用户文件路径。
 
-### 4.3 内容创作中的工作流生成
+### 4.3 内容创作中的独立 ComfyUI 子系统
 
-新增“内容创作 → 工作流生成”，一个页面提供“发起生成”和任务列表，暂不建立通用全站任务中心。
+“内容创作”下增加“ComfyUI 创作”“ComfyUI 素材”“ComfyUI 工作流”“ComfyUI 生成记录”四个入口。创作页面只负责选模板、填写开放参数和提交；素材、模板、任务分别管理，避免把大量结果与执行记录塞进一个页面。
 
 发起生成只显示选中工作流开放的字段，通常是提示词、风格、尺寸档位和输入图片；种子、步数、视频帧数等放高级区。工作流未开放的参数不能由请求附加。
 
@@ -264,11 +264,12 @@ ComfyUI 可能把工作流和提示词写进图片/视频元数据。归档到�
 
 | 实体与表名                                         | 主要字段                                                                                                                                                                                                                                              | 说明                                                                              |
 | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `ComfyConnection` / `comfy_connections`            | `name, mode, baseUrl, credentialRef, isEnabled, allowedRoles, capabilities, limits`                                                                                                                                                                   | 本期 mode 固定 direct；地址仅管理员配置，记录版本及能力验证，不向业务选项返回凭据 |
-| `ComfyWorkflow` / `comfy_workflows`                | `name, connectionId, outputKind, currentVersionId, isEnabled`                                                                                                                                                                                         | 工作流目录                                                                        |
-| `ComfyWorkflowVersion` / `comfy_workflow_versions` | `workflowId, revision, apiGraph, parameterSchema, inputBindings, outputBindings, dependencyManifest, digest`                                                                                                                                          | 已发布内容不可原地修改，任务可追溯                                                |
-| `ComfyTask` / `comfy_tasks`                        | `userId, connectionId, workflowVersionId, requestId, attemptId, clientId, promptId, status, connectivity, archiveStatus, parameterSnapshot, progressValue, progressMax, currentNodeId, workerId, leaseExpiresAt, fencingToken, timestamps, errorCode` | 幂等、对账和真实进度；列表不读取图 JSON 与参数快照                                |
-| `ComfyTaskOutput` / `comfy_task_outputs`           | `taskId, nodeId, ordinal, remoteDescriptor, fileId, thumbnailFileId, kind, archiveStatus`                                                                                                                                                             | 一个任务多个输出；记录每个文件归档结果，支持断点恢复                              |
+| `ComfyConnection` / `comfy_connections`            | `name, baseUrl, authType, username, secret, requestTimeoutMs, taskTimeoutSec, isDefault, isEnabled, capabilitySnapshot` | 同机直连配置；密钥不进入列表、业务选项或任务快照 |
+| `ComfyWorkflow` / `comfy_workflows`                | `name, connectionId, outputType, apiWorkflow, inputBindings, outputNodeIds, version, isPublished, isEnabled` | 工作流模板目录；图 JSON 不进入列表响应 |
+| `ComfyWorkflowVersion` / `comfy_workflow_versions` | `workflowId, version, connectionId, apiWorkflow, inputBindings, outputNodeIds` | 每次保存形成不可变快照，任务绑定确定版本 |
+| `ComfyMaterial` / `comfy_materials`                | `userId, name, sourceType, mediaType, fileId, fileUrl, sourceTaskId, isFavorite` | 独立输入/输出素材库，不复用 `AiMaterial` |
+| `ComfyTask` / `comfy_tasks`                        | `userId, connectionId, workflowVersionId, requestId, promptId, status, stage, parameterSnapshot, workflowSnapshot, timestamps, errorMessage` | 异步执行和恢复；列表不读取图 JSON与参数快照 |
+| `ComfyTaskOutput` / `comfy_task_outputs`           | `taskId, nodeId, materialId, fileId, fileUrl, mimeType, size` | 一个任务多个输出，每个结果进入 ComfyUI 素材库 |
 
 复用 `managed_files/managed_file_references`。本期不增加 `deviceId`、设备表、配对凭据或连接器执行日志；这些仅在后续明确采用连接器时再设计迁移。
 
@@ -276,16 +277,15 @@ ComfyUI 可能把工作流和提示词写进图片/视频元数据。归档到�
 
 | 接口                                      | 作用与权限                                                                        |
 | ----------------------------------------- | --------------------------------------------------------------------------------- |
-| `/api/comfy-connections` CRUD             | 连接管理，`ComfyConnection.read/create/update/delete/batchDelete`                 |
-| `POST /api/comfy-connections/:id/check`   | 有界只读连接测试；`ComfyConnection.read`，地址必须来自已授权配置                  |
-| `/api/comfy-workflows` CRUD 与版本发布    | 模板管理，`ComfyWorkflow` 标准五动作权限；发布使用 update，不能绕过依赖校验       |
-| `GET /api/comfy-tasks/workflow-options`   | 当前用户可运行模板及 schema，`ComfyTask.read`                                     |
-| `POST /api/comfy-tasks`                   | `{workflowVersionId, parameters, requestId}`，快速返回任务 ID，`ComfyTask.create` |
-| `GET /api/comfy-tasks`、`/:id`            | 本人列表和详情，`ComfyTask.read`                                                  |
-| `GET /api/comfy-tasks/:id/events`         | 可选的鉴权 SSE 进度，`ComfyTask.read`                                             |
-| `POST /api/comfy-tasks/:id/cancel`        | 本人任务、能力允许才取消，`ComfyTask.update`                                      |
-| `POST /api/comfy-tasks/:id/retry-archive` | 只重试归档，不重跑 GPU，`ComfyTask.update`                                        |
-| `DELETE /api/comfy-tasks/:id`             | 终态任务软删并按引用安排文件清理，`ComfyTask.delete`                              |
+| `/api/comfyui/connections` CRUD            | 连接管理，`ComfyConnection` 标准五动作权限 |
+| `POST /api/comfyui/connections/:id/test`   | 有界只读连接测试；`ComfyConnection.update` |
+| `/api/comfyui/workflows` CRUD              | 模板管理与版本快照，`ComfyWorkflow` 标准五动作权限 |
+| `GET /api/comfyui/workflows/options`       | 当前用户可运行模板及开放参数 schema，`ComfyTask.read` |
+| `/api/comfyui/materials` 与 `/upload`      | 本人 ComfyUI 输入/输出素材管理，`ComfyMaterial` 标准五动作权限 |
+| `POST /api/comfyui/tasks`                  | `{workflowId, parameters, requestId}`，快速返回任务 ID，`ComfyTask.create` |
+| `GET /api/comfyui/tasks`、`/:id`           | 本人列表和详情，`ComfyTask.read` |
+| `POST /api/comfyui/tasks/:id/cancel`       | 仅安全取消尚未提交的任务，不降级为共享实例全局中断 |
+| `DELETE /api/comfyui/tasks/:id`            | 终态任务软删，输出素材继续独立保留 |
 
 批量删除只处理终态且授权的任务，不带出批量生成或清空设备队列。运行任务不因前端关闭、刷新或删除按钮被隐式取消。
 
@@ -293,7 +293,7 @@ ComfyUI 可能把工作流和提示词写进图片/视频元数据。归档到�
 
 ## 11. 实现目录和步骤
 
-建议新增 `server/src/comfy-connections/`、`comfy-workflows/`、`comfy-tasks/`，CRUD 按 demo 复制；`server/src/common/comfyui/` 放客户端与版本/输出适配，不放业务权限判断。前端对应 `views/comfy-connection/`、`comfy-workflow/`、`comfy-task/` 与 API 文件，继续使用项目组件。
+后端统一放在 `server/src/comfyui/`，按连接、工作流、素材、任务拆分 controller/service/entity，并由 `ComfyUiModule` 组合；前端使用 `views/comfy-connection/`、`comfy-workflow/`、`comfy-create/`、`comfy-material/`、`comfy-task/` 和 `api/comfyUi.ts`，继续复用项目组件。
 
 ### 阶段一 接入准备
 
@@ -303,7 +303,7 @@ ComfyUI 可能把工作流和提示词写进图片/视频元数据。归档到�
 
 ### 阶段二 图片最小闭环
 
-完成连接、工作流导入/参数映射、异步提交、WebSocket 事件归属、队列/历史对账、图片归档及任务列表。前端先轮询本系统状态；旧版运行中取消默认不开放。
+完成连接、工作流导入/参数映射、异步提交、队列/历史轮询、图片或视频归档及任务列表。基础版前端轮询本系统状态；旧版运行中取消默认不开放。WebSocket 节点级进度、归档独立重试和多实例租约属于后续增强，不把阶段状态伪装为百分比。
 
 重点验证连接丢失、提交回执丢失、进程重启和重复点击。此阶段不依赖视频，不改文章服务，也不要求 Redis。
 
@@ -317,7 +317,7 @@ ComfyUI 可能把工作流和提示词写进图片/视频元数据。归档到�
 
 按需要增加 SSE、受控实时预览、更多模板/输出节点、素材生成引擎选择。本期所有阶段均采用同机直连；若后续改变部署拓扑，再单独立项处理连接器或专网接入，不作为当前实施依赖。
 
-后续可让素材模块通过统一接口选择云端生图或某份 ComfyUI 图片模板，但保持不同配置和执行适配器。文章自动封面仍按用户既定规则走同账号云端模型，不擅自切到本机 GPU。
+现有 AI 素材模块保持不变，不增加云端/ComfyUI 引擎切换。若未来出现跨引擎统一资产库需求再单独设计迁移；文章自动封面仍按用户既定规则走同账号云端模型，不擅自切到本机 GPU。
 
 ## 12. 必须覆盖的验收场景
 

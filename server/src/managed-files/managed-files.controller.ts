@@ -24,6 +24,6 @@ export class ManagedFilesController {
   @RequirePermissions('MediaStorage.update')
   @ApiOperation({ summary: '按预览文件 ID 精确清理受管文件' })
   cleanup(@Body() dto: CleanupManagedFilesDto) {
-    return this.service.cleanup(dto.fileIds);
+    return this.service.cleanup(dto.fileIds, dto.scope);
   }
 }
