@@ -331,32 +331,61 @@ async function submit() {
 <template>
   <Dialog
     v-model="visible"
+    class="workflow-dialog"
     :title="row ? '编辑 ComfyUI 工作流' : '导入 ComfyUI 工作流'"
-    width="1120px"
-    body-max-height="72vh"
+    width="1040px"
+    body-max-height="76vh"
     :confirm-loading="submitting"
     @confirm="submit"
   >
-    <div v-loading="loading">
+    <div v-loading="loading" class="workflow-editor">
+      <div class="workflow-editor__heading">
+        <span class="workflow-editor__heading-title">基础信息</span>
+        <span class="workflow-editor__heading-description">
+          选择工作流的执行服务与输出类型
+        </span>
+      </div>
       <Form
         ref="formRef"
         v-model="form"
+        class="workflow-form"
         :fields="fields"
         :rules="rules"
         :columns="2"
         label-width="110px"
       >
         <template #field-apiWorkflow>
-          <div class="workflow-json">
-            <div class="workflow-json__actions">
-              <Button :confirm="false" icon="Upload" @click="fileInput?.click()"
-                >选择 API JSON</Button
-              >
-              <span>{{
-                graph
-                  ? `已识别 ${Object.keys(graph).length} 个节点`
-                  : "请从 ComfyUI 导出 API 格式工作流"
-              }}</span>
+          <section class="workflow-section workflow-json">
+            <div class="workflow-section__header">
+              <div>
+                <div class="workflow-section__title">
+                  <span class="workflow-section__required" aria-hidden="true"
+                    >*</span
+                  >
+                  API 工作流 JSON
+                </div>
+                <div class="workflow-section__description">
+                  请在 ComfyUI 中开启开发者模式，并导出 API 格式工作流
+                </div>
+              </div>
+              <div class="workflow-section__actions">
+                <span
+                  class="workflow-json__status"
+                  :class="{ 'is-ready': graph }"
+                >
+                  {{
+                    graph
+                      ? `已识别 ${Object.keys(graph).length} 个节点`
+                      : "等待导入"
+                  }}
+                </span>
+                <Button
+                  :confirm="false"
+                  icon="Upload"
+                  @click="fileInput?.click()"
+                  >选择 JSON 文件</Button
+                >
+              </div>
               <input
                 ref="fileInput"
                 hidden
@@ -368,25 +397,36 @@ async function submit() {
             <Input
               v-model="form.apiWorkflow"
               mode="textarea"
-              :rows="8"
+              :rows="7"
               :trim="false"
               :clearable="false"
               placeholder="粘贴或导入 ComfyUI API 工作流 JSON"
             />
-          </div>
+          </section>
         </template>
         <template #field-inputBindings>
-          <div class="binding-editor">
-            <div class="binding-editor__header">
-              <span>只开放这里配置的参数，运行时不会接受任意节点修改。</span>
-              <Button :confirm="false" icon="Plus" @click="addBinding"
-                >添加参数</Button
-              >
+          <section class="workflow-section binding-editor">
+            <div class="workflow-section__header">
+              <div>
+                <div class="workflow-section__title">
+                  开放参数
+                  <span class="workflow-section__count">
+                    {{ form.inputBindings.length }} 项
+                  </span>
+                </div>
+                <div class="workflow-section__description">
+                  仅开放这里映射的参数，运行时不会接受任意节点修改
+                </div>
+              </div>
+              <Button :confirm="false" icon="Plus" @click="addBinding">
+                添加参数
+              </Button>
             </div>
             <el-empty
               v-if="!form.inputBindings.length"
-              description="尚未配置开放参数"
-              :image-size="54"
+              class="binding-editor__empty"
+              description="暂无开放参数，工作流将使用节点内的默认值"
+              :image-size="42"
             />
             <div
               v-for="(binding, index) in form.inputBindings"
@@ -460,7 +500,7 @@ async function submit() {
                 </template>
               </div>
             </div>
-          </div>
+          </section>
         </template>
       </Form>
     </div>
@@ -468,30 +508,112 @@ async function submit() {
 </template>
 
 <style scoped>
-.workflow-json,
-.binding-editor {
+.workflow-editor {
   width: 100%;
 }
-.workflow-json__actions,
-.binding-editor__header {
+
+.workflow-editor__heading {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.workflow-editor__heading-title {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-base);
+  font-weight: 600;
+}
+
+.workflow-editor__heading-description,
+.workflow-section__description {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}
+
+.workflow-form :deep(.form__item--label-top > .el-form-item__label) {
+  display: none;
+}
+
+.workflow-form :deep(.form__item--label-top > .el-form-item__content) {
+  margin-left: 0 !important;
+}
+
+.workflow-section {
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--space-md);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: #fafcff;
+}
+
+.workflow-section__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-  color: #606266;
-  font-size: 13px;
+  gap: var(--space-md);
+  margin-bottom: 12px;
 }
+
+.workflow-section__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.workflow-section__required {
+  color: var(--color-danger);
+}
+
+.workflow-section__count {
+  padding: 0 8px;
+  border-radius: var(--radius-full);
+  background: #ecf5ff;
+  color: var(--color-primary);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+}
+
+.workflow-section__actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: var(--space-sm);
+}
+
+.workflow-json__status {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.workflow-json__status.is-ready {
+  color: var(--color-success);
+}
+
+.binding-editor__empty {
+  padding: 12px 0 4px;
+}
+
+.binding-editor__empty :deep(.el-empty__description) {
+  margin-top: var(--space-xs);
+}
+
 .binding-row {
   display: grid;
   grid-template-columns: 1fr 1fr 140px 1.3fr 1fr 1fr 90px auto;
-  gap: 8px;
+  gap: var(--space-sm);
   align-items: center;
   padding: 12px;
-  margin-bottom: 10px;
-  border: 1px solid #dcdfe6;
-  border-radius: 8px;
-  background: #fafcff;
+  margin-top: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-container);
 }
 .binding-row__options {
   grid-column: 1 / -1;
@@ -500,12 +622,30 @@ async function submit() {
   grid-column: 1 / -1;
   display: grid;
   grid-template-columns: 1fr 160px 160px;
-  gap: 8px;
+  gap: var(--space-sm);
 }
 .system-value {
-  color: #909399;
-  font-size: 12px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
 }
+
+@media (max-width: 760px) {
+  .workflow-editor__heading,
+  .workflow-section__header,
+  .workflow-section__actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .workflow-section__actions {
+    width: 100%;
+  }
+
+  .workflow-section {
+    padding: 12px;
+  }
+}
+
 @media (max-width: 900px) {
   .binding-row {
     grid-template-columns: 1fr 1fr;
@@ -516,5 +656,9 @@ async function submit() {
   .binding-row__advanced {
     grid-template-columns: 1fr;
   }
+}
+
+:global(.el-dialog.pro-dialog.workflow-dialog) {
+  max-width: calc(100vw - 32px);
 }
 </style>
