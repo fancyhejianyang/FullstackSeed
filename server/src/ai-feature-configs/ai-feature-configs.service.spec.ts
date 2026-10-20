@@ -114,6 +114,18 @@ describe('AiFeatureConfigsService', () => {
     expect(chatConfig.supportsImageToImage).toBe(false);
   });
 
+  it('视频生成默认启用图生视频能力，并与图片能力互斥', () => {
+    const config: Partial<AiFeatureConfig> = {
+      featureType: 'videoGeneration',
+      supportsImageToImage: true,
+    };
+    internals.normalizeFeatureSpecificSettings(config);
+    expect(config.supportsImageToVideo).toBe(true);
+    expect(config.supportsImageToImage).toBe(false);
+    expect(config.enableThinking).toBe(false);
+    expect(config.responseFormat).toBe('text');
+  });
+
   it('素材配置选项包含图生图能力但不暴露账号和提示词', async () => {
     const repository = {
       findAndCount: jest.fn().mockResolvedValue([

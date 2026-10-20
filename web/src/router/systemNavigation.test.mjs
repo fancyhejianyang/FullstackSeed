@@ -248,6 +248,9 @@ test('AI 配置中心与内容分组在 bootstrap 后选择有权限的页签', 
     [['ContentTemplate.read'], '/content-creation', '/content-templates'],
     [['ContentArticle.read'], '/content-creation', '/content-articles'],
     [['Menu.read'], '/content-creation', '/'],
+    [['ComfyTask.read'], '/comfyui', '/comfyui/create'],
+    [['ComfyMaterial.read'], '/comfyui', '/comfyui/materials'],
+    [['Menu.read'], '/comfyui', '/'],
   ]) {
     const h = routerHarness(permissions);
     await h.router.push(path);

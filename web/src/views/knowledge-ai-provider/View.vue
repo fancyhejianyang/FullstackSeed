@@ -24,6 +24,7 @@ const isEmbeddingOnlyProvider = computed(() => {
     getModelLines(data.textModels).length === 0 &&
     getModelLines(data.visionModels).length === 0 &&
     getModelLines(data.imageGenerationModels).length === 0 &&
+    getModelLines(data.videoGenerationModels).length === 0 &&
     getModelLines(data.models).every((item) => defaultChatModels.includes(item))
   );
 });
@@ -142,6 +143,12 @@ function shouldShowModelGroup(value?: string | null) {
         </el-descriptions-item>
         <el-descriptions-item label="生图接口地址">{{
           rowData?.imageGenerationApiUrl || "未配置"
+        }}</el-descriptions-item>
+        <el-descriptions-item label="视频生成模型">
+          {{ getModelLines(rowData?.videoGenerationModels).join("、") || "-" }}
+        </el-descriptions-item>
+        <el-descriptions-item label="视频生成接口地址">{{
+          rowData?.videoGenerationApiUrl || "未配置"
         }}</el-descriptions-item>
         <el-descriptions-item label="向量模型">
           <div

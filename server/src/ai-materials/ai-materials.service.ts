@@ -18,15 +18,24 @@ import {
 } from '../common/ai/image-generation';
 import {
   downloadGeneratedImage,
+  downloadGeneratedVideo,
   imageMime,
   readMediaJson,
+  videoMime,
 } from '../common/ai/image-utils';
+import {
+  videoGenerationRequest,
+  videoTaskId,
+  videoTaskResult,
+} from '../common/ai/video-generation';
 import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
 import { ManagedFilesService } from '../managed-files/managed-files.service';
 import type { UploadedStorageFile } from '../uploads/uploads.service';
 import {
   AI_MATERIAL_STYLE_VERSION,
   buildMaterialPrompt,
+  materialMediaType,
+  materialNeedsReferenceImage,
   type AiMaterialGenerationMode,
 } from './ai-material.constants';
 import {
@@ -43,10 +52,10 @@ import {
   type MaterialTaskStatus,
 } from './entities/material-generation-task.entity';
 import {
-  AI_MATERIAL_GENERATION_TIMEOUT_MS,
-  AI_MATERIAL_TASK_LEASE_MS,
   describeMaterialGenerationFailure,
+  materialGenerationTimeout,
   materialLeaseExpiredMessage,
+  materialTaskLease,
   MaterialProviderHttpError,
   type MaterialGenerationPhase,
 } from './material-generation-error';
@@ -96,6 +105,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
     const where = {
       userId,
       ...(query.status ? { generationStatus: query.status as never } : {}),
+      ...(query.mediaType ? { mediaType: query.mediaType } : {}),
       ...(query.keyword?.trim()
         ? { prompt: Like(`%${query.keyword.trim()}%`) }
         : {}),
@@ -121,6 +131,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
         const config = configMap.get(row.aiConfigId);
         return {
           ...summary,
+          currentMediaUrl: row.currentImageUrl,
           promptPreview: prompt.slice(0, 160),
           aiConfigName: config?.name ?? `配置 #${row.aiConfigId}`,
           aiModel: config?.model ?? '',
@@ -143,6 +154,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
         id: true,
         status: true,
         resultFileId: true,
+        providerTaskId: true,
         errorMessage: true,
         createdAt: true,
         startedAt: true,
@@ -153,6 +165,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
     });
     return {
       ...material,
+      currentMediaUrl: material.currentImageUrl,
       aiConfigName: config?.name ?? `配置 #${material.aiConfigId}`,
       aiModel: config?.model ?? '',
       latestTask,
@@ -165,45 +178,56 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
     referenceImage?: UploadedStorageFile,
   ) {
     const generationMode = dto.generationMode ?? 'textToImage';
+    const mediaType = materialMediaType(generationMode);
     await this.assertConfig(dto.aiConfigId, generationMode);
     const source = this.referenceImage(generationMode, referenceImage);
-    return this.materials.manager.transaction(async (manager) => {
-      const materials = manager.getRepository(AiMaterial);
-      const material = await materials.save(
-        materials.create({
-          userId,
-          prompt: dto.prompt.trim(),
-          styleKey: dto.styleKey,
-          customStyle:
-            dto.styleKey === 'custom' ? dto.customStyle?.trim() || null : null,
-          aiConfigId: dto.aiConfigId,
-          generationMode,
-          referenceFileId: null,
-          referenceImageUrl: null,
-          currentFileId: null,
-          currentImageUrl: null,
-          version: 1,
-          generationRevision: 0,
-          generationStatus: 'idle',
-          generationError: null,
-        }),
-      );
-      if (!source) return material;
-      const file = await this.managedFiles.stageAndStore(source, {
-        ownerId: userId,
-        materialId: material.id,
-        revision: material.version,
-      });
-      await this.managedFiles.replaceMaterialSourceReference(manager, {
-        ownerId: userId,
-        materialId: material.id,
-        newFileId: file.id,
-        oldFileId: null,
-      });
-      material.referenceFileId = file.id;
-      material.referenceImageUrl = file.publicUrl;
-      return materials.save(material);
-    });
+    const material = await this.materials.manager.transaction(
+      async (manager) => {
+        const materials = manager.getRepository(AiMaterial);
+        const material = await materials.save(
+          materials.create({
+            userId,
+            prompt: dto.prompt.trim(),
+            styleKey: dto.styleKey,
+            customStyle:
+              dto.styleKey === 'custom'
+                ? dto.customStyle?.trim() || null
+                : null,
+            aiConfigId: dto.aiConfigId,
+            generationMode,
+            mediaType,
+            currentMediaType: null,
+            videoResolution: dto.videoResolution ?? '720P',
+            videoRatio: dto.videoRatio ?? '16:9',
+            videoDuration: dto.videoDuration ?? 5,
+            referenceFileId: null,
+            referenceImageUrl: null,
+            currentFileId: null,
+            currentImageUrl: null,
+            version: 1,
+            generationRevision: 0,
+            generationStatus: 'idle',
+            generationError: null,
+          }),
+        );
+        if (!source) return material;
+        const file = await this.managedFiles.stageAndStore(source, {
+          ownerId: userId,
+          materialId: material.id,
+          revision: material.version,
+        });
+        await this.managedFiles.replaceMaterialSourceReference(manager, {
+          ownerId: userId,
+          materialId: material.id,
+          newFileId: file.id,
+          oldFileId: null,
+        });
+        material.referenceFileId = file.id;
+        material.referenceImageUrl = file.publicUrl;
+        return materials.save(material);
+      },
+    );
+    return { ...material, currentMediaUrl: material.currentImageUrl };
   }
 
   async update(
@@ -215,14 +239,15 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
     const material = await this.material(id, userId);
     const nextConfigId = dto.aiConfigId ?? material.aiConfigId;
     const generationMode = dto.generationMode ?? material.generationMode;
+    const mediaType = materialMediaType(generationMode);
     await this.assertConfig(nextConfigId, generationMode);
     const source = this.referenceImage(generationMode, referenceImage, true);
     if (
-      generationMode === 'imageToImage' &&
+      materialNeedsReferenceImage(generationMode) &&
       !source &&
       !material.referenceFileId
     )
-      throw new BadRequestException('图生图必须上传参考图片');
+      throw new BadRequestException('图生图/图生视频必须上传参考图片');
     const nextStyle = dto.styleKey ?? material.styleKey;
     const customStyle =
       nextStyle === 'custom'
@@ -237,52 +262,60 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
           revision: material.version + 1,
         })
       : null;
-    return this.materials.manager.transaction(async (manager) => {
-      const materials = manager.getRepository(AiMaterial);
-      const current = await materials.findOne({
-        where: { id, userId },
-        lock: { mode: 'pessimistic_write' },
-      });
-      if (!current) throw new NotFoundException('素材不存在');
-      if (current.version !== material.version)
-        throw new ConflictException('素材已更新，请刷新后重试');
-      if (dto.prompt !== undefined) current.prompt = dto.prompt.trim();
-      current.styleKey = nextStyle;
-      current.customStyle = customStyle;
-      current.aiConfigId = nextConfigId;
-      current.generationMode = generationMode;
-      current.version += 1;
-      if (generationMode === 'textToImage') {
-        await this.managedFiles.releaseMaterialSourceReference(
-          manager,
-          userId,
-          id,
-          current.referenceFileId,
-        );
-        current.referenceFileId = null;
-        current.referenceImageUrl = null;
-      } else if (stagedSource) {
-        await this.managedFiles.replaceMaterialSourceReference(manager, {
-          ownerId: userId,
-          materialId: id,
-          newFileId: stagedSource.id,
-          oldFileId: current.referenceFileId,
+    const updated = await this.materials.manager.transaction(
+      async (manager) => {
+        const materials = manager.getRepository(AiMaterial);
+        const current = await materials.findOne({
+          where: { id, userId },
+          lock: { mode: 'pessimistic_write' },
         });
-        current.referenceFileId = stagedSource.id;
-        current.referenceImageUrl = stagedSource.publicUrl;
-      } else if (!current.referenceFileId) {
-        throw new BadRequestException('图生图必须上传参考图片');
-      }
-      if (
-        !ACTIVE_STATUSES.includes(
-          current.generationStatus as MaterialTaskStatus,
-        )
-      ) {
-        current.generationStatus = 'idle';
-        current.generationError = null;
-      }
-      return materials.save(current);
-    });
+        if (!current) throw new NotFoundException('素材不存在');
+        if (current.version !== material.version)
+          throw new ConflictException('素材已更新，请刷新后重试');
+        if (dto.prompt !== undefined) current.prompt = dto.prompt.trim();
+        current.styleKey = nextStyle;
+        current.customStyle = customStyle;
+        current.aiConfigId = nextConfigId;
+        current.generationMode = generationMode;
+        current.mediaType = mediaType;
+        current.videoResolution =
+          dto.videoResolution ?? material.videoResolution;
+        current.videoRatio = dto.videoRatio ?? material.videoRatio;
+        current.videoDuration = dto.videoDuration ?? material.videoDuration;
+        current.version += 1;
+        if (!materialNeedsReferenceImage(generationMode)) {
+          await this.managedFiles.releaseMaterialSourceReference(
+            manager,
+            userId,
+            id,
+            current.referenceFileId,
+          );
+          current.referenceFileId = null;
+          current.referenceImageUrl = null;
+        } else if (stagedSource) {
+          await this.managedFiles.replaceMaterialSourceReference(manager, {
+            ownerId: userId,
+            materialId: id,
+            newFileId: stagedSource.id,
+            oldFileId: current.referenceFileId,
+          });
+          current.referenceFileId = stagedSource.id;
+          current.referenceImageUrl = stagedSource.publicUrl;
+        } else if (!current.referenceFileId) {
+          throw new BadRequestException('图生图/图生视频必须上传参考图片');
+        }
+        if (
+          !ACTIVE_STATUSES.includes(
+            current.generationStatus as MaterialTaskStatus,
+          )
+        ) {
+          current.generationStatus = 'idle';
+          current.generationError = null;
+        }
+        return materials.save(current);
+      },
+    );
+    return { ...updated, currentMediaUrl: updated.currentImageUrl };
   }
 
   async remove(id: number, userId: number) {
@@ -330,7 +363,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
   }
 
   configOptions(query: QueryAiMaterialDto) {
-    return this.configs.imageGenerationOptions(query);
+    return this.configs.materialGenerationOptions(query);
   }
 
   async submit(materialId: number, dto: GenerateAiMaterialDto, userId: number) {
@@ -352,8 +385,13 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
       material.aiConfigId,
       material.generationMode,
     );
-    if (material.generationMode === 'imageToImage' && !material.referenceFileId)
-      throw new BadRequestException('图生图素材缺少参考图片，请先编辑素材');
+    if (
+      materialNeedsReferenceImage(material.generationMode) &&
+      !material.referenceFileId
+    )
+      throw new BadRequestException(
+        '图生图/图生视频素材缺少参考图片，请先编辑素材',
+      );
     const snapshot = {
       requestVersion: material.version,
       revision: material.generationRevision + 1,
@@ -368,6 +406,10 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
         defaultRequirement: config.systemPrompt,
       }),
       generationMode: material.generationMode,
+      mediaType: material.mediaType,
+      videoResolution: material.videoResolution,
+      videoRatio: material.videoRatio,
+      videoDuration: material.videoDuration,
       referenceFileId: material.referenceFileId,
       config: {
         id: config.id,
@@ -398,6 +440,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
             activeUserId: userId,
             snapshot,
             resultFileId: null,
+            providerTaskId: null,
             workerId: null,
             leaseExpiresAt: null,
             startedAt: null,
@@ -430,6 +473,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
         materialVersion: true,
         status: true,
         resultFileId: true,
+        providerTaskId: true,
         errorMessage: true,
         createdAt: true,
         startedAt: true,
@@ -465,7 +509,9 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
           status: 'running',
           workerId: this.workerId,
           startedAt: new Date(),
-          leaseExpiresAt: new Date(Date.now() + AI_MATERIAL_TASK_LEASE_MS),
+          leaseExpiresAt: new Date(
+            Date.now() + materialTaskLease(task.snapshot?.mediaType ?? 'image'),
+          ),
         },
       );
       if (claim.affected !== 1) return;
@@ -486,64 +532,83 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
     let resultFileId: number | null = null;
     let phase: MaterialGenerationPhase = 'resolvingConfig';
     try {
+      const mediaType =
+        task.snapshot.mediaType ??
+        materialMediaType(task.snapshot.generationMode ?? 'textToImage');
       const signal = AbortSignal.any([
         this.activeAbort.signal,
-        AbortSignal.timeout(AI_MATERIAL_GENERATION_TIMEOUT_MS),
+        AbortSignal.timeout(materialGenerationTimeout(mediaType)),
       ]);
       const target = await this.providers.resolveMediaTarget(
         task.snapshot.config.providerId,
         task.snapshot.config.model,
-        'imageGeneration',
+        mediaType === 'video' ? 'videoGeneration' : 'imageGeneration',
       );
       const generationMode = task.snapshot.generationMode ?? 'textToImage';
       phase = 'readingReference';
-      const reference =
-        generationMode === 'imageToImage'
-          ? await this.managedFiles.readMaterialImage(
-              task.snapshot.referenceFileId ?? 0,
-              task.userId,
-            )
-          : null;
+      const reference = materialNeedsReferenceImage(generationMode)
+        ? await this.managedFiles.readMaterialImage(
+            task.snapshot.referenceFileId ?? 0,
+            task.userId,
+          )
+        : null;
       const referenceImageDataUrl = reference
         ? `data:${reference.mimeType};base64,${reference.buffer.toString('base64')}`
         : undefined;
-      phase = 'requestingProvider';
-      const response = await fetch(target.url, {
-        method: 'POST',
-        redirect: 'error',
-        signal,
-        headers: {
-          Authorization: `Bearer ${target.secretKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(
-          imageGenerationRequest(
-            target.model,
-            task.snapshot.finalPrompt,
-            target.protocol,
-            referenceImageDataUrl,
+      let buffer: Buffer;
+      let mime: string;
+      let extension: string;
+      if (mediaType === 'video') {
+        const generated = await this.generateVideo(
+          task,
+          target,
+          generationMode,
+          referenceImageDataUrl,
+          signal,
+          (nextPhase) => {
+            phase = nextPhase;
+          },
+        );
+        phase = 'downloadingVideo';
+        buffer = await downloadGeneratedVideo(generated, signal);
+        mime = videoMime(buffer);
+        extension = 'mp4';
+      } else {
+        phase = 'requestingProvider';
+        const response = await fetch(target.url, {
+          method: 'POST',
+          redirect: 'error',
+          signal,
+          headers: {
+            Authorization: `Bearer ${target.secretKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(
+            imageGenerationRequest(
+              target.model,
+              task.snapshot.finalPrompt,
+              target.protocol,
+              referenceImageDataUrl,
+            ),
           ),
-        ),
-      });
-      if (!response.ok) {
-        const statusCode = response.status;
-        await response.body?.cancel();
-        throw new MaterialProviderHttpError(statusCode);
+        });
+        await this.assertProviderResponse(response);
+        phase = 'parsingResponse';
+        const generated = generationResult(
+          await readMediaJson(response),
+          target.protocol,
+        );
+        phase = 'downloadingImage';
+        buffer =
+          generated.data ??
+          (await downloadGeneratedImage(generated.url, signal));
+        mime = imageMime(buffer);
+        extension = {
+          'image/png': 'png',
+          'image/jpeg': 'jpg',
+          'image/webp': 'webp',
+        }[mime]!;
       }
-      phase = 'parsingResponse';
-      const generated = generationResult(
-        await readMediaJson(response),
-        target.protocol,
-      );
-      phase = 'downloadingImage';
-      const buffer =
-        generated.data ?? (await downloadGeneratedImage(generated.url, signal));
-      const mime = imageMime(buffer);
-      const extension = {
-        'image/png': 'png',
-        'image/jpeg': 'jpg',
-        'image/webp': 'webp',
-      }[mime]!;
       await this.tasks.update(
         { id: task.id, status: 'running', workerId: this.workerId },
         { status: 'storing' },
@@ -552,7 +617,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
         { id: task.materialId, userId: task.userId },
         { generationStatus: 'storing' },
       );
-      phase = 'storingImage';
+      phase = mediaType === 'video' ? 'storingVideo' : 'storingImage';
       const file = await this.managedFiles.stageAndStore(
         {
           originalname: `ai-material.${extension}`,
@@ -599,6 +664,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
         });
         material.currentFileId = file.id;
         material.currentImageUrl = file.publicUrl;
+        material.currentMediaType = mediaType;
         material.generationRevision = task.snapshot.revision;
         material.generationStatus = 'succeeded';
         material.generationError = null;
@@ -617,6 +683,9 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
     } catch (error) {
       const failure = describeMaterialGenerationFailure(error, {
         phase,
+        mediaType:
+          task.snapshot.mediaType ??
+          materialMediaType(task.snapshot.generationMode ?? 'textToImage'),
         serviceStopped: this.stopped,
         manuallyAborted: this.activeAbort.signal.aborted,
       });
@@ -651,6 +720,102 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  private async generateVideo(
+    task: MaterialGenerationTask,
+    target: {
+      url: string;
+      taskUrlTemplate: string | null;
+      secretKey: string;
+      model: string;
+      protocol: 'openai' | 'dashscope';
+    },
+    generationMode: AiMaterialGenerationMode,
+    referenceImageDataUrl: string | undefined,
+    signal: AbortSignal,
+    setPhase: (phase: MaterialGenerationPhase) => void,
+  ) {
+    if (target.protocol !== 'dashscope' || !target.taskUrlTemplate)
+      throw new BadRequestException(
+        '视频生成配置不是有效的 DashScope 异步协议',
+      );
+    setPhase('requestingProvider');
+    const response = await fetch(target.url, {
+      method: 'POST',
+      redirect: 'error',
+      signal,
+      headers: {
+        Authorization: `Bearer ${target.secretKey}`,
+        'Content-Type': 'application/json',
+        'X-DashScope-Async': 'enable',
+      },
+      body: JSON.stringify(
+        videoGenerationRequest({
+          model: target.model,
+          prompt: task.snapshot.finalPrompt,
+          generationMode,
+          referenceImageDataUrl,
+          resolution: task.snapshot.videoResolution ?? '720P',
+          ratio: task.snapshot.videoRatio ?? '16:9',
+          duration: task.snapshot.videoDuration ?? 5,
+        }),
+      ),
+    });
+    await this.assertProviderResponse(response);
+    setPhase('parsingResponse');
+    const providerTaskId = videoTaskId(await readMediaJson(response));
+    await this.tasks.update(
+      { id: task.id, status: 'running', workerId: this.workerId },
+      { providerTaskId },
+    );
+    const taskUrl = target.taskUrlTemplate.replace(
+      '{taskId}',
+      encodeURIComponent(providerTaskId),
+    );
+    setPhase('pollingProvider');
+    for (;;) {
+      await this.waitForPoll(signal);
+      const statusResponse = await fetch(taskUrl, {
+        method: 'GET',
+        redirect: 'error',
+        signal,
+        headers: { Authorization: `Bearer ${target.secretKey}` },
+      });
+      await this.assertProviderResponse(statusResponse);
+      const result = videoTaskResult(await readMediaJson(statusResponse));
+      if (result.status === 'pending') continue;
+      if (result.status === 'succeeded') return result.videoUrl!;
+      throw new BadRequestException(
+        `视频生成失败${result.errorMessage ? `：${result.errorMessage}` : ''}`,
+      );
+    }
+  }
+
+  private async assertProviderResponse(response: Response) {
+    if (response.ok) return;
+    const statusCode = response.status;
+    await response.body?.cancel();
+    throw new MaterialProviderHttpError(statusCode);
+  }
+
+  private waitForPoll(signal: AbortSignal) {
+    signal.throwIfAborted();
+    return new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        signal.removeEventListener('abort', onAbort);
+        resolve();
+      }, 3000);
+      const onAbort = () => {
+        clearTimeout(timer);
+        reject(
+          signal.reason instanceof Error
+            ? signal.reason
+            : new DOMException('The operation was aborted', 'AbortError'),
+        );
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+    });
+  }
+
   private async expireLeases() {
     const expired = await this.tasks.find({
       select: {
@@ -658,6 +823,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
         userId: true,
         materialId: true,
         materialVersion: true,
+        snapshot: true,
       },
       where: [
         { status: 'running', leaseExpiresAt: LessThan(new Date()) },
@@ -665,6 +831,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
       ],
     });
     for (const task of expired) {
+      const mediaType = task.snapshot?.mediaType ?? 'image';
       const result = await this.tasks.update(
         { id: task.id, status: In(['running', 'storing']) },
         {
@@ -673,7 +840,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
           activeMaterialId: null,
           activeUserId: null,
           leaseExpiresAt: null,
-          errorMessage: materialLeaseExpiredMessage(),
+          errorMessage: materialLeaseExpiredMessage(mediaType),
         },
       );
       if (result.affected === 1)
@@ -685,7 +852,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
           },
           {
             generationStatus: 'interrupted',
-            generationError: materialLeaseExpiredMessage(),
+            generationError: materialLeaseExpiredMessage(mediaType),
           },
         );
     }
@@ -695,18 +862,25 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
     id: number,
     generationMode: AiMaterialGenerationMode = 'textToImage',
   ) {
-    const config = await this.configs.findUsableImageGenerationConfig(
-      id,
-      generationMode,
-    );
+    const mediaType = materialMediaType(generationMode);
+    const config =
+      mediaType === 'video'
+        ? await this.configs.findUsableVideoGenerationConfig(id, generationMode)
+        : await this.configs.findUsableImageGenerationConfig(
+            id,
+            generationMode,
+          );
     const target = await this.providers.resolveMediaTarget(
       config.providerId!,
       config.model!,
-      'imageGeneration',
+      mediaType === 'video' ? 'videoGeneration' : 'imageGeneration',
     );
-    if (generationMode === 'imageToImage' && target.protocol !== 'dashscope')
+    if (
+      materialNeedsReferenceImage(generationMode) &&
+      target.protocol !== 'dashscope'
+    )
       throw new BadRequestException(
-        '图生图当前仅支持 DashScope 多模态生图协议',
+        '图生图/图生视频当前仅支持 DashScope 多模态协议',
       );
     return config;
   }
@@ -716,13 +890,13 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
     file?: UploadedStorageFile,
     optional = false,
   ) {
-    if (generationMode === 'textToImage') {
+    if (!materialNeedsReferenceImage(generationMode)) {
       if (file) throw new BadRequestException('文生图不接收参考图片');
       return undefined;
     }
     if (!file) {
       if (optional) return undefined;
-      throw new BadRequestException('图生图必须上传参考图片');
+      throw new BadRequestException('图生图/图生视频必须上传参考图片');
     }
     if (!file.buffer?.length) throw new BadRequestException('参考图片内容为空');
     if (
@@ -757,6 +931,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
       materialVersion: task.materialVersion,
       status: task.status,
       resultFileId: task.resultFileId,
+      providerTaskId: task.providerTaskId,
       errorMessage: task.errorMessage,
       createdAt: task.createdAt,
       startedAt: task.startedAt,

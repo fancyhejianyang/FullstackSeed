@@ -12,6 +12,8 @@ export interface KnowledgeAiProvider {
   imageGenerationModels: string;
   imageGenerationProtocol: "openai" | "dashscope";
   imageGenerationApiUrl: string;
+  videoGenerationModels: string;
+  videoGenerationApiUrl: string;
   embeddingModels: string;
   isEnabled: boolean;
   description: string;
@@ -45,6 +47,8 @@ export interface KnowledgeAiProviderForm {
   imageGenerationModels?: string;
   imageGenerationProtocol?: "openai" | "dashscope";
   imageGenerationApiUrl?: string;
+  videoGenerationModels?: string;
+  videoGenerationApiUrl?: string;
   embeddingModels?: string;
   isEnabled?: boolean;
   description?: string;
@@ -74,7 +78,8 @@ export interface ValidateKnowledgeAiProviderModelPayload {
     | "ocr"
     | "rerank"
     | "embedding"
-    | "imageGeneration";
+    | "imageGeneration"
+    | "videoGeneration";
 }
 
 export interface ValidateKnowledgeAiProviderModelResult {

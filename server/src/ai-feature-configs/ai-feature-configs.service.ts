@@ -154,6 +154,22 @@ export class AiFeatureConfigsService {
     return config;
   }
 
+  async findUsableVideoGenerationConfig(
+    id: number,
+    generationMode: AiMaterialGenerationMode = 'textToVideo',
+  ) {
+    const config = await this.findOne(id);
+    if (config.featureType !== 'videoGeneration')
+      throw new BadRequestException('请选择视频生成类型的 AI 功能配置');
+    if (!config.isEnabled)
+      throw new BadRequestException('该视频生成配置未启用');
+    if (!config.providerId || !config.model?.trim())
+      throw new BadRequestException('视频生成配置缺少模型账号或视频模型');
+    if (generationMode === 'imageToVideo' && !config.supportsImageToVideo)
+      throw new BadRequestException('所选视频生成配置未启用图生视频能力');
+    return config;
+  }
+
   async imageGenerationOptions(query: {
     page?: number;
     pageSize?: number;
@@ -167,6 +183,38 @@ export class AiFeatureConfigsService {
         name: true,
         model: true,
         supportsImageToImage: true,
+      },
+      where: keyword
+        ? [
+            { ...base, name: Like(`%${keyword}%`) },
+            { ...base, model: Like(`%${keyword}%`) },
+          ]
+        : base,
+      order: { id: 'DESC' },
+      skip: ((query.page ?? 1) - 1) * (query.pageSize ?? 100),
+      take: query.pageSize ?? 100,
+    });
+    return { list: rows, total };
+  }
+
+  async materialGenerationOptions(query: {
+    page?: number;
+    pageSize?: number;
+    keyword?: string;
+  }) {
+    const keyword = query.keyword?.trim();
+    const base = {
+      featureType: In(['imageGeneration', 'videoGeneration']),
+      isEnabled: true,
+    };
+    const [rows, total] = await this.configRepository.findAndCount({
+      select: {
+        id: true,
+        name: true,
+        model: true,
+        featureType: true,
+        supportsImageToImage: true,
+        supportsImageToVideo: true,
       },
       where: keyword
         ? [
@@ -285,6 +333,14 @@ export class AiFeatureConfigsService {
     ) {
       payload.supportsImageToImage = dto.featureType === 'imageGeneration';
     }
+    if (dto.supportsImageToVideo !== undefined) {
+      payload.supportsImageToVideo = dto.supportsImageToVideo;
+    } else if (
+      isCreate ||
+      (dto.featureType !== undefined && dto.featureType !== previousFeatureType)
+    ) {
+      payload.supportsImageToVideo = dto.featureType === 'videoGeneration';
+    }
     if (dto.useMineru !== undefined || isCreate) {
       payload.useMineru = dto.useMineru ?? false;
       if (!payload.useMineru) {
@@ -302,8 +358,18 @@ export class AiFeatureConfigsService {
   }
 
   private normalizeFeatureSpecificSettings(config: Partial<AiFeatureConfig>) {
-    if (config.featureType === 'imageGeneration') {
-      config.supportsImageToImage ??= true;
+    if (
+      config.featureType === 'imageGeneration' ||
+      config.featureType === 'videoGeneration'
+    ) {
+      config.supportsImageToImage =
+        config.featureType === 'imageGeneration'
+          ? (config.supportsImageToImage ?? true)
+          : false;
+      config.supportsImageToVideo =
+        config.featureType === 'videoGeneration'
+          ? (config.supportsImageToVideo ?? true)
+          : false;
       config.enableThinking = false;
       config.thinkingParameters = null;
       config.useMineru = false;
@@ -314,6 +380,7 @@ export class AiFeatureConfigsService {
       return;
     }
     config.supportsImageToImage = false;
+    config.supportsImageToVideo = false;
     if (config.featureType === 'contentCreation') {
       config.useMineru = false;
       config.mineruConfigId = null;

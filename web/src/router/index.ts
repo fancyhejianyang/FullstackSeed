@@ -72,6 +72,11 @@ const routes: RouteRecordRaw[] = [
         meta: { title: "素材管理", permission: "AiMaterial.read" },
       },
       {
+        path: "comfyui",
+        component: { render: () => null },
+        meta: { title: "ComfyUI" },
+      },
+      {
         path: "comfyui/create",
         name: "comfyui-create",
         component: () => import("@/views/comfy-create/Index.vue"),
@@ -476,7 +481,11 @@ router.beforeEach(async (to) => {
       return { path: "/login", query: { redirect: to.fullPath } };
     }
   }
-  if (to.path === "/ai-config" || to.path === "/content-creation") {
+  if (
+    to.path === "/ai-config" ||
+    to.path === "/content-creation" ||
+    to.path === "/comfyui"
+  ) {
     const entries =
       to.path === "/ai-config"
         ? [
@@ -484,14 +493,17 @@ router.beforeEach(async (to) => {
             ["/ai-config/commands", "AiCommandDefinition.read"],
             ["/ai-config/workflows", "AiWorkflow.read"],
           ]
-        : [
-            ["/content-articles", "ContentArticle.read"],
-            ["/content-templates", "ContentTemplate.read"],
-            ["/ai-materials", "AiMaterial.read"],
-            ["/comfyui/create", "ComfyTask.read"],
-            ["/comfyui/materials", "ComfyMaterial.read"],
-            ["/comfyui/workflows", "ComfyWorkflow.read"],
-          ];
+        : to.path === "/content-creation"
+          ? [
+              ["/content-articles", "ContentArticle.read"],
+              ["/content-templates", "ContentTemplate.read"],
+              ["/ai-materials", "AiMaterial.read"],
+            ]
+          : [
+              ["/comfyui/create", "ComfyTask.read"],
+              ["/comfyui/materials", "ComfyMaterial.read"],
+              ["/comfyui/workflows", "ComfyWorkflow.read"],
+            ];
     return (
       entries.find(([, permission]) =>
         userStore.hasPermission(permission),

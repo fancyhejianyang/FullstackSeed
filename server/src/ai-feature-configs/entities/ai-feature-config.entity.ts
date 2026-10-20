@@ -57,6 +57,10 @@ export class AiFeatureConfig extends BaseEntity {
   @Column({ type: 'tinyint', default: false })
   supportsImageToImage: boolean;
 
+  /** 视频生成配置是否允许首帧图生视频；文生视频始终可用。 */
+  @Column({ type: 'tinyint', default: false })
+  supportsImageToVideo: boolean;
+
   @Column({ type: 'tinyint', default: true })
   isEnabled: boolean;
 

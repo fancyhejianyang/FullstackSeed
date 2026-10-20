@@ -5,6 +5,7 @@ import { BlockList, isIPv4 } from 'node:net';
 
 export const IMAGE_UPLOAD_LIMIT = 5 * 1024 * 1024;
 export const IMAGE_LIMIT = 10 * 1024 * 1024;
+export const VIDEO_LIMIT = 250 * 1024 * 1024;
 
 export function imageMime(data: Buffer, limit = IMAGE_LIMIT): string {
   if (!data.length || data.length > limit)
@@ -60,9 +61,10 @@ export function isPublicImageAddress(address: string) {
 }
 
 /** URL 来自供应商而非浏览器；仍防 SSRF、重定向和 DNS 重绑定，不转发账号密钥。 */
-export async function downloadGeneratedImage(
+async function downloadGeneratedMedia(
   value: string,
   signal: AbortSignal,
+  options: { kind: '图片' | '视频'; limit: number; timeoutMs: number },
 ): Promise<Buffer> {
   const url = new URL(value);
   if (
@@ -71,7 +73,7 @@ export async function downloadGeneratedImage(
     url.password ||
     (url.port && url.port !== '443')
   )
-    throw new BadRequestException('供应商返回的图片地址不安全');
+    throw new BadRequestException(`供应商返回的${options.kind}地址不安全`);
   signal.throwIfAborted();
   const addresses = await lookup(url.hostname, { all: true, family: 4 });
   signal.throwIfAborted();
@@ -79,7 +81,7 @@ export async function downloadGeneratedImage(
     !addresses.length ||
     addresses.some(({ address }) => !isPublicImageAddress(address))
   )
-    throw new BadRequestException('图片地址必须解析到公网 IPv4');
+    throw new BadRequestException(`${options.kind}地址必须解析到公网 IPv4`);
   const pinned = addresses[0].address;
   return new Promise((resolve, reject) => {
     const req = get(
@@ -95,15 +97,23 @@ export async function downloadGeneratedImage(
       (response) => {
         if (response.statusCode !== 200) {
           response.destroy();
-          reject(new BadRequestException('生成图片下载失败（不跟随重定向）'));
+          reject(
+            new BadRequestException(
+              `生成${options.kind}下载失败（不跟随重定向）`,
+            ),
+          );
           return;
         }
         const chunks: Buffer[] = [];
         let length = 0;
         response.on('data', (chunk: Buffer) => {
           length += chunk.length;
-          if (length > IMAGE_LIMIT) {
-            req.destroy(new BadRequestException('生成图片超过 10 MB'));
+          if (length > options.limit) {
+            req.destroy(
+              new BadRequestException(
+                `生成${options.kind}超过 ${Math.round(options.limit / 1024 / 1024)} MB`,
+              ),
+            );
             return;
           }
           chunks.push(chunk);
@@ -112,9 +122,35 @@ export async function downloadGeneratedImage(
         response.on('error', reject);
       },
     );
-    req.setTimeout(30000, () => req.destroy(new Error('生成图片下载超时')));
+    req.setTimeout(options.timeoutMs, () =>
+      req.destroy(new Error(`生成${options.kind}下载超时`)),
+    );
     req.on('error', reject);
   });
+}
+
+export function downloadGeneratedImage(value: string, signal: AbortSignal) {
+  return downloadGeneratedMedia(value, signal, {
+    kind: '图片',
+    limit: IMAGE_LIMIT,
+    timeoutMs: 30000,
+  });
+}
+
+export function downloadGeneratedVideo(value: string, signal: AbortSignal) {
+  return downloadGeneratedMedia(value, signal, {
+    kind: '视频',
+    limit: VIDEO_LIMIT,
+    timeoutMs: 120000,
+  });
+}
+
+export function videoMime(data: Buffer): 'video/mp4' {
+  if (!data.length || data.length > VIDEO_LIMIT)
+    throw new BadRequestException('视频为空或超过 250 MB 限制');
+  if (data.length >= 12 && data.toString('ascii', 4, 8) === 'ftyp')
+    return 'video/mp4';
+  throw new BadRequestException('当前仅支持供应商返回 MP4 视频');
 }
 
 /** 限制模型 JSON 响应大小，避免无界读取 Base64。 */

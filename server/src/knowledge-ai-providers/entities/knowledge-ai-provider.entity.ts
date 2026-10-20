@@ -37,6 +37,12 @@ export class KnowledgeAiProvider extends BaseEntity {
   imageGenerationApiUrl: string | null;
 
   @Column({ type: 'text', nullable: true })
+  videoGenerationModels: string | null;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  videoGenerationApiUrl: string | null;
+
+  @Column({ type: 'text', nullable: true })
   embeddingModels: string | null;
 
   @Column({ type: 'tinyint', default: true })

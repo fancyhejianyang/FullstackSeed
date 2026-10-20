@@ -69,6 +69,15 @@ export class CreateKnowledgeAiProviderDto {
 
   @IsString()
   @IsOptional()
+  videoGenerationModels?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  videoGenerationApiUrl?: string;
+
+  @IsString()
+  @IsOptional()
   embeddingModels?: string;
 
   @IsBoolean()

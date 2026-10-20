@@ -76,6 +76,7 @@ describe('third-party access and credentials', () => {
         'textModels',
         'visionModels',
         'imageGenerationModels',
+        'videoGenerationModels',
         'embeddingModels',
       ],
       order: { id: 'DESC' },

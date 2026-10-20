@@ -9,6 +9,7 @@ export type ProviderOption = Pick<
   | 'textModels'
   | 'visionModels'
   | 'imageGenerationModels'
+  | 'videoGenerationModels'
   | 'embeddingModels'
 >;
 export interface MineruOption {

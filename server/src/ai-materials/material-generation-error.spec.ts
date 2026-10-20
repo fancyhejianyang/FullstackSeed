@@ -1,20 +1,32 @@
 import {
-  AI_MATERIAL_GENERATION_TIMEOUT_MS,
-  AI_MATERIAL_TASK_LEASE_MS,
+  AI_MATERIAL_IMAGE_TIMEOUT_MS,
+  AI_MATERIAL_VIDEO_TIMEOUT_MS,
   describeMaterialGenerationFailure,
+  materialTaskLease,
   MaterialProviderHttpError,
 } from './material-generation-error';
 
 const context = {
   phase: 'requestingProvider' as const,
+  mediaType: 'image' as const,
   serviceStopped: false,
   manuallyAborted: false,
 };
 
 describe('material generation errors', () => {
   it('固定生成上限为 5 分钟，并为结果落盘保留租约缓冲', () => {
-    expect(AI_MATERIAL_GENERATION_TIMEOUT_MS).toBe(300_000);
-    expect(AI_MATERIAL_TASK_LEASE_MS).toBe(330_000);
+    expect(AI_MATERIAL_IMAGE_TIMEOUT_MS).toBe(300_000);
+    expect(AI_MATERIAL_VIDEO_TIMEOUT_MS).toBe(900_000);
+    expect(materialTaskLease('image')).toBe(360_000);
+    expect(materialTaskLease('video')).toBe(960_000);
+  });
+
+  it('视频任务使用十五分钟执行上限', () => {
+    const result = describeMaterialGenerationFailure(
+      new DOMException('The operation timed out', 'TimeoutError'),
+      { ...context, mediaType: 'video' },
+    );
+    expect(result.message).toContain('15 分钟');
   });
 
   it('明确标记五分钟超时且不建议自动重试', () => {

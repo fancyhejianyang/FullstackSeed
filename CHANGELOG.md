@@ -1,5 +1,67 @@
 # CHANGELOG
 
+### 2026-10-20 拆分 ComfyUI 菜单并扩展 AI 视频素材生成
+
+- 将 ComfyUI 创作、素材、工作流和生成记录从“内容创作”移入独立一级“ComfyUI”菜单组；ComfyUI 服务连接继续保留在“第三方配置”，历史菜单按既有路径自动迁移父级，不改变权限码和业务路由。
+- 大模型账号增加独立视频生成模型目录与 DashScope 异步视频端点；AI 功能配置增加“视频生成”类型和“图生视频能力”开关，并继续与文本、识图、生图模型目录严格隔离。
+- AI 素材增加文生视频、图生视频两种模式，以及媒体类型、480P/720P/1080P、受控画面比例、5/10 秒时长等字段。列表可按图片/视频筛选并显示当前媒体，详情支持 MP4 播放与下载；图生视频复用受管参考图作为首帧。
+- 视频生成采用真实异步链路：提交任务后保存供应商任务编号，后台轮询终态，再通过公网 HTTPS 安全下载 MP4 并写入现有 `ai-materials` 专用受管路径。重新生成仍执行“新文件保存成功后切换”，失败不会清除旧素材，也不会自动重试或重复计费。
+- 图片执行上限保持 5 分钟，视频执行上限设为 15 分钟，租约分别额外保留 1 分钟用于下载、落盘和事务提交；失败信息区分提交、轮询、下载、保存和超时阶段。
+- 新增迁移 `1792569600000-AddVideoGenerationMaterials`，补齐账号、功能配置、素材和任务字段，并对已有图片结果回填媒体类型；存在视频素材、视频配置或供应商任务记录时拒绝破坏性回退。
+- 验证：后端变更文件 ESLint、TypeORM 实体检查、57 套 / 536 项 Jest、Nest 生产构建全部通过；前端 `vue-tsc`、组件复用扫描、10 项导航测试及 Vite 生产构建通过。未连接数据库、执行迁移、启动服务或调用真实视频供应商，供应商模型授权和计费仍需使用专用测试账号验收。
+
+新增文件（4）：
+
+- `server/src/common/ai/video-generation.ts`
+- `server/src/common/ai/video-generation.spec.ts`
+- `server/src/migrations/1792569600000-AddVideoGenerationMaterials.ts`
+- `server/src/migrations/1792569600000-AddVideoGenerationMaterials.spec.ts`
+
+修改文件（40）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `MD/AI素材生成与存储清理设计方案.md`
+- `MD/ComfyUI本机工作流接入设计方案.md`
+- `server/src/ai-feature-configs/ai-feature-config.constants.ts`
+- `server/src/ai-feature-configs/ai-feature-configs.service.spec.ts`
+- `server/src/ai-feature-configs/ai-feature-configs.service.ts`
+- `server/src/ai-feature-configs/dto/ai-feature-config.dto.ts`
+- `server/src/ai-feature-configs/entities/ai-feature-config.entity.ts`
+- `server/src/ai-materials/ai-material.constants.ts`
+- `server/src/ai-materials/ai-materials.controller.ts`
+- `server/src/ai-materials/ai-materials.service.ts`
+- `server/src/ai-materials/dto/ai-material.dto.ts`
+- `server/src/ai-materials/entities/ai-material.entity.ts`
+- `server/src/ai-materials/entities/material-generation-task.entity.ts`
+- `server/src/ai-materials/material-generation-error.spec.ts`
+- `server/src/ai-materials/material-generation-error.ts`
+- `server/src/common/ai/image-utils.ts`
+- `server/src/knowledge-ai-providers/dto/knowledge-ai-provider.dto.ts`
+- `server/src/knowledge-ai-providers/entities/knowledge-ai-provider.entity.ts`
+- `server/src/knowledge-ai-providers/knowledge-ai-media-target.spec.ts`
+- `server/src/knowledge-ai-providers/knowledge-ai-providers.service.spec.ts`
+- `server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`
+- `server/src/managed-files/managed-files.service.ts`
+- `server/src/menus/menus.service.ts`
+- `server/src/third-party-config/third-party-config.service.spec.ts`
+- `server/src/third-party-config/third-party-config.service.ts`
+- `web/src/api/aiFeatureConfig.ts`
+- `web/src/api/aiMaterial.ts`
+- `web/src/api/knowledgeAiProvider.ts`
+- `web/src/api/thirdPartyConfig.ts`
+- `web/src/router/index.ts`
+- `web/src/router/systemNavigation.test.mjs`
+- `web/src/views/ai-feature-config/Edit.vue`
+- `web/src/views/ai-feature-config/Index.vue`
+- `web/src/views/ai-material/Edit.vue`
+- `web/src/views/ai-material/Index.vue`
+- `web/src/views/ai-material/View.vue`
+- `web/src/views/knowledge-ai-provider/Edit.vue`
+- `web/src/views/knowledge-ai-provider/View.vue`
+
+删除文件：无。
+
 ### 2026-10-20 明确素材生图失败原因并固定五分钟上限
 
 - 素材文生图/图生图的单次执行上限由 120 秒统一调整为固定 5 分钟；后台任务租约由 150 秒调整为 330 秒，为结果下载、受管文件落盘和事务提交保留 30 秒缓冲，避免多实例在五分钟调用结束前提前回收任务。

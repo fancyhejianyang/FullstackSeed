@@ -141,7 +141,7 @@ describe('KnowledgeAiProvidersService', () => {
         model: 'image-model',
         featureType: 'imageGeneration',
       }),
-    ).rejects.toThrow('图片生成模型不会通过文本接口自动校验');
+    ).rejects.toThrow('图片/视频生成模型不会通过文本接口自动校验');
   });
 
   it('removes only the invalid model entry and recognizes model-not-found errors', () => {

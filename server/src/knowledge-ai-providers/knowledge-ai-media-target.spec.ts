@@ -21,6 +21,9 @@ describe('Agent media targets', () => {
         imageGenerationProtocol: 'dashscope',
         imageGenerationApiUrl:
           'https://old.cn-beijing.maas.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation',
+        videoGenerationModels: 'wan#视频',
+        videoGenerationApiUrl:
+          'https://old.cn-beijing.maas.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis',
         workspaceId: 'workspace',
       },
     );
@@ -54,6 +57,19 @@ describe('Agent media targets', () => {
     await expect(
       service.resolveAgentMediaTarget(2, 'vision', 'imageGeneration'),
     ).rejects.toThrow('不在');
+  });
+
+  it('视频生成使用独立目录、异步提交地址和同域任务查询模板', async () => {
+    const { service } = harness();
+    await expect(
+      service.resolveMediaTarget(2, 'wan', 'videoGeneration'),
+    ).resolves.toMatchObject({
+      model: 'wan',
+      protocol: 'dashscope',
+      url: 'https://workspace.cn-beijing.maas.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis',
+      taskUrlTemplate:
+        'https://workspace.cn-beijing.maas.aliyuncs.com/api/v1/tasks/{taskId}',
+    });
   });
   it('内容封面直接选同账号首个有效生图模型，缺配置跳过且不调用 Agent 入口', async () => {
     const { service, provider } = harness();

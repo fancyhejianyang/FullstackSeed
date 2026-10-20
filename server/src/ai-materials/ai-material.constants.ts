@@ -31,9 +31,42 @@ export const AI_MATERIAL_STYLE_VERSION = 1;
 export const AI_MATERIAL_GENERATION_MODES = [
   'textToImage',
   'imageToImage',
+  'textToVideo',
+  'imageToVideo',
 ] as const;
 export type AiMaterialGenerationMode =
   (typeof AI_MATERIAL_GENERATION_MODES)[number];
+
+export const AI_MATERIAL_MEDIA_TYPES = ['image', 'video'] as const;
+export type AiMaterialMediaType = (typeof AI_MATERIAL_MEDIA_TYPES)[number];
+
+export const AI_MATERIAL_VIDEO_RESOLUTIONS = ['480P', '720P', '1080P'] as const;
+export type AiMaterialVideoResolution =
+  (typeof AI_MATERIAL_VIDEO_RESOLUTIONS)[number];
+
+export const AI_MATERIAL_VIDEO_RATIOS = [
+  'adaptive',
+  '16:9',
+  '9:16',
+  '1:1',
+  '4:3',
+  '3:4',
+] as const;
+export type AiMaterialVideoRatio = (typeof AI_MATERIAL_VIDEO_RATIOS)[number];
+
+export const AI_MATERIAL_VIDEO_DURATIONS = [5, 10] as const;
+export type AiMaterialVideoDuration =
+  (typeof AI_MATERIAL_VIDEO_DURATIONS)[number];
+
+export function materialMediaType(
+  mode: AiMaterialGenerationMode,
+): AiMaterialMediaType {
+  return mode === 'textToVideo' || mode === 'imageToVideo' ? 'video' : 'image';
+}
+
+export function materialNeedsReferenceImage(mode: AiMaterialGenerationMode) {
+  return mode === 'imageToImage' || mode === 'imageToVideo';
+}
 
 export function buildMaterialPrompt(payload: {
   prompt: string;

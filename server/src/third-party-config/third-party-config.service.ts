@@ -53,6 +53,7 @@ export class ThirdPartyConfigService {
             'textModels',
             'visionModels',
             'imageGenerationModels',
+            'videoGenerationModels',
             'embeddingModels',
           ],
           order: { id: 'DESC' },

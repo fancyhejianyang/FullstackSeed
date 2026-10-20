@@ -55,6 +55,7 @@ const form = reactive<AiFeatureConfigEditForm>({
   temperature: 0.2,
   responseFormat: "text",
   supportsImageToImage: false,
+  supportsImageToVideo: false,
   isEnabled: true,
   description: "",
 });
@@ -63,6 +64,7 @@ const featureTypeOptions = [
   { label: "聊天", value: "chat" },
   { label: "内容创作", value: "contentCreation" },
   { label: "图片生成", value: "imageGeneration" },
+  { label: "视频生成", value: "videoGeneration" },
   { label: "文档解析", value: "documentParse" },
   { label: "OCR", value: "ocr" },
   { label: "LLM 重排", value: "rerank" },
@@ -97,6 +99,12 @@ const isWritingFeature = computed(() => form.featureType === "contentCreation");
 const isImageGenerationFeature = computed(
   () => form.featureType === "imageGeneration",
 );
+const isVideoGenerationFeature = computed(
+  () => form.featureType === "videoGeneration",
+);
+const isMediaGenerationFeature = computed(
+  () => isImageGenerationFeature.value || isVideoGenerationFeature.value,
+);
 const isTextFeature = computed(() =>
   ["chat", "contentCreation"].includes(form.featureType),
 );
@@ -104,7 +112,7 @@ const isRerankFeature = computed(() => form.featureType === "rerank");
 const isStructuredParseFeature = computed(() => isParseFeature.value);
 const isMarkdownFeature = computed(() => isParseFeature.value);
 const usesTemperature = computed(
-  () => !isRerankFeature.value && !isImageGenerationFeature.value,
+  () => !isRerankFeature.value && !isMediaGenerationFeature.value,
 );
 const usesPromptSettings = computed(() => !isRerankFeature.value);
 
@@ -118,6 +126,7 @@ const modelOptions = computed(() =>
 const modelPlaceholder = computed(() => {
   if (isMineruOcrFeature.value) return "请选择用于整理的文本模型";
   if (isImageGenerationFeature.value) return "请选择生图模型";
+  if (isVideoGenerationFeature.value) return "请选择视频生成模型";
   if (form.featureType === "ocr") return "请选择视觉模型";
   if (form.featureType === "rerank") return "请选择用于重排的通用文本模型";
   return "请选择模型";
@@ -143,11 +152,13 @@ const fields = computed<FormField[]>(() => {
             ? "用于文章后台生成；可启用多个配置，生成时选择使用哪一个。"
             : form.featureType === "imageGeneration"
               ? "用于素材管理直接生成图片；只使用账号的生图模型目录和完整生图端点。"
-              : form.featureType === "rerank"
-                ? "当前为 LLM 重排：模型只给召回的知识片段评分和排序，不参与最终回答。"
-                : form.featureType === "ocr"
-                  ? "当前为 OCR：仅处理图片或 PDF，可使用视觉模型或 MinerU 引擎。"
-                  : "当前为文档解析：仅处理文本/TXT/Word，由大模型按提示词整理为结构化 Markdown。",
+              : form.featureType === "videoGeneration"
+                ? "用于素材管理异步生成视频；只使用账号的视频模型目录和完整 DashScope 视频端点。"
+                : form.featureType === "rerank"
+                  ? "当前为 LLM 重排：模型只给召回的知识片段评分和排序，不参与最终回答。"
+                  : form.featureType === "ocr"
+                    ? "当前为 OCR：仅处理图片或 PDF，可使用视觉模型或 MinerU 引擎。"
+                    : "当前为文档解析：仅处理文本/TXT/Word，由大模型按提示词整理为结构化 Markdown。",
     },
   ];
 
@@ -193,8 +204,8 @@ const fields = computed<FormField[]>(() => {
         hint: validatingModel.value
           ? `正在校验“${form.model}”是否可用…`
           : modelValidationHint.value ||
-            (isImageGenerationFeature.value
-              ? "选择只校验模型目录；实际可用性在明确发起素材生成时验证，可能计费且不会自动重试。"
+            (isMediaGenerationFeature.value
+              ? "选择只校验媒体模型目录；实际可用性在明确发起素材生成时验证，可能计费且不会自动重试。"
               : isRerankFeature.value
                 ? "请选择通用文本模型。系统会固定用温度 0 和内置 JSON 评分提示词调用它，不会生成最终回答。"
                 : "切换模型后会自动调用账号接口校验；确认不存在时会从该账号模型列表中移除。"),
@@ -241,14 +252,14 @@ const fields = computed<FormField[]>(() => {
   if (usesPromptSettings.value) {
     baseFields.push({
       prop: "systemPrompt",
-      label: isImageGenerationFeature.value
+      label: isMediaGenerationFeature.value
         ? "默认画面要求"
         : isMineruOcrFeature.value
           ? "整理提示词"
           : "提示词",
       type: "textarea",
       rows: 5,
-      placeholder: isImageGenerationFeature.value
+      placeholder: isMediaGenerationFeature.value
         ? "如：主体清晰、构图简洁、无文字、无水印"
         : isStructuredParseFeature.value
           ? "可补充业务术语、标题规则或保留项；系统会固定追加 Markdown 结构化输出要求"
@@ -257,7 +268,7 @@ const fields = computed<FormField[]>(() => {
             : "该功能默认系统提示词，可被测试请求临时覆盖",
       hint: (() => {
         const prompt = form.systemPrompt?.trim() ?? "";
-        if (isImageGenerationFeature.value)
+        if (isMediaGenerationFeature.value)
           return prompt
             ? `生成素材时会把这 ${prompt.length} 个字符作为固定画面要求拼接到用户提示词。`
             : "可留空；系统仍会拼接所选风格，不额外调用文本模型润色。";
@@ -273,7 +284,7 @@ const fields = computed<FormField[]>(() => {
             : "未填写时将使用系统默认提示词；业务规则、口吻和禁止项请直接写在此处。";
       })(),
     });
-    if (!isImageGenerationFeature.value) {
+    if (!isMediaGenerationFeature.value) {
       baseFields.push({
         prop: "responseFormat",
         label: isWritingFeature.value ? "正文格式" : "返回格式",
@@ -315,6 +326,18 @@ const fields = computed<FormField[]>(() => {
       hint: form.supportsImageToImage
         ? "素材任务可上传参考图；当前仅在 DashScope 多模态生图协议下执行，不支持时会明确报错。"
         : "素材任务仅允许文生图，不显示为可用的图生图配置。",
+    });
+  }
+
+  if (isVideoGenerationFeature.value) {
+    baseFields.push({
+      prop: "supportsImageToVideo",
+      label: "图生视频能力",
+      component: "Switch",
+      componentProps: { activeText: "支持", inactiveText: "不支持" },
+      hint: form.supportsImageToVideo
+        ? "素材任务可上传首帧参考图；文生视频始终可用。"
+        : "素材任务仅允许文生视频，不显示为可用的图生视频配置。",
     });
   }
 
@@ -389,7 +412,10 @@ watch(
     if (!formReadyForModelValidation.value) return;
     if (type === "imageGeneration" && previousType !== "imageGeneration")
       form.supportsImageToImage = true;
+    if (type === "videoGeneration" && previousType !== "videoGeneration")
+      form.supportsImageToVideo = true;
     if (type !== "imageGeneration") form.supportsImageToImage = false;
+    if (type !== "videoGeneration") form.supportsImageToVideo = false;
   },
 );
 
@@ -417,7 +443,7 @@ watch(
       form.temperature = 0;
       form.responseFormat = "json";
     }
-    if (isImageGenerationFeature.value) {
+    if (isMediaGenerationFeature.value) {
       form.temperature = 0;
       form.responseFormat = "text";
     }
@@ -445,7 +471,7 @@ watch(
     if (!formReadyForModelValidation.value || !form.providerId || !form.model) {
       return;
     }
-    if (isImageGenerationFeature.value) return;
+    if (isMediaGenerationFeature.value) return;
     void validateSelectedModel();
   },
 );
@@ -469,6 +495,7 @@ function resetForm() {
   form.temperature = 0.2;
   form.responseFormat = "text";
   form.supportsImageToImage = false;
+  form.supportsImageToVideo = false;
   form.isEnabled = true;
   form.description = "";
 }
@@ -488,6 +515,7 @@ function fillForm(data: AiFeatureConfig) {
   form.temperature = Number(data.temperature ?? 0.2);
   form.responseFormat = data.responseFormat ?? "text";
   form.supportsImageToImage = !!data.supportsImageToImage;
+  form.supportsImageToVideo = !!data.supportsImageToVideo;
   form.isEnabled = !!data.isEnabled;
   form.description = data.description ?? "";
 }
@@ -506,18 +534,20 @@ function buildPayload(): AiFeatureConfigForm {
       : null,
     systemPrompt: isRerankFeature.value ? "" : form.systemPrompt?.trim(),
     temperature:
-      isRerankFeature.value || isImageGenerationFeature.value
+      isRerankFeature.value || isMediaGenerationFeature.value
         ? 0
         : Number(form.temperature),
     responseFormat: isRerankFeature.value
       ? "json"
-      : isImageGenerationFeature.value
+      : isMediaGenerationFeature.value
         ? "text"
         : isMarkdownFeature.value
           ? "markdown"
           : form.responseFormat,
     supportsImageToImage:
       isImageGenerationFeature.value && !!form.supportsImageToImage,
+    supportsImageToVideo:
+      isVideoGenerationFeature.value && !!form.supportsImageToVideo,
     isEnabled: form.isEnabled,
     description: form.description?.trim(),
   };
@@ -590,6 +620,9 @@ function getModelText(
   }
   if (featureType === "imageGeneration") {
     return provider.imageGenerationModels || "";
+  }
+  if (featureType === "videoGeneration") {
+    return provider.videoGenerationModels || "";
   }
   return "";
 }

@@ -7,7 +7,21 @@ export type AiMaterialStyleKey =
   | "flatIllustration"
   | "cinematic"
   | "custom";
-export type AiMaterialGenerationMode = "textToImage" | "imageToImage";
+export type AiMaterialGenerationMode =
+  | "textToImage"
+  | "imageToImage"
+  | "textToVideo"
+  | "imageToVideo";
+export type AiMaterialMediaType = "image" | "video";
+export type AiMaterialVideoResolution = "480P" | "720P" | "1080P";
+export type AiMaterialVideoRatio =
+  | "adaptive"
+  | "16:9"
+  | "9:16"
+  | "1:1"
+  | "4:3"
+  | "3:4";
+export type AiMaterialVideoDuration = 5 | 10;
 export type AiMaterialStatus =
   | "idle"
   | "pending"
@@ -23,6 +37,7 @@ export interface MaterialTaskSummary {
   materialVersion: number;
   status: Exclude<AiMaterialStatus, "idle"> | "unknown";
   resultFileId: number | null;
+  providerTaskId: string | null;
   errorMessage: string | null;
   createdAt: string;
   startedAt: string | null;
@@ -32,12 +47,18 @@ export interface MaterialTaskSummary {
 export interface AiMaterialSummary {
   id: number;
   generationMode: AiMaterialGenerationMode;
+  mediaType: AiMaterialMediaType;
+  currentMediaType: AiMaterialMediaType | null;
+  videoResolution: AiMaterialVideoResolution;
+  videoRatio: AiMaterialVideoRatio;
+  videoDuration: AiMaterialVideoDuration;
   styleKey: AiMaterialStyleKey;
   aiConfigId: number;
   aiConfigName: string;
   aiModel: string;
   currentFileId: number | null;
   currentImageUrl: string | null;
+  currentMediaUrl: string | null;
   referenceFileId: number | null;
   referenceImageUrl: string | null;
   version: number;
@@ -64,6 +85,9 @@ export interface AiMaterialForm {
   aiConfigId: number | "";
   referenceImageUrl?: string | null;
   referenceImageFile?: File | null;
+  videoResolution: AiMaterialVideoResolution;
+  videoRatio: AiMaterialVideoRatio;
+  videoDuration: AiMaterialVideoDuration;
 }
 
 export interface AiMaterialListResult {
@@ -75,7 +99,9 @@ export interface AiMaterialConfigOption {
   id: number;
   name: string;
   model: string;
+  featureType: "imageGeneration" | "videoGeneration";
   supportsImageToImage: boolean;
+  supportsImageToVideo: boolean;
 }
 
 export function getAiMaterials(params: {
@@ -83,6 +109,7 @@ export function getAiMaterials(params: {
   pageSize?: number;
   keyword?: string;
   status?: AiMaterialStatus | "";
+  mediaType?: AiMaterialMediaType | "";
 }) {
   return request.get<unknown, AiMaterialListResult>("/ai-materials", {
     params,
@@ -120,8 +147,14 @@ function toMaterialFormData(data: AiMaterialForm) {
   body.append("generationMode", data.generationMode);
   body.append("styleKey", data.styleKey);
   body.append("aiConfigId", String(data.aiConfigId));
+  body.append("videoResolution", data.videoResolution);
+  body.append("videoRatio", data.videoRatio);
+  body.append("videoDuration", String(data.videoDuration));
   if (data.customStyle) body.append("customStyle", data.customStyle);
-  if (data.generationMode === "imageToImage" && data.referenceImageFile) {
+  if (
+    ["imageToImage", "imageToVideo"].includes(data.generationMode) &&
+    data.referenceImageFile
+  ) {
     body.append("referenceImage", data.referenceImageFile);
   }
   return body;

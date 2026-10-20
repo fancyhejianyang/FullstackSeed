@@ -2,7 +2,11 @@ import { Column, Entity, Index } from 'typeorm';
 import { BaseEntity } from '../../common/entities/base.entity';
 import type {
   AiMaterialGenerationMode,
+  AiMaterialMediaType,
   AiMaterialStyleKey,
+  AiMaterialVideoDuration,
+  AiMaterialVideoRatio,
+  AiMaterialVideoResolution,
 } from '../ai-material.constants';
 
 export type MaterialTaskStatus =
@@ -23,6 +27,10 @@ export interface MaterialGenerationSnapshot {
   customStyle: string | null;
   finalPrompt: string;
   generationMode: AiMaterialGenerationMode;
+  mediaType: AiMaterialMediaType;
+  videoResolution: AiMaterialVideoResolution;
+  videoRatio: AiMaterialVideoRatio;
+  videoDuration: AiMaterialVideoDuration;
   referenceFileId: number | null;
   config: {
     id: number;
@@ -52,6 +60,8 @@ export class MaterialGenerationTask extends BaseEntity {
   activeUserId: number | null;
   @Column({ type: 'json' }) snapshot: MaterialGenerationSnapshot;
   @Column({ type: 'int', nullable: true }) resultFileId: number | null;
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  providerTaskId: string | null;
   @Column({ type: 'varchar', length: 36, nullable: true }) workerId:
     | string
     | null;

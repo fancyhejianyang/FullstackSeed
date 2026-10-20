@@ -32,7 +32,17 @@ const form = reactive<AiMaterialForm>({
   aiConfigId: "",
   referenceImageUrl: "",
   referenceImageFile: null,
+  videoResolution: "720P",
+  videoRatio: "16:9",
+  videoDuration: 5,
 });
+
+const isVideoMode = computed(() =>
+  ["textToVideo", "imageToVideo"].includes(form.generationMode),
+);
+const needsReference = computed(() =>
+  ["imageToImage", "imageToVideo"].includes(form.generationMode),
+);
 
 const styleOptions = [
   { label: "原始描述", value: "original" },
@@ -42,12 +52,20 @@ const styleOptions = [
   { label: "电影质感", value: "cinematic" },
   { label: "自定义风格", value: "custom" },
 ];
+const availableConfigs = computed(() =>
+  configs.value.filter((item) =>
+    isVideoMode.value
+      ? item.featureType === "videoGeneration"
+      : item.featureType === "imageGeneration",
+  ),
+);
 const configOptions = computed(() =>
-  configs.value.map((item) => ({
+  availableConfigs.value.map((item) => ({
     label: `${item.name} · ${item.model}`,
     value: item.id,
     disabled:
-      form.generationMode === "imageToImage" && !item.supportsImageToImage,
+      (form.generationMode === "imageToImage" && !item.supportsImageToImage) ||
+      (form.generationMode === "imageToVideo" && !item.supportsImageToVideo),
   })),
 );
 const fields = computed<FormField[]>(() => [
@@ -55,12 +73,13 @@ const fields = computed<FormField[]>(() => [
     prop: "generationMode",
     label: "生成模式",
     slot: true,
-    hint:
-      form.generationMode === "imageToImage"
-        ? "参考图与提示词会同时交给所选模型；当前仅支持已启用该能力的 DashScope 生图配置。"
+    hint: needsReference.value
+      ? "参考图作为图像生成依据或视频首帧，与提示词一并提交给所选模型。"
+      : isVideoMode.value
+        ? "根据提示词与风格异步生成视频，系统会在后台查询进度并保存 MP4。"
         : "仅根据提示词与风格生成新图片。",
   },
-  ...(form.generationMode === "imageToImage"
+  ...(needsReference.value
     ? [
         {
           prop: "referenceImageUrl",
@@ -94,16 +113,50 @@ const fields = computed<FormField[]>(() => [
         },
       ]
     : []),
+  ...(isVideoMode.value
+    ? [
+        {
+          prop: "videoResolution",
+          label: "视频清晰度",
+          type: "select" as const,
+          options: ["480P", "720P", "1080P"].map((value) => ({
+            label: value,
+            value,
+          })),
+        },
+        {
+          prop: "videoRatio",
+          label: "画面比例",
+          type: "select" as const,
+          options: ["adaptive", "16:9", "9:16", "1:1", "4:3", "3:4"].map(
+            (value) => ({
+              label: value === "adaptive" ? "自适应" : value,
+              value,
+            }),
+          ),
+        },
+        {
+          prop: "videoDuration",
+          label: "视频时长",
+          type: "select" as const,
+          options: [
+            { label: "5 秒", value: 5 },
+            { label: "10 秒", value: 10 },
+          ],
+          hint: "具体分辨率、比例和时长仍受所选视频模型能力限制。",
+        },
+      ]
+    : []),
   {
     prop: "aiConfigId",
-    label: "生图配置",
+    label: isVideoMode.value ? "视频配置" : "生图配置",
     type: "select",
     options: configOptions.value,
-    hint: configs.value.length
-      ? form.generationMode === "imageToImage"
-        ? "不支持图生图的配置已禁用；生成时不会自动降级为文生图。"
-        : "生成时仅调用所选配置绑定的图片模型。"
-      : "暂无启用的图片生成配置，请先到 AI 功能配置中创建。",
+    hint: availableConfigs.value.length
+      ? needsReference.value
+        ? "不支持当前参考图模式的配置已禁用；生成时不会自动降级。"
+        : `生成时仅调用所选配置绑定的${isVideoMode.value ? "视频" : "图片"}模型。`
+      : `暂无启用的${isVideoMode.value ? "视频" : "图片"}生成配置，请先到 AI 功能配置中创建。`,
   },
 ]);
 const rules = computed<FormRules>(() => ({
@@ -111,7 +164,7 @@ const rules = computed<FormRules>(() => ({
   generationMode: [
     { required: true, message: "请选择生成模式", trigger: "change" },
   ],
-  ...(form.generationMode === "imageToImage"
+  ...(needsReference.value
     ? {
         referenceImageUrl: [
           { required: true, message: "请上传参考图片", trigger: "change" },
@@ -120,7 +173,7 @@ const rules = computed<FormRules>(() => ({
     : {}),
   styleKey: [{ required: true, message: "请选择风格", trigger: "change" }],
   aiConfigId: [
-    { required: true, message: "请选择图片生成配置", trigger: "change" },
+    { required: true, message: "请选择生成配置", trigger: "change" },
   ],
   ...(form.styleKey === "custom"
     ? {
@@ -149,13 +202,21 @@ watch(visible, async (value) => {
       form.customStyle = detail.customStyle ?? "";
       form.aiConfigId = detail.aiConfigId;
       form.referenceImageUrl = detail.referenceImageUrl ?? "";
+      form.videoResolution = detail.videoResolution;
+      form.videoRatio = detail.videoRatio;
+      form.videoDuration = detail.videoDuration;
     } else {
       form.prompt = "";
       form.generationMode = "textToImage";
       form.styleKey = "original";
       form.customStyle = "";
-      form.aiConfigId = configs.value[0]?.id ?? "";
+      form.aiConfigId =
+        configs.value.find((item) => item.featureType === "imageGeneration")
+          ?.id ?? "";
       form.referenceImageUrl = "";
+      form.videoResolution = "720P";
+      form.videoRatio = "16:9";
+      form.videoDuration = 5;
     }
     referenceImageFile.value = null;
   } finally {
@@ -169,11 +230,19 @@ watch(
     const selected = configs.value.find(
       (item) => item.id === Number(form.aiConfigId),
     );
-    if (mode === "imageToImage" && !selected?.supportsImageToImage) {
+    const supportsMode =
+      selected &&
+      selected.featureType ===
+        (isVideoMode.value ? "videoGeneration" : "imageGeneration") &&
+      (mode !== "imageToImage" || selected.supportsImageToImage) &&
+      (mode !== "imageToVideo" || selected.supportsImageToVideo);
+    if (!supportsMode) {
       form.aiConfigId =
-        configs.value.find((item) => item.supportsImageToImage)?.id ?? "";
-    } else if (!form.aiConfigId) {
-      form.aiConfigId = configs.value[0]?.id ?? "";
+        availableConfigs.value.find(
+          (item) =>
+            (mode !== "imageToImage" || item.supportsImageToImage) &&
+            (mode !== "imageToVideo" || item.supportsImageToVideo),
+        )?.id ?? "";
     }
   },
 );
@@ -208,13 +277,15 @@ onBeforeUnmount(releaseReferenceObjectUrl);
 async function submit() {
   await formRef.value?.validate();
   if (
-    form.generationMode === "imageToImage" &&
+    needsReference.value &&
     !configs.value.find(
       (item) =>
-        item.id === Number(form.aiConfigId) && item.supportsImageToImage,
+        item.id === Number(form.aiConfigId) &&
+        (form.generationMode !== "imageToImage" || item.supportsImageToImage) &&
+        (form.generationMode !== "imageToVideo" || item.supportsImageToVideo),
     )
   ) {
-    ElMessage.error("请选择已启用图生图能力的生图配置");
+    ElMessage.error("请选择已启用当前参考图能力的生成配置");
     return;
   }
   submitting.value = true;
@@ -225,10 +296,12 @@ async function submit() {
       styleKey: form.styleKey,
       customStyle: form.styleKey === "custom" ? form.customStyle?.trim() : null,
       aiConfigId: Number(form.aiConfigId),
-      referenceImageFile:
-        form.generationMode === "imageToImage"
-          ? referenceImageFile.value
-          : null,
+      referenceImageFile: needsReference.value
+        ? referenceImageFile.value
+        : null,
+      videoResolution: form.videoResolution,
+      videoRatio: form.videoRatio,
+      videoDuration: form.videoDuration,
     };
     if (props.row?.id) {
       await updateAiMaterial(props.row.id, payload);
@@ -259,6 +332,8 @@ async function submit() {
           <el-radio-group v-model="form.generationMode">
             <el-radio value="textToImage">文生图</el-radio>
             <el-radio value="imageToImage">图生图</el-radio>
+            <el-radio value="textToVideo">文生视频</el-radio>
+            <el-radio value="imageToVideo">图生视频</el-radio>
           </el-radio-group>
         </template>
         <template #field-referenceImageUrl>

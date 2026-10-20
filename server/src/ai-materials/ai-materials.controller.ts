@@ -44,7 +44,7 @@ export class AiMaterialsController {
 
   @Get('config-options')
   @RequirePermissions('AiMaterial.read')
-  @ApiOperation({ summary: '启用的图片生成配置选项' })
+  @ApiOperation({ summary: '启用的图片/视频生成配置选项' })
   configOptions(@Query() query: QueryAiMaterialDto) {
     return this.service.configOptions(query);
   }

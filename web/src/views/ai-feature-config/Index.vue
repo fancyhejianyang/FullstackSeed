@@ -23,6 +23,8 @@ const tableRef = ref<{
 const featureTypeOptions = [
   { label: '聊天', value: 'chat' },
   { label: '内容创作', value: 'contentCreation' },
+  { label: '图片生成', value: 'imageGeneration' },
+  { label: '视频生成', value: 'videoGeneration' },
   { label: '文档解析', value: 'documentParse' },
   { label: 'OCR', value: 'ocr' },
   { label: 'LLM 重排', value: 'rerank' },
@@ -160,13 +162,21 @@ function getFeatureLabel(value: AiFeatureType) {
       </template>
 
       <template #column-temperature="{ row }">
-        {{ row.featureType === 'rerank' ? '固定 0' : row.temperature }}
+        {{
+          ['imageGeneration', 'videoGeneration'].includes(row.featureType)
+            ? '不适用'
+            : row.featureType === 'rerank'
+              ? '固定 0'
+              : row.temperature
+        }}
       </template>
 
       <template #column-enableThinking="{ row }">
         <el-tag
           :type="
-            row.featureType === 'rerank'
+            ['rerank', 'imageGeneration', 'videoGeneration'].includes(
+              row.featureType,
+            )
               ? 'info'
               : row.enableThinking
                 ? 'success'
@@ -174,7 +184,9 @@ function getFeatureLabel(value: AiFeatureType) {
           "
         >
           {{
-            row.featureType === 'rerank'
+            ['rerank', 'imageGeneration', 'videoGeneration'].includes(
+              row.featureType,
+            )
               ? '不适用'
               : row.enableThinking
                 ? '开启'
@@ -185,9 +197,11 @@ function getFeatureLabel(value: AiFeatureType) {
 
       <template #column-responseFormat="{ row }">
         {{
-          row.featureType === 'rerank'
-            ? 'JSON（固定）'
-            : responseFormatMap[row.responseFormat] || row.responseFormat
+          ['imageGeneration', 'videoGeneration'].includes(row.featureType)
+            ? '不适用'
+            : row.featureType === 'rerank'
+              ? 'JSON（固定）'
+              : responseFormatMap[row.responseFormat] || row.responseFormat
         }}
       </template>
 

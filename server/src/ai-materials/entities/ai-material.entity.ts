@@ -2,7 +2,11 @@ import { Column, Entity, Index } from 'typeorm';
 import { BaseEntity } from '../../common/entities/base.entity';
 import type {
   AiMaterialGenerationMode,
+  AiMaterialMediaType,
   AiMaterialStyleKey,
+  AiMaterialVideoDuration,
+  AiMaterialVideoRatio,
+  AiMaterialVideoResolution,
 } from '../ai-material.constants';
 
 export type AiMaterialGenerationStatus =
@@ -25,6 +29,16 @@ export class AiMaterial extends BaseEntity {
   @Column({ type: 'int' }) aiConfigId: number;
   @Column({ type: 'varchar', length: 24, default: 'textToImage' })
   generationMode: AiMaterialGenerationMode;
+  @Column({ type: 'varchar', length: 12, default: 'image' })
+  mediaType: AiMaterialMediaType;
+  @Column({ type: 'varchar', length: 12, nullable: true })
+  currentMediaType: AiMaterialMediaType | null;
+  @Column({ type: 'varchar', length: 12, default: '720P' })
+  videoResolution: AiMaterialVideoResolution;
+  @Column({ type: 'varchar', length: 12, default: '16:9' })
+  videoRatio: AiMaterialVideoRatio;
+  @Column({ type: 'int', default: 5 })
+  videoDuration: AiMaterialVideoDuration;
   @Column({ type: 'int', nullable: true }) referenceFileId: number | null;
   @Column({ type: 'varchar', length: 2048, nullable: true })
   referenceImageUrl: string | null;

@@ -3,6 +3,7 @@ export const AI_FEATURE_CONFIG_TYPES = [
   'chat',
   'contentCreation',
   'imageGeneration',
+  'videoGeneration',
   'documentParse',
   'ocr',
   'rerank',

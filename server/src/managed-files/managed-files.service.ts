@@ -70,7 +70,7 @@ export class ManagedFilesService {
         status: 'pending_delete',
         errorMessage: '文件写入未完成，已进入安全清理队列',
       });
-      throw new BadRequestException('生成图片保存失败，原素材未修改');
+      throw new BadRequestException('生成文件保存失败，原素材未修改');
     }
   }
 
@@ -219,12 +219,12 @@ export class ManagedFilesService {
         status: In(['ready', 'pending_delete']),
       },
     });
-    if (!file) throw new BadRequestException('图生图参考图片不存在或不可用');
+    if (!file) throw new BadRequestException('参考图片不存在或不可用');
     if (Number(file.size) > MAX_REFERENCE_IMAGE_SIZE)
-      throw new BadRequestException('图生图参考图片不能超过 5MB');
+      throw new BadRequestException('参考图片不能超过 5MB');
     const content = await this.storedFiles.read(file.publicUrl, file.fileName);
     if (content.buffer.length > MAX_REFERENCE_IMAGE_SIZE)
-      throw new BadRequestException('图生图参考图片不能超过 5MB');
+      throw new BadRequestException('参考图片不能超过 5MB');
     return {
       buffer: content.buffer,
       mimeType: imageMime(content.buffer, MAX_REFERENCE_IMAGE_SIZE),

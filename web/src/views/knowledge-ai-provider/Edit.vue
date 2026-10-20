@@ -35,6 +35,8 @@ const form = reactive<KnowledgeAiProviderForm>({
   imageGenerationModels: "",
   imageGenerationProtocol: "openai",
   imageGenerationApiUrl: "",
+  videoGenerationModels: "",
+  videoGenerationApiUrl: "",
   embeddingModels: "",
   isEnabled: true,
   description: "",
@@ -115,7 +117,7 @@ const fields: FormField[] = [
       { label: "OpenAI Images 兼容接口", value: "openai" },
       { label: "阿里云 DashScope 同步多模态生图", value: "dashscope" },
     ],
-    hint: "只支持同步文生图；不支持异步任务接口或图片编辑。请按供应商实际支持选择，不能仅按模型名称判断。",
+    hint: "OpenAI Images 兼容协议用于同步文生图；DashScope 同步多模态协议可承载文生图和参考图编辑。请按供应商实际支持选择。",
   },
   {
     prop: "imageGenerationApiUrl",
@@ -123,6 +125,21 @@ const fields: FormField[] = [
     type: "input",
     placeholder: "完整 HTTPS 地址（不是 Chat 路径）",
     hint: "OpenAI：完整 /v1/images/generations 地址；百炼：完整 /api/v1/services/aigc/multimodal-generation/generation 地址。使用本账号密钥，需填写正确地域/业务空间。留空则不开放 Agent 生图引用。",
+  },
+  {
+    prop: "videoGenerationModels",
+    label: "视频生成模型",
+    type: "textarea",
+    rows: 3,
+    placeholder: "模型编码#模型名称（每行一个）\nwan2.6-t2v#万相文生视频",
+    hint: "单独登记账号已开通的视频生成模型，用于文生视频和图生视频。",
+  },
+  {
+    prop: "videoGenerationApiUrl",
+    label: "视频生成接口",
+    type: "input",
+    placeholder: "完整 DashScope 视频生成 HTTPS 地址",
+    hint: "填写 /api/v1/services/aigc/video-generation/video-synthesis 完整地址；系统会异步提交并轮询同域任务接口。",
   },
   {
     prop: "embeddingModels",
@@ -158,6 +175,8 @@ function resetForm() {
   form.imageGenerationModels = "";
   form.imageGenerationProtocol = "openai";
   form.imageGenerationApiUrl = "";
+  form.videoGenerationModels = "";
+  form.videoGenerationApiUrl = "";
   form.embeddingModels = "";
   form.isEnabled = true;
   form.description = "";
@@ -176,6 +195,8 @@ function fillForm(data: KnowledgeAiProvider) {
   form.imageGenerationModels = data.imageGenerationModels || "";
   form.imageGenerationProtocol = data.imageGenerationProtocol || "openai";
   form.imageGenerationApiUrl = data.imageGenerationApiUrl || "";
+  form.videoGenerationModels = data.videoGenerationModels || "";
+  form.videoGenerationApiUrl = data.videoGenerationApiUrl || "";
   form.embeddingModels = data.embeddingModels || "";
   form.isEnabled = !!data.isEnabled;
   form.description = data.description ?? "";

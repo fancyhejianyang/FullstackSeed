@@ -266,9 +266,12 @@ export class KnowledgeAiProvidersService {
   }
 
   async validateModel(dto: ValidateKnowledgeAiProviderModelDto) {
-    if (dto.featureType === 'imageGeneration') {
+    if (
+      dto.featureType === 'imageGeneration' ||
+      dto.featureType === 'videoGeneration'
+    ) {
       throw new BadRequestException(
-        '图片生成模型不会通过文本接口自动校验，请在素材管理中明确发起实际生成',
+        '图片/视频生成模型不会通过文本接口自动校验，请在素材管理中明确发起实际生成',
       );
     }
 
@@ -427,7 +430,7 @@ export class KnowledgeAiProvidersService {
   async resolveAgentMediaTarget(
     providerId: number,
     model: string,
-    kind: 'vision' | 'imageGeneration',
+    kind: 'vision' | 'imageGeneration' | 'videoGeneration',
   ) {
     return this.resolveMediaTarget(providerId, model, kind);
   }
@@ -436,7 +439,7 @@ export class KnowledgeAiProvidersService {
   async resolveMediaTarget(
     providerId: number,
     model: string,
-    kind: 'vision' | 'imageGeneration',
+    kind: 'vision' | 'imageGeneration' | 'videoGeneration',
   ) {
     const provider = await this.findEntity(providerId);
     if (!provider.isEnabled || !provider.secretKey) {
@@ -445,7 +448,9 @@ export class KnowledgeAiProvidersService {
     const catalog =
       kind === 'vision'
         ? provider.visionModels
-        : provider.imageGenerationModels;
+        : kind === 'videoGeneration'
+          ? provider.videoGenerationModels
+          : provider.imageGenerationModels;
     if (!catalog?.trim())
       throw new BadRequestException('账号未配置对应媒体模型目录');
     // 媒体目录为空/格式不合法时不得套用通用模型的默认回退。
@@ -454,6 +459,7 @@ export class KnowledgeAiProvidersService {
     }
     const selected = model;
     let url = this.buildChatUrl(provider);
+    let taskUrlTemplate: string | null = null;
     if (kind === 'imageGeneration') {
       if (!provider.imageGenerationApiUrl)
         throw new BadRequestException('请在模型账号中配置完整的生图接口地址');
@@ -462,6 +468,17 @@ export class KnowledgeAiProvidersService {
         apiUrl: provider.imageGenerationApiUrl,
       });
       this.assertImageGenerationUrl(url);
+    } else if (kind === 'videoGeneration') {
+      if (!provider.videoGenerationApiUrl)
+        throw new BadRequestException(
+          '请在模型账号中配置完整的视频生成接口地址',
+        );
+      url = this.applyWorkspaceId({
+        ...provider,
+        apiUrl: provider.videoGenerationApiUrl,
+      });
+      this.assertVideoGenerationUrl(url);
+      taskUrlTemplate = this.buildVideoTaskUrlTemplate(url);
     }
     return {
       providerId: provider.id,
@@ -469,7 +486,11 @@ export class KnowledgeAiProvidersService {
       model: selected,
       url,
       secretKey: this.normalizeSecretKey(provider.secretKey),
-      protocol: provider.imageGenerationProtocol || 'openai',
+      protocol:
+        kind === 'videoGeneration'
+          ? ('dashscope' as const)
+          : provider.imageGenerationProtocol || 'openai',
+      taskUrlTemplate,
     };
   }
 
@@ -490,6 +511,32 @@ export class KnowledgeAiProvidersService {
     throw new BadRequestException(
       '生图接口须为完整 HTTPS 地址，不能包含账号、密码、查询参数或片段',
     );
+  }
+
+  private assertVideoGenerationUrl(value: string) {
+    try {
+      const url = new URL(value);
+      if (
+        url.protocol === 'https:' &&
+        !url.username &&
+        !url.password &&
+        !url.hash &&
+        !url.search &&
+        url.pathname.includes('/services/')
+      )
+        return;
+    } catch {
+      /* 统一返回配置错误，不回显密钥或地址。 */
+    }
+    throw new BadRequestException(
+      '视频生成接口须为包含 /services/ 的完整 DashScope HTTPS 地址，不能包含账号、密码、查询参数或片段',
+    );
+  }
+
+  private buildVideoTaskUrlTemplate(value: string) {
+    const url = new URL(value);
+    const serviceIndex = url.pathname.indexOf('/services/');
+    return `${url.origin}${url.pathname.slice(0, serviceIndex)}/tasks/{taskId}`;
   }
 
   async resolveEmbeddingTarget(
@@ -558,6 +605,8 @@ export class KnowledgeAiProvidersService {
     if (featureType === 'embedding') return provider.embeddingModels;
     if (featureType === 'imageGeneration')
       return provider.imageGenerationModels;
+    if (featureType === 'videoGeneration')
+      return provider.videoGenerationModels;
     if (featureType === 'ocr') {
       return this.joinModelTexts(provider.visionModels, provider.models);
     }
@@ -576,6 +625,10 @@ export class KnowledgeAiProvidersService {
     );
     provider.imageGenerationModels = this.removeModelFromList(
       provider.imageGenerationModels,
+      model,
+    );
+    provider.videoGenerationModels = this.removeModelFromList(
+      provider.videoGenerationModels,
       model,
     );
     provider.embeddingModels = this.removeModelFromList(
@@ -1051,6 +1104,16 @@ export class KnowledgeAiProvidersService {
       if (url) this.assertImageGenerationUrl(url);
       payload.imageGenerationApiUrl = url || null;
     }
+    if (dto.videoGenerationModels !== undefined) {
+      payload.videoGenerationModels = this.toNullableText(
+        dto.videoGenerationModels,
+      );
+    }
+    if (dto.videoGenerationApiUrl !== undefined) {
+      const url = dto.videoGenerationApiUrl.trim();
+      if (url) this.assertVideoGenerationUrl(url);
+      payload.videoGenerationApiUrl = url || null;
+    }
     if (dto.embeddingModels !== undefined) {
       payload.embeddingModels = this.toNullableText(dto.embeddingModels);
     }
@@ -1076,6 +1139,8 @@ export class KnowledgeAiProvidersService {
       imageGenerationModels: provider.imageGenerationModels ?? '',
       imageGenerationProtocol: provider.imageGenerationProtocol || 'openai',
       imageGenerationApiUrl: provider.imageGenerationApiUrl ?? '',
+      videoGenerationModels: provider.videoGenerationModels ?? '',
+      videoGenerationApiUrl: provider.videoGenerationApiUrl ?? '',
       embeddingModels: provider.embeddingModels ?? '',
       isEnabled: !!provider.isEnabled,
       description: provider.description ?? '',

@@ -24,20 +24,31 @@ const tableRef = ref<{
 }>();
 const columns: TableColumn[] = [
   {
-    prop: "currentImageUrl",
-    label: "图片",
+    prop: "currentMediaUrl",
+    label: "素材",
     width: 76,
     slot: true,
     showOverflowTooltip: false,
   },
+  { prop: "mediaType", label: "类型", width: 76, slot: true },
   { prop: "generationMode", label: "模式", width: 90, slot: true },
   { prop: "promptPreview", label: "提示词", minWidth: 280 },
   { prop: "styleKey", label: "风格", width: 120, slot: true },
   { prop: "generationStatus", label: "状态", width: 110, slot: true },
-  { prop: "aiConfigName", label: "生图配置", minWidth: 180 },
+  { prop: "aiConfigName", label: "生成配置", minWidth: 180 },
   { prop: "updatedAt", label: "更新时间", width: 180, slot: true },
 ];
 const searchFields: FormField[] = [
+  {
+    prop: "mediaType",
+    label: "素材类型",
+    type: "select",
+    options: [
+      { label: "全部", value: "" },
+      { label: "图片", value: "image" },
+      { label: "视频", value: "video" },
+    ],
+  },
   {
     prop: "keyword",
     label: "提示词",
@@ -70,6 +81,8 @@ const styleLabels: Record<string, string> = {
 const modeLabels = {
   textToImage: "文生图",
   imageToImage: "图生图",
+  textToVideo: "文生视频",
+  imageToVideo: "图生视频",
 } as const;
 function modeLabel(mode: unknown) {
   return modeLabels[mode as keyof typeof modeLabels] ?? String(mode || "-");
@@ -136,7 +149,7 @@ async function generate(row: AiMaterialSummary) {
   generatingId.value = row.id;
   try {
     await generateAiMaterial(row.id, row.version, crypto.randomUUID());
-    ElMessage.success("已提交后台生成；旧图会保留到新图保存成功");
+    ElMessage.success("已提交后台生成；旧素材会保留到新素材保存成功");
     tableRef.value?.clearSelection();
     await tableRef.value?.refresh();
   } finally {
@@ -198,15 +211,15 @@ function statusLabel(status: unknown) {
           :loading="generatingId === row.id"
           @click="generate(row)"
         >
-          {{ row.currentImageUrl ? "重新生成" : "AI 生成" }}
+          {{ row.currentMediaUrl ? "重新生成" : "AI 生成" }}
         </Button>
       </template>
-      <template #column-currentImageUrl="{ row }">
+      <template #column-currentMediaUrl="{ row }">
         <el-image
-          v-if="row.currentImageUrl"
+          v-if="row.currentMediaUrl && row.currentMediaType !== 'video'"
           class="material-thumb"
-          :src="row.currentImageUrl"
-          :preview-src-list="[row.currentImageUrl]"
+          :src="row.currentMediaUrl"
+          :preview-src-list="[row.currentMediaUrl]"
           fit="cover"
           preview-teleported
         >
@@ -214,14 +227,32 @@ function statusLabel(status: unknown) {
             ><span class="material-thumb__empty">—</span></template
           >
         </el-image>
+        <a
+          v-else-if="row.currentMediaUrl"
+          class="material-video-thumb"
+          :href="row.currentMediaUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="打开视频"
+          >▶</a
+        >
         <span v-else>—</span>
+      </template>
+      <template #column-mediaType="{ row }">
+        <el-tag :type="row.mediaType === 'video' ? 'warning' : 'info'">
+          {{ row.mediaType === "video" ? "视频" : "图片" }}
+        </el-tag>
       </template>
       <template #column-styleKey="{ row }">{{
         styleLabels[row.styleKey] || row.styleKey
       }}</template>
       <template #column-generationMode="{ row }">
         <el-tag
-          :type="row.generationMode === 'imageToImage' ? 'primary' : 'info'"
+          :type="
+            ['imageToImage', 'imageToVideo'].includes(row.generationMode)
+              ? 'primary'
+              : 'info'
+          "
         >
           {{ modeLabel(row.generationMode) }}
         </el-tag>
@@ -260,13 +291,19 @@ function statusLabel(status: unknown) {
 
 <style scoped>
 .material-thumb,
-.material-thumb__empty {
+.material-thumb__empty,
+.material-video-thumb {
   display: grid;
   place-items: center;
   width: 40px;
   height: 40px;
   border-radius: 4px;
   background: #f0f2f5;
+}
+.material-video-thumb {
+  color: #409eff;
+  font-size: 18px;
+  text-decoration: none;
 }
 :global(.material-error-tooltip .material-error-tooltip__content) {
   max-width: 420px;

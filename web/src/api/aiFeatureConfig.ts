@@ -4,6 +4,7 @@ export type AiFeatureType =
   | "chat"
   | "contentCreation"
   | "imageGeneration"
+  | "videoGeneration"
   | "documentParse"
   | "ocr"
   | "rerank";
@@ -25,6 +26,7 @@ export interface AiFeatureConfig {
   temperature: number;
   responseFormat: AiResponseFormat;
   supportsImageToImage: boolean;
+  supportsImageToVideo: boolean;
   isEnabled: boolean;
   description: string | null;
   createdAt: string;
@@ -58,6 +60,7 @@ export interface AiFeatureConfigForm {
   temperature?: number;
   responseFormat?: AiResponseFormat;
   supportsImageToImage?: boolean;
+  supportsImageToVideo?: boolean;
   isEnabled?: boolean;
   description?: string;
 }
