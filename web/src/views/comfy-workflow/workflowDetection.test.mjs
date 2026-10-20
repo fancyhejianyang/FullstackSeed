@@ -106,11 +106,13 @@ test("识别 ComfyUI 生图样本的模型、输出、提示词和常用参数",
     ["67", "text"],
   );
   assert.equal(byKey.positivePrompt.semanticRole, "positivePrompt");
+  assert.equal(byKey.positivePrompt.defaultValue, "");
   assert.deepEqual(
     [byKey.negativePrompt.nodeId, byKey.negativePrompt.inputKey],
     ["71", "text"],
   );
   assert.equal(byKey.negativePrompt.semanticRole, "negativePrompt");
+  assert.equal(byKey.negativePrompt.defaultValue, "");
   assert.deepEqual(
     ["seed", "steps", "cfg", "denoise", "width", "height", "batchSize"].map(
       (key) => [key, byKey[key].defaultValue],
@@ -185,4 +187,6 @@ test("直接提示词可以映射，且 CLIP/VAE 依赖不会被误判为主模�
     [negative?.nodeId, negative?.inputKey],
     ["2", "negative_prompt"],
   );
+  assert.equal(positive?.defaultValue, "");
+  assert.equal(negative?.defaultValue, "");
 });

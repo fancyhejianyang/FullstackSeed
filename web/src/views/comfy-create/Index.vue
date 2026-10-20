@@ -4,11 +4,13 @@ import { ElMessage } from "element-plus";
 import { useRouter } from "vue-router";
 import { useUserStore } from "@/stores/user";
 import PageContainer from "@/components/PageContainer.vue";
+import Dialog from "@/components/Dialog.vue";
 import Button from "@/components/Button.vue";
 import Input from "@/components/Input.vue";
 import InputNumber from "@/components/InputNumber.vue";
 import Select from "@/components/Select.vue";
 import Switch from "@/components/Switch.vue";
+import TaskTable from "@/views/comfy-task/TaskTable.vue";
 import {
   createComfyTask,
   getComfyMaterialOptions,
@@ -24,13 +26,14 @@ import {
 
 const router = useRouter();
 const user = useUserStore();
+const taskTableRef = ref<{ refresh: () => Promise<void> }>();
+const createVisible = ref(false);
 const loading = ref(false);
 const submitting = ref(false);
 const workflows = ref<ComfyWorkflowOption[]>([]);
 const materials = ref<ComfyMaterial[]>([]);
 const workflowId = ref<string | null>("");
 const parameters = reactive<Record<string, unknown>>({});
-const createdTaskId = ref<number | null>(null);
 const visualTemplates = ref<VisualPromptTemplateOption[]>([]);
 const visualTemplateId = ref<string>("");
 const creativeIdea = ref("");
@@ -62,13 +65,15 @@ const visualTemplateOptions = computed(() =>
   })),
 );
 
-watch(workflowId, async () => {
+async function initializeDraft() {
   Object.keys(parameters).forEach((key) => delete parameters[key]);
   for (const binding of current.value?.inputBindings || []) {
-    parameters[binding.key] =
-      binding.defaultValue ?? (binding.type === "boolean" ? false : "");
+    parameters[binding.key] = ["positivePrompt", "negativePrompt"].includes(
+      binding.semanticRole || "normal",
+    )
+      ? ""
+      : (binding.defaultValue ?? (binding.type === "boolean" ? false : ""));
   }
-  createdTaskId.value = null;
   visualTemplates.value = [];
   visualTemplateId.value = "";
   creativeIdea.value = "";
@@ -94,7 +99,14 @@ watch(workflowId, async () => {
       visualTemplateId.value = "";
     }
   }
-});
+}
+
+watch(workflowId, initializeDraft);
+
+function openCreate() {
+  createVisible.value = true;
+  void initializeDraft();
+}
 
 async function composePrompt() {
   if (!visualTemplateId.value) {
@@ -161,8 +173,9 @@ async function submit() {
       parameters: { ...parameters },
       requestId: crypto.randomUUID(),
     });
-    createdTaskId.value = task.id;
     ElMessage.success(`任务 #${task.id} 已提交`);
+    createVisible.value = false;
+    await taskTableRef.value?.refresh();
   } finally {
     submitting.value = false;
   }
@@ -172,345 +185,325 @@ onMounted(load);
 
 <template>
   <PageContainer title="ComfyUI 创作">
-    <div v-loading="loading" class="create-page">
-      <header class="create-hero">
-        <div class="create-hero__content">
-          <div class="create-hero__icon" aria-hidden="true">
-            <el-icon><MagicStick /></el-icon>
-          </div>
-          <div>
-            <div class="create-hero__eyebrow">本机生成工作台</div>
-            <h2>选择工作流，开始你的下一次创作</h2>
-            <p>
-              调用已发布的 ComfyUI
-              工作流生成图片或视频，任务提交后会在后台持续运行。
-            </p>
-          </div>
-        </div>
-        <div class="create-hero__actions">
-          <div class="create-hero__summary">
-            <span
-              ><strong>{{ workflows.length }}</strong> 个工作流</span
-            >
-            <span
-              ><strong>{{ materials.length }}</strong> 个输入素材</span
-            >
-          </div>
-          <div class="create-hero__links">
-            <Button
-              perm="ComfyMaterial.read"
-              icon="Picture"
-              @click="router.push('/comfyui/materials')"
-            >
-              素材库
-            </Button>
-            <Button
-              perm="ComfyTask.read"
-              icon="Clock"
-              @click="router.push('/comfyui/tasks')"
-            >
-              生成记录
-            </Button>
-          </div>
-        </div>
-      </header>
+    <TaskTable ref="taskTableRef">
+      <template #toolbar>
+        <Button perm="ComfyTask.create" icon="Plus" @click="openCreate">
+          新建创作任务
+        </Button>
+      </template>
+    </TaskTable>
 
-      <section v-if="!workflows.length" class="setup-empty">
-        <div class="setup-empty__header">
-          <div class="setup-empty__mark" aria-hidden="true">
-            <el-icon><Connection /></el-icon>
-          </div>
-          <div>
-            <h3>还没有可用于创作的工作流</h3>
-            <p>
-              完成服务连接并发布一个 API 工作流后，就可以在这里提交生成任务。
-            </p>
-          </div>
-        </div>
-        <div class="setup-steps">
-          <div class="setup-step">
-            <span>1</span>
-            <div>
-              <strong>连接本机服务</strong>
-              <p>配置 ComfyUI 地址并确认连接可用</p>
+    <Dialog
+      v-model="createVisible"
+      title="新建 ComfyUI 创作任务"
+      width="1040px"
+      body-max-height="76vh"
+      :show-footer="false"
+    >
+      <div v-loading="loading" class="create-page">
+        <section v-if="!workflows.length" class="setup-empty">
+          <div class="setup-empty__header">
+            <div class="setup-empty__mark" aria-hidden="true">
+              <el-icon><Connection /></el-icon>
             </div>
-          </div>
-          <div class="setup-step">
-            <span>2</span>
             <div>
-              <strong>导入并发布工作流</strong>
-              <p>从 ComfyUI 导出 API JSON，配置开放参数</p>
-            </div>
-          </div>
-          <div class="setup-step">
-            <span>3</span>
-            <div>
-              <strong>填写参数开始创作</strong>
-              <p>任务在后台执行，结果自动进入素材库</p>
-            </div>
-          </div>
-        </div>
-        <div class="setup-empty__actions">
-          <Button
-            perm="ComfyConnection.read"
-            icon="Connection"
-            @click="router.push('/third-party-config/comfyui')"
-          >
-            配置服务
-          </Button>
-          <Button
-            perm="ComfyWorkflow.read"
-            icon="Upload"
-            @click="router.push('/comfyui/workflows')"
-          >
-            导入工作流
-          </Button>
-          <span>没有配置权限时，请联系管理员完成前两步。</span>
-        </div>
-      </section>
-
-      <section v-else class="creation-workspace">
-        <aside class="workflow-panel">
-          <div class="panel-heading">
-            <div>
-              <h3>工作流模板</h3>
-              <p>选择一个已发布模板</p>
-            </div>
-            <span>{{ workflows.length }}</span>
-          </div>
-          <div class="workflow-list" role="radiogroup" aria-label="工作流模板">
-            <button
-              v-for="workflow in workflows"
-              :key="workflow.id"
-              type="button"
-              role="radio"
-              class="workflow-card"
-              :class="{ 'is-active': workflow.id === current?.id }"
-              :aria-checked="workflow.id === current?.id"
-              @click="workflowId = String(workflow.id)"
-            >
-              <span
-                class="workflow-card__icon"
-                :class="`is-${workflow.outputType}`"
-              >
-                <el-icon>
-                  <VideoPlay v-if="workflow.outputType === 'video'" />
-                  <Picture v-else />
-                </el-icon>
-              </span>
-              <span class="workflow-card__content">
-                <strong>{{ workflow.name }}</strong>
-                <small>
-                  {{ workflow.outputType === "video" ? "视频" : "图片" }} ·
-                  {{ workflow.inputBindings.length }} 个参数 · v{{
-                    workflow.version
-                  }}
-                </small>
-              </span>
-              <el-icon
-                v-if="workflow.id === current?.id"
-                class="workflow-card__check"
-              >
-                <CircleCheckFilled />
-              </el-icon>
-            </button>
-          </div>
-        </aside>
-
-        <main class="parameter-panel">
-          <div class="selected-workflow">
-            <div>
-              <div class="selected-workflow__meta">
-                <span
-                  class="output-badge"
-                  :class="`is-${current?.outputType || 'image'}`"
-                >
-                  {{
-                    current?.outputType === "video" ? "视频生成" : "图片生成"
-                  }}
-                </span>
-                <span>版本 v{{ current?.version }}</span>
-              </div>
-              <h3>{{ current?.name }}</h3>
+              <h3>还没有可用于创作的工作流</h3>
               <p>
-                {{
-                  current?.description || "按照模板填写参数后即可提交生成任务。"
-                }}
+                完成服务连接并发布一个 API 工作流后，就可以在这里提交生成任务。
               </p>
             </div>
-            <div class="selected-workflow__parameter-count">
-              <strong>{{ current?.inputBindings.length || 0 }}</strong>
-              <span>开放参数</span>
+          </div>
+          <div class="setup-steps">
+            <div class="setup-step">
+              <span>1</span>
+              <div>
+                <strong>连接本机服务</strong>
+                <p>配置 ComfyUI 地址并确认连接可用</p>
+              </div>
+            </div>
+            <div class="setup-step">
+              <span>2</span>
+              <div>
+                <strong>导入并发布工作流</strong>
+                <p>从 ComfyUI 导出 API JSON，配置开放参数</p>
+              </div>
+            </div>
+            <div class="setup-step">
+              <span>3</span>
+              <div>
+                <strong>填写参数开始创作</strong>
+                <p>任务在后台执行，结果自动进入素材库</p>
+              </div>
             </div>
           </div>
+          <div class="setup-empty__actions">
+            <Button
+              perm="ComfyConnection.read"
+              icon="Connection"
+              @click="router.push('/third-party-config/comfyui')"
+            >
+              配置服务
+            </Button>
+            <Button
+              perm="ComfyWorkflow.read"
+              icon="Upload"
+              @click="router.push('/comfyui/workflows')"
+            >
+              导入工作流
+            </Button>
+            <span>没有配置权限时，请联系管理员完成前两步。</span>
+          </div>
+        </section>
 
-          <section v-if="promptBindings.length" class="prompt-composer">
-            <div class="prompt-composer__heading">
+        <section v-else class="creation-workspace">
+          <aside class="workflow-panel">
+            <div class="panel-heading">
               <div>
-                <h4>AI 视觉提示词</h4>
+                <h3>工作流模板</h3>
+                <p>选择一个已发布模板</p>
+              </div>
+              <span>{{ workflows.length }}</span>
+            </div>
+            <div
+              class="workflow-list"
+              role="radiogroup"
+              aria-label="工作流模板"
+            >
+              <button
+                v-for="workflow in workflows"
+                :key="workflow.id"
+                type="button"
+                role="radio"
+                class="workflow-card"
+                :class="{ 'is-active': workflow.id === current?.id }"
+                :aria-checked="workflow.id === current?.id"
+                @click="workflowId = String(workflow.id)"
+              >
+                <span
+                  class="workflow-card__icon"
+                  :class="`is-${workflow.outputType}`"
+                >
+                  <el-icon>
+                    <VideoPlay v-if="workflow.outputType === 'video'" />
+                    <Picture v-else />
+                  </el-icon>
+                </span>
+                <span class="workflow-card__content">
+                  <strong>{{ workflow.name }}</strong>
+                  <small>
+                    {{ workflow.outputType === "video" ? "视频" : "图片" }} ·
+                    {{ workflow.inputBindings.length }} 个参数 · v{{
+                      workflow.version
+                    }}
+                  </small>
+                </span>
+                <el-icon
+                  v-if="workflow.id === current?.id"
+                  class="workflow-card__check"
+                >
+                  <CircleCheckFilled />
+                </el-icon>
+              </button>
+            </div>
+          </aside>
+
+          <main class="parameter-panel">
+            <div class="selected-workflow">
+              <div>
+                <div class="selected-workflow__meta">
+                  <span
+                    class="output-badge"
+                    :class="`is-${current?.outputType || 'image'}`"
+                  >
+                    {{
+                      current?.outputType === "video" ? "视频生成" : "图片生成"
+                    }}
+                  </span>
+                  <span>版本 v{{ current?.version }}</span>
+                </div>
+                <h3>{{ current?.name }}</h3>
                 <p>
-                  按
-                  {{ current?.targetModel || "通用模型" }}
-                  的规则生成正向、负向提示词，并只回填已绑定的工作流参数。
+                  {{
+                    current?.description ||
+                    "按照模板填写参数后即可提交生成任务。"
+                  }}
                 </p>
               </div>
-              <Button
-                v-if="user.hasPermission('VisualPromptTemplate.read')"
-                :confirm="false"
-                icon="MagicStick"
-                :loading="composing"
-                @click="composePrompt"
-                >生成提示词</Button
-              >
-            </div>
-            <template v-if="user.hasPermission('VisualPromptTemplate.read')">
-              <div v-if="visualTemplates.length" class="prompt-composer__form">
-                <div>
-                  <label>视觉模板</label>
-                  <Select
-                    v-model="visualTemplateId"
-                    :options="visualTemplateOptions"
-                    :clearable="false"
-                  />
-                </div>
-                <div class="prompt-composer__idea">
-                  <label>创作想法</label>
-                  <Input
-                    v-model="creativeIdea"
-                    mode="textarea"
-                    :rows="3"
-                    placeholder="描述主体、场景、风格、情绪或镜头运动；AI 会按目标模型规则整理"
-                  />
-                </div>
+              <div class="selected-workflow__parameter-count">
+                <strong>{{ current?.inputBindings.length || 0 }}</strong>
+                <span>开放参数</span>
               </div>
-              <div v-else class="prompt-composer__empty">
-                当前媒体类型和模型没有匹配的模板。
+            </div>
+
+            <section v-if="promptBindings.length" class="prompt-composer">
+              <div class="prompt-composer__heading">
+                <div>
+                  <h4>AI 视觉提示词</h4>
+                  <p>
+                    按
+                    {{ current?.targetModel || "通用模型" }}
+                    的规则生成正向、负向提示词，并只回填已绑定的工作流参数。
+                  </p>
+                </div>
                 <Button
-                  link
+                  v-if="user.hasPermission('VisualPromptTemplate.read')"
                   :confirm="false"
-                  @click="router.push('/visual-prompt-templates')"
-                  >去配置视觉提示词</Button
+                  icon="MagicStick"
+                  :loading="composing"
+                  @click="composePrompt"
+                  >生成提示词</Button
                 >
               </div>
-              <p v-if="composeNotes" class="prompt-composer__notes">
-                {{ composeNotes }}
-              </p>
-            </template>
-            <div v-else class="prompt-composer__empty">
-              当前账号没有视觉提示词模板查看权限，仍可手动填写下方参数。
-            </div>
-          </section>
+              <template v-if="user.hasPermission('VisualPromptTemplate.read')">
+                <div
+                  v-if="visualTemplates.length"
+                  class="prompt-composer__form"
+                >
+                  <div>
+                    <label>视觉模板</label>
+                    <Select
+                      v-model="visualTemplateId"
+                      :options="visualTemplateOptions"
+                      :clearable="false"
+                    />
+                  </div>
+                  <div class="prompt-composer__idea">
+                    <label>创作想法</label>
+                    <Input
+                      v-model="creativeIdea"
+                      mode="textarea"
+                      :rows="3"
+                      placeholder="描述主体、场景、风格、情绪或镜头运动；AI 会按目标模型规则整理"
+                    />
+                  </div>
+                </div>
+                <div v-else class="prompt-composer__empty">
+                  当前媒体类型和模型没有匹配的模板。
+                  <Button
+                    link
+                    :confirm="false"
+                    @click="router.push('/visual-prompt-templates')"
+                    >去配置视觉提示词</Button
+                  >
+                </div>
+                <p v-if="composeNotes" class="prompt-composer__notes">
+                  {{ composeNotes }}
+                </p>
+              </template>
+              <div v-else class="prompt-composer__empty">
+                当前账号没有视觉提示词模板查看权限，仍可手动填写下方参数。
+              </div>
+            </section>
 
-          <div v-if="current?.inputBindings.length" class="parameter-list">
-            <div
-              v-for="binding in current.inputBindings"
-              :key="binding.key"
-              class="parameter-item"
-              :class="{
-                'parameter-item--full': binding.type === 'textarea',
-              }"
-            >
-              <label>{{ binding.label }}<i v-if="binding.required">*</i></label>
-              <Input
-                v-if="binding.type === 'text'"
-                :model-value="String(parameters[binding.key] ?? '')"
-                :placeholder="binding.hint || `请输入${binding.label}`"
-                @update:model-value="parameters[binding.key] = $event"
-              />
-              <Input
-                v-else-if="binding.type === 'textarea'"
-                :model-value="String(parameters[binding.key] ?? '')"
-                mode="textarea"
-                :rows="6"
-                :placeholder="binding.hint || `请输入${binding.label}`"
-                @update:model-value="parameters[binding.key] = $event"
-              />
-              <InputNumber
-                v-else-if="binding.type === 'number' || binding.type === 'seed'"
-                :model-value="
-                  typeof parameters[binding.key] === 'number'
-                    ? (parameters[binding.key] as number)
-                    : null
-                "
-                mode="integer"
-                :min="binding.min"
-                :max="binding.max"
-                :placeholder="
-                  binding.type === 'seed'
-                    ? '留空则每次随机'
-                    : `请输入${binding.label}`
-                "
-                @update:model-value="parameters[binding.key] = $event"
-              />
-              <Switch
-                v-else-if="binding.type === 'boolean'"
-                :model-value="parameters[binding.key] === true"
-                active-text="是"
-                inactive-text="否"
-                @update:model-value="parameters[binding.key] = $event"
-              />
-              <Select
-                v-else-if="binding.type === 'select'"
-                :model-value="String(parameters[binding.key] ?? '')"
-                :options="
-                  (binding.options || []).map((item) => ({
-                    value: String(item.value),
-                    text: item.label,
-                  }))
-                "
-                :placeholder="`请选择${binding.label}`"
-                @update:model-value="parameters[binding.key] = $event"
-              />
-              <Select
-                v-else-if="binding.type === 'image'"
-                :model-value="String(parameters[binding.key] ?? '')"
-                :options="materialOptions"
-                :placeholder="
-                  materials.length
-                    ? `请选择${binding.label}`
-                    : '请先到 ComfyUI 素材上传图片'
-                "
-                @update:model-value="parameters[binding.key] = $event"
-              />
-              <small v-if="binding.hint">{{ binding.hint }}</small>
+            <div v-if="current?.inputBindings.length" class="parameter-list">
+              <div
+                v-for="binding in current.inputBindings"
+                :key="binding.key"
+                class="parameter-item"
+                :class="{
+                  'parameter-item--full': binding.type === 'textarea',
+                }"
+              >
+                <label
+                  >{{ binding.label }}<i v-if="binding.required">*</i></label
+                >
+                <Input
+                  v-if="binding.type === 'text'"
+                  :model-value="String(parameters[binding.key] ?? '')"
+                  :placeholder="binding.hint || `请输入${binding.label}`"
+                  @update:model-value="parameters[binding.key] = $event"
+                />
+                <Input
+                  v-else-if="binding.type === 'textarea'"
+                  :model-value="String(parameters[binding.key] ?? '')"
+                  mode="textarea"
+                  :rows="6"
+                  :placeholder="binding.hint || `请输入${binding.label}`"
+                  @update:model-value="parameters[binding.key] = $event"
+                />
+                <InputNumber
+                  v-else-if="
+                    binding.type === 'number' || binding.type === 'seed'
+                  "
+                  :model-value="
+                    typeof parameters[binding.key] === 'number'
+                      ? (parameters[binding.key] as number)
+                      : null
+                  "
+                  mode="integer"
+                  :min="binding.min"
+                  :max="binding.max"
+                  :placeholder="
+                    binding.type === 'seed'
+                      ? '留空则每次随机'
+                      : `请输入${binding.label}`
+                  "
+                  @update:model-value="parameters[binding.key] = $event"
+                />
+                <Switch
+                  v-else-if="binding.type === 'boolean'"
+                  :model-value="parameters[binding.key] === true"
+                  active-text="是"
+                  inactive-text="否"
+                  @update:model-value="parameters[binding.key] = $event"
+                />
+                <Select
+                  v-else-if="binding.type === 'select'"
+                  :model-value="String(parameters[binding.key] ?? '')"
+                  :options="
+                    (binding.options || []).map((item) => ({
+                      value: String(item.value),
+                      text: item.label,
+                    }))
+                  "
+                  :placeholder="`请选择${binding.label}`"
+                  @update:model-value="parameters[binding.key] = $event"
+                />
+                <Select
+                  v-else-if="binding.type === 'image'"
+                  :model-value="String(parameters[binding.key] ?? '')"
+                  :options="materialOptions"
+                  :placeholder="
+                    materials.length
+                      ? `请选择${binding.label}`
+                      : '请先到 ComfyUI 素材上传图片'
+                  "
+                  @update:model-value="parameters[binding.key] = $event"
+                />
+                <small v-if="binding.hint">{{ binding.hint }}</small>
+              </div>
             </div>
-          </div>
-          <div v-else class="parameter-empty">
-            <el-icon><Setting /></el-icon>
-            <div>
-              <strong>此工作流无需填写参数</strong>
-              <p>将直接使用工作流节点中保存的默认值执行。</p>
+            <div v-else class="parameter-empty">
+              <el-icon><Setting /></el-icon>
+              <div>
+                <strong>此工作流无需填写参数</strong>
+                <p>将直接使用工作流节点中保存的默认值执行。</p>
+              </div>
             </div>
-          </div>
 
-          <div class="submit-bar">
-            <span
-              >关闭页面不会中断任务，生成结果会自动保存到 ComfyUI 素材库。</span
-            >
-            <Button
-              perm="ComfyTask.create"
-              icon="MagicStick"
-              :loading="submitting"
-              @click="submit"
-            >
-              开始生成
-            </Button>
-          </div>
-          <div v-if="createdTaskId" class="task-created">
-            <span class="task-created__icon"
-              ><el-icon><CircleCheck /></el-icon
-            ></span>
-            <div>
-              <strong>任务已进入处理队列</strong>
-              <p>
-                任务 #{{ createdTaskId }}，可在生成记录中查看真实状态和输出。
-              </p>
+            <div class="submit-bar">
+              <span
+                >关闭页面不会中断任务，生成结果会自动保存到 ComfyUI
+                素材库。</span
+              >
+              <div class="submit-bar__actions">
+                <Button :confirm="false" @click="createVisible = false">
+                  取消
+                </Button>
+                <Button
+                  perm="ComfyTask.create"
+                  icon="MagicStick"
+                  :loading="submitting"
+                  @click="submit"
+                >
+                  开始生成
+                </Button>
+              </div>
             </div>
-            <Button @click="router.push('/comfyui/tasks')">查看任务进度</Button>
-          </div>
-        </main>
-      </section>
-    </div>
+          </main>
+        </section>
+      </div>
+    </Dialog>
   </PageContainer>
 </template>
 
@@ -524,53 +517,6 @@ onMounted(load);
   margin: 0 auto;
 }
 
-.create-hero {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-lg);
-  padding: 22px 24px;
-  border: 1px solid #dce8f7;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #f3f8ff 0%, #f8fbff 52%, #ffffff 100%);
-}
-
-.create-hero__content,
-.create-hero__actions,
-.create-hero__links,
-.create-hero__summary {
-  display: flex;
-  align-items: center;
-}
-
-.create-hero__content {
-  min-width: 0;
-  gap: var(--space-md);
-}
-
-.create-hero__icon {
-  display: grid;
-  width: 52px;
-  height: 52px;
-  flex: 0 0 52px;
-  place-items: center;
-  border-radius: 14px;
-  background: var(--color-primary);
-  box-shadow: 0 8px 20px rgba(64, 158, 255, 0.2);
-  color: #fff;
-  font-size: 25px;
-}
-
-.create-hero__eyebrow {
-  margin-bottom: 4px;
-  color: var(--color-primary);
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-}
-
-.create-hero h2,
-.create-hero p,
 .setup-empty h3,
 .setup-empty p,
 .panel-heading h3,
@@ -580,40 +526,6 @@ onMounted(load);
 .parameter-empty p,
 .setup-step p {
   margin: 0;
-}
-
-.create-hero h2 {
-  color: var(--color-text-primary);
-  font-size: 20px;
-  line-height: 1.4;
-}
-
-.create-hero p {
-  margin-top: 4px;
-  color: var(--color-text-regular);
-  font-size: var(--font-size-sm);
-  line-height: 1.6;
-}
-
-.create-hero__actions {
-  flex-shrink: 0;
-  gap: var(--space-md);
-}
-
-.create-hero__summary {
-  gap: 14px;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
-  white-space: nowrap;
-}
-
-.create-hero__summary strong {
-  color: var(--color-text-primary);
-  font-size: var(--font-size-base);
-}
-
-.create-hero__links {
-  gap: var(--space-sm);
 }
 
 .setup-empty {
@@ -1008,54 +920,13 @@ onMounted(load);
   line-height: 1.6;
 }
 
-.task-created {
+.submit-bar__actions {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: var(--space-md);
-  padding: 14px 16px;
-  border: 1px solid #b3e19d;
-  border-radius: var(--radius-lg);
-  background: #f0f9eb;
-}
-
-.task-created__icon {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  flex: 0 0 34px;
-  place-items: center;
-  border-radius: var(--radius-full);
-  background: #e1f3d8;
-  color: var(--color-success);
-}
-
-.task-created > div {
-  min-width: 0;
-  flex: 1;
-}
-
-.task-created strong {
-  color: #529b2e;
-}
-
-.task-created p {
-  margin: 6px 0 0;
-  color: var(--color-text-regular);
-  font-size: var(--font-size-xs);
+  flex: 0 0 auto;
+  gap: var(--space-sm);
 }
 
 @media (max-width: 960px) {
-  .create-hero {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .create-hero__actions {
-    width: 100%;
-    justify-content: space-between;
-  }
-
   .creation-workspace {
     grid-template-columns: 240px minmax(0, 1fr);
   }
@@ -1074,30 +945,26 @@ onMounted(load);
 }
 
 @media (max-width: 720px) {
-  .create-hero,
   .setup-empty,
   .parameter-panel,
   .workflow-panel {
     padding: var(--space-md);
   }
 
-  .create-hero__actions,
-  .create-hero__links,
   .setup-empty__actions,
   .submit-bar,
-  .task-created,
   .selected-workflow {
     align-items: stretch;
     flex-direction: column;
   }
 
+  .submit-bar__actions {
+    justify-content: flex-end;
+  }
+
   .prompt-composer__heading {
     align-items: stretch;
     flex-direction: column;
-  }
-
-  .create-hero__summary {
-    justify-content: space-between;
   }
 
   .setup-steps,

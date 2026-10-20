@@ -22,11 +22,10 @@ import { ComfyTask, type ComfyTaskStatus } from './entities/comfy-task.entity';
 import type { ComfyInputBinding } from './entities/comfy-workflow.entity';
 import { ComfyWorkflow } from './entities/comfy-workflow.entity';
 import { ComfyWorkflowVersion } from './entities/comfy-workflow-version.entity';
-
-type ApiGraph = Record<
-  string,
-  { class_type: string; inputs: Record<string, unknown> }
->;
+import {
+  sanitizeComfyWorkflow,
+  type ComfyApiGraph,
+} from './comfy-workflow-sanitizer';
 type OutputDescriptor = {
   filename: string;
   subfolder?: string;
@@ -131,11 +130,11 @@ export class ComfyTasksService implements OnModuleInit, OnModuleDestroy {
     if (!connection.isEnabled) {
       throw new BadRequestException('工作流绑定的 ComfyUI 服务已停用');
     }
-    await this.validateParameters(
-      userId,
+    const sanitized = sanitizeComfyWorkflow(
+      JSON.parse(version.apiWorkflow) as ComfyApiGraph,
       version.inputBindings,
-      dto.parameters,
     );
+    await this.validateParameters(userId, sanitized.bindings, dto.parameters);
     const saved = await this.tasks.save(
       this.tasks.create({
         userId,
@@ -148,8 +147,8 @@ export class ComfyTasksService implements OnModuleInit, OnModuleDestroy {
         stage: '等待执行',
         progress: null,
         parameterSnapshot: dto.parameters,
-        workflowSnapshot: version.apiWorkflow,
-        bindingSnapshot: version.inputBindings,
+        workflowSnapshot: JSON.stringify(sanitized.graph),
+        bindingSnapshot: sanitized.bindings,
         promptId: null,
         errorMessage: null,
         startedAt: null,
@@ -253,10 +252,13 @@ export class ComfyTasksService implements OnModuleInit, OnModuleDestroy {
       return;
     }
     try {
-      const graph = JSON.parse(task.workflowSnapshot) as ApiGraph;
-      await this.applyBindings(
-        graph,
+      const sanitized = sanitizeComfyWorkflow(
+        JSON.parse(task.workflowSnapshot) as ComfyApiGraph,
         task.bindingSnapshot as ComfyInputBinding[],
+      );
+      await this.applyBindings(
+        sanitized.graph,
+        sanitized.bindings,
         task.parameterSnapshot,
         task,
         connection,
@@ -269,7 +271,7 @@ export class ComfyTasksService implements OnModuleInit, OnModuleDestroy {
       });
       const result = await this.client.submitPrompt(
         connection,
-        graph,
+        sanitized.graph,
         `fullstack-seed-${task.id}-${randomUUID()}`,
       );
       if (!result.prompt_id) {
@@ -397,7 +399,7 @@ export class ComfyTasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async applyBindings(
-    graph: ApiGraph,
+    graph: ComfyApiGraph,
     bindings: ComfyInputBinding[],
     parameters: Record<string, unknown>,
     task: ComfyTask,

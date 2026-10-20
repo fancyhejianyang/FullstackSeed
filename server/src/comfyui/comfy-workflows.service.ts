@@ -18,12 +18,12 @@ import {
 } from './entities/comfy-workflow.entity';
 import { ComfyWorkflowVersion } from './entities/comfy-workflow-version.entity';
 import { ComfyTask } from './entities/comfy-task.entity';
-
-type ApiNode = {
-  class_type: string;
-  inputs: Record<string, unknown>;
-  _meta?: Record<string, unknown>;
-};
+import {
+  sanitizeComfyWorkflow,
+  withoutPromptBindingDefaults,
+  type ComfyApiGraph,
+  type ComfyApiNode,
+} from './comfy-workflow-sanitizer';
 
 @Injectable()
 export class ComfyWorkflowsService {
@@ -111,7 +111,7 @@ export class ComfyWorkflowsService {
         targetModel: item.targetModel,
         description: item.description,
         version: item.version,
-        inputBindings: item.inputBindings.filter(
+        inputBindings: withoutPromptBindingDefaults(item.inputBindings).filter(
           (binding) => binding.type !== 'outputPrefix',
         ),
       }));
@@ -119,8 +119,11 @@ export class ComfyWorkflowsService {
 
   async create(dto: CreateComfyWorkflowDto) {
     await this.assertConnection(dto.connectionId);
-    const graph = this.parseAndValidateGraph(dto.apiWorkflow);
-    const bindings = dto.inputBindings as ComfyInputBinding[];
+    const sanitized = sanitizeComfyWorkflow(
+      this.parseAndValidateGraph(dto.apiWorkflow),
+      dto.inputBindings as ComfyInputBinding[],
+    );
+    const { graph, bindings } = sanitized;
     this.validateBindings(graph, bindings, dto.outputNodeIds ?? []);
     const id = await this.workflows.manager.transaction(async (manager) => {
       const repo = manager.getRepository(ComfyWorkflow);
@@ -150,11 +153,11 @@ export class ComfyWorkflowsService {
     const current = await this.findOne(id);
     const connectionId = dto.connectionId ?? current.connectionId;
     await this.assertConnection(connectionId);
-    const graph = this.parseAndValidateGraph(
-      dto.apiWorkflow ?? current.apiWorkflow,
+    const sanitized = sanitizeComfyWorkflow(
+      this.parseAndValidateGraph(dto.apiWorkflow ?? current.apiWorkflow),
+      (dto.inputBindings ?? current.inputBindings) as ComfyInputBinding[],
     );
-    const bindings = (dto.inputBindings ??
-      current.inputBindings) as ComfyInputBinding[];
+    const { graph, bindings } = sanitized;
     const outputNodeIds = dto.outputNodeIds ?? current.outputNodeIds ?? [];
     this.validateBindings(graph, bindings, outputNodeIds);
     const savedId = await this.workflows.manager.transaction(
@@ -219,9 +222,9 @@ export class ComfyWorkflowsService {
     if (Buffer.byteLength(value, 'utf8') > 2 * 1024 * 1024) {
       throw new BadRequestException('工作流 JSON 不能超过 2MB');
     }
-    let graph: Record<string, ApiNode>;
+    let graph: ComfyApiGraph;
     try {
-      graph = JSON.parse(value) as Record<string, ApiNode>;
+      graph = JSON.parse(value) as ComfyApiGraph;
     } catch {
       throw new BadRequestException('工作流 JSON 格式错误');
     }
@@ -248,7 +251,7 @@ export class ComfyWorkflowsService {
   }
 
   private validateBindings(
-    graph: Record<string, ApiNode>,
+    graph: Record<string, ComfyApiNode>,
     bindings: ComfyInputBinding[],
     outputNodeIds: string[],
   ) {

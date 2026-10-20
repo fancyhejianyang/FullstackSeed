@@ -1,5 +1,32 @@
 # CHANGELOG
 
+### 2026-10-20 分离 ComfyUI 工作流模板与创作任务提示词
+
+- 工作流导入自动识别仍保留正向/负向提示词的节点映射，但不再把 JSON 自带的示例文本作为参数默认值；后端在创建、更新和生成版本快照前统一清空提示词节点及映射默认值。
+- 创建任务时只把用户本次填写的提示词保存在任务参数快照中；对历史工作流和历史任务快照在提交 ComfyUI 前再次执行清理，必填提示词不能再由旧模板默认值代替。
+- “ComfyUI 创作”改为任务查询列表，顶部“新建创作任务”打开标准弹窗选择已发布工作流并填写参数；提交成功后关闭弹窗并立即刷新列表。
+- 抽取 ComfyUI 任务共享列表，创作页与生成记录页复用状态展示、详情、取消、删除、批量删除和后台状态轮询，避免两套任务交互产生差异。
+- 验证：新增 2 项后端提示词清理测试并连同 3 项既有绑定测试通过，前端 3 项工作流识别测试、Vue 类型检查、目标页面组件复用扫描、后端定向 ESLint、Nest 生产构建和 Vite 生产构建通过；Vite 仅保留既有依赖 PURE 注释与大分块提示。未启动服务、修改现有数据库记录或提交真实 ComfyUI 任务。
+
+新增文件（3）：
+
+- `server/src/comfyui/comfy-workflow-sanitizer.spec.ts`
+- `server/src/comfyui/comfy-workflow-sanitizer.ts`
+- `web/src/views/comfy-task/TaskTable.vue`
+
+修改文件（8）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/comfyui/comfy-tasks.service.ts`
+- `server/src/comfyui/comfy-workflows.service.ts`
+- `web/src/views/comfy-create/Index.vue`
+- `web/src/views/comfy-task/Index.vue`
+- `web/src/views/comfy-workflow/workflowDetection.test.mjs`
+- `web/src/views/comfy-workflow/workflowDetection.ts`
+
+删除文件：无。
+
 ### 2026-10-20 精简 ComfyUI 工作流保存界面
 
 - 工作流弹窗恢复为常规 1040px 宽度，页面定位回归“导入、确认、保存并供创作调用”，不再默认展示完整节点调试表单。

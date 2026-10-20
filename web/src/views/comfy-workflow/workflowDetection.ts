@@ -257,7 +257,7 @@ function detectBindings(graph: Record<string, ComfyApiNode>) {
       inputKey: prompt.inputKey,
       semanticRole: "positivePrompt",
       required: true,
-      defaultValue: prompt.value,
+      defaultValue: "",
       hint: "描述希望生成的主体、场景、构图、光影与风格",
     });
   }
@@ -271,7 +271,7 @@ function detectBindings(graph: Record<string, ComfyApiNode>) {
       inputKey: prompt.inputKey,
       semanticRole: "negativePrompt",
       required: false,
-      defaultValue: prompt.value,
+      defaultValue: "",
       hint: "描述需要避免的画面问题与元素",
     });
   }
