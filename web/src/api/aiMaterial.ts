@@ -11,7 +11,15 @@ export type AiMaterialGenerationMode =
   | "textToImage"
   | "imageToImage"
   | "textToVideo"
-  | "imageToVideo";
+  | "imageToVideo"
+  | "referenceToVideo";
+export type AiMaterialReferenceMediaType =
+  | "reference_image"
+  | "reference_video";
+export interface AiMaterialReferenceMedia {
+  type: AiMaterialReferenceMediaType;
+  url: string;
+}
 export type AiMaterialMediaType = "image" | "video";
 export type AiMaterialVideoResolution = "480P" | "720P" | "1080P";
 export type AiMaterialVideoRatio =
@@ -62,6 +70,7 @@ export interface AiMaterialSummary {
   currentMediaUrl: string | null;
   referenceFileId: number | null;
   referenceImageUrl: string | null;
+  referenceCount: number;
   version: number;
   generationRevision: number;
   generationStatus: AiMaterialStatus;
@@ -75,6 +84,7 @@ export interface AiMaterialSummary {
 export interface AiMaterial extends Omit<AiMaterialSummary, "promptPreview"> {
   prompt: string;
   customStyle: string | null;
+  referenceMedia: AiMaterialReferenceMedia[] | null;
   latestTask: MaterialTaskSummary | null;
 }
 
@@ -86,6 +96,7 @@ export interface AiMaterialForm {
   aiConfigId: number | "";
   referenceImageUrl?: string | null;
   referenceImageFile?: File | null;
+  referenceMedia?: AiMaterialReferenceMedia[] | null;
   videoResolution: AiMaterialVideoResolution;
   videoRatio: AiMaterialVideoRatio;
   videoDuration: AiMaterialVideoDuration;
@@ -157,6 +168,9 @@ function toMaterialFormData(data: AiMaterialForm) {
     data.referenceImageFile
   ) {
     body.append("referenceImage", data.referenceImageFile);
+  }
+  if (data.generationMode === "referenceToVideo") {
+    body.append("referenceMedia", JSON.stringify(data.referenceMedia ?? []));
   }
   return body;
 }

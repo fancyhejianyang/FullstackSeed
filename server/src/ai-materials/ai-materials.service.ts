@@ -38,7 +38,9 @@ import {
   buildMaterialPrompt,
   materialMediaType,
   materialNeedsReferenceImage,
+  materialNeedsReferenceMedia,
   type AiMaterialGenerationMode,
+  type AiMaterialReferenceMedia,
 } from './ai-material.constants';
 import {
   BatchDeleteAiMaterialDto,
@@ -127,7 +129,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
     const configMap = new Map(configs.map((config) => [config.id, config]));
     return {
       list: rows.map((row) => {
-        const { prompt, customStyle, ...summary } = row;
+        const { prompt, customStyle, referenceMedia, ...summary } = row;
         const config = configMap.get(row.aiConfigId);
         return {
           ...summary,
@@ -136,6 +138,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
           aiConfigName: config?.name ?? `配置 #${row.aiConfigId}`,
           aiModel: config?.model ?? '',
           hasCustomStyle: !!customStyle,
+          referenceCount: referenceMedia?.length ?? 0,
         };
       }),
       total,
@@ -168,6 +171,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
       currentMediaUrl: material.currentImageUrl,
       aiConfigName: config?.name ?? `配置 #${material.aiConfigId}`,
       aiModel: config?.model ?? '',
+      referenceCount: material.referenceMedia?.length ?? 0,
       latestTask,
     };
   }
@@ -181,6 +185,10 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
     const mediaType = materialMediaType(generationMode);
     await this.assertConfig(dto.aiConfigId, generationMode);
     const source = this.referenceImage(generationMode, referenceImage);
+    const referenceMedia = this.referenceMedia(
+      generationMode,
+      dto.referenceMedia,
+    );
     const material = await this.materials.manager.transaction(
       async (manager) => {
         const materials = manager.getRepository(AiMaterial);
@@ -202,6 +210,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
             videoDuration: dto.videoDuration ?? 5,
             referenceFileId: null,
             referenceImageUrl: null,
+            referenceMedia,
             currentFileId: null,
             currentImageUrl: null,
             version: 1,
@@ -242,6 +251,11 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
     const mediaType = materialMediaType(generationMode);
     await this.assertConfig(nextConfigId, generationMode);
     const source = this.referenceImage(generationMode, referenceImage, true);
+    const referenceMedia =
+      dto.referenceMedia !== undefined ||
+      generationMode !== material.generationMode
+        ? this.referenceMedia(generationMode, dto.referenceMedia)
+        : material.referenceMedia;
     if (
       materialNeedsReferenceImage(generationMode) &&
       !source &&
@@ -304,6 +318,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
         } else if (!current.referenceFileId) {
           throw new BadRequestException('图生图/图生视频必须上传参考图片');
         }
+        current.referenceMedia = referenceMedia;
         if (
           !ACTIVE_STATUSES.includes(
             current.generationStatus as MaterialTaskStatus,
@@ -392,6 +407,13 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException(
         '图生图/图生视频素材缺少参考图片，请先编辑素材',
       );
+    if (
+      materialNeedsReferenceMedia(material.generationMode) &&
+      !material.referenceMedia?.length
+    )
+      throw new BadRequestException(
+        '多参考生视频素材缺少参考素材，请先编辑素材',
+      );
     const snapshot = {
       requestVersion: material.version,
       revision: material.generationRevision + 1,
@@ -411,6 +433,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
       videoRatio: material.videoRatio,
       videoDuration: material.videoDuration,
       referenceFileId: material.referenceFileId,
+      referenceMedia: material.referenceMedia,
       config: {
         id: config.id,
         name: config.name,
@@ -550,6 +573,9 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
         ? await this.managedFiles.readMaterialImage(
             task.snapshot.referenceFileId ?? 0,
             task.userId,
+            generationMode === 'imageToVideo'
+              ? AI_MATERIAL_VIDEO_REFERENCE_LIMIT_BYTES
+              : AI_MATERIAL_IMAGE_REFERENCE_LIMIT_BYTES,
           )
         : null;
       const referenceImageDataUrl = reference
@@ -564,6 +590,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
           target,
           generationMode,
           referenceImageDataUrl,
+          task.snapshot.referenceMedia ?? undefined,
           signal,
           (nextPhase) => {
             phase = nextPhase;
@@ -731,6 +758,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
     },
     generationMode: AiMaterialGenerationMode,
     referenceImageDataUrl: string | undefined,
+    referenceMedia: AiMaterialReferenceMedia[] | undefined,
     signal: AbortSignal,
     setPhase: (phase: MaterialGenerationPhase) => void,
   ) {
@@ -754,6 +782,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
           prompt: task.snapshot.finalPrompt,
           generationMode,
           referenceImageDataUrl,
+          referenceMedia,
           resolution: task.snapshot.videoResolution ?? '720P',
           ratio: task.snapshot.videoRatio ?? 'adaptive',
           duration: task.snapshot.videoDuration ?? 5,
@@ -881,11 +910,12 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
       mediaType === 'video' ? 'videoGeneration' : 'imageGeneration',
     );
     if (
-      materialNeedsReferenceImage(generationMode) &&
+      (materialNeedsReferenceImage(generationMode) ||
+        materialNeedsReferenceMedia(generationMode)) &&
       target.protocol !== 'dashscope'
     )
       throw new BadRequestException(
-        '图生图/图生视频当前仅支持 DashScope 多模态协议',
+        '参考素材生成当前仅支持 DashScope 多模态协议',
       );
     return config;
   }
@@ -896,7 +926,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
     optional = false,
   ) {
     if (!materialNeedsReferenceImage(generationMode)) {
-      if (file) throw new BadRequestException('文生图不接收参考图片');
+      if (file) throw new BadRequestException('当前生成模式不接收单张参考图片');
       return undefined;
     }
     if (!file) {
@@ -914,6 +944,44 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
       );
     const mimeType = imageMime(file.buffer, limit);
     return { ...file, mimetype: mimeType };
+  }
+
+  private referenceMedia(
+    generationMode: AiMaterialGenerationMode,
+    value?: AiMaterialReferenceMedia[] | null,
+  ) {
+    if (!materialNeedsReferenceMedia(generationMode)) {
+      if (value?.length)
+        throw new BadRequestException('当前生成模式不接收多参考素材');
+      return null;
+    }
+    const media = (value ?? []).map((item) => ({
+      type: item.type,
+      url: item.url.trim(),
+    }));
+    if (!media.length)
+      throw new BadRequestException('多参考生视频至少需要一个参考素材');
+    const imageCount = media.filter(
+      (item) => item.type === 'reference_image',
+    ).length;
+    const videoCount = media.filter(
+      (item) => item.type === 'reference_video',
+    ).length;
+    if (imageCount > 10) throw new BadRequestException('参考图片最多 10 个');
+    if (videoCount > 5) throw new BadRequestException('参考视频最多 5 个');
+    for (const item of media) {
+      let url: URL;
+      try {
+        url = new URL(item.url);
+      } catch {
+        throw new BadRequestException('参考素材地址格式无效');
+      }
+      if (url.protocol !== 'https:' || url.username || url.password)
+        throw new BadRequestException(
+          '参考素材必须使用无账号信息的公开 HTTPS 地址',
+        );
+    }
+    return media;
   }
 
   private async material(id: number, userId: number) {

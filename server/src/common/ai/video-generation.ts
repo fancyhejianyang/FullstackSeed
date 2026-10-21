@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import type {
   AiMaterialGenerationMode,
+  AiMaterialReferenceMedia,
   AiMaterialVideoDuration,
   AiMaterialVideoRatio,
   AiMaterialVideoResolution,
@@ -19,6 +20,7 @@ export function videoGenerationRequest(payload: {
   prompt: string;
   generationMode: AiMaterialGenerationMode;
   referenceImageDataUrl?: string;
+  referenceMedia?: AiMaterialReferenceMedia[];
   resolution: AiMaterialVideoResolution;
   ratio: AiMaterialVideoRatio;
   duration: AiMaterialVideoDuration;
@@ -28,17 +30,24 @@ export function videoGenerationRequest(payload: {
     !payload.referenceImageDataUrl
   )
     throw new BadRequestException('图生视频缺少首帧参考图片');
+  if (
+    payload.generationMode === 'referenceToVideo' &&
+    !payload.referenceMedia?.length
+  )
+    throw new BadRequestException('多参考生视频缺少参考素材');
   return {
     model: payload.model,
     input: {
       prompt: payload.prompt.slice(0, WAN_VIDEO_PROMPT_MAX_LENGTH),
-      ...(payload.referenceImageDataUrl
-        ? {
-            media: [
-              { type: 'first_frame', url: payload.referenceImageDataUrl },
-            ],
-          }
-        : {}),
+      ...(payload.generationMode === 'referenceToVideo'
+        ? { media: payload.referenceMedia }
+        : payload.referenceImageDataUrl
+          ? {
+              media: [
+                { type: 'first_frame', url: payload.referenceImageDataUrl },
+              ],
+            }
+          : {}),
     },
     parameters: {
       resolution: payload.resolution,

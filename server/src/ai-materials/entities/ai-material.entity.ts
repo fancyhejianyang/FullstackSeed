@@ -3,6 +3,7 @@ import { BaseEntity } from '../../common/entities/base.entity';
 import type {
   AiMaterialGenerationMode,
   AiMaterialMediaType,
+  AiMaterialReferenceMedia,
   AiMaterialStyleKey,
   AiMaterialVideoDuration,
   AiMaterialVideoRatio,
@@ -42,6 +43,8 @@ export class AiMaterial extends BaseEntity {
   @Column({ type: 'int', nullable: true }) referenceFileId: number | null;
   @Column({ type: 'varchar', length: 2048, nullable: true })
   referenceImageUrl: string | null;
+  @Column({ type: 'json', nullable: true })
+  referenceMedia: AiMaterialReferenceMedia[] | null;
   @Column({ type: 'int', nullable: true }) currentFileId: number | null;
   @Column({ type: 'varchar', length: 2048, nullable: true })
   currentImageUrl: string | null;

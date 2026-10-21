@@ -132,7 +132,7 @@ const fields: FormField[] = [
     type: "textarea",
     rows: 3,
     placeholder: "模型编码#模型名称（每行一个）\nwan2.6-t2v#万相文生视频",
-    hint: "单独登记账号已开通的视频生成模型，用于文生视频和图生视频。",
+    hint: "单独登记账号已开通的视频生成模型，用于文生、首帧及多参考素材生视频。",
   },
   {
     prop: "videoGenerationApiUrl",

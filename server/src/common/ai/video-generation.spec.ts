@@ -38,6 +38,43 @@ describe('video generation protocol', () => {
     ).toThrow(BadRequestException);
   });
 
+  it('按顺序提交图片与视频参考素材', () => {
+    expect(
+      videoGenerationRequest({
+        model: 'wan3.0-video',
+        prompt: '图1与视频1同框互动',
+        generationMode: 'referenceToVideo',
+        referenceMedia: [
+          { type: 'reference_image', url: 'https://cdn/a.png' },
+          { type: 'reference_video', url: 'https://cdn/b.mp4' },
+        ],
+        resolution: '480P',
+        ratio: 'adaptive',
+        duration: 5,
+      }),
+    ).toMatchObject({
+      input: {
+        media: [
+          { type: 'reference_image', url: 'https://cdn/a.png' },
+          { type: 'reference_video', url: 'https://cdn/b.mp4' },
+        ],
+      },
+    });
+  });
+
+  it('拒绝缺少参考素材的多参考生视频请求', () => {
+    expect(() =>
+      videoGenerationRequest({
+        model: 'wan3.0-video',
+        prompt: '互动',
+        generationMode: 'referenceToVideo',
+        resolution: '480P',
+        ratio: 'adaptive',
+        duration: 5,
+      }),
+    ).toThrow(BadRequestException);
+  });
+
   it('透传 Wan 3.0 的超宽画幅与 30 秒时长并限制提示词长度', () => {
     const request = videoGenerationRequest({
       model: 'wan3.0-video',

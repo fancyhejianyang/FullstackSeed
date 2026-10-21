@@ -33,6 +33,7 @@ export const AI_MATERIAL_GENERATION_MODES = [
   'imageToImage',
   'textToVideo',
   'imageToVideo',
+  'referenceToVideo',
 ] as const;
 export type AiMaterialGenerationMode =
   (typeof AI_MATERIAL_GENERATION_MODES)[number];
@@ -64,14 +65,31 @@ export type AiMaterialVideoDuration = number;
 export const AI_MATERIAL_IMAGE_REFERENCE_LIMIT_BYTES = 5 * 1024 * 1024;
 export const AI_MATERIAL_VIDEO_REFERENCE_LIMIT_BYTES = 20 * 1024 * 1024;
 
+export const AI_MATERIAL_REFERENCE_MEDIA_TYPES = [
+  'reference_image',
+  'reference_video',
+] as const;
+export type AiMaterialReferenceMediaType =
+  (typeof AI_MATERIAL_REFERENCE_MEDIA_TYPES)[number];
+export interface AiMaterialReferenceMedia {
+  type: AiMaterialReferenceMediaType;
+  url: string;
+}
+
 export function materialMediaType(
   mode: AiMaterialGenerationMode,
 ): AiMaterialMediaType {
-  return mode === 'textToVideo' || mode === 'imageToVideo' ? 'video' : 'image';
+  return ['textToVideo', 'imageToVideo', 'referenceToVideo'].includes(mode)
+    ? 'video'
+    : 'image';
 }
 
 export function materialNeedsReferenceImage(mode: AiMaterialGenerationMode) {
   return mode === 'imageToImage' || mode === 'imageToVideo';
+}
+
+export function materialNeedsReferenceMedia(mode: AiMaterialGenerationMode) {
+  return mode === 'referenceToVideo';
 }
 
 export function buildMaterialPrompt(payload: {

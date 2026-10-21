@@ -4,6 +4,7 @@ import { ElMessage, type FormRules } from "element-plus";
 import Dialog from "@/components/Dialog.vue";
 import Form, { type FormField } from "@/components/Form.vue";
 import UploadImage from "@/components/UploadImage.vue";
+import Button from "@/components/Button.vue";
 import type { UploadResult } from "@/api/upload";
 import {
   createAiMaterial,
@@ -12,6 +13,7 @@ import {
   updateAiMaterial,
   type AiMaterialForm,
   type AiMaterialConfigOption,
+  type AiMaterialReferenceMediaType,
   type AiMaterialSummary,
 } from "@/api/aiMaterial";
 
@@ -32,16 +34,22 @@ const form = reactive<AiMaterialForm>({
   aiConfigId: "",
   referenceImageUrl: "",
   referenceImageFile: null,
+  referenceMedia: [],
   videoResolution: "720P",
   videoRatio: "adaptive",
   videoDuration: 5,
 });
 
 const isVideoMode = computed(() =>
-  ["textToVideo", "imageToVideo"].includes(form.generationMode),
+  ["textToVideo", "imageToVideo", "referenceToVideo"].includes(
+    form.generationMode,
+  ),
 );
 const needsReference = computed(() =>
   ["imageToImage", "imageToVideo"].includes(form.generationMode),
+);
+const needsReferenceMedia = computed(
+  () => form.generationMode === "referenceToVideo",
 );
 
 const styleOptions = [
@@ -65,7 +73,8 @@ const configOptions = computed(() =>
     value: item.id,
     disabled:
       (form.generationMode === "imageToImage" && !item.supportsImageToImage) ||
-      (form.generationMode === "imageToVideo" && !item.supportsImageToVideo),
+      (["imageToVideo", "referenceToVideo"].includes(form.generationMode) &&
+        !item.supportsImageToVideo),
   })),
 );
 const fields = computed<FormField[]>(() => [
@@ -75,9 +84,11 @@ const fields = computed<FormField[]>(() => [
     slot: true,
     hint: needsReference.value
       ? "参考图作为图像生成依据或视频首帧，与提示词一并提交给所选模型。"
-      : isVideoMode.value
-        ? "根据提示词与风格异步生成视频，系统会在后台查询进度并保存 MP4。"
-        : "仅根据提示词与风格生成新图片。",
+      : needsReferenceMedia.value
+        ? "按顺序提交多张参考图或参考视频；提示词可用“图1、视频1”等序号引用素材。"
+        : isVideoMode.value
+          ? "根据提示词与风格异步生成视频，系统会在后台查询进度并保存 MP4。"
+          : "仅根据提示词与风格生成新图片。",
   },
   ...(needsReference.value
     ? [
@@ -85,6 +96,16 @@ const fields = computed<FormField[]>(() => [
           prop: "referenceImageUrl",
           label: "参考图片",
           slot: true,
+        },
+      ]
+    : []),
+  ...(needsReferenceMedia.value
+    ? [
+        {
+          prop: "referenceMedia",
+          label: "参考素材",
+          slot: true,
+          hint: "仅接收供应商能够访问的公开 HTTPS 地址；参考图片最多 10 个、参考视频最多 5 个且视频总时长不超过 15 秒，顺序会原样提交。",
         },
       ]
     : []),
@@ -172,7 +193,9 @@ const fields = computed<FormField[]>(() => [
     hint: availableConfigs.value.length
       ? needsReference.value
         ? "不支持当前参考图模式的配置已禁用；生成时不会自动降级。"
-        : `生成时仅调用所选配置绑定的${isVideoMode.value ? "视频" : "图片"}模型。`
+        : needsReferenceMedia.value
+          ? "多参考生视频使用视频配置的参考素材能力；生成时不会自动降级。"
+          : `生成时仅调用所选配置绑定的${isVideoMode.value ? "视频" : "图片"}模型。`
       : `暂无启用的${isVideoMode.value ? "视频" : "图片"}生成配置，请先到 AI 功能配置中创建。`,
   },
 ]);
@@ -185,6 +208,19 @@ const rules = computed<FormRules>(() => ({
     ? {
         referenceImageUrl: [
           { required: true, message: "请上传参考图片", trigger: "change" },
+        ],
+      }
+    : {}),
+  ...(needsReferenceMedia.value
+    ? {
+        referenceMedia: [
+          {
+            required: true,
+            type: "array",
+            min: 1,
+            message: "请至少添加一个参考素材",
+            trigger: "change",
+          },
         ],
       }
     : {}),
@@ -219,6 +255,9 @@ watch(visible, async (value) => {
       form.customStyle = detail.customStyle ?? "";
       form.aiConfigId = detail.aiConfigId;
       form.referenceImageUrl = detail.referenceImageUrl ?? "";
+      form.referenceMedia = (detail.referenceMedia ?? []).map((item) => ({
+        ...item,
+      }));
       form.videoResolution = detail.videoResolution;
       form.videoRatio = detail.videoRatio;
       form.videoDuration = detail.videoDuration;
@@ -231,6 +270,7 @@ watch(visible, async (value) => {
         configs.value.find((item) => item.featureType === "imageGeneration")
           ?.id ?? "";
       form.referenceImageUrl = "";
+      form.referenceMedia = [];
       form.videoResolution = "720P";
       form.videoRatio = "adaptive";
       form.videoDuration = 5;
@@ -252,13 +292,15 @@ watch(
       selected.featureType ===
         (isVideoMode.value ? "videoGeneration" : "imageGeneration") &&
       (mode !== "imageToImage" || selected.supportsImageToImage) &&
-      (mode !== "imageToVideo" || selected.supportsImageToVideo);
+      (!["imageToVideo", "referenceToVideo"].includes(mode) ||
+        selected.supportsImageToVideo);
     if (!supportsMode) {
       form.aiConfigId =
         availableConfigs.value.find(
           (item) =>
             (mode !== "imageToImage" || item.supportsImageToImage) &&
-            (mode !== "imageToVideo" || item.supportsImageToVideo),
+            (!["imageToVideo", "referenceToVideo"].includes(mode) ||
+              item.supportsImageToVideo),
         )?.id ?? "";
     }
   },
@@ -291,18 +333,66 @@ function releaseReferenceObjectUrl() {
 
 onBeforeUnmount(releaseReferenceObjectUrl);
 
+function addReferenceMedia(type: AiMaterialReferenceMediaType) {
+  const media = form.referenceMedia ?? (form.referenceMedia = []);
+  const typeCount = media.filter((item) => item.type === type).length;
+  const limit = type === "reference_image" ? 10 : 5;
+  if (typeCount >= limit) {
+    ElMessage.warning(
+      `参考${type === "reference_image" ? "图片" : "视频"}最多 ${limit} 个`,
+    );
+    return;
+  }
+  media.push({ type, url: "" });
+}
+
+function removeReferenceMedia(index: number) {
+  form.referenceMedia?.splice(index, 1);
+}
+
+function validateReferenceMedia() {
+  if (!needsReferenceMedia.value) return true;
+  const media = form.referenceMedia ?? [];
+  if (!media.length) {
+    ElMessage.error("请至少添加一个参考素材");
+    return false;
+  }
+  if (media.filter((item) => item.type === "reference_image").length > 10) {
+    ElMessage.error("参考图片最多 10 个");
+    return false;
+  }
+  if (media.filter((item) => item.type === "reference_video").length > 5) {
+    ElMessage.error("参考视频最多 5 个");
+    return false;
+  }
+  for (const [index, item] of media.entries()) {
+    try {
+      const url = new URL(item.url.trim());
+      if (url.protocol !== "https:" || url.username || url.password) {
+        throw new Error("invalid url");
+      }
+    } catch {
+      ElMessage.error(`第 ${index + 1} 个参考素材必须是公开 HTTPS 地址`);
+      return false;
+    }
+  }
+  return true;
+}
+
 async function submit() {
   await formRef.value?.validate();
+  if (!validateReferenceMedia()) return;
   if (
-    needsReference.value &&
+    (needsReference.value || needsReferenceMedia.value) &&
     !configs.value.find(
       (item) =>
         item.id === Number(form.aiConfigId) &&
         (form.generationMode !== "imageToImage" || item.supportsImageToImage) &&
-        (form.generationMode !== "imageToVideo" || item.supportsImageToVideo),
+        (!["imageToVideo", "referenceToVideo"].includes(form.generationMode) ||
+          item.supportsImageToVideo),
     )
   ) {
-    ElMessage.error("请选择已启用当前参考图能力的生成配置");
+    ElMessage.error("请选择已启用当前参考素材能力的生成配置");
     return;
   }
   submitting.value = true;
@@ -315,6 +405,12 @@ async function submit() {
       aiConfigId: Number(form.aiConfigId),
       referenceImageFile: needsReference.value
         ? referenceImageFile.value
+        : null,
+      referenceMedia: needsReferenceMedia.value
+        ? (form.referenceMedia ?? []).map((item) => ({
+            type: item.type,
+            url: item.url.trim(),
+          }))
         : null,
       videoResolution: form.videoResolution,
       videoRatio: form.videoRatio,
@@ -350,7 +446,8 @@ async function submit() {
             <el-radio value="textToImage">文生图</el-radio>
             <el-radio value="imageToImage">图生图</el-radio>
             <el-radio value="textToVideo">文生视频</el-radio>
-            <el-radio value="imageToVideo">图生视频</el-radio>
+            <el-radio value="imageToVideo">首帧生视频</el-radio>
+            <el-radio value="referenceToVideo">多参考生视频</el-radio>
           </el-radio-group>
         </template>
         <template #field-referenceImageUrl>
@@ -362,7 +459,73 @@ async function submit() {
             @remove="clearReferenceImage"
           />
         </template>
+        <template #field-referenceMedia>
+          <div class="reference-media-editor">
+            <div
+              v-for="(item, index) in form.referenceMedia || []"
+              :key="index"
+              class="reference-media-editor__row"
+            >
+              <el-select
+                v-model="item.type"
+                class="reference-media-editor__type"
+              >
+                <el-option label="参考图片" value="reference_image" />
+                <el-option label="参考视频" value="reference_video" />
+              </el-select>
+              <el-input
+                v-model="item.url"
+                placeholder="https://..."
+                clearable
+              />
+              <Button
+                icon="Delete"
+                :auto-icon="false"
+                title="移除参考素材"
+                @click="removeReferenceMedia(index)"
+              />
+            </div>
+            <div class="reference-media-editor__actions">
+              <Button icon="Plus" @click="addReferenceMedia('reference_image')">
+                添加参考图
+              </Button>
+              <Button icon="Plus" @click="addReferenceMedia('reference_video')">
+                添加参考视频
+              </Button>
+            </div>
+          </div>
+        </template>
       </Form>
     </div>
   </Dialog>
 </template>
+
+<style scoped>
+.reference-media-editor {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+}
+
+.reference-media-editor__row {
+  display: grid;
+  grid-template-columns: 118px minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.reference-media-editor__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .reference-media-editor__row {
+    grid-template-columns: 1fr auto;
+  }
+
+  .reference-media-editor__type {
+    grid-column: 1 / -1;
+  }
+}
+</style>

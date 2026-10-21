@@ -17,7 +17,7 @@ import { ManagedFile } from './entities/managed-file.entity';
 import { ManagedFileReference } from './entities/managed-file-reference.entity';
 
 const RETENTION_MS = 24 * 60 * 60 * 1000;
-const MAX_REFERENCE_IMAGE_SIZE = 5 * 1024 * 1024;
+const DEFAULT_MAX_REFERENCE_IMAGE_SIZE = 5 * 1024 * 1024;
 
 @Injectable()
 export class ManagedFilesService {
@@ -210,7 +210,11 @@ export class ManagedFilesService {
     await this.markUnreferenced(manager, fileId);
   }
 
-  async readMaterialImage(fileId: number, ownerId: number) {
+  async readMaterialImage(
+    fileId: number,
+    ownerId: number,
+    maxSize = DEFAULT_MAX_REFERENCE_IMAGE_SIZE,
+  ) {
     const file = await this.files.findOne({
       where: {
         id: fileId,
@@ -220,14 +224,18 @@ export class ManagedFilesService {
       },
     });
     if (!file) throw new BadRequestException('参考图片不存在或不可用');
-    if (Number(file.size) > MAX_REFERENCE_IMAGE_SIZE)
-      throw new BadRequestException('参考图片不能超过 5MB');
+    if (Number(file.size) > maxSize)
+      throw new BadRequestException(
+        `参考图片不能超过 ${maxSize / 1024 / 1024}MB`,
+      );
     const content = await this.storedFiles.read(file.publicUrl, file.fileName);
-    if (content.buffer.length > MAX_REFERENCE_IMAGE_SIZE)
-      throw new BadRequestException('参考图片不能超过 5MB');
+    if (content.buffer.length > maxSize)
+      throw new BadRequestException(
+        `参考图片不能超过 ${maxSize / 1024 / 1024}MB`,
+      );
     return {
       buffer: content.buffer,
-      mimeType: imageMime(content.buffer, MAX_REFERENCE_IMAGE_SIZE),
+      mimeType: imageMime(content.buffer, maxSize),
     };
   }
 

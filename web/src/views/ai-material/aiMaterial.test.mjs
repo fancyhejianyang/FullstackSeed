@@ -39,3 +39,13 @@ test("视频参考图允许 20MB，图片生成仍保持 5MB", () => {
   assert.match(edit, /:max-size-mb="isVideoMode \? 20 : 5"/);
   assert.match(edit, /maxlength: isVideoMode\.value \? 20000 : 4000/);
 });
+
+test("多参考视频保留图片与视频顺序并只接收公开 HTTPS 地址", () => {
+  assert.match(api, /\| "referenceToVideo"/);
+  assert.match(api, /"reference_image"/);
+  assert.match(api, /"reference_video"/);
+  assert.match(edit, /多参考生视频/);
+  assert.match(edit, /url\.protocol !== "https:"/);
+  assert.match(edit, /视频总时长不超过 15 秒/);
+  assert.match(view, /detail\.referenceMedia \|\| \[\]/);
+});

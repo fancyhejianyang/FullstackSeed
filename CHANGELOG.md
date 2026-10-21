@@ -1,5 +1,43 @@
 # CHANGELOG
 
+### 2026-10-21 接入 Wan 3.0 多参考素材生视频协议
+
+- 保留原有文生视频与 `first_frame` 单首帧链路，并将界面名称明确为“首帧生视频”；新增独立“多参考生视频”模式，按用户排列顺序向 DashScope 提交 `reference_image` / `reference_video`，不混用两类协议。
+- 素材编辑页可维护最多 10 张参考图、5 个参考视频的公开 HTTPS 地址，提示参考视频总时长不超过 15 秒；提示词可按“图1、视频1”等序号引用素材。列表与详情同步展示新模式，详情仅按需回显参考素材，列表只返回引用数量而不暴露完整 URL。
+- 后端新增参考素材 DTO、实体 JSON 字段、生产迁移与任务快照；创建、编辑、提交和供应商请求均校验模式、配置能力、素材数量及 HTTPS 地址，异步轮询、15 分钟执行上限、结果下载和受管 MP4 保存策略保持不变。未接入 PPTX、文档、网页和音频参考。
+- AI 视频配置中的能力名称调整为“参考素材生视频”，同时控制首帧与多参考两种模式；视频模型账号说明同步覆盖文生、首帧和多参考素材场景。
+- 修复首帧视频参考图虽允许上传 20MB、任务读取却仍按 5MB 拒绝的问题；受管文件读取上限现按图生图 5MB、首帧生视频 20MB 分别执行。
+- 验证：后端完整 76 suites / 657 tests、TypeORM 实体列检查和 NestJS build 通过；前端 `vue-tsc`、4 项素材协议/模板测试、组件复用线索检查及 Vite 生产构建通过。
+
+新增文件（1）：
+
+- `server/src/migrations/1793174400000-AddReferenceVideoMaterials.ts`
+
+修改文件（20）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/ai-feature-configs/ai-feature-configs.service.ts`
+- `server/src/ai-feature-configs/entities/ai-feature-config.entity.ts`
+- `server/src/ai-materials/ai-material.constants.ts`
+- `server/src/ai-materials/ai-materials.service.ts`
+- `server/src/ai-materials/dto/ai-material.dto.spec.ts`
+- `server/src/ai-materials/dto/ai-material.dto.ts`
+- `server/src/ai-materials/entities/ai-material.entity.ts`
+- `server/src/ai-materials/entities/material-generation-task.entity.ts`
+- `server/src/common/ai/video-generation.spec.ts`
+- `server/src/common/ai/video-generation.ts`
+- `server/src/managed-files/managed-files.service.ts`
+- `web/src/api/aiMaterial.ts`
+- `web/src/views/ai-feature-config/Edit.vue`
+- `web/src/views/ai-material/Edit.vue`
+- `web/src/views/ai-material/Index.vue`
+- `web/src/views/ai-material/View.vue`
+- `web/src/views/ai-material/aiMaterial.test.mjs`
+- `web/src/views/knowledge-ai-provider/Edit.vue`
+
+删除文件（0）。
+
 ### 2026-10-21 对齐 Wan 3.0 视频生成参数与错误回执
 
 - 保持现有 DashScope 异步 `video-synthesis`、`first_frame` 和任务轮询协议，未增加 PPTX、文档、网页、音频或多参考素材入口；视频比例新增 `21:9`，时长扩展为智能时长 `-1` 或 2～30 秒，新建素材默认使用 `adaptive` 画幅。

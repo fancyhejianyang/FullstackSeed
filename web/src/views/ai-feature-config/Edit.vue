@@ -367,12 +367,12 @@ const fields = computed<FormField[]>(() => {
   if (isVideoGenerationFeature.value) {
     baseFields.push({
       prop: "supportsImageToVideo",
-      label: "图生视频能力",
+      label: "参考素材生视频",
       component: "Switch",
       componentProps: { activeText: "支持", inactiveText: "不支持" },
       hint: form.supportsImageToVideo
-        ? "素材任务可上传首帧参考图；文生视频始终可用。"
-        : "素材任务仅允许文生视频，不显示为可用的图生视频配置。",
+        ? "素材任务可使用首帧图片或多张图片/视频参考素材；文生视频始终可用。"
+        : "素材任务仅允许文生视频，不显示为可用的参考素材视频配置。",
     });
   }
 

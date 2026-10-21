@@ -1,26 +1,31 @@
 import { PartialType } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { plainToInstance, Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsArray,
   IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUrl,
   IsUUID,
   MaxLength,
   Min,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator';
 import {
   AI_MATERIAL_GENERATION_MODES,
   AI_MATERIAL_MEDIA_TYPES,
+  AI_MATERIAL_REFERENCE_MEDIA_TYPES,
   AI_MATERIAL_STYLE_KEYS,
   AI_MATERIAL_VIDEO_DURATIONS,
   AI_MATERIAL_VIDEO_RATIOS,
   AI_MATERIAL_VIDEO_RESOLUTIONS,
   type AiMaterialGenerationMode,
   type AiMaterialMediaType,
+  type AiMaterialReferenceMediaType,
   type AiMaterialStyleKey,
   type AiMaterialVideoDuration,
   type AiMaterialVideoRatio,
@@ -28,6 +33,27 @@ import {
 } from '../ai-material.constants';
 import type { MaterialTaskStatus } from '../entities/material-generation-task.entity';
 import type { AiMaterialGenerationStatus } from '../entities/ai-material.entity';
+
+export class AiMaterialReferenceMediaDto {
+  @IsIn(AI_MATERIAL_REFERENCE_MEDIA_TYPES)
+  type: AiMaterialReferenceMediaType;
+
+  @IsUrl({ protocols: ['https'], require_protocol: true })
+  @MaxLength(2048)
+  url: string;
+}
+
+function parseReferenceMedia(value: unknown) {
+  let parsed = value;
+  try {
+    if (typeof value === 'string') parsed = JSON.parse(value) as unknown;
+  } catch {
+    return value;
+  }
+  return Array.isArray(parsed)
+    ? parsed.map((item) => plainToInstance(AiMaterialReferenceMediaDto, item))
+    : parsed;
+}
 
 export class CreateAiMaterialDto {
   @IsString()
@@ -52,6 +78,14 @@ export class CreateAiMaterialDto {
   @IsIn(AI_MATERIAL_GENERATION_MODES)
   @IsOptional()
   generationMode?: AiMaterialGenerationMode;
+
+  @Transform(({ value }) => parseReferenceMedia(value))
+  @IsArray()
+  @ArrayMaxSize(15)
+  @ValidateNested({ each: true })
+  @Type(() => AiMaterialReferenceMediaDto)
+  @IsOptional()
+  referenceMedia?: AiMaterialReferenceMediaDto[];
 
   @IsIn(AI_MATERIAL_VIDEO_RESOLUTIONS)
   @IsOptional()

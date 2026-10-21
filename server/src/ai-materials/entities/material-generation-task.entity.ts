@@ -3,6 +3,7 @@ import { BaseEntity } from '../../common/entities/base.entity';
 import type {
   AiMaterialGenerationMode,
   AiMaterialMediaType,
+  AiMaterialReferenceMedia,
   AiMaterialStyleKey,
   AiMaterialVideoDuration,
   AiMaterialVideoRatio,
@@ -32,6 +33,7 @@ export interface MaterialGenerationSnapshot {
   videoRatio: AiMaterialVideoRatio;
   videoDuration: AiMaterialVideoDuration;
   referenceFileId: number | null;
+  referenceMedia: AiMaterialReferenceMedia[] | null;
   config: {
     id: number;
     name: string;

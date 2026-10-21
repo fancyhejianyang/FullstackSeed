@@ -34,7 +34,8 @@ const modeLabels: Record<string, string> = {
   textToImage: "文生图",
   imageToImage: "图生图",
   textToVideo: "文生视频",
-  imageToVideo: "图生视频",
+  imageToVideo: "首帧生视频",
+  referenceToVideo: "多参考生视频",
 };
 const statusType = computed(() =>
   detail.value?.generationStatus === "succeeded"
@@ -114,6 +115,34 @@ function download() {
             <span v-else>参考图片不可用</span>
           </el-descriptions-item>
           <el-descriptions-item
+            v-if="detail.generationMode === 'referenceToVideo'"
+            label="参考素材"
+          >
+            <div class="material-view__references">
+              <template
+                v-for="(item, index) in detail.referenceMedia || []"
+                :key="`${item.type}-${index}`"
+              >
+                <el-image
+                  v-if="item.type === 'reference_image'"
+                  class="material-view__reference"
+                  :src="item.url"
+                  :preview-src-list="[item.url]"
+                  fit="cover"
+                  preview-teleported
+                />
+                <a
+                  v-else
+                  :href="item.url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  参考视频 {{ index + 1 }}
+                </a>
+              </template>
+            </div>
+          </el-descriptions-item>
+          <el-descriptions-item
             v-if="detail.mediaType === 'video'"
             label="视频参数"
           >
@@ -179,5 +208,11 @@ function download() {
   height: 80px;
   border-radius: 6px;
   background: #f5f7fa;
+}
+.material-view__references {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
 }
 </style>

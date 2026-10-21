@@ -190,8 +190,11 @@ export class AiFeatureConfigsService {
       throw new BadRequestException('该视频生成配置未启用');
     if (!config.providerId || !config.model?.trim())
       throw new BadRequestException('视频生成配置缺少模型账号或视频模型');
-    if (generationMode === 'imageToVideo' && !config.supportsImageToVideo)
-      throw new BadRequestException('所选视频生成配置未启用图生视频能力');
+    if (
+      ['imageToVideo', 'referenceToVideo'].includes(generationMode) &&
+      !config.supportsImageToVideo
+    )
+      throw new BadRequestException('所选视频生成配置未启用参考素材生视频能力');
     return config;
   }
 

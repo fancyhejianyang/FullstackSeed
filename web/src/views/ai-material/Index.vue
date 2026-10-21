@@ -82,7 +82,8 @@ const modeLabels = {
   textToImage: "文生图",
   imageToImage: "图生图",
   textToVideo: "文生视频",
-  imageToVideo: "图生视频",
+  imageToVideo: "首帧生视频",
+  referenceToVideo: "多参考生视频",
 } as const;
 function modeLabel(mode: unknown) {
   return modeLabels[mode as keyof typeof modeLabels] ?? String(mode || "-");
@@ -249,7 +250,9 @@ function statusLabel(status: unknown) {
       <template #column-generationMode="{ row }">
         <el-tag
           :type="
-            ['imageToImage', 'imageToVideo'].includes(row.generationMode)
+            ['imageToImage', 'imageToVideo', 'referenceToVideo'].includes(
+              row.generationMode,
+            )
               ? 'primary'
               : 'info'
           "
