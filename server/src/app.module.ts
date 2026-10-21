@@ -44,6 +44,7 @@ import { ManagedFilesModule } from './managed-files/managed-files.module';
 import { AiMaterialsModule } from './ai-materials/ai-materials.module';
 import { ComfyUiModule } from './comfyui/comfyui.module';
 import { VisualPromptTemplatesModule } from './visual-prompt-templates/visual-prompt-templates.module';
+import { HotTopicsModule } from './hot-topics/hot-topics.module';
 
 @Module({
   imports: [
@@ -142,6 +143,7 @@ import { VisualPromptTemplatesModule } from './visual-prompt-templates/visual-pr
     AiMaterialsModule,
     ComfyUiModule,
     VisualPromptTemplatesModule,
+    HotTopicsModule,
     KnowledgeRetrievalConfigsModule,
     KnowledgeRoutingRulesModule,
     KnowledgeStandardQasModule,

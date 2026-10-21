@@ -1,5 +1,17 @@
 import request from '@/utils/request';
 
+export interface ContentSourceMaterial {
+  title: string;
+  url: string;
+  sourceName: string;
+  publishedAt: string | null;
+  fetchedAt: string;
+  contentExcerpt: string;
+  acquisition: 'page' | 'feed' | 'aiSearch';
+  accountName?: string | null;
+  accountMatched?: boolean;
+}
+
 export interface ContentArticleForm {
   title: string;
   coverUrl: string;
@@ -9,6 +21,8 @@ export interface ContentArticleForm {
   templateId: number | null;
 }
 export interface ContentArticle extends ContentArticleForm {
+  sourceTopicId?: number | null;
+  sourceMaterials?: ContentSourceMaterial[] | null;
   id: number;
   version: number;
   createdAt: string;
@@ -93,6 +107,7 @@ export interface ContentTaskDetail extends ContentTask {
   } | null;
   generatedTitle: string | null;
   snapshot: {
+    sourceMaterials?: ContentSourceMaterial[];
     title: string;
     idea: string;
     template: { id: number | null; name: string; instruction: string };

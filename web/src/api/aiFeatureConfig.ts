@@ -3,6 +3,7 @@ import request from "@/utils/request";
 export type AiFeatureType =
   | "chat"
   | "contentCreation"
+  | "topicDiscovery"
   | "visualPrompt"
   | "imageGeneration"
   | "videoGeneration"
@@ -10,6 +11,7 @@ export type AiFeatureType =
   | "ocr"
   | "rerank";
 export type AiResponseFormat = "text" | "json" | "markdown";
+export type AiWebSearchMode = "disabled" | "bailianResponses" | "bailianChat";
 
 export interface AiFeatureConfig {
   id: number;
@@ -26,6 +28,7 @@ export interface AiFeatureConfig {
   systemPrompt: string | null;
   temperature: number;
   responseFormat: AiResponseFormat;
+  webSearchMode: AiWebSearchMode;
   supportsImageToImage: boolean;
   supportsImageToVideo: boolean;
   isEnabled: boolean;
@@ -60,6 +63,7 @@ export interface AiFeatureConfigForm {
   systemPrompt?: string;
   temperature?: number;
   responseFormat?: AiResponseFormat;
+  webSearchMode?: AiWebSearchMode;
   supportsImageToImage?: boolean;
   supportsImageToVideo?: boolean;
   isEnabled?: boolean;

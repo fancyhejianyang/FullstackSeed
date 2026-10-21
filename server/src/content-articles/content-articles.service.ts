@@ -11,6 +11,7 @@ import { ContentGenerationService } from './content-generation.service';
 import { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-configs.service';
 import { ContentTemplatesService } from '../content-templates/content-templates.service';
 import { ContentArticle } from './entities/content-article.entity';
+import type { ContentArticleOrigin } from './content-source.types';
 import {
   CreateContentArticleDto,
   QueryContentArticleDto,
@@ -76,6 +77,7 @@ export class ContentArticlesService {
     userId: number,
     canUseTemplates = false,
     manager?: EntityManager,
+    origin?: ContentArticleOrigin,
   ) {
     const preferences = await this.preferences(
       dto,
@@ -86,7 +88,14 @@ export class ContentArticlesService {
     const repository =
       manager?.getRepository(ContentArticle) ?? this.repository;
     return repository.save(
-      repository.create({ ...this.fields(dto), ...preferences, userId }),
+      repository.create({
+        ...this.fields(dto),
+        ...preferences,
+        userId,
+        ...(origin
+          ? { sourceTopicId: origin.topicId, sourceMaterials: origin.materials }
+          : {}),
+      }),
     );
   }
 
@@ -96,8 +105,15 @@ export class ContentArticlesService {
     userId: number,
     canUseTemplates: boolean,
     manager: EntityManager,
+    origin?: ContentArticleOrigin,
   ) {
-    const article = await this.create(dto, userId, canUseTemplates, manager);
+    const article = await this.create(
+      dto,
+      userId,
+      canUseTemplates,
+      manager,
+      origin,
+    );
     const task = await this.generation.submitWithManager(
       article.id,
       {

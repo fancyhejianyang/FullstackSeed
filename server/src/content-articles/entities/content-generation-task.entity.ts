@@ -1,5 +1,6 @@
 import { Column, Entity, Index } from 'typeorm';
 import { BaseEntity } from '../../common/entities/base.entity';
+import type { ContentSourceMaterial } from '../content-source.types';
 export type ContentTaskStatus =
   | 'pending'
   | 'running'
@@ -13,6 +14,7 @@ export interface ContentGenerationSnapshot {
   requestVersion?: number; // 首次记住生成偏好可能递增文章版本，重试仍绑定原请求版本。
   title: string;
   idea: string;
+  sourceMaterials?: ContentSourceMaterial[];
   template: { id: number | null; name: string; instruction: string };
   config: {
     id: number;

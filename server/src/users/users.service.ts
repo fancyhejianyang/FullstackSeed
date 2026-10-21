@@ -25,6 +25,8 @@ const STANDARD_ACTIONS = [
 const ADMIN_PERMISSION_MODULES = [
   'Demo',
   'ContentArticle',
+  'HotTopic',
+  'HotTopicSource',
   'ContentTemplate',
   'VisualPromptTemplate',
   'AiMaterial',

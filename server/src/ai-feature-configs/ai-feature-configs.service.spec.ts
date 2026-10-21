@@ -64,6 +64,27 @@ describe('AiFeatureConfigsService', () => {
   );
   const internals = service as unknown as AiFeatureConfigInternals;
 
+  it('热点配置固定结构化输出，显式保留联网协议且不影响普通写作', () => {
+    const config: Partial<AiFeatureConfig> = {
+      featureType: 'topicDiscovery',
+      webSearchMode: 'bailianResponses',
+      responseFormat: 'markdown',
+      useMineru: true,
+      mineruConfigId: 8,
+    };
+    internals.normalizeFeatureSpecificSettings(config);
+    expect(config).toMatchObject({
+      webSearchMode: 'bailianResponses',
+      responseFormat: 'json',
+      useMineru: false,
+      mineruConfigId: null,
+    });
+    config.featureType = 'contentCreation';
+    config.responseFormat = 'text';
+    internals.normalizeFeatureSpecificSettings(config);
+    expect(config.webSearchMode).toBe('disabled');
+  });
+
   it('keeps non-core Think parameters for enabled chat configurations', () => {
     const config: Partial<AiFeatureConfig> = {
       featureType: 'chat',

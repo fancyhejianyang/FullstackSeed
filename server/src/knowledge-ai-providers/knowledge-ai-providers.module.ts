@@ -5,6 +5,7 @@ import { KnowledgeAiProvider } from './entities/knowledge-ai-provider.entity';
 import { AiFeatureConfig } from '../ai-feature-configs/entities/ai-feature-config.entity';
 import { KnowledgeAiProvidersController } from './knowledge-ai-providers.controller';
 import { KnowledgeAiProvidersService } from './knowledge-ai-providers.service';
+import { KnowledgeWebSearchService } from './knowledge-web-search.service';
 
 @Module({
   imports: [
@@ -12,7 +13,7 @@ import { KnowledgeAiProvidersService } from './knowledge-ai-providers.service';
     TypeOrmModule.forFeature([KnowledgeAiProvider, AiFeatureConfig]),
   ],
   controllers: [KnowledgeAiProvidersController],
-  providers: [KnowledgeAiProvidersService],
-  exports: [KnowledgeAiProvidersService],
+  providers: [KnowledgeAiProvidersService, KnowledgeWebSearchService],
+  exports: [KnowledgeAiProvidersService, KnowledgeWebSearchService],
 })
 export class KnowledgeAiProvidersModule {}

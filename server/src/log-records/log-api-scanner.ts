@@ -147,6 +147,16 @@ const ROUTE_FALLBACK_META_MAP: Record<
     isSystem: true,
   },
   '/external-apps': { moduleId: 'external-apps', moduleName: '聊天应用' },
+  '/hot-topics': {
+    moduleId: 'hot-topics',
+    moduleName: '热点选题',
+    tableName: 'hot_topics',
+  },
+  '/hot-topic-sources': {
+    moduleId: 'hot-topic-sources',
+    moduleName: '热点来源',
+    tableName: 'hot_topic_sources',
+  },
   '/knowledge-ai-chat': {
     moduleId: 'knowledge-ai-chat',
     moduleName: 'AI 问答会话',

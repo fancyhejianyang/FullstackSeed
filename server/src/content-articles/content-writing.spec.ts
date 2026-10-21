@@ -10,6 +10,27 @@ describe('文章成稿协议', () => {
     config: { systemPrompt: '默认口吻', responseFormat: 'text' },
     template: { instruction: '用 Markdown 写一篇评论' },
   } as ContentGenerationSnapshot;
+  it('热点来源使用独立快照，区分联网摘要与作者想法，不声称已重新核验', () => {
+    const prompt = buildContentWritingPrompt({
+      ...snapshot,
+      sourceMaterials: [
+        {
+          title: '事件',
+          url: 'https://example.com/news',
+          sourceName: '来源',
+          publishedAt: null,
+          fetchedAt: '2026-10-21T00:00:00.000Z',
+          contentExcerpt: '搜索摘要',
+          acquisition: 'aiSearch',
+          accountMatched: false,
+        },
+      ],
+    });
+    expect(prompt).toContain('sourceMaterials');
+    expect(prompt).toContain('aiSearch 表示联网模型整理的搜索线索');
+    expect(prompt).not.toContain('未执行新闻检索');
+    expect(prompt).toContain('accountMatched');
+  });
   it('最终格式约束独立于模板；旧快照仍按 Markdown', () => {
     const prompt = buildContentWritingPrompt(snapshot);
     expect(prompt).toContain('替作者成稿');

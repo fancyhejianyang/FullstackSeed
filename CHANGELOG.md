@@ -1,5 +1,92 @@
 # CHANGELOG
 
+### 2026-10-21 新增抖音优先的热点选题、来源管理与异步推荐
+
+- 内容创作增加“热点选题”列表，第三方配置增加“热点来源”；支持个人偏好、收藏/忽略、手动获取、按现有资料重新推荐和每日计划。计划默认关闭，Asia/Shanghai，每日按设定时间执行；停机期间最多补一次当前发现，不回放历史新闻。
+- 来源支持抖音公开热榜/账号页中的结构化 JSON、RSS/Atom、授权 JSON Feed，以及 AI 联网搜索，可选平台、AI、混合三种模式。央视新闻、央视网、钧正平为名称快捷候选，未写入猜测的主页/账号标识。锁定账号仍需真实 /user/ 链接与 UID/sec_uid，公开页受限时明确提示，不绕过登录、验证码或反爬。
+- AI 功能新增 topicDiscovery（热点发现与推荐），联网采用百炼官方 Responses web_search 来源回执；仅模型目录验证不会计费，不支持的 Chat 联网协议提交前拒绝。搜索资料不冒充账号本人作品，来源时间/排名缺失保留未知；平台数据与 AI 推荐分别保留。
+- 热点任务持久化、按用户隔离，提交立即返回任务号；整体最多 5 分钟，单来源请求最多 20 秒，单次联网请求最多 120 秒。唯一活跃任务、请求号防重、数据库租约和超时/停机终态防止重复计费；默认不自动重试。来源密钥不回显、不进入快照，公网 HTTPS 请求固定 DNS 结果并禁止重定向、内网与大响应。
+- 选题创建文章在事务中防重，并可显式选择创建后入队生成。独立 sourceMaterials 保留来源/时间/摘要与账号匹配情况，不替换作者想法；文章查看、编辑、生成记录可折叠查看资料。不调用 Agent、不自动发表、不自动采纳生成稿。
+- 同一榜单 URL 下不同标题分别去重，普通文章 URL 保留更新语义；来源快照使用 MySQL JSON 避免多份中文摘要超过 TEXT 容量，列表只取摘要列。首期未实现跨站语义聚类、日费用预算或推荐缓存。
+- 生产迁移：`server/src/migrations/1792915200000-AddHotTopics.ts`，增加四张热点表、AI 联网协议列、文章来源列；重复执行检查存在性，带业务数据的回退要求人工归档。未对当前数据库执行迁移、未重启运行中的服务。开发环境重启自动同步，生产先备份并运行 `cd server; npm.cmd run migration:run`，再重启后端刷新菜单。
+- 来源控制器与选题控制器分文件，兼容项目日志扫描器，并补齐中文日志模块名称，避免来源路由被归入选题路由。
+- 验证：后端相关 16 suites / 181 tests 通过；前端 11 项模板/交互测试通过；前后端生产构建通过，真实前端 `vue-tsc --noEmit --project tsconfig.app.json` 与后端生产类型检查通过，新增模块和本次业务代码定向 ESLint 通过。Vite 有现存大分包及依赖 PURE 注释告警。
+- 检查边界：全量后端测试文件类型检查仍有既有 agent-workspace/dashboard/menus 测试类型问题；app.module.ts 既有 mysql require 段落有 ESLint 问题，本次未扩展修改。未启动服务、未调用真实收费模型、未进行已登录抖音账号或生产数据库联调。联网协议依据 [百炼官方联网搜索文档](https://help.aliyun.com/zh/model-studio/web-search)。
+
+新增文件（37）：
+
+- `server/src/content-articles/content-source.types.ts`
+- `server/src/hot-topics/dto/hot-topic.dto.ts`
+- `server/src/hot-topics/entities/hot-topic.entity.ts`
+- `server/src/hot-topics/hot-topic-controllers.spec.ts`
+- `server/src/hot-topics/hot-topic-fetch.service.spec.ts`
+- `server/src/hot-topics/hot-topic-fetch.service.ts`
+- `server/src/hot-topics/hot-topic-network.spec.ts`
+- `server/src/hot-topics/hot-topic-network.ts`
+- `server/src/hot-topics/hot-topic-parsers.spec.ts`
+- `server/src/hot-topics/hot-topic-parsers.ts`
+- `server/src/hot-topics/hot-topic-sources.service.spec.ts`
+- `server/src/hot-topics/hot-topic-sources.service.ts`
+- `server/src/hot-topics/hot-topic-sources.controller.ts`
+- `server/src/hot-topics/hot-topic-utils.spec.ts`
+- `server/src/hot-topics/hot-topic-utils.ts`
+- `server/src/hot-topics/hot-topic.types.ts`
+- `server/src/hot-topics/hot-topics.controller.ts`
+- `server/src/hot-topics/hot-topics.module.ts`
+- `server/src/hot-topics/hot-topics.service.spec.ts`
+- `server/src/hot-topics/hot-topics.service.ts`
+- `server/src/knowledge-ai-providers/knowledge-web-search.service.spec.ts`
+- `server/src/knowledge-ai-providers/knowledge-web-search.service.ts`
+- `server/src/migrations/1792915200000-AddHotTopics.spec.ts`
+- `server/src/migrations/1792915200000-AddHotTopics.ts`
+- `web/src/api/hotTopic.ts`
+- `web/src/views/content-article/SourceMaterials.vue`
+- `web/src/views/hot-topic-source/Edit.vue`
+- `web/src/views/hot-topic-source/Index.vue`
+- `web/src/views/hot-topic-source/View.vue`
+- `web/src/views/hot-topic/CreateArticle.vue`
+- `web/src/views/hot-topic/Index.vue`
+- `web/src/views/hot-topic/Preferences.vue`
+- `web/src/views/hot-topic/Runs.vue`
+- `web/src/views/hot-topic/View.vue`
+- `web/src/views/hot-topic/hotTopic.test.mjs`
+- `web/src/views/hot-topic/preferenceValidation.ts`
+- `web/src/views/hot-topic/submissionGuard.ts`
+
+修改文件（29）：
+
+- `CHANGELOG.md`
+- `.design-spec.md`
+- `server/src/ai-feature-configs/ai-feature-config.constants.ts`
+- `server/src/ai-feature-configs/ai-feature-configs.service.spec.ts`
+- `server/src/ai-feature-configs/ai-feature-configs.service.ts`
+- `server/src/ai-feature-configs/dto/ai-feature-config.dto.ts`
+- `server/src/ai-feature-configs/entities/ai-feature-config.entity.ts`
+- `server/src/app.module.ts`
+- `server/src/content-articles/content-articles.service.ts`
+- `server/src/content-articles/content-generation.service.spec.ts`
+- `server/src/content-articles/content-generation.service.ts`
+- `server/src/content-articles/content-writing.spec.ts`
+- `server/src/content-articles/content-writing.ts`
+- `server/src/content-articles/entities/content-article.entity.ts`
+- `server/src/content-articles/entities/content-generation-task.entity.ts`
+- `server/src/knowledge-ai-providers/knowledge-ai-providers.module.ts`
+- `server/src/log-records/log-api-scanner.ts`
+- `server/src/menus/menu-structure.ts`
+- `server/src/menus/menus.service.ts`
+- `server/src/third-party-config/third-party-config.service.ts`
+- `server/src/users/users.service.ts`
+- `web/src/api/aiFeatureConfig.ts`
+- `web/src/api/contentArticle.ts`
+- `web/src/router/index.ts`
+- `web/src/views/ai-feature-config/Edit.vue`
+- `web/src/views/ai-feature-config/Index.vue`
+- `web/src/views/content-article/Edit.vue`
+- `web/src/views/content-article/Tasks.vue`
+- `web/src/views/content-article/View.vue`
+
+删除文件：无。
+
 ### 2026-10-21 迁移并重命名 ComfyUI 提示词规范模块
 
 - 将原“视觉提示词”菜单从“内容创作”迁移到 ComfyUI 分组，并统一更名为“模型提示词规范”；ComfyUI 现在依次包含创作任务、素材库管理、工作流管理和模型提示词规范。

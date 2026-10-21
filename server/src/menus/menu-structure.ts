@@ -14,6 +14,7 @@ export const THIRD_PARTY_MENUS = [
   { key: 'mineru', name: 'MinerU 解析服务', permission: 'MineruConfig' },
   { key: 'vector', name: '向量化服务', permission: 'VectorConfig' },
   { key: 'comfyui', name: 'ComfyUI 服务', permission: 'ComfyConnection' },
+  { key: 'hot-topics', name: '热点来源', permission: 'HotTopicSource' },
 ] as const;
 export function reorganizeSystemMenus(
   seeds: StructuredMenuSeed[],

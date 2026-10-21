@@ -135,6 +135,30 @@ function setup() {
 }
 
 describe('持久化文章生成任务', () => {
+  it('热点参考资料独立写入生成快照，原始想法不被来源替换', async () => {
+    const h = setup();
+    const materials = [
+      {
+        title: '热点来源',
+        url: 'https://example.com/news',
+        sourceName: '公开来源',
+        publishedAt: null,
+        fetchedAt: '2026-10-21T00:00:00.000Z',
+        contentExcerpt: '摘要',
+        acquisition: 'aiSearch' as const,
+      },
+    ];
+    Object.assign(h.article, { sourceTopicId: 2, sourceMaterials: materials });
+    await h.service.submit(3, h.dto, 7);
+    expect(h.tasks.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        snapshot: expect.objectContaining({
+          idea: '想法',
+          sourceMaterials: materials,
+        }) as unknown,
+      }),
+    );
+  });
   it('列表最新任务仅投影封面 URL 标量，保持本人/文章范围且不加载大 JSON', async () => {
     const h = setup();
     const builder = {

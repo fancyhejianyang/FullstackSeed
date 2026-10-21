@@ -2,6 +2,7 @@
 export const AI_FEATURE_CONFIG_TYPES = [
   'chat',
   'contentCreation',
+  'topicDiscovery',
   'visualPrompt',
   'imageGeneration',
   'videoGeneration',
@@ -20,3 +21,10 @@ export type AiModelFeatureType = (typeof AI_MODEL_FEATURE_TYPES)[number];
 
 export const AI_RESPONSE_FORMATS = ['text', 'json', 'markdown'] as const;
 export type AiResponseFormat = (typeof AI_RESPONSE_FORMATS)[number];
+
+export const AI_WEB_SEARCH_MODES = [
+  'disabled',
+  'bailianResponses',
+  'bailianChat',
+] as const;
+export type AiWebSearchMode = (typeof AI_WEB_SEARCH_MODES)[number];

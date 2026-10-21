@@ -201,6 +201,9 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
       requestVersion: dto.version,
       title: article.title,
       idea: article.idea,
+      ...(article.sourceMaterials?.length
+        ? { sourceMaterials: article.sourceMaterials }
+        : {}),
       template: template
         ? {
             id: template.id,
@@ -479,7 +482,13 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
               new Date(),
               task.createdAt,
             ),
-            question: JSON.stringify({ title, idea }),
+            question: JSON.stringify({
+              title,
+              idea,
+              ...(task.snapshot.sourceMaterials?.length
+                ? { sourceMaterials: task.snapshot.sourceMaterials }
+                : {}),
+            }),
           }),
       );
       totalTokens = response.usage?.totalTokens ?? null;

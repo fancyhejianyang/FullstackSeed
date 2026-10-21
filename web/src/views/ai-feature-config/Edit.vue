@@ -54,6 +54,7 @@ const form = reactive<AiFeatureConfigEditForm>({
   systemPrompt: "",
   temperature: 0.2,
   responseFormat: "text",
+  webSearchMode: "disabled",
   supportsImageToImage: false,
   supportsImageToVideo: false,
   isEnabled: true,
@@ -63,6 +64,7 @@ const form = reactive<AiFeatureConfigEditForm>({
 const featureTypeOptions = [
   { label: "聊天", value: "chat" },
   { label: "内容创作", value: "contentCreation" },
+  { label: "热点发现与推荐", value: "topicDiscovery" },
   { label: "模型提示词规范", value: "visualPrompt" },
   { label: "图片生成", value: "imageGeneration" },
   { label: "视频生成", value: "videoGeneration" },
@@ -97,6 +99,7 @@ const isMineruOcrFeature = computed(
   () => isOcrFeature.value && !!form.useMineru,
 );
 const isWritingFeature = computed(() => form.featureType === "contentCreation");
+const isTopicFeature = computed(() => form.featureType === "topicDiscovery");
 const isVisualPromptFeature = computed(
   () => form.featureType === "visualPrompt",
 );
@@ -152,19 +155,21 @@ const fields = computed<FormField[]>(() => {
       hint:
         form.featureType === "chat"
           ? "当前为聊天：所选模型负责生成对话与知识库问答的最终回复。"
-          : form.featureType === "contentCreation"
-            ? "用于文章后台生成；可启用多个配置，生成时选择使用哪一个。"
-            : form.featureType === "visualPrompt"
-              ? "用于从明确 Demo 提炼格式、风格和模型规则，并按具体模型生成正向、负向提示词；固定返回 JSON，不调用 Agent。"
-              : form.featureType === "imageGeneration"
-                ? "用于素材管理直接生成图片；只使用账号的生图模型目录和完整生图端点。"
-                : form.featureType === "videoGeneration"
-                  ? "用于素材管理异步生成视频；只使用账号的视频模型目录和完整 DashScope 视频端点。"
-                  : form.featureType === "rerank"
-                    ? "当前为 LLM 重排：模型只给召回的知识片段评分和排序，不参与最终回答。"
-                    : form.featureType === "ocr"
-                      ? "当前为 OCR：仅处理图片或 PDF，可使用视觉模型或 MinerU 引擎。"
-                      : "当前为文档解析：仅处理文本/TXT/Word，由大模型按提示词整理为结构化 Markdown。",
+          : form.featureType === "topicDiscovery"
+            ? "发现近期热点并按个人偏好推荐；使用独立后台任务，可选原生联网，不调用 Agent。"
+            : form.featureType === "contentCreation"
+              ? "用于文章后台生成；可启用多个配置，生成时选择使用哪一个。"
+              : form.featureType === "visualPrompt"
+                ? "用于从明确 Demo 提炼格式、风格和模型规则，并按具体模型生成正向、负向提示词；固定返回 JSON，不调用 Agent。"
+                : form.featureType === "imageGeneration"
+                  ? "用于素材管理直接生成图片；只使用账号的生图模型目录和完整生图端点。"
+                  : form.featureType === "videoGeneration"
+                    ? "用于素材管理异步生成视频；只使用账号的视频模型目录和完整 DashScope 视频端点。"
+                    : form.featureType === "rerank"
+                      ? "当前为 LLM 重排：模型只给召回的知识片段评分和排序，不参与最终回答。"
+                      : form.featureType === "ocr"
+                        ? "当前为 OCR：仅处理图片或 PDF，可使用视觉模型或 MinerU 引擎。"
+                        : "当前为文档解析：仅处理文本/TXT/Word，由大模型按提示词整理为结构化 Markdown。",
     },
   ];
 
@@ -210,11 +215,13 @@ const fields = computed<FormField[]>(() => {
         hint: validatingModel.value
           ? `正在校验“${form.model}”是否可用…`
           : modelValidationHint.value ||
-            (isMediaGenerationFeature.value
-              ? "选择只校验媒体模型目录；实际可用性在明确发起素材生成时验证，可能计费且不会自动重试。"
-              : isRerankFeature.value
-                ? "请选择通用文本模型。系统会固定用温度 0 和内置 JSON 评分提示词调用它，不会生成最终回答。"
-                : "切换模型后会自动调用账号接口校验；确认不存在时会从该账号模型列表中移除。"),
+            (isTopicFeature.value
+              ? "仅校验账号文本模型目录；联网能力在手动获取热点时验证，可能产生模型及搜索费用。"
+              : isMediaGenerationFeature.value
+                ? "选择只校验媒体模型目录；实际可用性在明确发起素材生成时验证，可能计费且不会自动重试。"
+                : isRerankFeature.value
+                  ? "请选择通用文本模型。系统会固定用温度 0 和内置 JSON 评分提示词调用它，不会生成最终回答。"
+                  : "切换模型后会自动调用账号接口校验；确认不存在时会从该账号模型列表中移除。"),
       },
     );
     if (usesTemperature.value) {
@@ -233,6 +240,18 @@ const fields = computed<FormField[]>(() => {
     }
   }
 
+  if (isTopicFeature.value) {
+    baseFields.push({
+      prop: "webSearchMode",
+      label: "联网方式",
+      type: "select",
+      options: [
+        { label: "不联网（仅分析已采集资料）", value: "disabled" },
+        { label: "百炼 Responses 原生搜索", value: "bailianResponses" },
+      ],
+      hint: "只对热点获取生效。需百炼官方兼容端点及支持 web_search 的模型；没有真实搜索来源时明确报错，不把模型记忆当成今日热点。",
+    });
+  }
   if (isTextFeature.value) {
     baseFields.push({
       prop: "enableThinking",
@@ -299,22 +318,25 @@ const fields = computed<FormField[]>(() => {
         prop: "responseFormat",
         label: isWritingFeature.value ? "正文格式" : "返回格式",
         type: "select",
-        options: isVisualPromptFeature.value
-          ? [{ label: "JSON（固定）", value: "json" }]
-          : isMarkdownFeature.value
-            ? [{ label: "Markdown（固定）", value: "markdown" }]
-            : isWritingFeature.value
-              ? [
-                  { label: "纯文本", value: "text" },
-                  { label: "Markdown", value: "markdown" },
-                ]
-              : [
-                  { label: "文本", value: "text" },
-                  { label: "JSON", value: "json" },
-                  { label: "Markdown", value: "markdown" },
-                ],
+        options:
+          isVisualPromptFeature.value || isTopicFeature.value
+            ? [{ label: "JSON（固定）", value: "json" }]
+            : isMarkdownFeature.value
+              ? [{ label: "Markdown（固定）", value: "markdown" }]
+              : isWritingFeature.value
+                ? [
+                    { label: "纯文本", value: "text" },
+                    { label: "Markdown", value: "markdown" },
+                  ]
+                : [
+                    { label: "文本", value: "text" },
+                    { label: "JSON", value: "json" },
+                    { label: "Markdown", value: "markdown" },
+                  ],
         componentProps:
-          isMarkdownFeature.value || isVisualPromptFeature.value
+          isMarkdownFeature.value ||
+          isVisualPromptFeature.value ||
+          isTopicFeature.value
             ? { disabled: true }
             : undefined,
         hint: isWritingFeature.value
@@ -456,7 +478,7 @@ watch(
       form.temperature = 0;
       form.responseFormat = "json";
     }
-    if (isVisualPromptFeature.value) {
+    if (isVisualPromptFeature.value || isTopicFeature.value) {
       form.enableThinking = false;
       form.thinkingParametersText = "";
       form.useMineru = false;
@@ -490,7 +512,7 @@ watch(
     if (!formReadyForModelValidation.value || !form.providerId || !form.model) {
       return;
     }
-    if (isMediaGenerationFeature.value) return;
+    if (isMediaGenerationFeature.value || isTopicFeature.value) return;
     void validateSelectedModel();
   },
 );
@@ -513,6 +535,7 @@ function resetForm() {
   form.systemPrompt = "";
   form.temperature = 0.2;
   form.responseFormat = "text";
+  form.webSearchMode = "disabled";
   form.supportsImageToImage = false;
   form.supportsImageToVideo = false;
   form.isEnabled = true;
@@ -533,6 +556,7 @@ function fillForm(data: AiFeatureConfig) {
   form.systemPrompt = data.systemPrompt ?? "";
   form.temperature = Number(data.temperature ?? 0.2);
   form.responseFormat = data.responseFormat ?? "text";
+  form.webSearchMode = data.webSearchMode ?? "disabled";
   form.supportsImageToImage = !!data.supportsImageToImage;
   form.supportsImageToVideo = !!data.supportsImageToVideo;
   form.isEnabled = !!data.isEnabled;
@@ -557,13 +581,16 @@ function buildPayload(): AiFeatureConfigForm {
         ? 0
         : Number(form.temperature),
     responseFormat:
-      isRerankFeature.value || isVisualPromptFeature.value
+      isRerankFeature.value ||
+      isVisualPromptFeature.value ||
+      isTopicFeature.value
         ? "json"
         : isMediaGenerationFeature.value
           ? "text"
           : isMarkdownFeature.value
             ? "markdown"
             : form.responseFormat,
+    webSearchMode: isTopicFeature.value ? form.webSearchMode : "disabled",
     supportsImageToImage:
       isImageGenerationFeature.value && !!form.supportsImageToImage,
     supportsImageToVideo:
@@ -630,6 +657,7 @@ function getModelText(
   if (
     featureType === "chat" ||
     featureType === "contentCreation" ||
+    featureType === "topicDiscovery" ||
     featureType === "visualPrompt" ||
     featureType === "documentParse" ||
     featureType === "rerank"
@@ -649,6 +677,8 @@ function getModelText(
 }
 
 async function validateSelectedModel() {
+  // 热点配置只在用户明确提交发现任务后调用模型，不在选择时触发计费。
+  if (form.featureType === "topicDiscovery") return;
   if (!user.hasPermission("KnowledgeAiProvider.update")) return;
   const providerId = Number(form.providerId);
   const model = form.model?.trim() ?? "";

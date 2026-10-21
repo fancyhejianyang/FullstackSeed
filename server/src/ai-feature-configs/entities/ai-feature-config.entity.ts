@@ -3,6 +3,7 @@ import { BaseEntity } from '../../common/entities/base.entity';
 import type {
   AiFeatureConfigType,
   AiResponseFormat,
+  AiWebSearchMode,
 } from '../ai-feature-config.constants';
 
 @Entity('ai_feature_configs')
@@ -52,6 +53,10 @@ export class AiFeatureConfig extends BaseEntity {
 
   @Column({ type: 'varchar', length: 40, default: 'text' })
   responseFormat: AiResponseFormat;
+
+  /** 联网能力由具体协议执行并验证来源，不由提示词或模型名称猜测。 */
+  @Column({ type: 'varchar', length: 32, default: 'disabled' })
+  webSearchMode: AiWebSearchMode;
 
   /** 图片生成配置是否允许参考图编辑；文生图始终可用。 */
   @Column({ type: 'tinyint', default: false })

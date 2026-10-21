@@ -149,6 +149,20 @@ export class AiFeatureConfigsService {
     return config;
   }
 
+  async findUsableTopicDiscoveryConfig(id: number) {
+    const config = await this.findOne(id);
+    if (config.featureType !== 'topicDiscovery' || !config.isEnabled)
+      throw new BadRequestException('请选择启用的热点发现与推荐 AI 配置');
+    if (!config.providerId || !config.model?.trim())
+      throw new BadRequestException('热点配置缺少大模型账号或模型');
+    await this.providersService.assertModelSupported({
+      id: config.providerId,
+      model: config.model,
+      featureType: 'topicDiscovery',
+    });
+    return config;
+  }
+
   async findUsableImageGenerationConfig(
     id: number,
     generationMode: AiMaterialGenerationMode = 'textToImage',
@@ -346,6 +360,8 @@ export class AiFeatureConfigsService {
     if (dto.responseFormat !== undefined || isCreate) {
       payload.responseFormat = dto.responseFormat ?? 'text';
     }
+    if (dto.webSearchMode !== undefined || isCreate)
+      payload.webSearchMode = dto.webSearchMode ?? 'disabled';
     if (dto.supportsImageToImage !== undefined) {
       payload.supportsImageToImage = dto.supportsImageToImage;
     } else if (
@@ -379,6 +395,15 @@ export class AiFeatureConfigsService {
   }
 
   private normalizeFeatureSpecificSettings(config: Partial<AiFeatureConfig>) {
+    if (config.featureType !== 'topicDiscovery')
+      config.webSearchMode = 'disabled';
+    if (config.featureType === 'topicDiscovery') {
+      config.webSearchMode ??= 'disabled';
+      config.useMineru = false;
+      config.mineruConfigId = null;
+      config.mineruConfigName = null;
+      config.responseFormat = 'json';
+    }
     if (
       config.featureType === 'imageGeneration' ||
       config.featureType === 'videoGeneration'

@@ -23,6 +23,7 @@ const tableRef = ref<{
 const featureTypeOptions = [
   { label: '聊天', value: 'chat' },
   { label: '内容创作', value: 'contentCreation' },
+  { label: '热点发现与推荐', value: 'topicDiscovery' },
   { label: '模型提示词规范', value: 'visualPrompt' },
   { label: '图片生成', value: 'imageGeneration' },
   { label: '视频生成', value: 'videoGeneration' },

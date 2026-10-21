@@ -18,6 +18,8 @@ import { PartialType } from '@nestjs/swagger';
 import {
   AI_FEATURE_CONFIG_TYPES,
   AI_RESPONSE_FORMATS,
+  AI_WEB_SEARCH_MODES,
+  type AiWebSearchMode,
   type AiFeatureConfigType,
   type AiResponseFormat,
 } from '../ai-feature-config.constants';
@@ -78,6 +80,10 @@ export class CreateAiFeatureConfigDto {
   @IsIn(AI_RESPONSE_FORMATS)
   @IsOptional()
   responseFormat?: AiResponseFormat;
+
+  @IsIn(AI_WEB_SEARCH_MODES)
+  @IsOptional()
+  webSearchMode?: AiWebSearchMode;
 
   @IsBoolean()
   @IsOptional()

@@ -7,6 +7,7 @@ import { VectorConfig } from '../vector-configs/entities/vector-config.entity';
 import { StorageConfigService } from '../storage-config/storage-config.service';
 import { THIRD_PARTY_MENUS } from '../menus/menu-structure';
 import { ComfyConnection } from '../comfyui/entities/comfy-connection.entity';
+import { HotTopicSource } from '../hot-topics/entities/hot-topic.entity';
 
 export interface ThirdPartySummary {
   key: string;
@@ -98,6 +99,7 @@ export class ThirdPartyConfigService {
             mineru: MineruConfig,
             vector: VectorConfig,
             comfyui: ComfyConnection,
+            'hot-topics': HotTopicSource,
           };
           // 只查询聚合元信息，密钥、地址及模型参数不进入概览响应。
           const row = await this.db

@@ -5,6 +5,7 @@ import { ElMessage } from 'element-plus';
 import Button from '@/components/Button.vue';
 import Dialog from '@/components/Dialog.vue';
 import CoverPreview from './CoverPreview.vue';
+import SourceMaterials from './SourceMaterials.vue';
 import { useUserStore } from '@/stores/user';
 import {
   adoptContentTask,
@@ -171,6 +172,11 @@ async function copyContent() {
           <summary>初始想法</summary>
           <pre>{{ originalIdea || '暂无想法' }}</pre>
         </details>
+        <SourceMaterials
+          :materials="
+            latest?.snapshot?.sourceMaterials ?? detail.sourceMaterials
+          "
+        />
         <template v-if="latest">
           <template v-if="generatedTitle">
             <p class="article-view__title-label">AI 推荐标题</p>

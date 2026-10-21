@@ -48,6 +48,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: "内容创作" },
       },
       {
+        path: "hot-topics",
+        name: "hot-topics",
+        component: () => import("@/views/hot-topic/Index.vue"),
+        meta: { title: "热点选题", permission: "HotTopic.read" },
+      },
+      {
         path: "content-templates",
         name: "content-templates",
         component: () => import("@/views/content-template/Index.vue"),
@@ -214,6 +220,12 @@ const routes: RouteRecordRaw[] = [
         name: "third-party-config-overview",
         component: () => import("@/views/third-party-config/Index.vue"),
         meta: { title: "第三方配置" },
+      },
+      {
+        path: "third-party-config/hot-topics",
+        name: "third-party-config-hot-topics",
+        component: () => import("@/views/hot-topic-source/Index.vue"),
+        meta: { title: "热点来源配置", permission: "HotTopicSource.read" },
       },
       {
         path: "third-party-config/ai",
@@ -505,6 +517,7 @@ router.beforeEach(async (to) => {
         : to.path === "/content-creation"
           ? [
               ["/content-articles", "ContentArticle.read"],
+              ["/hot-topics", "HotTopic.read"],
               ["/content-templates", "ContentTemplate.read"],
               ["/ai-materials", "AiMaterial.read"],
               ["/visual-prompt-templates", "VisualPromptTemplate.read"],

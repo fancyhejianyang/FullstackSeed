@@ -1,0 +1,98 @@
+import { Repository } from 'typeorm';
+import { HotTopicSource } from './entities/hot-topic.entity';
+import {
+  HotTopicSourcesService,
+  sourceView,
+  validateSource,
+} from './hot-topic-sources.service';
+
+const source = () =>
+  ({
+    id: 1,
+    name: '授权 Feed',
+    kind: 'jsonFeed',
+    accessMode: 'feed',
+    url: 'https://feed.example.com/news.json',
+    accountName: '',
+    accountId: '',
+    apiToken: 'private-token',
+    isEnabled: false,
+    description: '',
+  }) as HotTopicSource;
+
+describe('热点来源配置', () => {
+  it('详情安全视图只返回是否存在密钥', () => {
+    expect(sourceView(source())).toMatchObject({ hasApiToken: true });
+    expect(sourceView(source())).not.toHaveProperty('apiToken');
+  });
+  it('阻止本地、明文、凭据 URL 和伪装抖音来源', () => {
+    for (const url of [
+      'http://feed.example.com',
+      'https://127.0.0.1',
+      'https://user:password@example.com',
+      'https://feed.example.com?token=abc',
+    ])
+      expect(() => validateSource({ ...source(), url })).toThrow();
+    expect(() =>
+      validateSource({ ...source(), kind: 'douyinHot', accessMode: 'page' }),
+    ).toThrow('抖音来源');
+  });
+  it('锁定账号必须提供真实主页和标识，不能只填名称', () => {
+    const account = {
+      ...source(),
+      apiToken: null,
+      kind: 'douyinAccount' as const,
+      accessMode: 'search' as const,
+      url: 'https://www.douyin.com/user/MS4w-test',
+      accountName: '央视新闻',
+      accountId: 'MS4w-test',
+    };
+    expect(() => validateSource(account)).not.toThrow();
+    expect(() => validateSource({ ...account, accountId: '' })).toThrow(
+      '账号标识',
+    );
+    expect(() =>
+      validateSource({ ...account, url: 'https://www.douyin.com/hot' }),
+    ).toThrow('主页');
+  });
+  it('敏感 URL 参数大小写与变体均拒绝，不通过概要泄漏密钥', () => {
+    for (const key of [
+      'token',
+      'ACCESS_TOKEN',
+      'accessToken',
+      'apiKey',
+      'API-KEY',
+      'key',
+      'secretKey',
+    ])
+      expect(() =>
+        validateSource({
+          ...source(),
+          url: `https://feed.example.com/?${key}=private`,
+        }),
+      ).toThrow('密钥字段');
+  });
+  it('编辑空密钥保留旧值，显式清除才删除', async () => {
+    const row = source();
+    const builder = {
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      getOne: jest.fn().mockResolvedValue(row),
+    };
+    const repository = {
+      createQueryBuilder: jest.fn().mockReturnValue(builder),
+      save: jest
+        .fn()
+        .mockImplementation((value: HotTopicSource) => Promise.resolve(value)),
+    };
+    const service = new HotTopicSourcesService(
+      repository as unknown as Repository<HotTopicSource>,
+    );
+    const preserved = await service.update(1, { apiToken: '' });
+    expect(row.apiToken).toBe('private-token');
+    expect(preserved.hasApiToken).toBe(true);
+    expect(preserved).not.toHaveProperty('apiToken');
+    await service.update(1, { clearApiToken: true });
+    expect(row.apiToken).toBeNull();
+  });
+});

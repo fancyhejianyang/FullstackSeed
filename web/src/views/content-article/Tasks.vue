@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import SourceMaterials from './SourceMaterials.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
@@ -381,6 +382,7 @@ onBeforeUnmount(() => {
             <pre>{{ detail.snapshot.idea }}</pre>
             <pre>{{ detail.snapshot.template.instruction || '通用写作' }}</pre>
           </details>
+          <SourceMaterials :materials="detail.snapshot.sourceMaterials" />
           <template v-if="hasCandidate">
             <CoverPreview :task="detail" />
             <div v-if="hasGeneratedTitle" class="generation-records__title">

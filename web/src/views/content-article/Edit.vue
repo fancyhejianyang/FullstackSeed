@@ -14,6 +14,7 @@ import Dialog from '@/components/Dialog.vue';
 import Button from '@/components/Button.vue';
 import Input from '@/components/Input.vue';
 import GenerationSettings from './GenerationSettings.vue';
+import SourceMaterials from './SourceMaterials.vue';
 import { useUserStore } from '@/stores/user';
 import UploadImage from '@/components/UploadImage.vue';
 import { uploadFile } from '@/api/upload';
@@ -22,6 +23,7 @@ import {
   getContentArticlePreview,
   updateContentArticle,
   type ContentArticle,
+  type ContentSourceMaterial,
   type ContentArticleForm,
   type ContentArticleSummary,
   type ContentTaskDetail,
@@ -47,6 +49,7 @@ const loadFailed = ref(false);
 const submitting = ref(false);
 const uploading = ref(false);
 const latestCandidate = ref<ContentTaskDetail | null>(null);
+const sourceMaterials = ref<ContentSourceMaterial[] | null>(null);
 const loadedGeneratedBody = ref(false);
 const canLoadGeneratedBody = computed(
   () =>
@@ -104,6 +107,7 @@ watch(
     loadFailed.value = false;
     loading.value = false;
     latestCandidate.value = null;
+    sourceMaterials.value = null;
     loadedGeneratedBody.value = false;
     if (!open) return;
     Object.assign(form, {
@@ -147,6 +151,7 @@ watch(
 );
 
 function fillSaved(data: ContentArticle) {
+  sourceMaterials.value = data.sourceMaterials ?? null;
   Object.assign(form, {
     title: data.title,
     coverUrl: data.coverUrl,
@@ -327,6 +332,10 @@ onBeforeUnmount(() => {
           </div>
         </template>
       </Form>
+      <SourceMaterials
+        v-if="!loading && !loadFailed"
+        :materials="sourceMaterials"
+      />
       <GenerationSettings
         v-if="
           visible &&
