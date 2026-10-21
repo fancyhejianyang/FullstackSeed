@@ -89,7 +89,7 @@ function download() {
           preload="metadata"
         />
         <el-empty v-else description="尚未生成素材" :image-size="90" />
-        <el-descriptions :column="1" border>
+        <el-descriptions class="material-view__details" :column="1" border>
           <el-descriptions-item label="状态">
             <el-tag :type="statusType">{{
               statusLabels[detail.generationStatus]
@@ -202,6 +202,12 @@ function download() {
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.65;
+}
+.material-view__details :deep(.el-descriptions__label) {
+  width: 96px;
+  min-width: 96px;
+  white-space: nowrap;
+  word-break: keep-all;
 }
 .material-view__reference {
   width: 80px;
