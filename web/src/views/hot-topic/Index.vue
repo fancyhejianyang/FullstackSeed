@@ -144,7 +144,7 @@ onBeforeUnmount(() => {
       perm-module="hotTopic"
       :show-edit="false"
       :show-delete="false"
-      :action-width="200"
+      :action-width="180"
       @view="view"
     >
       <template #toolbar>
@@ -203,10 +203,12 @@ onBeforeUnmount(() => {
           v-if="row.decision !== 'selected'"
           perm="HotTopic.update"
           link
+          :icon="row.decision === 'ignored' ? 'RefreshLeft' : 'Hide'"
+          :title="row.decision === 'ignored' ? '恢复' : '忽略'"
+          :aria-label="row.decision === 'ignored' ? '恢复该热点' : '忽略该热点'"
           :disabled="updatingId !== null"
           @click="decide(row, row.decision === 'ignored' ? 'new' : 'ignored')"
-          >{{ row.decision === 'ignored' ? '恢复' : '忽略' }}</Button
-        >
+        />
       </template>
     </Table>
     <Preferences v-model:visible="preferenceVisible" />

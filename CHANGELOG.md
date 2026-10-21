@@ -1,5 +1,21 @@
 # CHANGELOG
 
+### 2026-10-21 修正热点行内操作图标语义
+
+- 热点列表“忽略/恢复”操作改为仅图标展示，分别使用隐藏与恢复图标；补充悬停标题和 `aria-label`，在保持单行紧凑排列的同时避免无文字按钮语义不清。
+- 修正原按钮因复用 `HotTopic.update` 权限而自动显示编辑铅笔的误导表现，操作列宽度由 200px 收紧至 180px。
+- 验证：热点页面 11 项模板与交互测试、前端 `vue-tsc` 静态检查通过。
+
+新增文件：无。
+
+修改文件（3）：
+
+- `CHANGELOG.md`
+- `web/src/views/hot-topic/Index.vue`
+- `web/src/views/hot-topic/hotTopic.test.mjs`
+
+删除文件：无。
+
 ### 2026-10-21 修复热点偏好布尔契约并精简选题操作
 
 - 修复 `PUT /api/hot-topics/preferences` 报 `scheduleEnabled must be a boolean value`：MySQL `tinyint` 实际读取为 `0/1`，热点实体布尔列改用 TypeORM `boolean` 元数据，接口读取稳定返回原生布尔值；偏好与来源表单在载入和提交时再次规范为 boolean。

@@ -97,7 +97,16 @@ test('手动发起、计划默认关闭、创建后是否生成须明确选择',
   assert.match(sources.get('Index.vue'), /perm="HotTopic.create"/);
   assert.doesNotMatch(sources.get('Index.vue'), /onMounted\(/);
   assert.doesNotMatch(sources.get('Index.vue'), /收藏|saved/);
-  assert.match(sources.get('Index.vue'), /:action-width="200"/);
+  assert.match(sources.get('Index.vue'), /:action-width="180"/);
+  assert.match(
+    sources.get('Index.vue'),
+    /:icon="row\.decision === 'ignored' \? 'RefreshLeft' : 'Hide'"/,
+  );
+  assert.match(sources.get('Index.vue'), /:aria-label=/);
+  assert.doesNotMatch(
+    sources.get('Index.vue'),
+    />\{\{ row\.decision === 'ignored' \? '恢复' : '忽略' \}\}<\/Button/,
+  );
 });
 
 test('指定账号预设不冒充已核验，密钥不从详情写回表单', () => {
