@@ -24,6 +24,13 @@ import type {
   HotTopicMode,
 } from '../hot-topic.types';
 
+function normalizeBoolean(value: unknown): unknown {
+  if (value === true || value === false) return value;
+  if (value === 1 || value === '1' || value === 'true') return true;
+  if (value === 0 || value === '0' || value === 'false') return false;
+  return value;
+}
+
 export class HotTopicQueryDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number = 1;
   @IsOptional()
@@ -34,7 +41,7 @@ export class HotTopicQueryDto {
   pageSize?: number = 10;
   @IsOptional() @IsString() @MaxLength(200) keyword?: string;
   @IsOptional()
-  @IsIn(['new', 'saved', 'ignored', 'selected'])
+  @IsIn(['new', 'ignored', 'selected'])
   decision?: HotTopicDecision;
   @IsOptional()
   @IsIn(['unreviewed', 'high', 'medium', 'low'])
@@ -55,8 +62,14 @@ export class SaveHotTopicSourceDto {
   @IsOptional() @IsString() @MaxLength(120) accountName?: string;
   @IsOptional() @IsString() @MaxLength(160) accountId?: string;
   @IsOptional() @IsString() @MaxLength(4000) apiToken?: string;
-  @IsOptional() @IsBoolean() clearApiToken?: boolean;
-  @IsOptional() @IsBoolean() isEnabled?: boolean;
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => normalizeBoolean(value))
+  @IsBoolean()
+  clearApiToken?: boolean;
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => normalizeBoolean(value))
+  @IsBoolean()
+  isEnabled?: boolean;
   @IsOptional() @IsString() @MaxLength(2000) description?: string;
 }
 export class UpdateHotTopicSourceDto extends PartialType(
@@ -65,9 +78,7 @@ export class UpdateHotTopicSourceDto extends PartialType(
 
 export class HotTopicSourceQueryDto extends HotTopicQueryDto {
   @IsOptional()
-  @Transform(({ value }: { value: unknown }) =>
-    value === 'true' ? true : value === 'false' ? false : value,
-  )
+  @Transform(({ value }: { value: unknown }) => normalizeBoolean(value))
   @IsBoolean()
   isEnabled?: boolean;
 }
@@ -85,7 +96,9 @@ export class SaveHotTopicPreferenceDto {
   @IsString() @MaxLength(1000) writingStyle: string;
   @IsInt() @Min(1) @Max(168) lookbackHours: number;
   @IsInt() @Min(1) @Max(30) maxResults: number;
-  @IsBoolean() scheduleEnabled: boolean;
+  @Transform(({ value }: { value: unknown }) => normalizeBoolean(value))
+  @IsBoolean()
+  scheduleEnabled: boolean;
   @IsString() @Matches(/^([01]\d|2[0-3]):[0-5]\d$/) scheduleTime: string;
 }
 export class SubmitHotTopicRunDto {
@@ -93,14 +106,16 @@ export class SubmitHotTopicRunDto {
   @IsIn(['discover', 'recommend']) action: 'discover' | 'recommend';
 }
 export class HotTopicDecisionDto {
-  @IsIn(['new', 'saved', 'ignored']) decision: 'new' | 'saved' | 'ignored';
+  @IsIn(['new', 'ignored']) decision: 'new' | 'ignored';
 }
 export class CreateHotTopicArticleDto {
   @IsUUID() requestId: string;
   @IsString() @MaxLength(20000) idea: string;
   @IsOptional() @IsInt() @Min(1) aiConfigId?: number;
   @IsOptional() @IsInt() @Min(1) templateId?: number;
-  @IsBoolean() generate: boolean;
+  @Transform(({ value }: { value: unknown }) => normalizeBoolean(value))
+  @IsBoolean()
+  generate: boolean;
 }
 export class BatchDeleteHotTopicsDto {
   @IsArray()

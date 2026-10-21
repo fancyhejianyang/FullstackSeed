@@ -183,10 +183,10 @@ async function load() {
       writingStyle: saved.writingStyle,
       lookbackHours: saved.lookbackHours,
       maxResults: saved.maxResults,
-      scheduleEnabled: saved.scheduleEnabled,
+      scheduleEnabled: Boolean(saved.scheduleEnabled),
       scheduleTime: saved.scheduleTime,
     });
-    wasScheduled = saved.scheduleEnabled;
+    wasScheduled = Boolean(saved.scheduleEnabled);
     options.value = choices;
   } catch {
     if (sequence === epoch) failed.value = true;
@@ -206,8 +206,13 @@ function close() {
 async function submit() {
   if (submitting.value || loading.value || failed.value) return;
   await formRef.value?.validate();
+  const payload: HotPreference = {
+    ...form,
+    sourceIds: form.sourceIds.map(Number),
+    scheduleEnabled: Boolean(form.scheduleEnabled),
+  };
   const validationError = scheduleValidationError(
-    { ...form, sourceIds: form.sourceIds.map(Number) },
+    payload,
     options.value,
     user.hasPermission('HotTopic.create'),
   );
@@ -224,7 +229,7 @@ async function submit() {
   }
   submitting.value = true;
   try {
-    await saveHotPreference({ ...form, sourceIds: form.sourceIds.map(Number) });
+    await saveHotPreference(payload);
     ElMessage.success('偏好与执行计划已保存');
     visible.value = false;
     emit('success');

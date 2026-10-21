@@ -107,7 +107,7 @@ export class HotTopicsController {
   }
   @Patch(':id/decision')
   @RequirePermissions('HotTopic.update')
-  @ApiOperation({ summary: '收藏或忽略选题' })
+  @ApiOperation({ summary: '忽略或恢复选题' })
   decision(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: HotTopicDecisionDto,

@@ -208,11 +208,7 @@ export class HotTopicsService implements OnModuleInit, OnModuleDestroy {
       sources: await this.sources.options(),
     };
   }
-  async setDecision(
-    id: number,
-    decision: 'new' | 'saved' | 'ignored',
-    userId: number,
-  ) {
+  async setDecision(id: number, decision: 'new' | 'ignored', userId: number) {
     const current = await this.findOne(id, userId);
     if (current.articleId)
       throw new ConflictException('该选题已经创建文章，不能改为未选取状态');
@@ -622,7 +618,7 @@ export class HotTopicsService implements OnModuleInit, OnModuleDestroy {
         saved = await this.topics.find({
           where: {
             userId: run.userId,
-            decision: In(['new', 'saved']),
+            decision: 'new',
             fetchedAt: MoreThanOrEqual(
               new Date(
                 Date.now() - run.preferences.lookbackHours * 3600_000,

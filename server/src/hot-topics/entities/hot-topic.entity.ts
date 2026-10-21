@@ -22,7 +22,7 @@ export class HotTopicSource extends BaseEntity {
   @Column({ type: 'text', nullable: true, select: false }) apiToken:
     | string
     | null;
-  @Column({ type: 'tinyint', default: false }) isEnabled: boolean;
+  @Column({ type: 'boolean', default: false }) isEnabled: boolean;
   @Column({ length: 2000, default: '' }) description: string;
 }
 
@@ -42,7 +42,7 @@ export class HotTopicPreference
   @Column({ length: 1000, default: '' }) writingStyle: string;
   @Column({ type: 'int', default: 24 }) lookbackHours: number;
   @Column({ type: 'int', default: 10 }) maxResults: number;
-  @Column({ type: 'tinyint', default: false }) scheduleEnabled: boolean;
+  @Column({ type: 'boolean', default: false }) scheduleEnabled: boolean;
   @Column({ length: 5, default: '08:30' }) scheduleTime: string;
   @Column({ length: 40, default: 'Asia/Shanghai' }) timeZone: string;
   @Column({ type: 'datetime', nullable: true }) nextRunAt: Date | null;
@@ -68,7 +68,7 @@ export class HotTopicRun extends BaseEntity {
   @Column({ type: 'simple-json', nullable: true }) sources:
     | HotSourceOutcome[]
     | null;
-  @Column({ type: 'tinyint', default: false }) searchExecuted: boolean;
+  @Column({ type: 'boolean', default: false }) searchExecuted: boolean;
   @Column({ type: 'int', default: 0 }) candidateCount: number;
   @Column({ type: 'int', default: 0 }) topicCount: number;
   @Column({ type: 'int', nullable: true }) totalTokens: number | null;
@@ -99,7 +99,7 @@ export class HotTopic extends BaseEntity {
   @Column({ type: 'varchar', length: 160, nullable: true }) accountId:
     | string
     | null;
-  @Column({ type: 'tinyint', default: false }) accountMatched: boolean;
+  @Column({ type: 'boolean', default: false }) accountMatched: boolean;
   @Column({ type: 'int', nullable: true }) rank: number | null;
   @Column({ type: 'double', nullable: true }) heat: number | null;
   @Column({ type: 'varchar', length: 40, nullable: true }) publishedAt:

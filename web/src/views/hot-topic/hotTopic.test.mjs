@@ -83,11 +83,21 @@ test('所有新页面模板可编译，来源与模型内容只以转义文本�
 
 test('手动发起、计划默认关闭、创建后是否生成须明确选择', () => {
   assert.match(sources.get('Preferences.vue'), /scheduleEnabled: false/);
+  assert.match(
+    sources.get('Preferences.vue'),
+    /scheduleEnabled: Boolean\(form\.scheduleEnabled\)/,
+  );
+  assert.match(
+    sources.get('Preferences.vue'),
+    /scheduleEnabled: Boolean\(saved\.scheduleEnabled\)/,
+  );
   assert.match(sources.get('Preferences.vue'), /ElMessageBox\.confirm/);
   assert.match(sources.get('CreateArticle.vue'), /generate: false/);
   assert.match(sources.get('Index.vue'), /@click="run\('discover'\)"/);
   assert.match(sources.get('Index.vue'), /perm="HotTopic.create"/);
   assert.doesNotMatch(sources.get('Index.vue'), /onMounted\(/);
+  assert.doesNotMatch(sources.get('Index.vue'), /收藏|saved/);
+  assert.match(sources.get('Index.vue'), /:action-width="200"/);
 });
 
 test('指定账号预设不冒充已核验，密钥不从详情写回表单', () => {

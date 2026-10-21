@@ -164,7 +164,7 @@ async function load() {
       url: row.url,
       accountName: row.accountName,
       accountId: row.accountId,
-      isEnabled: row.isEnabled,
+      isEnabled: Boolean(row.isEnabled),
       description: row.description,
       apiToken: '',
     });
@@ -205,6 +205,8 @@ async function submit() {
   try {
     const data = {
       ...form,
+      isEnabled: Boolean(form.isEnabled),
+      clearApiToken: Boolean(form.clearApiToken),
       ...(form.apiToken?.trim() ? { apiToken: form.apiToken.trim() } : {}),
     };
     if (!form.apiToken?.trim()) delete data.apiToken;

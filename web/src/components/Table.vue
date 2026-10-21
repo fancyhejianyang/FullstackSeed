@@ -370,6 +370,7 @@ onMounted(fetchData);
       <el-table-column
         v-if="hasActionColumn || $slots.actions"
         label="操作"
+        class-name="pro-table__action-column"
         :width="props.actionWidth"
         fixed="left"
         :show-overflow-tooltip="false"

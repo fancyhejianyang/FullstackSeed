@@ -11,7 +11,7 @@ export type HotRunStatus =
   | 'partial'
   | 'failed'
   | 'interrupted';
-export type HotTopicDecision = 'new' | 'saved' | 'ignored' | 'selected';
+export type HotTopicDecision = 'new' | 'ignored' | 'selected';
 export interface HotSourceForm {
   name: string;
   kind: HotSourceKind;
@@ -150,7 +150,6 @@ export const modeLabels: Record<HotTopicMode, string> = {
 };
 export const decisionLabels: Record<HotTopicDecision, string> = {
   new: '未处理',
-  saved: '已收藏',
   ignored: '已忽略',
   selected: '已选题创作',
 };

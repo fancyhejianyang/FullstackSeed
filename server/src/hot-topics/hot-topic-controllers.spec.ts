@@ -1,6 +1,51 @@
 import { scanLogApiModules } from '../log-records/log-api-scanner';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
+import { SaveHotTopicPreferenceDto } from './dto/hot-topic.dto';
+
+const preferencePayload = (scheduleEnabled: unknown) => ({
+  mode: 'aiSearch',
+  aiConfigId: null,
+  sourceIds: [],
+  interests: '',
+  exclusions: '',
+  audience: '',
+  writingStyle: '',
+  lookbackHours: 24,
+  maxResults: 10,
+  scheduleEnabled,
+  scheduleTime: '09:00',
+});
 
 describe('热点模块日志路由归属', () => {
+  it.each([
+    [true, true],
+    [false, false],
+    [1, true],
+    [0, false],
+    ['1', true],
+    ['0', false],
+    ['true', true],
+    ['false', false],
+  ])('将表单布尔值 %p 规范为 %p', async (input, expected) => {
+    const dto = plainToInstance(
+      SaveHotTopicPreferenceDto,
+      preferencePayload(input),
+    );
+    expect(await validate(dto)).toEqual([]);
+    expect(dto.scheduleEnabled).toBe(expected);
+  });
+
+  it('拒绝无法识别的每日计划布尔值', async () => {
+    const dto = plainToInstance(
+      SaveHotTopicPreferenceDto,
+      preferencePayload('yes'),
+    );
+    expect((await validate(dto)).map((error) => error.property)).toContain(
+      'scheduleEnabled',
+    );
+  });
+
   it('分别识别选题和来源控制器，接口不串线或丢失', () => {
     const modules = scanLogApiModules();
     const topics = modules.find((module) => module.routePath === '/hot-topics');

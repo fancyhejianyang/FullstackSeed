@@ -1,5 +1,36 @@
 # CHANGELOG
 
+### 2026-10-21 修复热点偏好布尔契约并精简选题操作
+
+- 修复 `PUT /api/hot-topics/preferences` 报 `scheduleEnabled must be a boolean value`：MySQL `tinyint` 实际读取为 `0/1`，热点实体布尔列改用 TypeORM `boolean` 元数据，接口读取稳定返回原生布尔值；偏好与来源表单在载入和提交时再次规范为 boolean。
+- 热点 DTO 对 `true/false`、`0/1` 及对应字符串做严格白名单转换，无法识别的值仍由 `@IsBoolean()` 拒绝；同一规则覆盖每日计划、来源启用、清除密钥和创建后生成，避免相同问题在关联表单复现。
+- 移除热点选题收藏功能及 `saved` 状态，列表筛选、操作按钮、前后端类型、DTO 与推荐候选查询保持一致；新增迁移将历史收藏恢复为“未处理”，当前数据库没有历史收藏需要转换。
+- 热点列表操作列由 260px 收紧至 200px，仅保留查看、选取创作和忽略/恢复；Table 操作列增加稳定类名，热点页明确禁止操作内容换行。
+- 验证：后端相关 3 suites / 22 tests、TypeORM 实体列检查和生产 TypeScript 静态检查通过；前端热点 11 项交互/模板测试及 `vue-tsc` 通过；真实仓储读取 `scheduleEnabled` 已为 boolean。
+
+新增文件（2）：
+
+- `server/src/migrations/1793088000000-RemoveHotTopicSavedDecision.ts`
+- `server/src/migrations/1793088000000-RemoveHotTopicSavedDecision.spec.ts`
+
+修改文件（13）：
+
+- `CHANGELOG.md`
+- `server/src/hot-topics/dto/hot-topic.dto.ts`
+- `server/src/hot-topics/entities/hot-topic.entity.ts`
+- `server/src/hot-topics/hot-topic-controllers.spec.ts`
+- `server/src/hot-topics/hot-topic.types.ts`
+- `server/src/hot-topics/hot-topics.controller.ts`
+- `server/src/hot-topics/hot-topics.service.ts`
+- `web/src/api/hotTopic.ts`
+- `web/src/components/Table.vue`
+- `web/src/views/hot-topic-source/Edit.vue`
+- `web/src/views/hot-topic/Index.vue`
+- `web/src/views/hot-topic/Preferences.vue`
+- `web/src/views/hot-topic/hotTopic.test.mjs`
+
+删除文件：无。
+
 ### 2026-10-21 修复移除草稿生命周期后的旧库兼容
 
 - 修复首页与首页配置同时加载失败：开发库经 TypeORM `synchronize` 新增的 `dashboard_configs.widgets` 可能为空字符串，原 `simple-json` 会在进入服务前抛出 JSON 解析异常；改为容错转换器，并将空值、损坏 JSON、空数组统一恢复为系统默认板块。

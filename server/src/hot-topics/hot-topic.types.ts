@@ -9,7 +9,7 @@ export type HotRunStatus =
   | 'partial'
   | 'failed'
   | 'interrupted';
-export type HotTopicDecision = 'new' | 'saved' | 'ignored' | 'selected';
+export type HotTopicDecision = 'new' | 'ignored' | 'selected';
 export interface HotSourceInput {
   id: number;
   name: string;

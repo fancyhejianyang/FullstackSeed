@@ -144,7 +144,7 @@ onBeforeUnmount(() => {
       perm-module="hotTopic"
       :show-edit="false"
       :show-delete="false"
-      :action-width="260"
+      :action-width="200"
       @view="view"
     >
       <template #toolbar>
@@ -204,14 +204,6 @@ onBeforeUnmount(() => {
           perm="HotTopic.update"
           link
           :disabled="updatingId !== null"
-          @click="decide(row, row.decision === 'saved' ? 'new' : 'saved')"
-          >{{ row.decision === 'saved' ? '取消收藏' : '收藏' }}</Button
-        >
-        <Button
-          v-if="row.decision !== 'selected'"
-          perm="HotTopic.update"
-          link
-          :disabled="updatingId !== null"
           @click="decide(row, row.decision === 'ignored' ? 'new' : 'ignored')"
           >{{ row.decision === 'ignored' ? '恢复' : '忽略' }}</Button
         >
@@ -236,5 +228,8 @@ onBeforeUnmount(() => {
   color: var(--el-text-color-regular);
   line-height: 1.8;
   margin: 0 0 20px;
+}
+:deep(.pro-table__action-column .cell) {
+  white-space: nowrap;
 }
 </style>
