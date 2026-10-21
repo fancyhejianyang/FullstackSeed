@@ -108,7 +108,7 @@ describe('third-party access and credentials', () => {
       }),
     ).toEqual({ accessKeyId: 'private-id', accessKeySecret: 'new-secret' });
   });
-  it('separates read/update permissions on controllers and protects publication', () => {
+  it('separates read/update permissions on controllers and protects dashboard saving', () => {
     expect(
       Reflect.getMetadata(
         PERMISSIONS_KEY,
@@ -130,7 +130,7 @@ describe('third-party access and credentials', () => {
     expect(
       Reflect.getMetadata(
         PERMISSIONS_KEY,
-        DashboardController.prototype.publish,
+        DashboardController.prototype.save,
       ),
     ).toEqual(['DashboardConfig.read', 'DashboardConfig.update']);
   });

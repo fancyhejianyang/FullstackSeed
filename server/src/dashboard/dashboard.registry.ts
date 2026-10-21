@@ -27,7 +27,6 @@ const limit: WidgetParameter = {
 const businessPermissions = [
   'AgentApp.read',
   'CustomerService.read',
-  'ApprovalRequest.read',
   'Product.read',
   'ProductSku.read',
   'KnowledgeBase.read',
@@ -76,12 +75,6 @@ export const DASHBOARD_LINKS = [
     permission: 'ProductSku.read',
   },
   {
-    key: 'approvals',
-    label: '审批管理',
-    path: '/collaboration-center/approvals',
-    permission: 'ApprovalRequest.read',
-  },
-  {
     key: 'articles',
     label: '文章创作',
     path: '/content-articles',
@@ -123,7 +116,6 @@ const metricOptions = [
   { label: '今日执行', value: 'agentTotal' },
   { label: '今日成功率', value: 'agentRate' },
   { label: '等待人工', value: 'waitingHuman' },
-  { label: '待审批', value: 'pendingApprovals' },
   { label: '产品总数', value: 'productTotal' },
   { label: 'SKU 总数', value: 'skuTotal' },
   { label: '内容创作数', value: 'contentTotal' },
@@ -134,7 +126,7 @@ export const DASHBOARD_WIDGETS: WidgetDefinition[] = [
   {
     key: 'core.metrics',
     name: '核心数据',
-    description: '执行、客服、审批、商品与内容资产概览',
+    description: '执行、客服、商品与内容资产概览',
     category: 'metric',
     permissionCodes: corePermissions,
     allowedSpans: [12],
@@ -375,12 +367,11 @@ export const DASHBOARD_WIDGETS: WidgetDefinition[] = [
   {
     key: 'operations.todo',
     name: '待办与异常',
-    description: '待接待、审批与近期处理失败记录',
+    description: '待接待与近期处理失败记录',
     category: 'list',
     permissionCodes: [
       'AgentApp.read',
       'CustomerService.read',
-      'ApprovalRequest.read',
       'KnowledgeBase.read',
     ],
     allowedSpans: [6, 8, 12],

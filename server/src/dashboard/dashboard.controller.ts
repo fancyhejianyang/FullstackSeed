@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Put, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   CurrentUser,
@@ -7,11 +7,7 @@ import {
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator';
 import { DashboardService } from './dashboard.service';
 import { DashboardConfigService } from './dashboard-config.service';
-import {
-  DashboardRevisionDto,
-  QueryDashboardDto,
-  SaveDashboardDto,
-} from './dto/dashboard.dto';
+import { QueryDashboardDto, SaveDashboardDto } from './dto/dashboard.dto';
 @ApiTags('Dashboard')
 @ApiBearerAuth()
 @Controller('dashboard')
@@ -33,20 +29,8 @@ export class DashboardController {
   }
   @Put('config')
   @RequirePermissions('DashboardConfig.read', 'DashboardConfig.update')
-  @ApiOperation({ summary: '保存首页配置草稿' })
+  @ApiOperation({ summary: '保存并立即应用首页配置' })
   save(@Body() dto: SaveDashboardDto, @CurrentUser() user: AuthUser) {
-    return this.config.change(dto, 'save', user);
-  }
-  @Post('config/publish')
-  @RequirePermissions('DashboardConfig.read', 'DashboardConfig.update')
-  @ApiOperation({ summary: '保存并发布首页配置' })
-  publish(@Body() dto: SaveDashboardDto, @CurrentUser() user: AuthUser) {
-    return this.config.change(dto, 'publish', user);
-  }
-  @Post('config/rollback')
-  @RequirePermissions('DashboardConfig.read', 'DashboardConfig.update')
-  @ApiOperation({ summary: '回退到上一个首页配置版本' })
-  rollback(@Body() dto: DashboardRevisionDto, @CurrentUser() user: AuthUser) {
-    return this.config.change(dto, 'rollback', user);
+    return this.config.save(dto, user);
   }
 }

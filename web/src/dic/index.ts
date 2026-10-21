@@ -1,7 +1,7 @@
 // 本文件收纳固定字典和API字典
 //
 // 使用方式：
-//   import { DEMO_CATEGORY, DEMO_STATUS } from '@/dic'
+//   import { DEMO_CATEGORY } from '@/dic'
 //   DicService.init(DEMO_CATEGORY, items)  // 直接写入 Ref
 //   const dic = await DicService.init(DEMO_CATEGORY)
 //   dic.getLabel('original') // → '原创'
@@ -15,15 +15,6 @@ export const DEMO_CATEGORY = {
         { label: '原创', value: 'original' },
         { label: '转载', value: 'reprint' },
         { label: '翻译', value: 'translation' },
-    ],
-} satisfies DicDefinition
-
-// ========== 示例状态 ==========
-export const DEMO_STATUS = {
-    isStatic: true,
-    items: [
-        { label: '草稿', value: 'draft' },
-        { label: '已发布', value: 'published' },
     ],
 } satisfies DicDefinition
 

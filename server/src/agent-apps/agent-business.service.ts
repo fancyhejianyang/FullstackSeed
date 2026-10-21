@@ -78,7 +78,7 @@ export class AgentBusinessService {
     private readonly knowledge: KnowledgeBasesService,
     private readonly articles: ContentArticlesService,
   ) {
-    // 唯一服务绑定表。新增模块只声明 DTO、服务绑定和目录字段，不复制对话/草稿/确认流程。
+    // 唯一服务绑定表。新增模块只声明 DTO、服务绑定和目录字段，不复制对话/待确认操作/确认流程。
     this.adapters = {
       demo: {
         createDto: CreateDemoDto,
@@ -110,7 +110,7 @@ export class AgentBusinessService {
           qa.create(
             {
               ...d,
-              status: 'draft',
+              isActive: false,
             } as unknown as CreateKnowledgeStandardQaDto,
             m,
           ),
@@ -318,7 +318,7 @@ export class AgentBusinessService {
   async query(key: string, input: Record<string, unknown>, user: AuthUser) {
     const tool = this.requireTool(key, user);
     if (tool.operation === 'create')
-      throw new BadRequestException('写入工具必须经过草稿确认');
+      throw new BadRequestException('写入工具必须经过待确认操作确认');
     const data = this.validated(key, input);
     const adapter = this.adapters[tool.moduleKey];
     const result =

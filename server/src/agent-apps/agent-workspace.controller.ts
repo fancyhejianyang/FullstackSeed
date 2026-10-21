@@ -21,12 +21,12 @@ import {
 } from '../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator';
 import {
-  ConfirmAgentDraftDto,
+  ConfirmAgentPendingActionDto,
   CreateAgentSessionDto,
   QueryAgentMessageDto,
   QueryAgentSessionDto,
   SendAgentMessageDto,
-  UpdateAgentDraftDto,
+  UpdateAgentPendingActionDto,
 } from './dto/agent-app.dto';
 import { AgentWorkspaceService } from './agent-workspace.service';
 
@@ -125,33 +125,33 @@ export class AgentWorkspaceController {
     response.send(image.data);
   }
 
-  @Patch('drafts/:id')
-  @ApiOperation({ summary: '按版本修改本人录入草稿' })
-  updateDraft(
+  @Patch('pending-actions/:id')
+  @ApiOperation({ summary: '按版本修改本人待确认操作' })
+  updatePendingAction(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateAgentDraftDto,
+    @Body() dto: UpdateAgentPendingActionDto,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.service.updateDraft(id, dto, user);
+    return this.service.updatePendingAction(id, dto, user);
   }
 
-  @Post('drafts/:id/confirm')
-  @ApiOperation({ summary: '确认并幂等提交本人录入草稿' })
-  confirmDraft(
+  @Post('pending-actions/:id/confirm')
+  @ApiOperation({ summary: '确认并幂等提交本人待确认操作' })
+  confirmPendingAction(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: ConfirmAgentDraftDto,
+    @Body() dto: ConfirmAgentPendingActionDto,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.service.confirmDraft(id, dto, user);
+    return this.service.confirmPendingAction(id, dto, user);
   }
 
-  @Post('drafts/:id/cancel')
-  @ApiOperation({ summary: '取消本人尚未提交的录入草稿' })
-  cancelDraft(
+  @Post('pending-actions/:id/cancel')
+  @ApiOperation({ summary: '取消本人尚未提交的待确认操作' })
+  cancelPendingAction(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.service.cancelDraft(id, user);
+    return this.service.cancelPendingAction(id, user);
   }
 
   @Get('executions/request/:requestId')

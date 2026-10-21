@@ -43,7 +43,6 @@ const ADMIN_PERMISSION_MODULES = [
   'AiWorkflow',
   'Product',
   'ProductSku',
-  'ApprovalRequest',
   'CustomerService',
   'AgentApp',
   'AgentWorkspace',

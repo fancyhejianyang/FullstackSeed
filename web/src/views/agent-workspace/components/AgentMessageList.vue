@@ -3,11 +3,11 @@ import { computed, nextTick, ref, watch } from "vue";
 import Button from "@/components/Button.vue";
 import type { ProductOption } from "@/api/productCatalog";
 import type {
-  AgentDraft,
+  AgentPendingAction,
   AgentExecution,
   AgentMessage,
 } from "@/api/agentWorkspace";
-import AgentDraftCard from "./AgentDraftCard.vue";
+import AgentPendingActionCard from "./AgentPendingActionCard.vue";
 import AgentExecutionStatus from "./AgentExecutionStatus.vue";
 import AgentQueryCard from "./AgentQueryCard.vue";
 import AgentBusinessQueryCard from "./AgentBusinessQueryCard.vue";
@@ -24,7 +24,7 @@ const props = defineProps<{
     prompt: string;
   }>;
   messages: AgentMessage[];
-  drafts: AgentDraft[];
+  pendingActions: AgentPendingAction[];
   executions: AgentExecution[];
   products: ProductOption[];
   busy?: boolean;
@@ -37,51 +37,51 @@ const props = defineProps<{
   } | null;
 }>();
 const emit = defineEmits<{
-  updateDraft: [draft: AgentDraft, data: AgentDraft["data"]];
-  confirmDraft: [draft: AgentDraft];
-  cancelDraft: [draft: AgentDraft];
+  updatePendingAction: [pendingAction: AgentPendingAction, data: AgentPendingAction["data"]];
+  confirmPendingAction: [pendingAction: AgentPendingAction];
+  cancelPendingAction: [pendingAction: AgentPendingAction];
   prompt: [prompt: string];
   loadOlder: [];
 }>();
 const scroller = ref<HTMLElement>();
 
-const draftMap = computed(
-  () => new Map(props.drafts.map((item) => [item.id, item])),
+const pendingActionMap = computed(
+  () => new Map(props.pendingActions.map((item) => [item.id, item])),
 );
 const executionMap = computed(
   () => new Map(props.executions.map((item) => [item.id, item])),
 );
-const latestDraftMessageMap = computed(() => {
+const latestPendingActionMessageMap = computed(() => {
   const result = new Map<number, number>();
   props.messages.forEach((message) => {
-    const draftId = message.structuredData?.draftId;
-    if (draftId) result.set(draftId, message.id);
+    const pendingActionId = message.structuredData?.pendingActionId;
+    if (pendingActionId) result.set(pendingActionId, message.id);
   });
   return result;
 });
 
-function draftFor(message: AgentMessage) {
-  const id = message.structuredData?.draftId;
-  return id ? draftMap.value.get(id) : undefined;
+function pendingActionFor(message: AgentMessage) {
+  const id = message.structuredData?.pendingActionId;
+  return id ? pendingActionMap.value.get(id) : undefined;
 }
 function executionFor(message: AgentMessage) {
   return message.executionId
     ? executionMap.value.get(message.executionId)
     : undefined;
 }
-function showDraftCard(message: AgentMessage) {
-  const id = message.structuredData?.draftId;
-  return Boolean(id && latestDraftMessageMap.value.get(id) === message.id);
+function showPendingActionCard(message: AgentMessage) {
+  const id = message.structuredData?.pendingActionId;
+  return Boolean(id && latestPendingActionMessageMap.value.get(id) === message.id);
 }
 
-function forwardDraftUpdate(draft: AgentDraft, data: AgentDraft["data"]) {
-  emit("updateDraft", draft, data);
+function forwardPendingActionUpdate(pendingAction: AgentPendingAction, data: AgentPendingAction["data"]) {
+  emit("updatePendingAction", pendingAction, data);
 }
 
 watch(
   () => [
     props.messages[props.messages.length - 1]?.id ?? 0,
-    props.drafts.map((item) => item.version).join(","),
+    props.pendingActions.map((item) => item.version).join(","),
     props.processing?.clientMessageId,
   ],
   async () => {
@@ -145,20 +145,20 @@ watch(
             <div class="message-list__author">
               {{ message.role === "user" ? "我" : agentName }}
             </div>
-            <template v-if="showDraftCard(message) && draftFor(message)">
+            <template v-if="showPendingActionCard(message) && pendingActionFor(message)">
               <div
-                v-if="message.messageType === 'draft' && message.content"
+                v-if="message.messageType === 'pending_action' && message.content"
                 class="message-list__bubble"
               >
                 {{ message.content }}
               </div>
-              <AgentDraftCard
-                :draft="draftFor(message)!"
+              <AgentPendingActionCard
+                :pendingAction="pendingActionFor(message)!"
                 :products="products"
                 :busy="busy"
-                @update="forwardDraftUpdate"
-                @confirm="emit('confirmDraft', $event)"
-                @cancel="emit('cancelDraft', $event)"
+                @update="forwardPendingActionUpdate"
+                @confirm="emit('confirmPendingAction', $event)"
+                @cancel="emit('cancelPendingAction', $event)"
               />
             </template>
             <AgentBusinessQueryCard

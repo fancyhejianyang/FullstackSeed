@@ -1,19 +1,16 @@
 import request from '@/utils/request';
 
-export type KnowledgeStandardQaStatus = 'draft' | 'pending' | 'published' | 'disabled';
-
 export interface KnowledgeStandardQa {
   id: number;
   question: string;
   aliases: string[] | null;
   answer: string;
-  status: KnowledgeStandardQaStatus;
+  isActive: boolean;
   effectiveAt: string | null;
   expiresAt: string | null;
   sourceChatMessageId: number | null;
   sourceChunkIds: number[] | null;
   version: number;
-  reviewedAt: string | null;
   hitCount: number;
   lastHitAt: string | null;
   createdAt: string;
@@ -29,24 +26,17 @@ export interface QueryKnowledgeStandardQaParams {
   page?: number;
   pageSize?: number;
   keyword?: string;
-  status?: KnowledgeStandardQaStatus | '';
+  isActive?: boolean | '';
 }
 
 export interface KnowledgeStandardQaForm {
   question: string;
   aliases?: string[];
   answer: string;
-  status?: KnowledgeStandardQaStatus;
+  isActive?: boolean;
   sourceChatMessageId?: number | null;
   sourceChunkIds?: number[];
 }
-
-export const knowledgeStandardQaStatusOptions = [
-  { label: '草稿', value: 'draft' },
-  { label: '待审批', value: 'pending' },
-  { label: '已发布', value: 'published' },
-  { label: '已停用', value: 'disabled' },
-] as const;
 
 export function getKnowledgeStandardQas(params: QueryKnowledgeStandardQaParams) {
   return request.get<unknown, KnowledgeStandardQaListResult>('/knowledge-standard-qas', {

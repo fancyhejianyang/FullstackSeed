@@ -351,7 +351,7 @@ export class SendAgentMessageDto {
   clientMessageId: string;
 }
 
-export class UpdateAgentDraftDto {
+export class UpdateAgentPendingActionDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
@@ -361,7 +361,7 @@ export class UpdateAgentDraftDto {
   data: Record<string, unknown>;
 }
 
-export class ConfirmAgentDraftDto {
+export class ConfirmAgentPendingActionDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)

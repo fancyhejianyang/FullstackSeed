@@ -1,12 +1,12 @@
 import type {
   AgentActionType,
-  AgentSkuDraftData,
+  AgentSkuPendingActionData,
 } from './agent-apps.constants';
 
 export interface AgentActionDecision {
   type: AgentActionType;
   queryBeforeWrite: boolean;
-  // 确认表达只能定位真实草稿；不能作为绕过版本/幂等校验的写入凭证。
+  // 确认表达只能定位待确认操作；不能作为绕过版本/幂等校验的写入凭证。
   writeIntent?: 'review' | 'unsupported';
 }
 
@@ -19,7 +19,7 @@ const KNOWLEDGE_QUESTION_PATTERN =
 
 export function classifyAgentAction(
   content: string,
-  hasActiveDraft = false,
+  hasActivePendingAction = false,
 ): AgentActionDecision {
   const text = content.trim();
   const confirmation = text.replace(/[\s，,。.!！]/g, '');
@@ -28,19 +28,19 @@ export function classifyAgentAction(
     /^(?:好的?|符合|没问题|没有问题|信息无误|核对无误|确认无误|确认|同意)?(?:可以|请|现在|直接|确认|同意)?(?:入库|录入|提交|保存)(?:吧|即可)?$/.test(
       confirmation,
     );
-  const draftAcknowledgement =
-    hasActiveDraft &&
+  const pendingActionAcknowledgement =
+    hasActivePendingAction &&
     /^(?:好的?|符合|没问题|信息无误|核对无误|确认|可以|同意)$/.test(
       confirmation,
     );
-  if (explicitConfirmation || draftAcknowledgement) {
+  if (explicitConfirmation || pendingActionAcknowledgement) {
     return {
-      type: hasActiveDraft ? 'prepare_write' : 'clarify',
+      type: hasActivePendingAction ? 'prepare_write' : 'clarify',
       queryBeforeWrite: false,
       writeIntent: 'review',
     };
   }
-  // 否定、询问或假设不能当作创建/修改草稿的指令。
+  // 否定、询问或假设不能当作创建/修改待确认操作的指令。
   if (
     /不要|不用|不需要|不能|不可以|不可|不允许|不确认|不同意|暂不|先不|别.{0,8}(?:新增|创建|入库|录入|保存|提交)/.test(
       text,
@@ -72,7 +72,7 @@ export function classifyAgentAction(
     };
   }
   if (
-    hasActiveDraft &&
+    hasActivePendingAction &&
     /修改|改成|改为|补充|选择产品|产品是|规格|颜色|容量|名称|编码/.test(text)
   ) {
     return { type: 'prepare_write', queryBeforeWrite: false };
@@ -86,7 +86,7 @@ export function classifyAgentAction(
   return { type: 'answer', queryBeforeWrite: false };
 }
 
-export function extractSkuDraftPatch(content: string) {
+export function extractSkuPendingActionPatch(content: string) {
   const text = content.trim();
   const specifications: Record<string, unknown> = {};
   const pairPattern = /([\p{L}\p{N}_-]{1,20})\s*[:：=]\s*([^,，;；\n。]+)/gu;
@@ -133,7 +133,7 @@ export function extractSkuDraftPatch(content: string) {
   };
 }
 
-export function validateSkuDraft(data: AgentSkuDraftData) {
+export function validateSkuPendingAction(data: AgentSkuPendingActionData) {
   const missingFields: string[] = [];
   const validationErrors: string[] = [];
   if (!Number.isInteger(data.productId) || Number(data.productId) < 1) {

@@ -321,23 +321,6 @@ const BASE_SEED_MENUS: SeedMenu[] = [
     isSystem: true,
   },
   {
-    name: '协作中心',
-    path: '/collaboration-center',
-    icon: 'Connection',
-    sort: 78,
-    permissionCode: 'ApprovalRequest.read',
-    isSystem: true,
-  },
-  {
-    name: '审批管理',
-    path: '/collaboration-center/approvals',
-    icon: '',
-    sort: 10,
-    permissionCode: 'ApprovalRequest.read',
-    isSystem: true,
-    parentPath: '/collaboration-center',
-  },
-  {
     name: '配置菜单',
     path: '/system-config/menu',
     icon: 'Operation',

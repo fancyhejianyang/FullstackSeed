@@ -39,7 +39,7 @@ function display(value: unknown) {
     </el-descriptions>
     <router-link :to="result.detailPath">打开业务管理页面</router-link>
     <p class="business-result__hint">
-      可继续输入“查看 ID 详情”或“查询下一页”；新增数据需要生成草稿并确认。
+      可继续输入“查看 ID 详情”或“查询下一页”；新增数据需要生成待确认操作并确认。
     </p>
   </section>
 </template>

@@ -71,11 +71,7 @@ export interface DashboardHome {
 }
 export interface DashboardConfiguration {
   revision: number;
-  publishedVersion: number;
-  draft: WidgetConfig[];
-  published: WidgetConfig[];
-  canRollback: boolean;
-  publishedAt: string | null;
+  widgets: WidgetConfig[];
   definitions: WidgetDefinition[];
 }
 
@@ -91,21 +87,9 @@ export function getDashboardConfiguration() {
 export function saveDashboardConfiguration(
   revision: number,
   widgets: WidgetConfig[],
-  publish = false,
 ) {
-  return publish
-    ? request.post<unknown, DashboardConfiguration>(
-        '/dashboard/config/publish',
-        { revision, widgets },
-      )
-    : request.put<unknown, DashboardConfiguration>('/dashboard/config', {
-        revision,
-        widgets,
-      });
-}
-export function rollbackDashboardConfiguration(revision: number) {
-  return request.post<unknown, DashboardConfiguration>(
-    '/dashboard/config/rollback',
-    { revision },
-  );
+  return request.put<unknown, DashboardConfiguration>('/dashboard/config', {
+    revision,
+    widgets,
+  });
 }

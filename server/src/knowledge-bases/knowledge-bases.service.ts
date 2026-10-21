@@ -149,7 +149,11 @@ export class KnowledgeBasesService implements OnModuleInit {
       throw new BadRequestException('OCR 功能配置缺少 MinerU 配置');
     }
     if (!config.providerId || !config.model?.trim()) {
-      throw new BadRequestException(config.useMineru ? '请在 OCR 功能配置中补充 MinerU 整理模型账号和模型' : 'OCR 功能配置缺少大模型账号或视觉模型');
+      throw new BadRequestException(
+        config.useMineru
+          ? '请在 OCR 功能配置中补充 MinerU 整理模型账号和模型'
+          : 'OCR 功能配置缺少大模型账号或视觉模型',
+      );
     }
     return config;
   }
@@ -261,7 +265,12 @@ export class KnowledgeBasesService implements OnModuleInit {
     }
 
     if (base?.parseStatus === 'processing') {
-      const content = await this.refineMineruMarkdown(this.resolveMineruParsedContent(result), undefined, document, base);
+      const content = await this.refineMineruMarkdown(
+        this.resolveMineruParsedContent(result),
+        undefined,
+        document,
+        base,
+      );
       const savedDocument = await this.saveBaseDocument(
         base,
         content,
@@ -1068,7 +1077,7 @@ export class KnowledgeBasesService implements OnModuleInit {
         sourceType: dto.sourceType?.trim() || 'manual',
         sourceName: dto.sourceName?.trim() ?? '',
         content: dto.content?.trim() || null,
-        status: dto.status?.trim() || 'draft',
+        status: dto.status?.trim() || 'empty',
         description: dto.description?.trim() || null,
       }),
     );
@@ -1352,11 +1361,7 @@ export class KnowledgeBasesService implements OnModuleInit {
       if (ocrConfig.useMineru) {
         return this.executeDocumentThirdPartyParse(document, dto, ocrConfig);
       }
-      return this.executeDocumentVisionOcrParse(
-        document,
-        dto,
-        ocrConfig,
-      );
+      return this.executeDocumentVisionOcrParse(document, dto, ocrConfig);
     }
     return this.executeDocumentTextModelParse(
       document,
@@ -1607,7 +1612,7 @@ export class KnowledgeBasesService implements OnModuleInit {
     if (dto.content !== undefined)
       document.content = dto.content.trim() || null;
     if (dto.status !== undefined)
-      document.status = dto.status.trim() || 'draft';
+      document.status = dto.status.trim() || 'empty';
     if (dto.description !== undefined) {
       document.description = dto.description.trim() || null;
     }
@@ -2063,9 +2068,9 @@ export class KnowledgeBasesService implements OnModuleInit {
     fileUrl?: string | null,
   ) {
     if (contentType === 'text') {
-      return contentText?.trim() ? 'ready' : 'draft';
+      return contentText?.trim() ? 'ready' : 'empty';
     }
-    return fileUrl?.trim() ? 'uploaded' : 'draft';
+    return fileUrl?.trim() ? 'uploaded' : 'empty';
   }
 
   private async readTextSource(fileUrl: string, fileName?: string | null) {
@@ -2528,7 +2533,12 @@ export class KnowledgeBasesService implements OnModuleInit {
         taskId: task.taskId,
         markdownLength: result.markdown.length,
       });
-      const content = await this.refineMineruMarkdown(this.resolveMineruParsedContent(result), ocrConfig, document, base);
+      const content = await this.refineMineruMarkdown(
+        this.resolveMineruParsedContent(result),
+        ocrConfig,
+        document,
+        base,
+      );
       return this.enhanceMineruWordContentWithSourceLinks({
         content,
         contentType: base.contentType,
@@ -2973,7 +2983,11 @@ export class KnowledgeBasesService implements OnModuleInit {
     if (!markdown.trim()) {
       throw new BadRequestException(this.buildMineruEmptyContentMessage(raw));
     }
-    const content = await this.refineMineruMarkdown(markdown, ocrConfig, document);
+    const content = await this.refineMineruMarkdown(
+      markdown,
+      ocrConfig,
+      document,
+    );
     document.content = content;
     document.status = 'parsed';
     document.sourceType = KNOWLEDGE_PARSE_MODE.ai;

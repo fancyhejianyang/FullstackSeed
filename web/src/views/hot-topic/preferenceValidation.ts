@@ -1,6 +1,6 @@
 import type { HotOptions, HotPreference } from '@/api/hotTopic';
 
-/** An incomplete preference draft must never prevent disabling a schedule. */
+/** An incomplete preference form must never prevent disabling a schedule. */
 export function scheduleValidationError(
   preference: HotPreference,
   options: HotOptions,

@@ -50,8 +50,8 @@ test("labels follow actual phases; missing/failed progress never invents a searc
     "正在搜索业务数据",
   );
   assert.equal(
-    agentProgressText(progress("running", "a", "preparing_draft")),
-    "正在整理录入草稿",
+    agentProgressText(progress("running", "a", "preparing_confirmation")),
+    "正在整理待确认操作",
   );
   assert.equal(
     agentProgressText(progress("running", "a", "generating")),

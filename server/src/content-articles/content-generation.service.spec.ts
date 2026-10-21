@@ -70,7 +70,7 @@ function setup() {
     callChat: jest.fn().mockResolvedValue({
       isSuccess: true,
       answer: JSON.stringify({
-        outcome: 'draft',
+        outcome: 'completed',
         title: '新拟的发布标题',
         body: ' 新正文 ',
         notes: ['发布前确认来源日期'],
@@ -748,7 +748,7 @@ describe('持久化文章生成任务', () => {
       /当前服务器时间为 \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/,
     );
     expect(prompt).toContain('任务提交时间为 2026-10-19 00:30:00');
-    expect(prompt).toContain('默认直接输出 draft 正文');
+    expect(prompt).toContain('默认直接输出 completed 正文');
     expect(h.providers.callChat).toHaveBeenCalledTimes(1);
   });
   it('格式写入任务快照，后续配置修改不会影响已排队任务', async () => {
@@ -1085,7 +1085,7 @@ describe('持久化文章生成任务', () => {
     h.providers.callChat.mockResolvedValue({
       isSuccess: true,
       answer: JSON.stringify({
-        outcome: 'draft',
+        outcome: 'completed',
         body: '无标题正文',
         notes: [],
       }),

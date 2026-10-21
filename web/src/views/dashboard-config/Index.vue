@@ -9,7 +9,6 @@ import { useUserStore } from '@/stores/user';
 import {
   getDashboardConfiguration,
   saveDashboardConfiguration,
-  rollbackDashboardConfiguration,
   type DashboardConfiguration,
   type WidgetConfig,
 } from '@/api/dashboard';
@@ -62,7 +61,7 @@ function apply(value: DashboardConfiguration) {
   clearDrag();
   orderMessage.value = '';
   config.value = value;
-  const known = value.draft.filter((w) =>
+  const known = value.widgets.filter((w) =>
     value.definitions.some((d) => d.key === w.widgetKey),
   );
   widgets.value = [
@@ -94,32 +93,16 @@ async function load() {
     loading.value = false;
   }
 }
-async function save(publish: boolean) {
+async function save() {
   if (!config.value || !canEdit.value || busy.value || loading.value)
     return;
   clearDrag();
   busy.value = true;
   try {
     apply(
-      await saveDashboardConfiguration(
-        config.value.revision,
-        widgets.value,
-        publish,
-      ),
+      await saveDashboardConfiguration(config.value.revision, widgets.value),
     );
-    ElMessage.success(publish ? '首页配置已生效' : '草稿已保存');
-  } finally {
-    busy.value = false;
-  }
-}
-async function rollback() {
-  if (!config.value || !canEdit.value || busy.value || loading.value)
-    return;
-  clearDrag();
-  busy.value = true;
-  try {
-    apply(await rollbackDashboardConfiguration(config.value.revision));
-    ElMessage.success('已回退首页版本');
+    ElMessage.success('首页配置已保存并生效');
   } finally {
     busy.value = false;
   }
@@ -137,7 +120,7 @@ function applyOrder(next: WidgetConfig[], id?: string) {
   if (next === widgets.value) return;
   widgets.value = next;
   const index = next.findIndex((widget) => widget.instanceId === id);
-  orderMessage.value = `已将“${next[index]?.title ?? '板块'}”移至第 ${index + 1} 位，保存并发布后生效。`;
+  orderMessage.value = `已将“${next[index]?.title ?? '板块'}”移至第 ${index + 1} 位，保存配置后生效。`;
 }
 function clearDrag() {
   dragSource.value = null;
@@ -255,9 +238,7 @@ onBeforeUnmount(() => {
       <div>
         <h2>选择首页板块</h2>
         <p>
-          已选 {{ widgets.filter((w) => w.enabled).length }} 个 · 已发布 v{{
-            config?.publishedVersion ?? 0
-          }}
+          已启用 {{ widgets.filter((w) => w.enabled).length }} 个
           <span v-if="dirty">· 有未保存修改</span>
         </p>
       </div>
@@ -270,29 +251,14 @@ onBeforeUnmount(() => {
         <Button
           perm="DashboardConfig.update"
           :disabled="busy || !config || loading"
-          @click="(_, done) => done(save(false))"
-          >保存草稿</Button
-        >
-        <Button
-          perm="DashboardConfig.update"
-          :disabled="busy || !config || loading"
-          @click="(_, done) => done(save(true))"
-          >保存并发布</Button
-        >
-        <Button
-          v-if="config?.canRollback"
-          perm="DashboardConfig.update"
-          :disabled="busy || loading"
-          confirm
-          confirm-text="回退到上一个已发布版本？当前草稿将被替换。"
-          @click="(_, done) => done(rollback())"
-          >回退版本</Button
+          @click="(_, done) => done(save())"
+          >保存配置</Button
         >
       </div>
     </div>
     <p class="config-help">
       拖动板块右上角手柄排序，也可使用上移 /
-      下移。勾选及排序在保存并发布后生效，首页按访问者权限展示数据。
+      下移。启用、停用及排序在保存配置后生效，首页按访问者权限展示数据。
     </p>
     <p
       v-if="orderMessage"

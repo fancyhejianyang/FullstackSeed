@@ -48,7 +48,7 @@ export type AgentMessageRole = (typeof AGENT_MESSAGE_ROLES)[number];
 export const AGENT_MESSAGE_TYPES = [
   'text',
   'query_result',
-  'draft',
+  'pending_action',
   'receipt',
   'status',
   'error',
@@ -63,7 +63,7 @@ export const AGENT_ACTION_TYPES = [
 ] as const;
 export type AgentActionType = (typeof AGENT_ACTION_TYPES)[number];
 
-export const AGENT_DRAFT_STATUSES = [
+export const AGENT_PENDING_ACTION_STATUSES = [
   'collecting',
   'pending_confirmation',
   'submitting',
@@ -72,7 +72,8 @@ export const AGENT_DRAFT_STATUSES = [
   'expired',
   'failed',
 ] as const;
-export type AgentDraftStatus = (typeof AGENT_DRAFT_STATUSES)[number];
+export type AgentPendingActionStatus =
+  (typeof AGENT_PENDING_ACTION_STATUSES)[number];
 
 export const AGENT_EXECUTION_STATUSES = [
   'queued',
@@ -94,7 +95,7 @@ export const AGENT_EXECUTION_ACTIVE_STATUSES: AgentExecutionStatus[] = [
   'verifying',
 ];
 
-export interface AgentSkuDraftData extends Record<string, unknown> {
+export interface AgentSkuPendingActionData extends Record<string, unknown> {
   productId: number | null;
   productName: string;
   skuCode: string;

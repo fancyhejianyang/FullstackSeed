@@ -8,7 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, IsNull, LessThanOrEqual, Repository } from 'typeorm';
 import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
 import { AGENT_EXECUTION_ACTIVE_STATUSES } from './agent-apps.constants';
-import { AgentDraft } from './entities/agent-draft.entity';
+import { AgentPendingAction } from './entities/agent-pending-action.entity';
 import { AgentExecution } from './entities/agent-execution.entity';
 import { AgentMessage } from './entities/agent-message.entity';
 import { AgentSession } from './entities/agent-session.entity';
@@ -148,11 +148,11 @@ export class AgentExecutionRuntimeService
         },
       );
       if (!updated.affected) return;
-      if (execution.draftId) {
+      if (execution.pendingActionId) {
         await manager
-          .getRepository(AgentDraft)
+          .getRepository(AgentPendingAction)
           .update(
-            { id: execution.draftId, status: 'submitting' },
+            { id: execution.pendingActionId, status: 'submitting' },
             { status: 'failed' },
           );
       }

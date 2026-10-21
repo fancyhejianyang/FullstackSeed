@@ -258,18 +258,6 @@ const routes: RouteRecordRaw[] = [
         meta: { title: "业务数据", permission: "Product.read" },
       },
       {
-        path: "collaboration-center",
-        name: "collaboration-center",
-        redirect: "/collaboration-center/approvals",
-        meta: { title: "协作中心", permission: "ApprovalRequest.read" },
-      },
-      {
-        path: "collaboration-center/approvals",
-        name: "collaboration-center-approvals",
-        component: () => import("@/views/approval-request/Index.vue"),
-        meta: { title: "审批管理", permission: "ApprovalRequest.read" },
-      },
-      {
         path: "agent-management/debug",
         name: "agent-management-debug",
         component: () => import("@/views/knowledge-ai-chat/Index.vue"),

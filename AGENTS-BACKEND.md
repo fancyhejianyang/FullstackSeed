@@ -112,6 +112,7 @@ demo 覆盖的能力：
 - **响应结构**：`TransformInterceptor` 包 `{ statusCode, data, success, message, timestamp }`；`HttpExceptionFilter` 包错误
 - **鉴权**：默认全局 `JwtAuthGuard`；公开加 `@Public()`；权限用 `@RequirePermissions('Module.action')`
 - **权限码**：`Module.action` 首字母大写点号，动作统一 `read/create/update/delete/batchDelete`
+- **业务资源状态**：默认使用 `isActive:boolean`（数据库 `tinyint`，默认 `true`）表达启用/关闭，DTO 查询参数需显式转换布尔值。禁止为普通配置或内容资源增加 `draft/published`、`isDraft/isPublished`、草稿副本、发布版本或发布/回退接口；确有异步任务、人工确认或审批流程时，使用 `pending/running/failed`、`PendingAction` 等真实过程语义，并在需求中明确例外。
 - **默认超管**：开发默认 `root/root123`，生产环境必须通过 `ADMIN_PASSWORD` 显式配置；用户表空时启动 seed 自动创建；`isAdmin` 放行一切
 - **SEED_PERMISSIONS 兜底**：至少覆盖 RBAC 基建 + 各业务模块 5 个动作；启动会**清理不合规旧权限**
 - **账号模块**：`users` + `roles` + `permissions` 为必迁基建，详见 `MIGRATION.md`
@@ -124,3 +125,4 @@ demo 覆盖的能力：
 - **菜单权限归属**：业务菜单 seed 必须显式配置 `permissionCode:'Module.read'`，避免权限点与菜单归属不清晰
 - **不要在 controller 里写业务**：所有查询组装/事务/领域校验放到 service
 - **软删除**：走 `softDelete`（`BaseEntity` 已提供 `deletedAt`），不要 `remove` 硬删
+- **不要复制草稿发布模型**：新增模块从 demo 复制后保留 `isActive` 即可；历史迁移可读取旧字段完成一次性转换，但新实体、DTO、接口、菜单和测试不得继续暴露“草稿/发布”生命周期。

@@ -69,7 +69,7 @@ describe('文章成稿协议', () => {
       '身份称谓（如新闻工作者）不自动附加采访、核验或审核流程',
     );
     expect(prompt).toContain(
-      '默认直接输出 draft 正文，不设置新闻类素材审核门槛',
+      '默认直接输出 completed 正文，不设置新闻类素材审核门槛',
     );
     expect(prompt).toContain('不输出核查清单');
     expect(prompt).toContain('完全无法理解写作主题');
@@ -116,7 +116,7 @@ describe('文章成稿协议', () => {
   });
   it('只提取正文与编辑提示，不将协议标记或提示加入正文', () => {
     const expected = {
-      outcome: 'draft',
+      outcome: 'completed',
       body: '普通小标题\n\n第一段。\n\n第二段。',
       notes: ['核对日期'],
     };
@@ -125,7 +125,7 @@ describe('文章成稿协议', () => {
       title: null,
     });
     const markdown = {
-      outcome: 'draft',
+      outcome: 'completed',
       body: '### 小标题\n\n**正文**',
       notes: [],
     };
@@ -154,30 +154,34 @@ describe('文章成稿协议', () => {
     'null',
     '[]',
     '{',
-    '{"outcome":"draft","body":"正文"}',
-    JSON.stringify({ outcome: ['draft'], body: '', notes: ['提示'] }),
-    JSON.stringify({ outcome: 'draft', body: ' ', notes: [] }),
+    '{"outcome":"completed","body":"正文"}',
+    JSON.stringify({ outcome: ['completed'], body: '', notes: ['提示'] }),
+    JSON.stringify({ outcome: 'completed', body: ' ', notes: [] }),
     JSON.stringify({
       outcome: 'needs_input',
       body: '这不是正文',
       notes: ['提示'],
     }),
     JSON.stringify({ outcome: 'needs_input', body: '', notes: [] }),
-    JSON.stringify({ outcome: 'draft', body: '正文', notes: [123] }),
-    JSON.stringify({ outcome: 'draft', body: '正文', notes: [' '] }),
+    JSON.stringify({ outcome: 'completed', body: '正文', notes: [123] }),
+    JSON.stringify({ outcome: 'completed', body: '正文', notes: [' '] }),
     JSON.stringify({
-      outcome: 'draft',
+      outcome: 'completed',
       body: '正文',
       notes: ['a'.repeat(501)],
     }),
     JSON.stringify({
-      outcome: 'draft',
+      outcome: 'completed',
       body: '正文',
       notes: Array(7).fill('提示'),
     }),
-    JSON.stringify({ outcome: 'draft', body: 'a'.repeat(50001), notes: [] }),
     JSON.stringify({
-      outcome: 'draft',
+      outcome: 'completed',
+      body: 'a'.repeat(50001),
+      notes: [],
+    }),
+    JSON.stringify({
+      outcome: 'completed',
       body: '正文',
       notes: [],
       reasoning: '内部推理',
@@ -201,7 +205,7 @@ describe('文章成稿协议', () => {
     expect(prompt).toContain('body 不重复总标题');
     expect(prompt).toContain('title 为单行纯文本');
     const answer = {
-      outcome: 'draft',
+      outcome: 'completed',
       title: '  新拟的发布标题  ',
       body: ' 正文 ',
       notes: [],
@@ -212,7 +216,7 @@ describe('文章成稿协议', () => {
       body: '正文',
     });
     const legacy = JSON.stringify({
-      outcome: 'draft',
+      outcome: 'completed',
       body: '旧正文',
       notes: [],
     });
@@ -224,7 +228,7 @@ describe('文章成稿协议', () => {
     expect(
       parseContentWritingResponse(
         JSON.stringify({
-          outcome: 'draft',
+          outcome: 'completed',
           title: '中'.repeat(160),
           body: '正文',
           notes: [],
@@ -247,7 +251,12 @@ describe('文章成稿协议', () => {
   ])('无效标题拒绝 (%#)，不会自动截断或提取正文首行', (title) => {
     expect(
       parseContentWritingResponse(
-        JSON.stringify({ outcome: 'draft', title, body: '正文', notes: [] }),
+        JSON.stringify({
+          outcome: 'completed',
+          title,
+          body: '正文',
+          notes: [],
+        }),
         true,
       ),
     ).toBeNull();

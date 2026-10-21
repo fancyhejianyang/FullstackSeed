@@ -497,8 +497,8 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
         if (parsed) {
           status =
             parsed.outcome === 'needs_input' ? 'needs_input' : 'succeeded';
-          result = parsed.outcome === 'draft' ? parsed.body : null;
-          generatedTitle = parsed.outcome === 'draft' ? parsed.title : null;
+          result = parsed.outcome === 'completed' ? parsed.body : null;
+          generatedTitle = parsed.outcome === 'completed' ? parsed.title : null;
           editorNotes = parsed.notes;
           errorMessage = null;
         } else {

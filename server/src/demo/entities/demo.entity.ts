@@ -1,6 +1,6 @@
 import { Entity, Column } from 'typeorm';
 import { BaseEntity } from '../../common/entities/base.entity';
-import type { DemoStatus, DemoCategory } from '../demo.constants';
+import type { DemoCategory } from '../demo.constants';
 
 const decimalTransformer = {
   to: (value?: number | null) => value ?? 0,
@@ -18,11 +18,8 @@ export class Demo extends BaseEntity {
   @Column({ type: 'varchar', length: 20, default: 'original' })
   category: DemoCategory;
 
-  @Column({ type: 'varchar', length: 20, default: 'draft' })
-  status: DemoStatus;
-
-  @Column({ type: 'datetime', nullable: true })
-  publishedAt: Date | null;
+  @Column({ type: 'tinyint', default: true })
+  isActive: boolean;
 
   @Column({ type: 'simple-json', nullable: true })
   activeRange: string[] | null;

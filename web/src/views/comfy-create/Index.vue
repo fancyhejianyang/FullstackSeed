@@ -52,7 +52,7 @@ const promptBindings = computed(() =>
     ),
   ),
 );
-function initializeDraft() {
+function initializeForm() {
   composeRunToken += 1;
   composing.value = false;
   composeStage.value = "";
@@ -68,11 +68,11 @@ function initializeDraft() {
   composeNotes.value = "";
 }
 
-watch(workflowId, initializeDraft);
+watch(workflowId, initializeForm);
 
 function openCreate() {
   createVisible.value = true;
-  initializeDraft();
+  initializeForm();
 }
 
 async function composePrompt() {

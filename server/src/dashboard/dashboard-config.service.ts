@@ -1,8 +1,4 @@
-import {
-  ConflictException,
-  Injectable,
-  BadRequestException,
-} from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { DashboardConfig } from './entities/dashboard-config.entity';
 import {
@@ -25,20 +21,12 @@ export class DashboardConfigService {
       .findOneBy({ key: 'home' });
     return {
       revision: row?.revision ?? 0,
-      publishedVersion: row?.publishedVersion ?? 0,
-      draft: resolveWidgets(row?.draft),
-      published: resolveWidgets(row?.published),
-      publishedAt: row?.publishedAt?.toISOString() ?? null,
-      canRollback: !!row?.previous,
+      widgets: resolveWidgets(row?.widgets),
       definitions: DASHBOARD_WIDGETS,
     };
   }
-  async change(
-    dto: SaveDashboardDto | { revision: number },
-    action: 'save' | 'publish' | 'rollback',
-    user: AuthUser,
-  ) {
-    const widgets = 'widgets' in dto ? validateWidgets(dto.widgets) : null;
+  async save(dto: SaveDashboardDto, user: AuthUser) {
+    const widgets = validateWidgets(dto.widgets);
     await this.db.transaction(async (manager) => {
       const repo = manager.getRepository(DashboardConfig);
       await repo
@@ -47,9 +35,7 @@ export class DashboardConfigService {
         .values({
           key: 'home',
           revision: 0,
-          publishedVersion: 0,
-          draft: defaultWidgets(),
-          published: defaultWidgets(),
+          widgets: defaultWidgets(),
         })
         .orIgnore()
         // 已存在时 INSERT IGNORE 不返回主键，禁止 TypeORM 再按新实体回填。
@@ -62,44 +48,22 @@ export class DashboardConfigService {
       });
       if (row.revision !== dto.revision)
         throw new ConflictException('配置已被其他管理员更新，请刷新后重试');
-      if (action === 'rollback') {
-        if (!row.previous) throw new BadRequestException('暂无可回退版本');
-        const previous = validateWidgets(resolveWidgets(row.previous));
-        row.previous = row.published;
-        row.published = previous;
-        row.draft = previous;
-      } else {
-        if (!widgets) throw new BadRequestException('缺少配置');
-        row.draft = widgets;
-        if (action === 'publish') {
-          row.previous = row.published;
-          row.published = widgets;
-        }
-      }
+      row.widgets = widgets;
       row.revision += 1;
       row.updatedBy = user.userId;
-      if (action !== 'save') {
-        row.publishedVersion += 1;
-        row.publishedAt = new Date();
-      }
       await repo.save(row);
       await manager.getRepository(LogRecord).save({
         moduleId: 'dashboard',
         moduleName: '首页配置',
-        action,
+        action: 'save',
         recordId: String(row.id),
         operatorId: user.userId,
         operatorName: user.username,
-        summary: {
-          save: '保存首页草稿',
-          publish: '发布首页配置',
-          rollback: '回退首页配置',
-        }[action],
+        summary: '保存首页配置',
         beforeData: { revision: dto.revision },
         afterData: {
           revision: row.revision,
-          publishedVersion: row.publishedVersion,
-          enabledWidgets: row.draft.filter((w) => w.enabled).length,
+          enabledWidgets: row.widgets.filter((w) => w.enabled).length,
         },
         ip: '',
         userAgent: 'dashboard-config',

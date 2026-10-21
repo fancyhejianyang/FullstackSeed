@@ -1,16 +1,6 @@
 import { Column, Entity, Index } from 'typeorm';
 import { BaseEntity } from '../../common/entities/base.entity';
 
-export const KNOWLEDGE_STANDARD_QA_STATUSES = [
-  'draft',
-  'pending',
-  'published',
-  'disabled',
-] as const;
-
-export type KnowledgeStandardQaStatus =
-  (typeof KNOWLEDGE_STANDARD_QA_STATUSES)[number];
-
 @Entity('knowledge_standard_qas')
 export class KnowledgeStandardQa extends BaseEntity {
   @Column({ type: 'text' })
@@ -30,8 +20,8 @@ export class KnowledgeStandardQa extends BaseEntity {
   retrievalConfigId: number | null;
 
   @Index()
-  @Column({ type: 'varchar', length: 20, default: 'draft' })
-  status: KnowledgeStandardQaStatus;
+  @Column({ type: 'tinyint', default: true })
+  isActive: boolean;
 
   @Column({ type: 'datetime', nullable: true })
   effectiveAt: Date | null;
@@ -48,13 +38,9 @@ export class KnowledgeStandardQa extends BaseEntity {
   @Column({ type: 'int', default: 1 })
   version: number;
 
-  @Column({ type: 'datetime', nullable: true })
-  reviewedAt: Date | null;
-
   @Column({ type: 'int', default: 0 })
   hitCount: number;
 
   @Column({ type: 'datetime', nullable: true })
   lastHitAt: Date | null;
-
 }

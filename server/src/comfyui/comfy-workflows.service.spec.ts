@@ -151,9 +151,6 @@ describe('ComfyUI 工作流版本快照保存', () => {
       1,
     );
 
-    expect(workflowRepository.create.mock.calls[0]?.[0]).toMatchObject({
-      isPublished: true,
-    });
     expect(manager.getRepository).toHaveBeenCalledWith(ComfyWorkflowVersion);
     const versionValue = versionRepository.create.mock.calls[0]?.[0];
     expect(versionValue).toMatchObject({
@@ -265,7 +262,7 @@ describe('ComfyUI 工作流版本快照保存', () => {
 });
 
 describe('ComfyUI 工作流可用状态', () => {
-  it('保存过但处于旧草稿状态的工作流也会出现在创作选项中', async () => {
+  it('启用的工作流会出现在创作选项中', async () => {
     const workflows = {
       find: jest.fn().mockResolvedValue([
         {
@@ -278,7 +275,6 @@ describe('ComfyUI 工作流可用状态', () => {
           version: 1,
           inputBindings: [],
           isEnabled: true,
-          isPublished: false,
         },
       ]),
     };
@@ -315,7 +311,6 @@ describe('ComfyUI 工作流可用状态', () => {
       id: 1,
       version: 2,
       isEnabled: true,
-      isPublished: false,
     } as ComfyWorkflow);
 
     const result = await service.getRunnableVersion(1);

@@ -26,7 +26,7 @@ export class AgentExecution extends BaseEntity {
   messageId: number | null;
 
   @Column({ type: 'int', nullable: true })
-  draftId: number | null;
+  pendingActionId: number | null;
 
   @Column({ type: 'varchar', length: 64 })
   toolKey: AgentExecutionToolKey;

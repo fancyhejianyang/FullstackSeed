@@ -9,7 +9,7 @@ const labels: Record<AgentProgressStage, string> = {
   understanding: "正在理解需求",
   querying: "正在搜索业务数据",
   retrieving: "正在检索参考资料",
-  preparing_draft: "正在整理录入草稿",
+  preparing_confirmation: "正在整理待确认操作",
   generating: "AI 正在思考并生成回答",
   summarizing: "正在整理回答依据",
 };

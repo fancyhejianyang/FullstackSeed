@@ -7,7 +7,7 @@ import type { FormField } from '@/components/Form.vue';
 import { formatDateTime } from '@/utils/format';
 import { getDemos, deleteDemo, batchDeleteDemos, type Demo } from '@/api/demo';
 import { DicService } from '@/dic/service';
-import { DEMO_CATEGORY, DEMO_STATUS, DEMO_TAG } from '@/dic';
+import { DEMO_CATEGORY, DEMO_TAG } from '@/dic';
 import Edit from './Edit.vue';
 import View from './View.vue';
 
@@ -18,12 +18,9 @@ const tableRef = ref<{
   runBatchDelete: () => Promise<void>;
 }>();
 
-// 状态字典（用于列渲染）
-const statusDic = ref<{ label: string; value: string }[]>([]);
 const categoryDic = ref<{ label: string; value: string }[]>([]);
 const tagDic = ref<{ label: string; value: string }[]>([]);
 DicService.init(DEMO_CATEGORY, categoryDic);
-DicService.init(DEMO_STATUS, statusDic);
 DicService.init(DEMO_TAG, tagDic);
 const channelMap: Record<string, string> = {
   web: 'Web',
@@ -34,9 +31,8 @@ const channelMap: Record<string, string> = {
 // 列配置（特殊列用具名插槽 #column-[prop]）
 const columns: TableColumn[] = [
   { prop: 'title', label: '标题', minWidth: 180 },
-  { prop: 'status', label: '状态', width: 100, slot: true },
+  { prop: 'isActive', label: '状态', width: 100, slot: true },
   { prop: 'category', label: '分类', width: 120, slot: true },
-  { prop: 'publishedAt', label: '发布日期', width: 130, slot: true },
   { prop: 'contactPhone', label: '联系电话', width: 140 },
   { prop: 'email', label: '邮箱', minWidth: 180 },
   { prop: 'quantity', label: '数量', width: 90 },
@@ -53,13 +49,13 @@ const columns: TableColumn[] = [
 // 搜索栏配置
 const searchFields: FormField[] = [
   {
-    prop: 'status',
+    prop: 'isActive',
     label: '状态',
     type: 'select',
     options: [
       { label: '全部', value: '' },
-      { label: '草稿', value: 'draft' },
-      { label: '已发布', value: 'published' },
+      { label: '启用', value: true },
+      { label: '停用', value: false },
     ],
   },
   { prop: 'keyword', label: '标题', type: 'input', placeholder: '按标题搜索' },
@@ -68,10 +64,6 @@ const searchFields: FormField[] = [
 // 列表请求函数（Table 内部调用）
 function fetchDemos(params: Record<string, any>) {
   return getDemos(params);
-}
-
-function getStatusLabel(value: string) {
-  return statusDic.value.find((item) => item.value === value)?.label ?? value;
 }
 
 function getCategoryLabel(value: string) {
@@ -159,19 +151,15 @@ async function batchDeleteDemoRequest(payload: { ids: Array<string | number> }) 
       </template>
 
       <!-- 状态列 -->
-      <template #column-status="{ row }">
-        <el-tag :type="row.status === 'published' ? 'success' : 'info'">
-          {{ getStatusLabel(row.status) }}
+      <template #column-isActive="{ row }">
+        <el-tag :type="row.isActive ? 'success' : 'info'">
+          {{ row.isActive ? '启用' : '停用' }}
         </el-tag>
       </template>
 
       <!-- 分类列 -->
       <template #column-category="{ row }">
         {{ getCategoryLabel(row.category) }}
-      </template>
-
-      <template #column-publishedAt="{ row }">
-        {{ row.publishedAt || '-' }}
       </template>
 
       <template #column-unitPrice="{ row }">

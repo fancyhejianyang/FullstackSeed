@@ -49,7 +49,7 @@ const props = withDefaults(
 
 const model = defineModel<number | null>({ default: null });
 const error = ref('');
-const draftValue = ref(formatDraftValue(model.value));
+const inputBuffer = ref(formatInputBuffer(model.value));
 
 const emit = defineEmits<{
   input: [value: number | null];
@@ -61,22 +61,22 @@ const emit = defineEmits<{
   validate: [result: true | string];
 }>();
 
-const displayValue = computed(() => draftValue.value);
+const displayValue = computed(() => inputBuffer.value);
 
 watch(model, (value) => {
-  // 忽略输入值经 v-model 返回的同值同步，保留 `1.` / `1.20` / `-` 等编辑草稿。
+  // 忽略输入值经 v-model 返回的同值同步，保留 `1.` / `1.20` / `-` 等编辑缓冲值。
   // 父表单真正赋入不同值（加载、重置等）时仍正常回显。
-  if (Object.is(value, parseValue(draftValue.value))) return;
-  const nextValue = formatDraftValue(value);
-  if (draftValue.value !== nextValue) {
-    draftValue.value = nextValue;
+  if (Object.is(value, parseValue(inputBuffer.value))) return;
+  const nextValue = formatInputBuffer(value);
+  if (inputBuffer.value !== nextValue) {
+    inputBuffer.value = nextValue;
     error.value = '';
   }
 });
 
 function handleInput(value: string | number) {
   const normalized = normalizeInput(String(value));
-  draftValue.value = normalized;
+  inputBuffer.value = normalized;
   model.value = parseValue(normalized);
   error.value = '';
   emit('input', model.value);
@@ -84,21 +84,21 @@ function handleInput(value: string | number) {
 
 function handleChange(value: string | number) {
   model.value = parseValue(String(value));
-  draftValue.value = formatDraftValue(model.value);
+  inputBuffer.value = formatInputBuffer(model.value);
   validate();
   emit('change', model.value);
 }
 
 function handleBlur(event: FocusEvent) {
-  model.value = parseValue(draftValue.value);
-  draftValue.value = formatDraftValue(model.value);
+  model.value = parseValue(inputBuffer.value);
+  inputBuffer.value = formatInputBuffer(model.value);
   validate();
   emit('blur', event);
 }
 
 function handleClear() {
   model.value = null;
-  draftValue.value = '';
+  inputBuffer.value = '';
   error.value = '';
   emit('clear');
 }
@@ -108,7 +108,7 @@ function handleEnter() {
 }
 
 function parseValue(value: string): number | null {
-  // 未完成数字只保留在 draftValue 中，对外始终输出 number | null。
+  // 未完成数字只保留在 inputBuffer 中，对外始终输出 number | null。
   const normalized = normalizeInput(value);
   if (
     normalized === '' ||
@@ -135,7 +135,7 @@ function normalizeInput(value: string) {
       );
 }
 
-function formatDraftValue(value: number | null) {
+function formatInputBuffer(value: number | null) {
   return value === null || value === undefined ? '' : String(value);
 }
 

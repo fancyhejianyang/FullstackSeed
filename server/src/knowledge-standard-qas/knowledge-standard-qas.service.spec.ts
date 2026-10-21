@@ -14,7 +14,7 @@ function createQa(
     aliases,
     answer: `标准答案 #${id}`,
     retrievalConfigId,
-    status: 'published',
+    isActive: true,
     effectiveAt: null,
     expiresAt: null,
     hitCount: 2,
@@ -61,9 +61,13 @@ describe('KnowledgeStandardQasService', () => {
     expect(result?.entry).toBe(globalQa);
     expect(result?.matchedEntries.map((item) => item.id)).toEqual([10, 3]);
     expect(queryBuilder.andWhere).toHaveBeenCalledTimes(2);
-    expect(queryBuilder.andWhere.mock.calls.every(([condition]) =>
-      typeof condition === 'string' && !condition.includes('retrievalConfigId'),
-    )).toBe(true);
+    expect(
+      queryBuilder.andWhere.mock.calls.every(
+        ([condition]) =>
+          typeof condition === 'string' &&
+          !condition.includes('retrievalConfigId'),
+      ),
+    ).toBe(true);
     expect(qaRepository.update).toHaveBeenCalledWith(
       globalQa.id,
       expect.objectContaining({ hitCount: 3, lastHitAt: expect.any(Date) }),
@@ -71,9 +75,7 @@ describe('KnowledgeStandardQasService', () => {
   });
 
   it('does not return a fixed answer for a merely related question', async () => {
-    queryBuilder.getMany.mockResolvedValue([
-      createQa(1, null, ['年假有几天']),
-    ]);
+    queryBuilder.getMany.mockResolvedValue([createQa(1, null, ['年假有几天'])]);
 
     await expect(
       service.matchForChat({

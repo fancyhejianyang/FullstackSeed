@@ -1,5 +1,41 @@
 # CHANGELOG
 
+### 2026-10-21 统一业务资源启停并移除草稿生命周期
+
+- 全项目业务资源统一为启用/关闭：示例数据与标准问答改用 `isActive`，ComfyUI 工作流只保留 `isEnabled`；首页配置取消草稿、发布、回退及双份配置，单次保存立即生效。知识库文档的空内容处理阶段由 `draft` 更名为 `empty`。
+- 移除依赖标准问答草稿/发布状态的审批模块、菜单、路由和首页审批统计。历史 `approval_requests` 表不在迁移中硬删除，仅停用旧菜单，避免不可恢复地清除既有审批记录。
+- Agent 写入前人工确认能力继续保留，但实体、表、执行关联、消息类型、接口和前端卡片统一更名为“待确认操作”/`PendingAction`；迁移同步改写历史消息和执行快照字段，不降低权限、版本校验、幂等提交与事务回执要求。
+- 文章生成协议的成功结果由 `outcome=draft` 改为 `outcome=completed`；输入组件、客服未发送内容、ComfyUI 表单与手工分段等临时编辑变量不再借用草稿命名。
+- 新增生产迁移 `1793001600000-RemoveDraftLifecycle`：转换首页配置、标准问答、示例数据、ComfyUI 工作流、知识文档阶段及 Agent 待确认操作；保留可回退路径。旧迁移中的历史字段名保持不动，确保全新数据库仍能按原顺序建表后执行清理迁移。
+- 在 `AGENTS.md` 与 `AGENTS-BACKEND.md` 增加硬性规则：普通业务资源只用启用布尔字段，禁止新增草稿/发布双状态、影子副本和发布/回退接口；真实异步任务与人工确认必须按 `pending/running/PendingAction` 等过程语义命名。
+- 验证：后端实体列检查、生产构建与全量 74 suites / 624 tests 通过；前端类型检查、组件复用扫描、33 项相关交互测试与生产构建通过。Vite 仅保留既有依赖 PURE 注释和大分包告警；未执行数据库迁移、未启动服务。
+
+新增文件（4）：
+
+- `server/src/agent-apps/entities/agent-pending-action.entity.ts`
+- `server/src/migrations/1793001600000-RemoveDraftLifecycle.ts`
+- `server/src/migrations/1793001600000-RemoveDraftLifecycle.spec.ts`
+- `web/src/views/agent-workspace/components/AgentPendingActionCard.vue`
+
+修改文件（按模块归类）：
+
+- 规则与设计：`AGENTS.md`、`AGENTS-BACKEND.md`、`.design-spec.md`
+- 后端：`server/src/agent-apps/**`、`server/src/ai-command-definitions/**`、`server/src/comfyui/**`、`server/src/content-articles/**`、`server/src/dashboard/**`、`server/src/demo/**`、`server/src/knowledge-bases/**`、`server/src/knowledge-standard-qas/**`、`server/src/app.module.ts`、`server/src/menus/menus.service.ts`、`server/src/module-models/module-models.map.ts`、`server/src/users/users.service.ts` 及受契约影响的测试
+- 前端：`web/src/api/{agentWorkspace,comfyUi,dashboard,demo,knowledgeStandardQa}.ts`、`web/src/router/index.ts`、`web/src/dic/index.ts`、`web/src/components/InputNumber.vue`，以及 `agent-app`、`agent-workspace`、`comfy-create`、`content-article`、`customer-service`、`dashboard-config`、`demo`、`home`、`hot-topic`、`knowledge-base`、`knowledge-standard-qa` 相关页面与测试
+
+删除文件（10）：
+
+- `server/src/agent-apps/entities/agent-draft.entity.ts`
+- `server/src/approval-requests/approval-requests.controller.ts`
+- `server/src/approval-requests/approval-requests.module.ts`
+- `server/src/approval-requests/approval-requests.service.spec.ts`
+- `server/src/approval-requests/approval-requests.service.ts`
+- `server/src/approval-requests/dto/approval-request.dto.ts`
+- `server/src/approval-requests/entities/approval-request.entity.ts`
+- `web/src/api/approvalRequest.ts`
+- `web/src/views/agent-workspace/components/AgentDraftCard.vue`
+- `web/src/views/approval-request/Index.vue`
+
 ### 2026-10-21 修复首页配置保存异常并增加板块拖拽排序
 
 - 修复已有首页配置保存时 `Cannot update entity because entity id is not set in the entity.`：幂等初始化的 `INSERT IGNORE` 不再触发 TypeORM 实体回填；后续仍按唯一 key 加锁读取真实记录并执行版本校验，不修改既有草稿、发布版本或表结构。

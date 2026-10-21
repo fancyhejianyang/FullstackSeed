@@ -12,10 +12,7 @@ import {
   QueryKnowledgeStandardQaDto,
   UpdateKnowledgeStandardQaDto,
 } from './dto/knowledge-standard-qa.dto';
-import {
-  KnowledgeStandardQa,
-  type KnowledgeStandardQaStatus,
-} from './entities/knowledge-standard-qa.entity';
+import { KnowledgeStandardQa } from './entities/knowledge-standard-qa.entity';
 
 export interface KnowledgeStandardQaMatch {
   entry: KnowledgeStandardQa;
@@ -36,7 +33,7 @@ export class KnowledgeStandardQasService {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
     const where = {
-      ...(query.status ? { status: query.status } : {}),
+      ...(query.isActive !== undefined ? { isActive: query.isActive } : {}),
     };
     const conditions = query.keyword?.trim()
       ? [
@@ -67,29 +64,20 @@ export class KnowledgeStandardQasService {
 
   async update(id: number, dto: UpdateKnowledgeStandardQaDto) {
     const qa = await this.findEntity(id);
-    if (qa.status === 'pending') {
-      throw new BadRequestException('标准问答正在审批中，不能编辑');
-    }
     const payload = await this.toEntityPayload(dto, false);
     const changedAnswer =
       payload.answer !== undefined &&
       payload.answer.trim() !== qa.answer.trim();
-    const publishingNow =
-      payload.status === 'published' && qa.status !== 'published';
     Object.assign(qa, payload);
-    if (changedAnswer || publishingNow) {
+    if (changedAnswer) {
       qa.version += 1;
-      qa.reviewedAt = new Date();
     }
     await this.qaRepository.save(qa);
     return this.findOne(id);
   }
 
   async remove(id: number) {
-    const qa = await this.findEntity(id);
-    if (qa.status === 'pending') {
-      throw new BadRequestException('标准问答正在审批中，不能删除');
-    }
+    await this.findEntity(id);
     await this.qaRepository.softDelete(id);
     return { id };
   }
@@ -105,9 +93,6 @@ export class KnowledgeStandardQasService {
     if (entries.length !== uniqueIds.length) {
       throw new NotFoundException('部分标准问答不存在');
     }
-    if (entries.some((item) => item.status === 'pending')) {
-      throw new BadRequestException('存在正在审批中的标准问答，不能删除');
-    }
     await this.qaRepository.softDelete(uniqueIds);
     return { ids: uniqueIds };
   }
@@ -121,7 +106,7 @@ export class KnowledgeStandardQasService {
     const now = new Date();
     const entries = await this.qaRepository
       .createQueryBuilder('qa')
-      .where('qa.status = :status', { status: 'published' })
+      .where('qa.isActive = :isActive', { isActive: true })
       .andWhere('(qa.effectiveAt IS NULL OR qa.effectiveAt <= :now)', { now })
       .andWhere('(qa.expiresAt IS NULL OR qa.expiresAt >= :now)', { now })
       .orderBy('qa.id', 'DESC')
@@ -167,12 +152,8 @@ export class KnowledgeStandardQasService {
     }
     if (dto.aliases !== undefined)
       payload.aliases = this.normalizeTexts(dto.aliases);
-    if (dto.status !== undefined || isCreate) {
-      if (dto.status === 'pending' || dto.status === 'published') {
-        throw new BadRequestException('请通过审批流程提交或发布标准问答');
-      }
-      payload.status = dto.status ?? 'draft';
-    }
+    if (dto.isActive !== undefined || isCreate)
+      payload.isActive = dto.isActive ?? true;
     if (dto.effectiveAt !== undefined)
       payload.effectiveAt = this.toDate(dto.effectiveAt);
     if (dto.expiresAt !== undefined)
@@ -205,7 +186,6 @@ export class KnowledgeStandardQasService {
       payload.sourceChunkIds = this.normalizeIds(dto.sourceChunkIds);
     if (isCreate) {
       payload.version = 1;
-      payload.reviewedAt = payload.status === 'published' ? new Date() : null;
       payload.hitCount = 0;
       payload.lastHitAt = null;
     }
@@ -213,7 +193,9 @@ export class KnowledgeStandardQasService {
   }
 
   private async toViews(entries: KnowledgeStandardQa[]) {
-    return entries.map(({ retrievalConfigId: _legacyScope, ...entry }) => entry);
+    return entries.map(
+      ({ retrievalConfigId: _legacyScope, ...entry }) => entry,
+    );
   }
 
   private async findEntity(id: number) {

@@ -32,7 +32,7 @@ const app = (id) => ({
 const session = (id) => ({
   id,
   messages: [],
-  drafts: [],
+  pendingActions: [],
   executions: [],
   messageTotal: 0,
 });

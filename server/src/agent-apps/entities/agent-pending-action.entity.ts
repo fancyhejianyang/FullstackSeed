@@ -1,11 +1,14 @@
 import { Column, Entity, Index } from 'typeorm';
 import { BaseEntity } from '../../common/entities/base.entity';
-import type { AgentDraftStatus, AgentToolKey } from '../agent-apps.constants';
+import type {
+  AgentPendingActionStatus,
+  AgentToolKey,
+} from '../agent-apps.constants';
 import type { AgentBusinessForm } from '../agent-business.registry';
 
-@Index('IDX_agent_drafts_session_status', ['sessionId', 'status'])
-@Entity('agent_drafts')
-export class AgentDraft extends BaseEntity {
+@Index('IDX_agent_pending_actions_session_status', ['sessionId', 'status'])
+@Entity('agent_pending_actions')
+export class AgentPendingAction extends BaseEntity {
   @Column({ type: 'int' })
   sessionId: number;
 
@@ -19,7 +22,7 @@ export class AgentDraft extends BaseEntity {
   toolKey: AgentToolKey;
 
   @Column({ type: 'varchar', length: 32, default: 'collecting' })
-  status: AgentDraftStatus;
+  status: AgentPendingActionStatus;
 
   @Column({ type: 'int', default: 1 })
   version: number;

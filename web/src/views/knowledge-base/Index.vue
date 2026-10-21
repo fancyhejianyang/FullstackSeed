@@ -82,7 +82,7 @@ const searchFields = computed<FormField[]>(() => [
     type: 'select',
     placeholder: '全部阶段',
     options: [
-      { label: '待补充', value: 'draft' },
+      { label: '待补充', value: 'empty' },
       { label: '待处理', value: 'ready' },
       { label: '待解析', value: 'uploaded' },
       { label: '解析中', value: 'parsing' },
@@ -210,7 +210,7 @@ function getCategoryName(categoryId?: number | null) {
 
 function getStageLabel(stage?: string) {
   const map: Record<string, string> = {
-    draft: '待补充',
+    empty: '待补充',
     ready: '待解析',
     uploaded: '待解析',
     parsing: '解析中',

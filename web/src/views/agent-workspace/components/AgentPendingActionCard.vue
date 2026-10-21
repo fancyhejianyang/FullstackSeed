@@ -5,28 +5,28 @@ import Button from "@/components/Button.vue";
 import Dialog from "@/components/Dialog.vue";
 import Form, { type FormField } from "@/components/Form.vue";
 import type { ProductOption } from "@/api/productCatalog";
-import type { AgentDraft, AgentBusinessForm } from "@/api/agentWorkspace";
+import type { AgentPendingAction, AgentBusinessForm } from "@/api/agentWorkspace";
 import { getPermissionActionColor } from "@/utils/permission";
 
 const props = defineProps<{
-  draft: AgentDraft;
+  pendingAction: AgentPendingAction;
   products: ProductOption[];
   busy?: boolean;
 }>();
 
 const emit = defineEmits<{
-  update: [draft: AgentDraft, data: AgentDraft["data"]];
-  confirm: [draft: AgentDraft];
-  cancel: [draft: AgentDraft];
+  update: [pendingAction: AgentPendingAction, data: AgentPendingAction["data"]];
+  confirm: [pendingAction: AgentPendingAction];
+  cancel: [pendingAction: AgentPendingAction];
 }>();
 
 const editVisible = ref(false);
 const formRef = ref<InstanceType<typeof Form>>();
 const form = ref<Record<string, unknown>>({});
-// 旧 SKU 草稿无需迁移，继续从已有产品选项回显；其余模块使用后端声明。
+// 旧 SKU 待确认操作无需迁移，继续从已有产品选项回显；其余模块使用后端声明。
 const definition = computed<AgentBusinessForm>(
   () =>
-    props.draft.form ?? {
+    props.pendingAction.form ?? {
       name: "新增 SKU",
       permission: "ProductSku.create",
       detailPath: "/business-data/product-skus",
@@ -62,13 +62,13 @@ const definition = computed<AgentBusinessForm>(
 );
 
 const canEdit = computed(() =>
-  ["collecting", "pending_confirmation", "failed"].includes(props.draft.status),
+  ["collecting", "pending_confirmation", "failed"].includes(props.pendingAction.status),
 );
 const canConfirm = computed(
   () =>
-    ["pending_confirmation", "failed"].includes(props.draft.status) &&
-    !props.draft.missingFields.length &&
-    !props.draft.validationErrors.length,
+    ["pending_confirmation", "failed"].includes(props.pendingAction.status) &&
+    !props.pendingAction.missingFields.length &&
+    !props.pendingAction.validationErrors.length,
 );
 
 const fields = computed<FormField[]>(() =>
@@ -128,7 +128,7 @@ watch(editVisible, (value) => {
   if (!value) return;
   form.value = Object.fromEntries(
     definition.value.fields.map((field) => {
-      const current = props.draft.data[field.prop] ?? field.default;
+      const current = props.pendingAction.data[field.prop] ?? field.default;
       const value =
         field.type === "object"
           ? JSON.stringify(current ?? {}, null, 2)
@@ -172,12 +172,12 @@ async function saveEdit() {
     );
     return;
   }
-  emit("update", props.draft, data);
+  emit("update", props.pendingAction, data);
   editVisible.value = false;
 }
 
 function displayValue(prop: string) {
-  const value = props.draft.data[prop];
+  const value = props.pendingAction.data[prop];
   const label = definition.value.fields
     .find((f) => f.prop === prop)
     ?.options?.find((o) => o.value === value)?.label;
@@ -187,8 +187,8 @@ function displayValue(prop: string) {
   return typeof value === "object" ? JSON.stringify(value) : String(value);
 }
 
-function statusText(status: AgentDraft["status"]) {
-  const map: Record<AgentDraft["status"], string> = {
+function statusText(status: AgentPendingAction["status"]) {
+  const map: Record<AgentPendingAction["status"], string> = {
     collecting: "待补充",
     pending_confirmation: "待确认",
     submitting: "提交中",
@@ -202,23 +202,23 @@ function statusText(status: AgentDraft["status"]) {
 </script>
 
 <template>
-  <div class="draft-card" :class="`is-${draft.status}`">
-    <div class="draft-card__header">
+  <div class="pendingAction-card" :class="`is-${pendingAction.status}`">
+    <div class="pendingAction-card__header">
       <strong>{{
-        draft.status === "submitted"
+        pendingAction.status === "submitted"
           ? `${definition.name}回执`
-          : `${definition.name}草稿 — 尚未保存`
+          : `${definition.name}待确认操作 — 尚未保存`
       }}</strong>
       <el-tag
         :type="
-          draft.status === 'submitted'
+          pendingAction.status === 'submitted'
             ? getPermissionActionColor('create')
-            : draft.status === 'failed'
+            : pendingAction.status === 'failed'
               ? getPermissionActionColor('reject')
               : getPermissionActionColor('audit')
         "
       >
-        {{ statusText(draft.status) }}
+        {{ statusText(pendingAction.status) }}
       </el-tag>
     </div>
     <el-descriptions :column="1" border size="small">
@@ -226,23 +226,23 @@ function statusText(status: AgentDraft["status"]) {
         v-for="field in definition.fields"
         :key="field.prop"
         :label="field.label"
-        ><span class="draft-card__value">{{
+        ><span class="pendingAction-card__value">{{
           displayValue(field.prop)
         }}</span></el-descriptions-item
       >
-      <el-descriptions-item v-if="draft.submittedRecordId" label="记录 ID">{{
-        draft.submittedRecordId
+      <el-descriptions-item v-if="pendingAction.submittedRecordId" label="记录 ID">{{
+        pendingAction.submittedRecordId
       }}</el-descriptions-item>
     </el-descriptions>
-    <p v-if="definition.note" class="draft-card__note">{{ definition.note }}</p>
+    <p v-if="definition.note" class="pendingAction-card__note">{{ definition.note }}</p>
     <el-alert
-      v-if="draft.missingFields.length || draft.validationErrors.length"
-      class="draft-card__alert"
+      v-if="pendingAction.missingFields.length || pendingAction.validationErrors.length"
+      class="pendingAction-card__alert"
       type="warning"
       :closable="false"
-      :title="[...draft.missingFields, ...draft.validationErrors].join('；')"
+      :title="[...pendingAction.missingFields, ...pendingAction.validationErrors].join('；')"
     />
-    <div v-if="canEdit" class="draft-card__actions">
+    <div v-if="canEdit" class="pendingAction-card__actions">
       <Button
         :perm="definition.permission"
         :auto-type="false"
@@ -255,9 +255,9 @@ function statusText(status: AgentDraft["status"]) {
       <Button
         :perm="definition.permission"
         confirm
-        :confirm-text="`确认提交当前版本的${definition.name}草稿？${definition.note}`"
+        :confirm-text="`确认提交当前版本的${definition.name}待确认操作？${definition.note}`"
         :disabled="!canConfirm || busy"
-        @click="emit('confirm', draft)"
+        @click="emit('confirm', pendingAction)"
         >确认录入</Button
       >
       <Button
@@ -267,14 +267,14 @@ function statusText(status: AgentDraft["status"]) {
         icon="Close"
         :confirm="false"
         :disabled="busy"
-        @click="emit('cancel', draft)"
+        @click="emit('cancel', pendingAction)"
         >取消</Button
       >
     </div>
 
     <Dialog
       v-model="editVisible"
-      :title="`修改${definition.name}草稿`"
+      :title="`修改${definition.name}待确认操作`"
       width="720px"
       @confirm="saveEdit"
     >
@@ -290,42 +290,42 @@ function statusText(status: AgentDraft["status"]) {
 </template>
 
 <style scoped>
-.draft-card {
+.pendingAction-card {
   padding: 16px;
   border: 1px solid #f3d19e;
   border-radius: 14px;
   background: #fffcf5;
   box-shadow: 0 6px 20px rgb(31 35 41 / 6%);
 }
-.draft-card.is-submitted {
+.pendingAction-card.is-submitted {
   border-color: #b3e19d;
   background: #f6fff2;
 }
-.draft-card.is-cancelled,
-.draft-card.is-expired {
+.pendingAction-card.is-cancelled,
+.pendingAction-card.is-expired {
   border-color: #dcdfe6;
   background: #f5f7fa;
 }
-.draft-card__header {
+.pendingAction-card__header {
   display: flex;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 12px;
   color: #303133;
 }
-.draft-card__alert {
+.pendingAction-card__alert {
   margin-top: 10px;
 }
-.draft-card__value {
+.pendingAction-card__value {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.draft-card__note {
+.pendingAction-card__note {
   color: var(--el-text-color-secondary);
   font-size: 12px;
   line-height: 1.6;
 }
-.draft-card__actions {
+.pendingAction-card__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;

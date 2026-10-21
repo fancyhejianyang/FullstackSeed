@@ -1,4 +1,4 @@
-import { DEMO_CATEGORIES, DEMO_STATUSES } from '../demo/demo.constants';
+import { DEMO_CATEGORIES } from '../demo/demo.constants';
 import { KNOWLEDGE_COLLOQUIAL_SEMANTIC_TYPES } from '../knowledge-colloquial-terms/entities/knowledge-colloquial-term.entity';
 
 export const AI_COMMAND_ACTIONS = [
@@ -175,7 +175,7 @@ function createBusinessCrudCatalog(
       permissionAction: 'create',
       chatCallable: true,
       semanticKeywords: ['创建', '新增', '添加', '录入'],
-      description: `根据受控字段生成${spec.moduleName}创建草稿；聊天调用必须人工确认后才可提交。`,
+      description: `根据受控字段生成${spec.moduleName}待确认操作；聊天调用必须人工确认后才可提交。`,
     }),
     businessCommand(spec, {
       suffix: 'update',
@@ -234,10 +234,7 @@ export const AI_BUSINESS_COMMAND_CATALOG: AiCommandCatalogItem[] = [
       type: 'object',
       properties: {
         keyword: { type: 'string' },
-        status: {
-          type: 'string',
-          enum: ['draft', 'pending', 'published', 'disabled'],
-        },
+        isActive: { type: 'boolean' },
       },
     },
     createSchema: {
@@ -407,7 +404,7 @@ export const AI_BUSINESS_COMMAND_CATALOG: AiCommandCatalogItem[] = [
         page: { type: 'integer', minimum: 1, default: 1 },
         pageSize: { type: 'integer', minimum: 1, default: 10 },
         keyword: { type: 'string' },
-        status: { type: 'string', enum: [...DEMO_STATUSES] },
+        isActive: { type: 'boolean' },
       },
     },
     createSchema: {
@@ -417,8 +414,7 @@ export const AI_BUSINESS_COMMAND_CATALOG: AiCommandCatalogItem[] = [
         title: { type: 'string', minLength: 1 },
         content: { type: 'string' },
         category: { type: 'string', enum: [...DEMO_CATEGORIES] },
-        status: { type: 'string', enum: [...DEMO_STATUSES] },
-        publishedAt: { type: 'string', format: 'date-time' },
+        isActive: { type: 'boolean' },
         activeRange: {
           type: 'array',
           items: { type: 'string' },
@@ -580,7 +576,7 @@ export const AI_BUSINESS_COMMAND_CATALOG: AiCommandCatalogItem[] = [
       '根据想法写作',
     ],
     description:
-      '根据员工提供的想法创建文章并登记异步生成任务；只生成待确认草稿，人工确认后才提交。',
+      '根据员工提供的想法创建文章并登记异步生成任务；只生成待确认操作，人工确认后才提交。',
   },
 ];
 
@@ -632,12 +628,12 @@ export const AI_COMMAND_CATALOG: AiCommandCatalogItem[] = [
     }),
     contextBindings: toJson({
       retrievalConfigId: '$chat.retrievalConfigId',
-      status: 'published',
+      isActive: true,
     }),
     chatCallable: true,
     requireApproval: false,
     semanticKeywords: ['标准问答', '固定答案', 'FAQ', '常见问题'],
-    description: '仅在当前应用范围内精确匹配已发布且有效的标准问题或相似问法。',
+    description: '仅精确匹配已启用且处于有效期内的标准问题或相似问法。',
   },
   {
     commandKey: 'knowledge.retrieve',
@@ -736,11 +732,11 @@ export const AI_COMMAND_CATALOG: AiCommandCatalogItem[] = [
       required: ['question', 'answer'],
       properties: { question: { type: 'string' }, answer: { type: 'string' } },
     }),
-    contextBindings: toJson({ status: 'draft', operatorId: '$operator.id' }),
+    contextBindings: toJson({ isActive: false, operatorId: '$operator.id' }),
     chatCallable: false,
     requireApproval: true,
     semanticKeywords: ['收录问答', '新增标准答案'],
-    description: '后台人工收录问答；默认草稿，审核后才允许聊天命中。',
+    description: '后台人工收录问答；默认关闭，确认内容后可在管理页启用。',
   },
   {
     commandKey: 'qa.update',

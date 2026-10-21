@@ -132,7 +132,7 @@ watch(
         latestTask.result?.trim()
       ) {
         latestCandidate.value = latestTask;
-        // 只填入空白且未变更版本的正文；基线仍是已保存数据，回填属于未保存草稿。
+        // 只填入空白且未变更版本的正文；基线仍是已保存数据，回填属于未保存编辑。
         if (
           !data.content?.trim() &&
           latestTask.status === 'succeeded' &&
@@ -176,7 +176,7 @@ function loadGeneratedBody() {
   form.content = latestCandidate.value!.result!;
   loadedGeneratedBody.value = true;
 }
-async function saveDraft() {
+async function saveContent() {
   if (savedId.value && !dirty.value) return;
   const current = epoch;
   const saved = savedId.value
@@ -196,7 +196,7 @@ async function handleSubmit() {
   submitting.value = true;
   const current = epoch;
   try {
-    await saveDraft();
+    await saveContent();
     if (current !== epoch) return;
     ElMessage.success('保存成功');
     visible.value = false;

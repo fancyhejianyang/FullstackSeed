@@ -107,8 +107,8 @@ describe('热点选题核心', () => {
     configs.findUsableTopicDiscoveryConfig.mockRejectedValue(
       new Error('AI 已删除'),
     );
-    const draft = { ...preference(), aiConfigId: 404, scheduleEnabled: false };
-    await expect(service.savePreferences(draft, 9)).resolves.toMatchObject({
+    const form = { ...preference(), aiConfigId: 404, scheduleEnabled: false };
+    await expect(service.savePreferences(form, 9)).resolves.toMatchObject({
       aiConfigId: 404,
       scheduleEnabled: false,
       nextRunAt: null,
@@ -124,7 +124,7 @@ describe('热点选题核心', () => {
       ],
     });
     await expect(
-      service.savePreferences({ ...draft, scheduleEnabled: true }, 9),
+      service.savePreferences({ ...form, scheduleEnabled: true }, 9),
     ).rejects.toThrow('执行权限');
   });
   it('详情和列表强制用户隔离', async () => {

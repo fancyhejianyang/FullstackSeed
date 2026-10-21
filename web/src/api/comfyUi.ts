@@ -88,7 +88,6 @@ export interface ComfyWorkflow {
   outputNodeIds: string[] | null;
   dependencyNotes: string | null;
   version: number;
-  isPublished: boolean;
   isEnabled: boolean;
   createdAt: string;
   updatedAt: string;
@@ -100,7 +99,6 @@ export type ComfyWorkflowForm = Omit<
   | "connectionName"
   | "bindingCount"
   | "visualPromptTemplateId"
-  | "isPublished"
   | "version"
   | "createdAt"
   | "updatedAt"

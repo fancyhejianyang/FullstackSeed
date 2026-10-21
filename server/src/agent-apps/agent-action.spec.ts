@@ -1,7 +1,7 @@
 import {
   classifyAgentAction,
-  extractSkuDraftPatch,
-  validateSkuDraft,
+  extractSkuPendingActionPatch,
+  validateSkuPendingAction,
 } from './agent-action';
 
 describe('agent action protocol', () => {
@@ -26,7 +26,7 @@ describe('agent action protocol', () => {
   });
 
   it.each(['符合，可以入库', '确认录入', '没问题，保存吧', '好的，请提交'])(
-    'routes %s to draft review rather than model chat',
+    'routes %s to pendingAction review rather than model chat',
     (content) => {
       expect(classifyAgentAction(content, true)).toEqual({
         type: 'prepare_write',
@@ -58,7 +58,7 @@ describe('agent action protocol', () => {
     expect(classifyAgentAction(content, true).writeIntent).toBeUndefined();
   });
 
-  it('only interprets a short acknowledgement in the context of a real draft', () => {
+  it('only interprets a short acknowledgement in the context of a real pendingAction', () => {
     expect(classifyAgentAction('好的', true).writeIntent).toBe('review');
     expect(classifyAgentAction('好的', false).type).toBe('answer');
     expect(classifyAgentAction('请新增一个产品')).toEqual({
@@ -85,9 +85,11 @@ describe('agent action protocol', () => {
     ).not.toBe('prepare_write');
   });
 
-  it('extracts only allowed SKU draft fields without executing anything', () => {
+  it('extracts only allowed SKU pendingAction fields without executing anything', () => {
     expect(
-      extractSkuDraftPatch('新增 SKU，颜色：蓝色，容量=256G，名称：典藏版'),
+      extractSkuPendingActionPatch(
+        '新增 SKU，颜色：蓝色，容量=256G，名称：典藏版',
+      ),
     ).toEqual({
       name: '典藏版',
       skuCode: '',
@@ -97,7 +99,7 @@ describe('agent action protocol', () => {
 
   it('requires product and specifications before confirmation', () => {
     expect(
-      validateSkuDraft({
+      validateSkuPendingAction({
         productId: null,
         productName: '',
         skuCode: '',

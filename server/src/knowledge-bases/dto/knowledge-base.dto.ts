@@ -106,7 +106,7 @@ export class QueryKnowledgeBaseDto {
   contentType?: 'text' | 'pdf' | 'word' | 'image';
 
   @IsIn([
-    'draft',
+    'empty',
     'ready',
     'uploaded',
     'parsing',
@@ -223,7 +223,6 @@ export class CreateKnowledgeBaseDocumentDto {
   @IsString()
   @IsOptional()
   description?: string;
-
 }
 
 export class UpdateKnowledgeBaseDocumentDto extends PartialType(

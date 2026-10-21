@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 import { DashboardConfigService } from './dashboard-config.service';
 import { DashboardConfig } from './entities/dashboard-config.entity';
 import { defaultWidgets } from './dashboard.registry';
+
 const user = {
   userId: 1,
   username: 'admin',
@@ -10,16 +11,14 @@ const user = {
   roles: [],
   permissions: [],
 };
+
 function fixture(createQueryBuilder?: () => unknown) {
   const row: DashboardConfig = Object.assign(new DashboardConfig(), {
     id: 1,
     key: 'home',
     revision: 0,
-    publishedVersion: 0,
-    draft: defaultWidgets(),
-    published: defaultWidgets(),
-    previous: null,
-    publishedAt: null,
+    widgets: defaultWidgets(),
+    updatedBy: null,
   });
   const insert = {
     insert: jest.fn().mockReturnThis(),
@@ -32,7 +31,7 @@ function fixture(createQueryBuilder?: () => unknown) {
     createQueryBuilder: jest.fn(createQueryBuilder ?? (() => insert)),
     findOneOrFail: jest.fn().mockResolvedValue(row),
     findOneBy: jest.fn().mockResolvedValue(row),
-    save: jest.fn().mockResolvedValue(row),
+    save: jest.fn().mockImplementation(async (value) => value),
   };
   const audit = { save: jest.fn().mockResolvedValue({}) };
   const manager = {
@@ -43,7 +42,7 @@ function fixture(createQueryBuilder?: () => unknown) {
   const db = {
     getRepository: jest.fn(() => repo),
     transaction: jest.fn(
-      async (callback: (m: typeof manager) => Promise<void>) =>
+      async (callback: (value: typeof manager) => Promise<unknown>) =>
         callback(manager),
     ),
   };
@@ -56,8 +55,9 @@ function fixture(createQueryBuilder?: () => unknown) {
     service: new DashboardConfigService(db as unknown as DataSource),
   };
 }
-describe('dashboard draft, publication and rollback', () => {
-  it('does not reload an ignored insert and always saves the locked persisted entity', async () => {
+
+describe('dashboard immediate configuration', () => {
+  it('does not hydrate an ignored insert and saves the locked persisted entity', async () => {
     const { service, row, insert, repo } = fixture();
     insert.execute.mockImplementation(() => {
       if (insert.updateEntity.mock.lastCall?.[0] !== false) {
@@ -71,7 +71,7 @@ describe('dashboard draft, publication and rollback', () => {
     });
     for (const revision of [0, 1]) {
       await expect(
-        service.change({ revision, widgets: defaultWidgets() }, 'save', user),
+        service.save({ revision, widgets: defaultWidgets() }, user),
       ).resolves.toMatchObject({ revision: revision + 1 });
     }
     expect(insert.updateEntity).toHaveBeenCalledTimes(2);
@@ -80,64 +80,39 @@ describe('dashboard draft, publication and rollback', () => {
     expect(repo.save).toHaveBeenLastCalledWith(row);
     expect(row.id).toBe(1);
   });
-  it('persists reordered drafts separately, publishes order, and restores the previous order on rollback', async () => {
-    const { service, row } = fixture();
-    const original = defaultWidgets();
-    const widgets = [...original].reverse().map((widget, index) => ({
-      ...widget,
-      layout: { ...widget.layout, order: index * 10 },
-    }));
-    const saved = await service.change({ revision: 0, widgets }, 'save', user);
-    expect(saved.draft).toEqual(widgets);
-    expect(saved.published).toEqual(original);
-    const published = await service.change(
-      { revision: 1, widgets },
-      'publish',
-      user,
-    );
-    expect(published.published).toEqual(widgets);
-    const rolledBack = await service.change({ revision: 2 }, 'rollback', user);
-    expect(rolledBack.published).toEqual(original);
-    expect(rolledBack.draft).toEqual(original);
-    expect(row.revision).toBe(3);
-  });
-  it('does not publish a draft; publish and rollback increment versions and write safe audit metadata', async () => {
+
+  it('saves reordered widgets immediately and records safe audit metadata', async () => {
     const { service, row, audit } = fixture();
-    const widgets = defaultWidgets();
+    const widgets = defaultWidgets()
+      .reverse()
+      .map((widget, index) => ({
+        ...widget,
+        layout: { ...widget.layout, order: index * 10 },
+      }));
     widgets[1].enabled = false;
-    await service.change({ revision: 0, widgets }, 'save', user);
-    expect(row.published[1].enabled).toBe(true);
-    expect(row.publishedVersion).toBe(0);
-    await service.change({ revision: 1, widgets }, 'publish', user);
-    expect(row.published[1].enabled).toBe(false);
-    expect(row.publishedVersion).toBe(1);
-    await service.change({ revision: 2 }, 'rollback', user);
-    expect(row.published[1].enabled).toBe(true);
-    expect(row.publishedVersion).toBe(2);
-    expect(row.draft).toEqual(row.published);
-    expect(row.revision).toBe(3);
-    expect(audit.save).toHaveBeenCalledTimes(3);
-    expect(audit.save).toHaveBeenLastCalledWith(
+
+    const saved = await service.save({ revision: 0, widgets }, user);
+
+    expect(saved.widgets).toEqual(widgets);
+    expect(row.widgets).toEqual(widgets);
+    expect(row.revision).toBe(1);
+    expect(audit.save).toHaveBeenCalledWith(
       expect.objectContaining({
-        action: 'rollback',
+        action: 'save',
         operatorId: 1,
-        afterData: { revision: 3, publishedVersion: 2, enabledWidgets: 10 },
+        afterData: {
+          revision: 1,
+          enabledWidgets: widgets.filter((widget) => widget.enabled).length,
+        },
       }),
     );
   });
+
   it('rejects a stale writer after acquiring the row lock', async () => {
     const { service, repo } = fixture();
-    await service.change(
-      { revision: 0, widgets: defaultWidgets() },
-      'publish',
-      user,
-    );
+    await service.save({ revision: 0, widgets: defaultWidgets() }, user);
     await expect(
-      service.change(
-        { revision: 0, widgets: defaultWidgets() },
-        'publish',
-        user,
-      ),
+      service.save({ revision: 0, widgets: defaultWidgets() }, user),
     ).rejects.toBeInstanceOf(ConflictException);
     expect(repo.findOneOrFail).toHaveBeenCalledWith({
       where: { key: 'home' },
@@ -145,47 +120,13 @@ describe('dashboard draft, publication and rollback', () => {
     });
     expect(repo.save).toHaveBeenCalledTimes(1);
   });
+
   it('does not start a transaction for illegal configuration', async () => {
     const { service, db } = fixture();
     await expect(
-      service.change({ revision: 0, widgets: [] }, 'publish', user),
+      service.save({ revision: 0, widgets: [] }, user),
     ).rejects.toThrow();
     expect(db.transaction).not.toHaveBeenCalled();
-  });
-  it('rejects rollback without history', async () => {
-    const { service, repo } = fixture();
-    await expect(
-      service.change({ revision: 0 }, 'rollback', user),
-    ).rejects.toThrow('暂无可回退版本');
-    expect(repo.save).not.toHaveBeenCalled();
-  });
-  it('upgrades an older saved widget schema during rollback', async () => {
-    const { service, row } = fixture();
-    row.previous = defaultWidgets()
-      .filter(
-        (widget) =>
-          !['generation.health', 'creation.recent'].includes(widget.widgetKey),
-      )
-      .map((widget) =>
-        widget.widgetKey === 'content.generationTrend'
-          ? { ...widget, schemaVersion: 1, params: { days: 7 } }
-          : widget,
-      );
-    await expect(
-      service.change({ revision: 0 }, 'rollback', user),
-    ).resolves.toBeDefined();
-    expect(row.published).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          widgetKey: 'content.generationTrend',
-          schemaVersion: 2,
-        }),
-        expect.objectContaining({
-          widgetKey: 'generation.health',
-          enabled: false,
-        }),
-      ]),
-    );
   });
 });
 
@@ -218,16 +159,12 @@ describe('dashboard initialization with real TypeORM insert handling', () => {
     };
   }
 
-  it('reproduces the missing entity id error for an ignored insert with default hydration', async () => {
+  it('reproduces the missing entity id error when default insert hydration is used', async () => {
     const { createQueryBuilder, query } = ignoredInsert(0);
     await expect(
       createQueryBuilder()
         .insert()
-        .values({
-          key: 'home',
-          draft: defaultWidgets(),
-          published: defaultWidgets(),
-        })
+        .values({ key: 'home', widgets: defaultWidgets() })
         .orIgnore()
         .execute(),
     ).rejects.toThrow(
@@ -242,11 +179,7 @@ describe('dashboard initialization with real TypeORM insert handling', () => {
       const { createQueryBuilder, query } = ignoredInsert(insertId);
       const { service, repo } = fixture(createQueryBuilder);
       await expect(
-        service.change(
-          { revision: 0, widgets: defaultWidgets() },
-          'save',
-          user,
-        ),
+        service.save({ revision: 0, widgets: defaultWidgets() }, user),
       ).resolves.toMatchObject({ revision: 1 });
       expect(query).toHaveBeenCalledTimes(1);
       expect(query.mock.calls[0]?.[0]).toMatch(/^INSERT\s+IGNORE INTO/);

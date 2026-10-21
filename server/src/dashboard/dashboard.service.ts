@@ -5,7 +5,6 @@ import { AgentExecution } from '../agent-apps/entities/agent-execution.entity';
 import { AgentApp } from '../agent-apps/entities/agent-app.entity';
 import { Product } from '../product-catalog/entities/product.entity';
 import { ProductSku } from '../product-catalog/entities/product-sku.entity';
-import { ApprovalRequest } from '../approval-requests/entities/approval-request.entity';
 import { KnowledgeBase } from '../knowledge-bases/entities/knowledge-base.entity';
 import { KnowledgeAiChatSession } from '../knowledge-ai-chat/entities/knowledge-ai-chat-session.entity';
 import { CustomerChatTask } from '../customer-service/entities/customer-chat-task.entity';
@@ -117,7 +116,7 @@ export class DashboardService {
       if (!cache.has(key)) cache.set(key, fn());
       return cache.get(key)!;
     };
-    const widgets = resolveWidgets(config.published).filter(
+    const widgets = resolveWidgets(config.widgets).filter(
       (w) =>
         w.enabled &&
         (!query.instanceId || w.instanceId === query.instanceId) &&
@@ -232,7 +231,7 @@ export class DashboardService {
       }
     }
     return {
-      layoutVersion: config.publishedVersion,
+      layoutVersion: config.revision,
       generatedAt: now.toISOString(),
       widgets: result,
     };
@@ -280,18 +279,6 @@ export class DashboardService {
         value: count,
         unit: '个会话',
         path: '/customer-service',
-      });
-    }
-    if (allowed(user, 'ApprovalRequest.read') && need('pendingApprovals')) {
-      const count = await this.query(ApprovalRequest)
-        .where('r.status = :status', { status: 'pending' })
-        .getCount();
-      metrics.push({
-        key: 'pendingApprovals',
-        label: '待审批',
-        value: count,
-        unit: '条',
-        path: '/collaboration-center/approvals',
       });
     }
     for (const [key, label, entity, permission, path] of [
@@ -1184,26 +1171,9 @@ export class DashboardService {
         })),
       );
     }
-    if (allowed(user, 'ApprovalRequest.read')) {
-      const rows = await this.query(ApprovalRequest)
-        .select(['r.id', 'r.businessTitle', 'r.submittedAt'])
-        .where('r.status = :s', { s: 'pending' })
-        .orderBy('r.submittedAt', 'ASC')
-        .take(limit)
-        .getMany();
-      items.push(
-        ...rows.map((r) => ({
-          id: 'approval-' + r.id,
-          title: r.businessTitle,
-          detail: '待审批',
-          time: r.submittedAt.toISOString(),
-          path: '/collaboration-center/approvals',
-        })),
-      );
-    }
     return {
       items: items.slice(0, limit),
-      note: '按接待、执行异常、知识异常、审批顺序展示；执行异常范围为近 7 天。',
+      note: '按接待、执行异常、知识异常顺序展示；执行异常范围为近 7 天。',
     };
   }
   private async activities(user: AuthUser, limit: number): Promise<WidgetData> {
@@ -1213,7 +1183,6 @@ export class DashboardService {
       'agent-apps': 'AgentApp.read',
       'agent-workspace': 'AgentWorkspace.read',
       'knowledge-bases': 'KnowledgeBase.read',
-      'approval-requests': 'ApprovalRequest.read',
       'customer-service': 'CustomerService.read',
     };
     const visible = Object.keys(modules).filter((k) =>

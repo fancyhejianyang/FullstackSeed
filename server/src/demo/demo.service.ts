@@ -15,7 +15,8 @@ export class DemoService {
   async findAll(query: QueryDemoDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
-    const baseWhere = query.status ? { status: query.status } : {};
+    const baseWhere =
+      query.isActive === undefined ? {} : { isActive: query.isActive };
     const [list, total] = await this.demoRepository.findAndCount({
       where: query.keyword
         ? { ...baseWhere, title: Like(`%${query.keyword}%`) }

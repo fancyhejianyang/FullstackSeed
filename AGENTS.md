@@ -53,6 +53,7 @@ FullstackSeed 是一个全栈项目开发框架 / 平台基座，采用管理后
 > 统一前后端命名约定，避免字段歧义。
 
 - 后端字段命名：实体/DTO 属性用 **camelCase**（如 `isActive`、`createdAt`）；数据库表名用复数小写（`@Entity('users')`）
+- **业务资源启停规则**：可配置资源默认只使用 `isActive`（或既有同义布尔字段）表达启用/关闭，禁止新增 `draft/published`、`isDraft/isPublished`、`草稿/已发布`双版本或影子配置字段。任务运行、人工确认、审批等过程状态应按真实语义命名（如 `pending/running`、`PendingAction`），不能借用“草稿”概念；外部来源的 `publishedAt` 仅表示来源发布时间，不属于资源生命周期。
 - 前端字段命名：变量/属性 **camelCase**；接口返回字段与后端保持一致
 - 接口字段对齐规则：登录令牌等接口契约字段（如 `access_token`、`statusCode`、`success`）前后端必须一字不差对齐，**改字段先改两端类型定义**
 - 文件 / 目录命名：后端用 **kebab-case**（`jwt-auth.guard.ts`、`auth.module.ts`）；前端组件/页面用 **PascalCase**（`LoginView.vue`、`MainLayout.vue`），其他 ts 文件 camelCase。前端菜单模块在 `views/<module>/`（小写目录）下用标准文件名 `Index.vue`/`Edit.vue`/`View.vue`

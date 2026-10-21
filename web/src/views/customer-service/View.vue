@@ -26,7 +26,7 @@ const pollingPaused = ref(false);
 const messageContainer = ref<HTMLElement>();
 const formRef = ref<InstanceType<typeof Form>>();
 const form = reactive({ content: '' });
-const drafts = new Map<number, string>();
+const unsentContents = new Map<number, string>();
 const attempts = new Map<number, { clientMessageId: string; content: string }>();
 let selectedGeneration = 0;
 let snapshotRevision = 0;
@@ -137,12 +137,12 @@ function schedulePoll() {
 }
 
 watch(() => props.sessionId, async (sessionId, previousId) => {
-  if (previousId) drafts.set(previousId, form.content);
+  if (previousId) unsentContents.set(previousId, form.content);
   selectedGeneration += 1;
   snapshotRevision += 1;
   clearTimeout(timer);
   detail.value = null;
-  form.content = sessionId ? drafts.get(sessionId) || '' : '';
+  form.content = sessionId ? unsentContents.get(sessionId) || '' : '';
   loading.value = false;
   loadingOlder.value = false;
   busy.value = false;
@@ -220,7 +220,7 @@ async function sendMessage() {
   const generation = selectedGeneration;
   const content = form.content.trim();
   try { await formRef.value?.validate(); } catch { return; }
-  // 异步校验期间可能切换会话或重复按发送，不能把新会话草稿发进旧会话。
+  // 异步校验期间可能切换会话或重复按发送，不能把新会话输入发进旧会话。
   if (generation !== selectedGeneration || props.sessionId !== sessionId || busy.value || !canSend.value) return;
   const previousAttempt = attempts.get(sessionId);
   const attempt = previousAttempt?.content === content ? previousAttempt : {
@@ -236,7 +236,7 @@ async function sendMessage() {
   try {
     const snapshot = await sendCustomerServiceMessage(sessionId, attempt);
     if (attempts.get(sessionId)?.clientMessageId === attempt.clientMessageId) attempts.delete(sessionId);
-    if (drafts.get(sessionId)?.trim() === content) drafts.delete(sessionId);
+    if (unsentContents.get(sessionId)?.trim() === content) unsentContents.delete(sessionId);
     if (props.sessionId === sessionId && form.content.trim() === content) form.content = '';
     if (disposed || generation !== selectedGeneration) return;
     await applySnapshot(snapshot, true);
@@ -279,7 +279,7 @@ onBeforeUnmount(() => {
           <Button perm="CustomerService.read" icon="Refresh" link :disabled="busy" @click="(_event, done) => done(retryRefresh())">刷新</Button>
         </div>
       </header>
-      <p v-if="pollingPaused" class="customer-conversation__notice" role="status">消息自动刷新已暂停，请点击刷新重试；草稿已保留。</p>
+      <p v-if="pollingPaused" class="customer-conversation__notice" role="status">消息自动刷新已暂停，请点击刷新重试；未发送内容已保留。</p>
       <div ref="messageContainer" class="customer-conversation__messages" role="log" aria-label="会话消息">
         <div v-if="hasMoreMessages" class="customer-conversation__history">
           <Button perm="CustomerService.read" link :loading="loadingOlder" :auto-icon="false" @click="(_event, done) => done(loadOlderMessages())">加载更早消息</Button>

@@ -124,7 +124,7 @@ describe('AI command catalog', () => {
         'title',
         'content',
         'category',
-        'status',
+        'isActive',
         'quantity',
         'unitPrice',
         'budgetAmount',

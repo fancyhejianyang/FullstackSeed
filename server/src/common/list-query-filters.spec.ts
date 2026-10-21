@@ -38,14 +38,14 @@ describe('列表组合筛选', () => {
     );
   });
 
-  it('示例列表按状态查询', async () => {
+  it('示例列表按启用状态查询', async () => {
     const repository = createRepositoryMock();
     const service = new DemoService(repository as never);
 
-    await service.findAll({ status: 'published' });
+    await service.findAll({ isActive: true });
 
     expect(repository.findAndCount).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { status: 'published' } }),
+      expect.objectContaining({ where: { isActive: true } }),
     );
   });
 

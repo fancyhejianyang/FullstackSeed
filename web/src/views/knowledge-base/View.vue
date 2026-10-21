@@ -24,7 +24,7 @@ type GridCoordinate = {
   column: number;
 };
 
-type ManualChunkDraft = {
+type ManualChunkEdit = {
   id: number | null;
   title: string;
   content: string;
@@ -89,7 +89,7 @@ const manualSourceContent = ref('');
 const manualSelectionStart = ref<GridCoordinate | null>(null);
 const manualSelectionEnd = ref<GridCoordinate | null>(null);
 const manualSelectionDragging = ref(false);
-const manualChunks = ref<ManualChunkDraft[]>([]);
+const manualChunks = ref<ManualChunkEdit[]>([]);
 const manualPixiHostRef = ref<HTMLDivElement>();
 const manualContextOverlap = ref(DEFAULT_MANUAL_CONTEXT_OVERLAP);
 const manualMaxChunks = ref(500);
@@ -576,7 +576,7 @@ function cloneManualChunks() {
 }
 
 // 单条分片同步：创建 / 删除 / 改标题仅传输对应片段，降低接口数据压力
-async function persistManualChunkCreate(draft: ManualChunkDraft) {
+async function persistManualChunkCreate(chunkEdit: ManualChunkEdit) {
   if (!activeDocumentId.value) {
     await fetchBaseDocument();
   }
@@ -588,15 +588,15 @@ async function persistManualChunkCreate(draft: ManualChunkDraft) {
   try {
     const created = await createKnowledgeBaseChunk({
       documentId: activeDocumentId.value,
-      title: draft.title.trim(),
-      content: draft.content,
-      coreContent: draft.coreContent,
-      manualStartOffset: draft.manualStartOffset ?? undefined,
-      manualEndOffset: draft.manualEndOffset ?? undefined,
-      contextBeforeLength: draft.contextBeforeLength,
-      contextAfterLength: draft.contextAfterLength,
+      title: chunkEdit.title.trim(),
+      content: chunkEdit.content,
+      coreContent: chunkEdit.coreContent,
+      manualStartOffset: chunkEdit.manualStartOffset ?? undefined,
+      manualEndOffset: chunkEdit.manualEndOffset ?? undefined,
+      contextBeforeLength: chunkEdit.contextBeforeLength,
+      contextAfterLength: chunkEdit.contextAfterLength,
     });
-    draft.id = created.id; // 回填持久化 id 供后续删除/修改使用
+    chunkEdit.id = created.id; // 回填持久化 id 供后续删除/修改使用
     ElMessage.success('分片已生成并同步');
     chunkPage.value = 1;
     void fetchChunks();
@@ -609,7 +609,7 @@ async function persistManualChunkCreate(draft: ManualChunkDraft) {
   }
 }
 
-async function persistManualChunkRemove(draft: ManualChunkDraft) {
+async function persistManualChunkRemove(chunkEdit: ManualChunkEdit) {
   if (!activeDocumentId.value) {
     await fetchBaseDocument();
   }
@@ -619,8 +619,8 @@ async function persistManualChunkRemove(draft: ManualChunkDraft) {
   }
   savingManualChunks.value = true;
   try {
-    if (draft.id) {
-      await deleteKnowledgeBaseChunk(draft.id);
+    if (chunkEdit.id) {
+      await deleteKnowledgeBaseChunk(chunkEdit.id);
     }
     ElMessage.success('分片已删除并同步');
     chunkPage.value = 1;
@@ -634,7 +634,7 @@ async function persistManualChunkRemove(draft: ManualChunkDraft) {
   }
 }
 
-async function persistManualChunkTitle(draft: ManualChunkDraft) {
+async function persistManualChunkTitle(chunkEdit: ManualChunkEdit) {
   if (!activeDocumentId.value) {
     await fetchBaseDocument();
   }
@@ -642,10 +642,10 @@ async function persistManualChunkTitle(draft: ManualChunkDraft) {
     ElMessage.warning('未找到可同步分片的文档');
     return false;
   }
-  if (!draft.id) return true; // 尚未持久化，无需同步
+  if (!chunkEdit.id) return true; // 尚未持久化，无需同步
   savingManualChunks.value = true;
   try {
-    await updateKnowledgeBaseChunk(draft.id, { title: draft.title.trim() });
+    await updateKnowledgeBaseChunk(chunkEdit.id, { title: chunkEdit.title.trim() });
     ElMessage.success('分片标题已同步');
     chunkPage.value = 1;
     void fetchChunks();
@@ -697,7 +697,7 @@ async function createManualChunkFromSelection() {
   const manualStartOffset = getCoordinateOffset(range.start);
   const manualEndOffset = getCoordinateOffset(range.end);
   const context = getManualContextContent(manualStartOffset, manualEndOffset);
-  const draft: ManualChunkDraft = {
+  const chunkEdit: ManualChunkEdit = {
     id: null,
     title,
     content: context.content,
@@ -709,10 +709,10 @@ async function createManualChunkFromSelection() {
     contextBeforeLength: context.beforeLength,
     contextAfterLength: context.afterLength,
   };
-  manualChunks.value.push(draft);
+  manualChunks.value.push(chunkEdit);
   clearManualSelection();
   scheduleManualGridDraw();
-  const synced = await persistManualChunkCreate(draft);
+  const synced = await persistManualChunkCreate(chunkEdit);
   if (!synced) {
     manualChunks.value = previousChunks;
     scheduleManualGridDraw();
@@ -749,7 +749,7 @@ function getManualContextContent(startOffset: number, endOffset: number) {
   };
 }
 
-function getManualChunkRange(chunk: ManualChunkDraft) {
+function getManualChunkRange(chunk: ManualChunkEdit) {
   if (!chunk.start || !chunk.end) return null;
   return normalizeCoordinateRange(chunk.start, chunk.end);
 }
@@ -1133,9 +1133,9 @@ async function removeManualChunk(index: number) {
   }
 }
 
-async function handleManualChunkTitleChange(draft: ManualChunkDraft) {
+async function handleManualChunkTitleChange(chunkEdit: ManualChunkEdit) {
   if (savingManualChunks.value) return;
-  await persistManualChunkTitle(draft);
+  await persistManualChunkTitle(chunkEdit);
 }
 
 function handleChunkSearch() {

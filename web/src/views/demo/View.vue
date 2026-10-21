@@ -5,7 +5,7 @@ import Dialog from '@/components/Dialog.vue';
 import { formatDateTime } from '@/utils/format';
 import { getDemo, type Demo } from '@/api/demo';
 import { DicService } from '@/dic/service';
-import { DEMO_CATEGORY, DEMO_STATUS, DEMO_TAG } from '@/dic';
+import { DEMO_CATEGORY, DEMO_TAG } from '@/dic';
 
 const props = defineProps<{
   row?: Demo | null;
@@ -18,10 +18,8 @@ const detail = ref<Demo | null>(null);
 const rowData = computed(() => detail.value);
 
 const categoryDic = ref<{ label: string; value: string }[]>([]);
-const statusDic = ref<{ label: string; value: string }[]>([]);
 const tagDic = ref<{ label: string; value: string }[]>([]);
 DicService.init(DEMO_CATEGORY, categoryDic);
-DicService.init(DEMO_STATUS, statusDic);
 DicService.init(DEMO_TAG, tagDic);
 const channelMap: Record<string, string> = {
   web: 'Web',
@@ -32,11 +30,6 @@ const channelMap: Record<string, string> = {
 function getCategoryLabel(value?: string) {
   if (!value) return '-';
   return categoryDic.value.find((item) => item.value === value)?.label ?? value;
-}
-
-function getStatusLabel(value?: string) {
-  if (!value) return '-';
-  return statusDic.value.find((item) => item.value === value)?.label ?? value;
 }
 
 function getTagLabel(value: string) {
@@ -60,10 +53,6 @@ function downloadAttachment() {
   link.download = rowData.value.attachmentName || '附件文件';
   link.click();
 }
-
-const statusTagType = computed(() =>
-  rowData.value?.status === 'published' ? 'success' : 'info',
-);
 
 watch(visible, async (val) => {
   if (!val) {
@@ -93,11 +82,7 @@ watch(visible, async (val) => {
         </el-descriptions-item>
 
         <el-descriptions-item label="状态">
-          <el-tag :type="statusTagType">{{ getStatusLabel(rowData?.status) }}</el-tag>
-        </el-descriptions-item>
-
-        <el-descriptions-item label="发布日期">
-          {{ rowData?.publishedAt || '-' }}
+          <el-tag :type="rowData?.isActive ? 'success' : 'info'">{{ rowData?.isActive ? '启用' : '停用' }}</el-tag>
         </el-descriptions-item>
 
         <el-descriptions-item label="有效期">

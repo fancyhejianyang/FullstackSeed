@@ -34,7 +34,6 @@ import { DocumentParseRulesModule } from './document-parse-rules/document-parse-
 import { KnowledgeStandardQasModule } from './knowledge-standard-qas/knowledge-standard-qas.module';
 import { KnowledgeColloquialTermsModule } from './knowledge-colloquial-terms/knowledge-colloquial-terms.module';
 import { AiCommandDefinitionsModule } from './ai-command-definitions/ai-command-definitions.module';
-import { ApprovalRequestsModule } from './approval-requests/approval-requests.module';
 import { ProductCatalogModule } from './product-catalog/product-catalog.module';
 import { AiWorkflowsModule } from './ai-workflows/ai-workflows.module';
 import { AgentAppsModule } from './agent-apps/agent-apps.module';
@@ -149,7 +148,6 @@ import { HotTopicsModule } from './hot-topics/hot-topics.module';
     KnowledgeStandardQasModule,
     KnowledgeColloquialTermsModule,
     ProductCatalogModule,
-    ApprovalRequestsModule,
     AiCommandDefinitionsModule,
     KnowledgeChunkConfigsModule,
     VectorConfigsModule,

@@ -1,19 +1,15 @@
 import { PartialType } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
   IsDateString,
-  IsIn,
+  IsBoolean,
   IsInt,
   IsOptional,
   IsString,
   MaxLength,
   Min,
 } from 'class-validator';
-import {
-  KNOWLEDGE_STANDARD_QA_STATUSES,
-  type KnowledgeStandardQaStatus,
-} from '../entities/knowledge-standard-qa.entity';
 
 export class CreateKnowledgeStandardQaDto {
   @IsString()
@@ -29,10 +25,9 @@ export class CreateKnowledgeStandardQaDto {
   @IsString()
   answer: string;
 
-
-  @IsIn(KNOWLEDGE_STANDARD_QA_STATUSES)
+  @IsBoolean()
   @IsOptional()
-  status?: KnowledgeStandardQaStatus;
+  isActive?: boolean;
 
   @IsDateString()
   @IsOptional()
@@ -54,7 +49,6 @@ export class CreateKnowledgeStandardQaDto {
   @Min(1, { each: true })
   @IsOptional()
   sourceChunkIds?: number[];
-
 }
 
 export class UpdateKnowledgeStandardQaDto extends PartialType(
@@ -78,10 +72,14 @@ export class QueryKnowledgeStandardQaDto {
   @IsOptional()
   keyword?: string;
 
-
-  @IsIn(KNOWLEDGE_STANDARD_QA_STATUSES)
+  @Transform(({ value }: { value: unknown }) => {
+    if (value === true || value === 'true') return true;
+    if (value === false || value === 'false') return false;
+    return value;
+  })
+  @IsBoolean()
   @IsOptional()
-  status?: KnowledgeStandardQaStatus;
+  isActive?: boolean;
 }
 
 export class BatchDeleteKnowledgeStandardQaDto {

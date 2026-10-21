@@ -47,7 +47,10 @@ describe('KnowledgeRetrievalConfigsService', () => {
       (payload: Partial<KnowledgeRetrievalConfig>) => payload,
     );
     const service = new KnowledgeRetrievalConfigsService(
-      { create, save: jest.fn((payload) => Promise.resolve(payload)) } as unknown as Repository<KnowledgeRetrievalConfig>,
+      {
+        create,
+        save: jest.fn((payload) => Promise.resolve(payload)),
+      } as unknown as Repository<KnowledgeRetrievalConfig>,
       {} as Repository<KnowledgeBase>,
       {} as Repository<KnowledgeBaseCategory>,
       {} as AiFeatureConfigsService,
@@ -179,7 +182,7 @@ describe('KnowledgeRetrievalConfigsService', () => {
     );
   });
 
-  it('keeps a v2 draft limited to the input-cleaning entry node', () => {
+  it('keeps a v2 workflow limited to the input-cleaning entry node', () => {
     const definition = normalizeAiWorkflowDefinition({
       version: 2,
       nodes: [{ id: 'node-preflight', type: 'preflight', enabled: true }],
@@ -254,8 +257,8 @@ describe('KnowledgeRetrievalConfigsService', () => {
     expect(
       definition.nodes.filter((node) => node.type === 'knowledgeRetrieval'),
     ).toHaveLength(2);
-    expect(getAiWorkflowExecutionPlan(definition).enableKnowledgeRetrieval).toBe(
-      true,
-    );
+    expect(
+      getAiWorkflowExecutionPlan(definition).enableKnowledgeRetrieval,
+    ).toBe(true);
   });
 });

@@ -16,7 +16,7 @@ import { AgentAppsService } from './agent-apps.service';
 import { AgentWorkspaceController } from './agent-workspace.controller';
 import { AgentWorkspaceService } from './agent-workspace.service';
 import { AgentApp } from './entities/agent-app.entity';
-import { AgentDraft } from './entities/agent-draft.entity';
+import { AgentPendingAction } from './entities/agent-pending-action.entity';
 import { AgentExecution } from './entities/agent-execution.entity';
 import { AgentMessage } from './entities/agent-message.entity';
 import { AgentSession } from './entities/agent-session.entity';
@@ -31,7 +31,7 @@ import { AgentExecutionRuntimeService } from './agent-execution-runtime.service'
       AgentApp,
       AgentSession,
       AgentMessage,
-      AgentDraft,
+      AgentPendingAction,
       AgentExecution,
       AgentImage,
     ]),

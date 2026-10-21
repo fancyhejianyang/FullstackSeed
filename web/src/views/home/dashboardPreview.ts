@@ -16,7 +16,6 @@ export function previewWidget(widget: WidgetConfig): DashboardWidget {
           { key: 'agentTotal', label: '今日执行', value: 128, unit: '次' },
           { key: 'agentRate', label: '今日成功率', value: 96.2, unit: '%' },
           { key: 'waitingHuman', label: '等待人工', value: 2 },
-          { key: 'pendingApprovals', label: '待审批', value: 3 },
           { key: 'productTotal', label: '产品总数', value: 86 },
           { key: 'skuTotal', label: 'SKU 总数', value: 412 },
           { key: 'contentTotal', label: '内容创作数', value: 24 },
@@ -298,7 +297,6 @@ export function previewWidget(widget: WidgetConfig): DashboardWidget {
           { key: 'agentRate', label: '今日成功率', value: 96.2, unit: '%' },
           { key: 'apps', label: '启用 Agent', value: 5, hint: '共 6 个应用' },
           { key: 'waitingHuman', label: '等待人工', value: 2 },
-          { key: 'pendingApprovals', label: '待审批', value: 3 },
           {
             key: 'knowledge',
             label: '可用知识库',
@@ -315,7 +313,7 @@ export function previewWidget(widget: WidgetConfig): DashboardWidget {
         items: [
           { id: '1', title: '客服会话 #203', detail: '等待人工接待' },
           { id: '2', title: '产品说明文档', detail: '知识处理异常' },
-          { id: '3', title: '售后问题标准问答', detail: '待审批' },
+          { id: '3', title: '售后知识处理', detail: '等待处理' },
         ],
       };
       break;
@@ -336,7 +334,7 @@ export function previewWidget(widget: WidgetConfig): DashboardWidget {
           { id: 'knowledge', title: '知识库', detail: '进入模块' },
           { id: 'product', title: '产品库', detail: '进入模块' },
           { id: 'sku', title: 'SKU 库', detail: '进入模块' },
-          { id: 'approvals', title: '审批管理', detail: '进入模块' },
+          { id: 'articles', title: '文章创作', detail: '进入模块' },
           { id: 'articles', title: '文章创作', detail: '进入模块' },
           {
             id: 'contentGeneration',

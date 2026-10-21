@@ -30,19 +30,19 @@ export function buildContentWritingPrompt(
       writingPreferences: snapshot.config.systemPrompt,
       template: snapshot.template.instruction,
     }),
-    '成稿原则：默认直接输出 draft 正文，不设置新闻类素材审核门槛。不得仅因缺少来源链接、准确日期、学校/课程、当事方回应或处理结果而停止写作，也不要要求作者逐项确认措辞后才写。普通随笔、评论和热点解读都先围绕可理解的主题与作者观点成稿；细节不足就省略、缩短或改为围绕该主题的观点表达，不补造细节，不在歧义的具体行为上自行定性。不输出核查清单、写作方案或重复的“待核实/待补充”。',
+    '成稿原则：默认直接输出 completed 正文，不设置新闻类素材审核门槛。不得仅因缺少来源链接、准确日期、学校/课程、当事方回应或处理结果而停止写作，也不要要求作者逐项确认措辞后才写。普通随笔、评论和热点解读都先围绕可理解的主题与作者观点成稿；细节不足就省略、缩短或改为围绕该主题的观点表达，不补造细节，不在歧义的具体行为上自行定性。不输出核查清单、写作方案或重复的“待核实/待补充”。',
     format === 'text'
       ? '正文格式（最高格式约束）：body 使用纯文本；小标题直接写文字，使用自然段。不使用 Markdown 标题井号、加粗/斜体标记、引用块、代码围栏、Markdown 表格或链接语法。不要因模板示例中包含这些符号而沿用。'
       : '正文格式（最高格式约束）：body 使用 Markdown，可使用小标题和必要列表，不用代码围栏包裹整篇文章。',
     '发布标题：输入的 title 是作者记录的主题或工作标题，成稿时需结合完整正文重新拟定一个可直接用于自媒体发布的标题，而不是默认照抄主题。按模板中的平台、读者、口吻和标题要求调整；未指定平台时采用通用自媒体表达，突出文章的具体看点或核心观点，简洁自然、有吸引力，通常约 18～30 个中文字符，不硬凑字数。不编造冲突、数字或结论，不做与正文不符的夸张承诺。作者明确要求保留原题时尊重该要求。title 为单行纯文本，最多 160 个字符，不带“标题：”前缀、Markdown 标记或备选标题列表；body 不重复总标题。',
-    '返回协议：只输出一个合法 JSON 对象，只有 outcome、title、body、notes 四个字段。outcome 只能是 draft 或 needs_input；draft 必须同时返回非空的发布标题 title 和正文 body；notes 默认空数组，确有必要时最多给 2 条简短编辑提示，每项不超过 500 字，不作为成稿前置条件，不包含内部推理过程。JSON 中换行必须转义。',
-    '默认返回：{"outcome":"draft","title":"适合发布的文章标题","body":"完整文章正文","notes":[]}。即使素材简短也先交付相应篇幅的正文，提示不属于正文。',
+    '返回协议：只输出一个合法 JSON 对象，只有 outcome、title、body、notes 四个字段。outcome 只能是 completed 或 needs_input；completed 必须同时返回非空的发布标题 title 和正文 body；notes 默认空数组，确有必要时最多给 2 条简短编辑提示，每项不超过 500 字，不作为成稿前置条件，不包含内部推理过程。JSON 中换行必须转义。',
+    '默认返回：{"outcome":"completed","title":"适合发布的文章标题","body":"完整文章正文","notes":[]}。即使素材简短也先交付相应篇幅的正文，提示不属于正文。',
     '仅在标题与想法完全无法理解写作主题、无法形成任何有意义正文时，返回 {"outcome":"needs_input","title":"","body":"","notes":["请说明想写的主题"]}，最多问 1～2 个必要问题。不要把缺少新闻证明材料当成无法理解写作主题。',
   ].join('\n\n');
 }
 
 export interface ContentWritingResult {
-  outcome: 'draft' | 'needs_input';
+  outcome: 'completed' | 'needs_input';
   title: string | null;
   body: string;
   notes: string[];
@@ -73,7 +73,7 @@ export function parseContentWritingResponse(
     return null;
   if (
     typeof record.outcome !== 'string' ||
-    !['draft', 'needs_input'].includes(record.outcome) ||
+    !['completed', 'needs_input'].includes(record.outcome) ||
     typeof record.body !== 'string' ||
     record.body.length > 50000 ||
     !Array.isArray(record.notes) ||
@@ -93,14 +93,14 @@ export function parseContentWritingResponse(
     return null;
   const title = typeof record.title === 'string' ? record.title.trim() : null;
   if (
-    record.outcome === 'draft'
+    record.outcome === 'completed'
       ? (requireTitle || record.title !== undefined) && !title
       : !!title
   )
     return null;
   const body = record.body.trim();
   const notes = (record.notes as string[]).map((note) => note.trim());
-  if (record.outcome === 'draft' ? !body : !!body || notes.length === 0)
+  if (record.outcome === 'completed' ? !body : !!body || notes.length === 0)
     return null;
   return {
     outcome: record.outcome as ContentWritingResult['outcome'],

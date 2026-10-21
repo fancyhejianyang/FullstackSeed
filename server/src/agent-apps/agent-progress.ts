@@ -6,7 +6,7 @@ export const AGENT_PROGRESS_STAGES = [
   'generating_image',
   'querying',
   'retrieving',
-  'preparing_draft',
+  'preparing_confirmation',
   'generating',
   'summarizing',
 ] as const;

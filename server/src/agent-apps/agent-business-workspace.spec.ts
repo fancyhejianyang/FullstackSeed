@@ -10,7 +10,7 @@ import { AgentWorkspaceService } from './agent-workspace.service';
 import { AgentModelRouterService } from './agent-model-router.service';
 import type { AgentMediaService } from './agent-media.service';
 import type { AgentExecutionRuntimeService } from './agent-execution-runtime.service';
-import { AgentDraft } from './entities/agent-draft.entity';
+import { AgentPendingAction } from './entities/agent-pending-action.entity';
 import { AgentExecution } from './entities/agent-execution.entity';
 import { AgentMessage } from './entities/agent-message.entity';
 import { AgentSession } from './entities/agent-session.entity';
@@ -28,19 +28,22 @@ const user: AuthUser = {
 function harness(
   mediaIntent?: 'vision' | 'imageGeneration' | 'chat' | 'imageEdit' | 'clarify',
 ) {
-  let draft: AgentDraft = Object.assign(new AgentDraft(), {
-    id: 4,
-    sessionId: 2,
-    userId: 3,
-    agentAppId: 1,
-    toolKey: 'demo.create',
-    version: 2,
-    status: 'pending_confirmation',
-    data: { title: '任务' },
-    missingFields: [],
-    validationErrors: [],
-    lastExecutionId: null,
-  });
+  let pendingAction: AgentPendingAction = Object.assign(
+    new AgentPendingAction(),
+    {
+      id: 4,
+      sessionId: 2,
+      userId: 3,
+      agentAppId: 1,
+      toolKey: 'demo.create',
+      version: 2,
+      status: 'pending_confirmation',
+      data: { title: '任务' },
+      missingFields: [],
+      validationErrors: [],
+      lastExecutionId: null,
+    },
+  );
   let runs: AgentExecution[] = [];
   let messages: AgentMessage[] = [];
   const matches = (row: object, query: { where: Record<string, unknown> }) =>
@@ -54,15 +57,20 @@ function harness(
       }
       return actual === value;
     });
-  const drafts = {
+  const pendingActions = {
     findOne: jest.fn((query: { where: Record<string, unknown> }) =>
-      Promise.resolve(matches(draft, query) ? structuredClone(draft) : null),
+      Promise.resolve(
+        matches(pendingAction, query) ? structuredClone(pendingAction) : null,
+      ),
     ),
-    save: jest.fn((value: AgentDraft) => {
-      draft = structuredClone(value);
+    save: jest.fn((value: AgentPendingAction) => {
+      pendingAction = structuredClone(value);
       return Promise.resolve(value);
     }),
-    create: jest.fn((value: Partial<AgentDraft>) => ({ ...value, id: 4 })),
+    create: jest.fn((value: Partial<AgentPendingAction>) => ({
+      ...value,
+      id: 4,
+    })),
   };
   const executions = {
     update: jest.fn(
@@ -125,8 +133,8 @@ function harness(
     getRepository: (entity: unknown) =>
       entity === AgentApp
         ? appRepository
-        : entity === AgentDraft
-          ? drafts
+        : entity === AgentPendingAction
+          ? pendingActions
           : entity === AgentExecution
             ? executions
             : entity === AgentMessage
@@ -135,11 +143,11 @@ function harness(
   } as unknown as EntityManager;
   const transaction = jest.fn(
     async (run: (manager: EntityManager) => Promise<unknown>) => {
-      const backup = structuredClone({ draft, runs, messages });
+      const backup = structuredClone({ pendingAction, runs, messages });
       try {
         return await run(manager);
       } catch (error) {
-        ({ draft, runs, messages } = backup);
+        ({ pendingAction, runs, messages } = backup);
         throw error;
       }
     },
@@ -225,7 +233,7 @@ function harness(
   const service = new AgentWorkspaceService(
     sessions as unknown as Repository<AgentSession>,
     chats as unknown as Repository<AgentMessage>,
-    drafts as unknown as Repository<AgentDraft>,
+    pendingActions as unknown as Repository<AgentPendingAction>,
     executions as unknown as Repository<AgentExecution>,
     { transaction } as unknown as DataSource,
     apps as unknown as AgentAppsService,
@@ -253,11 +261,11 @@ function harness(
     manager,
     models,
     executions,
-    drafts,
+    pendingActions,
     transaction,
     appRepository,
-    get draft() {
-      return draft;
+    get pendingAction() {
+      return pendingAction;
     },
     get runs() {
       return runs;
@@ -285,7 +293,7 @@ describe('generic Agent workflow and confirmation', () => {
       expect.objectContaining({ mode: 'vision', imageId: 9 }),
     );
     expect(h.business.create).not.toHaveBeenCalled();
-    expect(h.drafts.save).not.toHaveBeenCalled();
+    expect(h.pendingActions.save).not.toHaveBeenCalled();
   });
 
   it('uses a fixed text model for intent classification while keeping vision on its dedicated model', async () => {
@@ -390,7 +398,7 @@ describe('generic Agent workflow and confirmation', () => {
         'assistantMessage' in result && result.assistantMessage?.content,
       ).toContain(message);
       expect(h.media.run).not.toHaveBeenCalled();
-      expect(h.drafts.save).not.toHaveBeenCalled();
+      expect(h.pendingActions.save).not.toHaveBeenCalled();
     },
   );
 
@@ -410,7 +418,7 @@ describe('generic Agent workflow and confirmation', () => {
     expect(h.business.query).not.toHaveBeenCalled();
   });
 
-  it('does not call media or cancel an unrelated draft when stopped during classification', async () => {
+  it('does not call media or cancel an unrelated pendingAction when stopped during classification', async () => {
     const h = harness('imageGeneration');
     h.models.callChat.mockImplementationOnce(async () => {
       await h.service.stopExecution(h.runs[0].id, user);
@@ -431,10 +439,10 @@ describe('generic Agent workflow and confirmation', () => {
     );
     expect(result.execution?.status).toBe('cancelled');
     expect(h.media.run).not.toHaveBeenCalled();
-    expect(h.draft.status).toBe('pending_confirmation');
+    expect(h.pendingAction.status).toBe('pending_confirmation');
   });
 
-  it('generates images once per message id without running business tools or touching an active draft', async () => {
+  it('generates images once per message id without running business tools or touching an active pendingAction', async () => {
     const h = harness('imageGeneration');
     const payload = {
       content: '生成商品海报',
@@ -444,7 +452,7 @@ describe('generic Agent workflow and confirmation', () => {
     expect(result.execution).toMatchObject({
       toolKey: 'media.imageGeneration',
       status: 'succeeded',
-      draftId: null,
+      pendingActionId: null,
     });
     expect(result.execution?.result).toMatchObject({
       images: [
@@ -455,7 +463,7 @@ describe('generic Agent workflow and confirmation', () => {
     expect(h.media.run).toHaveBeenCalledTimes(1);
     expect(h.business.create).not.toHaveBeenCalled();
     expect(h.models.callChat).toHaveBeenCalledTimes(1);
-    expect(h.drafts.save).not.toHaveBeenCalled();
+    expect(h.pendingActions.save).not.toHaveBeenCalled();
   });
 
   it('does not revive a stopped media execution when a provider returns late', async () => {
@@ -482,7 +490,7 @@ describe('generic Agent workflow and confirmation', () => {
     );
     expect(result.execution?.status).toBe('cancelled');
     expect(h.media.cancel).toHaveBeenCalled();
-    expect(h.draft.status).toBe('pending_confirmation');
+    expect(h.pendingAction.status).toBe('pending_confirmation');
   });
 
   it('checks attachment ownership before accepting a vision message', async () => {
@@ -506,7 +514,7 @@ describe('generic Agent workflow and confirmation', () => {
     expect(h.media.run).not.toHaveBeenCalled();
     expect(h.runs).toHaveLength(0);
   });
-  it('guides confirmation without a real draft using current module capabilities, not SKU-only wording', async () => {
+  it('guides confirmation without a real pendingAction using current module capabilities, not SKU-only wording', async () => {
     const h = harness();
     const execution = Object.assign(new AgentExecution(), {
       id: 30,
@@ -523,7 +531,7 @@ describe('generic Agent workflow and confirmation', () => {
       session: Object.assign(new AgentSession(), { id: 2, messageCount: 0 }),
       app: h.app,
       execution,
-      activeDraft: null,
+      activePendingAction: null,
       user,
     };
     const review = Reflect.get(h.service, 'processWriteReview') as (
@@ -538,8 +546,8 @@ describe('generic Agent workflow and confirmation', () => {
   it('commits a real receipt with the same manager and replays the same idempotency key', async () => {
     const h = harness();
     const dto = { version: 2, idempotencyKey: 'test-one' };
-    const first = await h.service.confirmDraft(4, dto, user);
-    const second = await h.service.confirmDraft(4, dto, user);
+    const first = await h.service.confirmPendingAction(4, dto, user);
+    const second = await h.service.confirmPendingAction(4, dto, user);
     expect(h.business.create).toHaveBeenCalledTimes(1);
     expect(h.business.create).toHaveBeenCalledWith(
       'demo.create',
@@ -553,33 +561,45 @@ describe('generic Agent workflow and confirmation', () => {
       detailPath: '/demo',
     });
     expect(second.execution.id).toBe(first.execution.id);
-    expect(h.draft.status).toBe('submitted');
+    expect(h.pendingAction.status).toBe('submitted');
     await expect(
-      h.service.confirmDraft(4, { ...dto, idempotencyKey: 'new-key' }, user),
-    ).rejects.toThrow('草稿已提交');
+      h.service.confirmPendingAction(
+        4,
+        { ...dto, idempotencyKey: 'new-key' },
+        user,
+      ),
+    ).rejects.toThrow('待确认操作已提交');
     expect(h.business.create).toHaveBeenCalledTimes(1);
   });
 
   it('rejects old versions, foreign owners, write-off and withdrawn grants before writing', async () => {
     const h = harness();
     await expect(
-      h.service.confirmDraft(4, { version: 1, idempotencyKey: 'old' }, user),
+      h.service.confirmPendingAction(
+        4,
+        { version: 1, idempotencyKey: 'old' },
+        user,
+      ),
     ).rejects.toThrow('版本变化');
     await expect(
-      h.service.confirmDraft(
+      h.service.confirmPendingAction(
         4,
         { version: 2, idempotencyKey: 'foreign' },
         { ...user, userId: 44 },
       ),
-    ).rejects.toThrow('草稿不存在');
+    ).rejects.toThrow('待确认操作不存在');
     h.app.writeEnabled = false;
     await expect(
-      h.service.confirmDraft(4, { version: 2, idempotencyKey: 'off' }, user),
+      h.service.confirmPendingAction(
+        4,
+        { version: 2, idempotencyKey: 'off' },
+        user,
+      ),
     ).rejects.toThrow('总开关已关闭');
     h.app.writeEnabled = true;
     h.apps.getExecutableToolKeys.mockResolvedValue([]);
     await expect(
-      h.service.confirmDraft(
+      h.service.confirmPendingAction(
         4,
         { version: 2, idempotencyKey: 'withdrawn' },
         user,
@@ -593,19 +613,19 @@ describe('generic Agent workflow and confirmation', () => {
     h.business.create.mockRejectedValue(
       new BadRequestException('业务校验未通过'),
     );
-    const result = await h.service.confirmDraft(
+    const result = await h.service.confirmPendingAction(
       4,
       { version: 2, idempotencyKey: 'fail' },
       user,
     );
     expect(result.execution.status).toBe('failed');
     expect(result.execution.result).toBeNull();
-    expect(h.draft.status).toBe('failed');
+    expect(h.pendingAction.status).toBe('failed');
     expect(h.runs).toHaveLength(1);
     expect(h.transaction).toHaveBeenCalledTimes(2);
   });
 
-  it('routes semantic queries and create drafts without executing a write', async () => {
+  it('routes semantic queries and create pendingActions without executing a write', async () => {
     const h = harness();
     h.app.maxToolCalls = 1;
     const execution = Object.assign(new AgentExecution(), {
@@ -619,12 +639,15 @@ describe('generic Agent workflow and confirmation', () => {
       session: Object.assign(new AgentSession(), { id: 2, messageCount: 0 }),
       app: h.app,
       execution,
-      activeDraft: null,
+      activePendingAction: null,
       user,
     };
     const process = Reflect.get(h.service, 'processBusinessAction') as (
       p: typeof params,
-    ) => Promise<{ execution: AgentExecution; draft?: AgentDraft }>;
+    ) => Promise<{
+      execution: AgentExecution;
+      pendingAction?: AgentPendingAction;
+    }>;
     h.models.callChat.mockResolvedValue({
       isSuccess: true,
       answer:
@@ -657,7 +680,7 @@ describe('generic Agent workflow and confirmation', () => {
       ...params,
       content: '录入新任务',
     });
-    expect(create.draft?.data).toEqual({ title: '新任务' });
+    expect(create.pendingAction?.data).toEqual({ title: '新任务' });
     expect(create.execution.status).toBe('waiting_confirmation');
     expect(
       h.executions.update.mock.calls
@@ -669,7 +692,7 @@ describe('generic Agent workflow and confirmation', () => {
       'understanding',
       'querying',
       'understanding',
-      'preparing_draft',
+      'preparing_confirmation',
     ]);
     expect(h.business.create).not.toHaveBeenCalled();
   });

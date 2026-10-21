@@ -238,10 +238,6 @@ export class CreateComfyWorkflowDto {
 
   @IsBoolean()
   @IsOptional()
-  isPublished?: boolean = true;
-
-  @IsBoolean()
-  @IsOptional()
   isEnabled?: boolean = true;
 }
 

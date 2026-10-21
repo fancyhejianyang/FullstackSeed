@@ -20,7 +20,7 @@ import type { AgentAppsService } from './agent-apps.service';
 import { AgentWorkspaceService } from './agent-workspace.service';
 import { AgentModelRouterService } from './agent-model-router.service';
 import type { AgentMediaService } from './agent-media.service';
-import { AgentDraft } from './entities/agent-draft.entity';
+import { AgentPendingAction } from './entities/agent-pending-action.entity';
 import { AgentExecution } from './entities/agent-execution.entity';
 import { AgentMessage } from './entities/agent-message.entity';
 import { AgentSession } from './entities/agent-session.entity';
@@ -56,7 +56,7 @@ describe('AgentWorkspaceService ownership and state guards', () => {
       Promise.resolve({ ...value, id: 88 }),
     ),
   };
-  const draftRepository = {
+  const pendingActionRepository = {
     findOne: jest.fn(),
     save: jest.fn(),
   };
@@ -75,7 +75,7 @@ describe('AgentWorkspaceService ownership and state guards', () => {
   const service = new AgentWorkspaceService(
     sessionRepository as unknown as Repository<AgentSession>,
     messageRepository as unknown as Repository<AgentMessage>,
-    draftRepository as unknown as Repository<AgentDraft>,
+    pendingActionRepository as unknown as Repository<AgentPendingAction>,
     executionRepository as unknown as Repository<AgentExecution>,
     {} as DataSource,
     appsService as unknown as AgentAppsService,
@@ -410,15 +410,15 @@ describe('AgentWorkspaceService ownership and state guards', () => {
     );
   });
 
-  it('invalidates confirmation when the draft version has changed', async () => {
-    draftRepository.findOne.mockResolvedValue({
+  it('invalidates confirmation when the pendingAction version has changed', async () => {
+    pendingActionRepository.findOne.mockResolvedValue({
       id: 5,
       userId: currentUser.userId,
       status: 'pending_confirmation',
       version: 3,
     });
     await expect(
-      service.updateDraft(5, { version: 2, data: {} }, currentUser),
+      service.updatePendingAction(5, { version: 2, data: {} }, currentUser),
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
@@ -523,8 +523,8 @@ describe('AgentWorkspaceService ownership and state guards', () => {
     );
     expect(systemPrompt).toContain('没有收到真实工具回执');
     expect(systemPrompt).toContain('# 工作目标');
-    expect(systemPrompt).toContain('可生成 SKU 草稿');
-    expect(systemPrompt).toContain('当前会话没有待确认的真实录入草稿');
+    expect(systemPrompt).toContain('可生成 SKU 待确认操作');
+    expect(systemPrompt).toContain('当前会话没有待确认的真实待确认操作');
   });
 
   it('falls back through selected models in order until one succeeds', async () => {
@@ -636,8 +636,8 @@ describe('AgentWorkspaceService ownership and state guards', () => {
     toolKeys: ['product.query', 'productSku.create'],
     writeEnabled: true,
   } as AgentApp;
-  const makeDraft = (): AgentDraft =>
-    Object.assign(new AgentDraft(), {
+  const makePendingAction = (): AgentPendingAction =>
+    Object.assign(new AgentPendingAction(), {
       id: 5,
       sessionId: 9,
       userId: currentUser.userId,
@@ -661,7 +661,7 @@ describe('AgentWorkspaceService ownership and state guards', () => {
     session: AgentSession;
     app: AgentApp;
     execution: AgentExecution;
-    activeDraft: AgentDraft | null;
+    activePendingAction: AgentPendingAction | null;
     user: AuthUser;
   };
   const review = Reflect.get(service, 'processWriteReview') as (
@@ -669,11 +669,13 @@ describe('AgentWorkspaceService ownership and state guards', () => {
   ) => Promise<{
     assistantMessage: AgentMessage;
     execution: AgentExecution;
-    draft: AgentDraft | null;
+    pendingAction: AgentPendingAction | null;
   }>;
-  function reviewParams(draft: AgentDraft | null): ReviewParams {
+  function reviewParams(
+    pendingAction: AgentPendingAction | null,
+  ): ReviewParams {
     return {
-      decision: classifyAgentAction('符合，可以入库', Boolean(draft)),
+      decision: classifyAgentAction('符合，可以入库', Boolean(pendingAction)),
       session: { id: 9, messageCount: 1 } as AgentSession,
       app,
       execution: {
@@ -682,66 +684,70 @@ describe('AgentWorkspaceService ownership and state guards', () => {
         status: 'running',
         toolCallCount: 0,
       } as AgentExecution,
-      activeDraft: draft,
+      activePendingAction: pendingAction,
       user: currentUser,
     };
   }
 
-  it('returns the current real draft without changing its version or performing a write', async () => {
-    const draft = makeDraft();
-    const params = reviewParams(draft);
-    draftRepository.findOne.mockResolvedValue(draft);
+  it('returns the current real pendingAction without changing its version or performing a write', async () => {
+    const pendingAction = makePendingAction();
+    const params = reviewParams(pendingAction);
+    pendingActionRepository.findOne.mockResolvedValue(pendingAction);
     executionRepository.findOne.mockResolvedValue({ status: 'running' });
     const result = await review.call(service, params);
     expect(result.execution.status).toBe('waiting_confirmation');
     expect(result.assistantMessage.structuredData).toEqual({
       action: 'prepare_write',
-      draftId: 5,
-      draftVersion: 3,
+      pendingActionId: 5,
+      pendingActionVersion: 3,
     });
     expect(result.assistantMessage.content).toContain('点击“确认录入”');
-    expect(draftRepository.findOne).toHaveBeenCalledWith({
+    expect(pendingActionRepository.findOne).toHaveBeenCalledWith({
       where: { id: 5, sessionId: 9, userId: currentUser.userId },
     });
-    expect(draft.version).toBe(3);
-    expect(draftRepository.save).not.toHaveBeenCalled();
+    expect(pendingAction.version).toBe(3);
+    expect(pendingActionRepository.save).not.toHaveBeenCalled();
     expect(productCatalogService.createSkuFromAgent).not.toHaveBeenCalled();
     expect(knowledgeAiChatService.askForAgent).not.toHaveBeenCalled();
   });
 
   it.each([null, 'cancelled', 'submitted', 'expired'])(
-    'does not infer a draft from chat prose or stale state (%s)',
+    'does not infer a pendingAction from chat prose or stale state (%s)',
     async (status) => {
-      const draft = status ? ({ ...makeDraft(), status } as AgentDraft) : null;
-      draftRepository.findOne.mockResolvedValue(draft);
+      const pendingAction = status
+        ? ({ ...makePendingAction(), status } as AgentPendingAction)
+        : null;
+      pendingActionRepository.findOne.mockResolvedValue(pendingAction);
       executionRepository.findOne.mockResolvedValue({ status: 'running' });
-      const result = await review.call(service, reviewParams(draft));
-      expect(result.draft).toBeNull();
+      const result = await review.call(service, reviewParams(pendingAction));
+      expect(result.pendingAction).toBeNull();
       expect(result.execution.status).toBe('waiting_input');
-      expect(result.assistantMessage.content).toContain('没有可确认的录入草稿');
-      expect(draftRepository.save).not.toHaveBeenCalled();
+      expect(result.assistantMessage.content).toContain(
+        '没有可确认的待确认操作',
+      );
+      expect(pendingActionRepository.save).not.toHaveBeenCalled();
       expect(productCatalogService.createSkuFromAgent).not.toHaveBeenCalled();
       expect(knowledgeAiChatService.askForAgent).not.toHaveBeenCalled();
     },
   );
 
   it('asks for missing or invalid fields instead of inviting submission', async () => {
-    const draft = makeDraft();
-    draft.data.specifications = {};
-    draftRepository.findOne.mockResolvedValue(draft);
+    const pendingAction = makePendingAction();
+    pendingAction.data.specifications = {};
+    pendingActionRepository.findOne.mockResolvedValue(pendingAction);
     executionRepository.findOne.mockResolvedValue({ status: 'running' });
-    const result = await review.call(service, reviewParams(draft));
+    const result = await review.call(service, reviewParams(pendingAction));
     expect(result.execution.status).toBe('waiting_input');
     expect(result.assistantMessage.content).toContain('待补充');
     expect(productCatalogService.createSkuFromAgent).not.toHaveBeenCalled();
   });
 
   it('blocks review and the shared write authorization check when a selected command was disabled', async () => {
-    const draft = makeDraft();
-    draftRepository.findOne.mockResolvedValue(draft);
+    const pendingAction = makePendingAction();
+    pendingActionRepository.findOne.mockResolvedValue(pendingAction);
     appsService.getExecutableToolKeys.mockResolvedValue(['product.query']);
     await expect(
-      review.call(service, reviewParams(draft)),
+      review.call(service, reviewParams(pendingAction)),
     ).rejects.toBeInstanceOf(ForbiddenException);
     const assertAuthorized = Reflect.get(service, 'assertActionAuthorized') as (
       app: AgentApp,

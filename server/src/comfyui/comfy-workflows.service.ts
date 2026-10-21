@@ -150,7 +150,6 @@ export class ComfyWorkflowsService {
           outputNodeIds,
           dependencyNotes: dto.dependencyNotes?.trim() || null,
           version: 1,
-          isPublished: true,
         }),
       );
       if (promptExamples.positivePrompt) {
@@ -217,7 +216,6 @@ export class ComfyWorkflowsService {
             ? { dependencyNotes: dto.dependencyNotes.trim() || null }
             : {}),
           version: current.version + 1,
-          isPublished: true,
         });
         const saved = await manager.getRepository(ComfyWorkflow).save(current);
         if (promptExamples.positivePrompt) {
@@ -275,7 +273,7 @@ export class ComfyWorkflowsService {
     const version = await this.versions.findOne({
       where: { workflowId, version: workflow.version },
     });
-    if (!version) throw new BadRequestException('工作流发布版本不存在');
+    if (!version) throw new BadRequestException('工作流当前版本不存在');
     return { workflow, version };
   }
 

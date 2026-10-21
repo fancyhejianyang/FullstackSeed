@@ -23,7 +23,7 @@ export class KnowledgeBaseDocument extends BaseEntity {
   @Column({ type: 'longtext', nullable: true })
   content: string | null;
 
-  @Column({ length: 30, default: 'draft' })
+  @Column({ length: 30, default: 'empty' })
   status: string;
 
   @Column({ type: 'text', nullable: true })

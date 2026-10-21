@@ -12,7 +12,7 @@ import {
   type DemoForm,
 } from '@/api/demo';
 import { DicService, type DicItem } from '@/dic/service';
-import { DEMO_CATEGORY, DEMO_STATUS, DEMO_TAG } from '@/dic';
+import { DEMO_CATEGORY, DEMO_TAG } from '@/dic';
 import type { SelectOption } from '@/components/Select.vue';
 
 const props = defineProps<{
@@ -30,9 +30,8 @@ const formRef = ref<InstanceType<typeof Form>>();
 const form = reactive<DemoForm>({
   title: '',
   content: '',
-  status: 'draft',
+  isActive: true,
   category: '',
-  publishedAt: '',
   activeRange: [],
   contactPhone: '',
   email: '',
@@ -49,10 +48,8 @@ const form = reactive<DemoForm>({
 });
 
 const categoryDic = ref<DicItem[]>([]);
-const statusDic = ref<DicItem[]>([]);
 const tagDic = ref<DicItem[]>([]);
 DicService.init(DEMO_CATEGORY, categoryDic);
-DicService.init(DEMO_STATUS, statusDic);
 DicService.init(DEMO_TAG, tagDic);
 
 const demoTotalAmount = 10000;
@@ -62,7 +59,6 @@ const toSelectOptions = (items: DicItem[]): SelectOption[] =>
     text: item.label,
   }));
 const categoryOptions = computed(() => toSelectOptions(categoryDic.value));
-const statusOptions = computed(() => toSelectOptions(statusDic.value));
 const tagOptions = computed(() => toSelectOptions(tagDic.value));
 const channelOptions = [
   { value: 'web', text: 'Web' },
@@ -79,16 +75,9 @@ const fields: FormField[] = [
     componentProps: { options: categoryOptions, debounce: 250 },
   },
   {
-    prop: 'status',
-    label: '状态',
-    component: 'Select',
-    componentProps: { options: statusOptions, debounce: 250 },
-  },
-  {
-    prop: 'publishedAt',
-    label: '发布日期',
-    component: 'DatePicker',
-    componentProps: { placeholder: '请选择发布日期' },
+    prop: 'isActive',
+    label: '是否启用',
+    component: 'Switch',
   },
   {
     prop: 'activeRange',
@@ -171,15 +160,13 @@ const fields: FormField[] = [
 const rules: FormRules = {
   title: [{ required: true, message: '请输入标题', trigger: 'blur' }],
   category: [{ required: true, message: '请选择分类', trigger: 'change' }],
-  status: [{ required: true, message: '请选择状态', trigger: 'change' }],
 };
 
 function resetForm() {
   form.title = '';
   form.content = '';
   form.category = '';
-  form.status = 'draft';
-  form.publishedAt = '';
+  form.isActive = true;
   form.activeRange = [];
   form.contactPhone = '';
   form.email = '';
@@ -199,8 +186,7 @@ function fillForm(data: Demo) {
   form.title = data.title ?? '';
   form.content = data.content ?? '';
   form.category = data.category ?? '';
-  form.status = data.status ?? 'draft';
-  form.publishedAt = data.publishedAt ?? '';
+  form.isActive = data.isActive;
   form.activeRange = data.activeRange ?? [];
   form.contactPhone = data.contactPhone ?? '';
   form.email = data.email ?? '';

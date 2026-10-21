@@ -5,7 +5,7 @@ import {
   AgentExecutionRuntimeService,
   AgentTimeoutError,
 } from './agent-execution-runtime.service';
-import { AgentDraft } from './entities/agent-draft.entity';
+import { AgentPendingAction } from './entities/agent-pending-action.entity';
 import { AgentExecution } from './entities/agent-execution.entity';
 import { AgentMessage } from './entities/agent-message.entity';
 
@@ -21,7 +21,7 @@ describe('AgentExecutionRuntimeService', () => {
     ),
   };
   const executionUpdates = { update: jest.fn() };
-  const draftUpdates = { update: jest.fn() };
+  const pendingActionUpdates = { update: jest.fn() };
   const messages = {
     findOne: jest.fn(),
     create: jest.fn((value: Partial<AgentMessage>) => value),
@@ -32,8 +32,8 @@ describe('AgentExecutionRuntimeService', () => {
     getRepository: (entity: unknown) =>
       entity === AgentExecution
         ? executionUpdates
-        : entity === AgentDraft
-          ? draftUpdates
+        : entity === AgentPendingAction
+          ? pendingActionUpdates
           : entity === AgentMessage
             ? messages
             : sessions,
@@ -76,14 +76,14 @@ describe('AgentExecutionRuntimeService', () => {
     expect(executionSignal?.aborted).toBe(true);
   });
 
-  it('recovers an expired execution, its submitting draft and its session receipt', async () => {
+  it('recovers an expired execution, its submitting pendingAction and its session receipt', async () => {
     executionRepository.find.mockResolvedValue([
       Object.assign(new AgentExecution(), {
         id: 9,
         sessionId: 3,
         userId: 4,
         messageId: 5,
-        draftId: 6,
+        pendingActionId: 6,
         status: 'running',
       }),
     ]);
@@ -100,7 +100,7 @@ describe('AgentExecutionRuntimeService', () => {
         failureStage: 'recovery',
       }),
     );
-    expect(draftUpdates.update).toHaveBeenCalledWith(
+    expect(pendingActionUpdates.update).toHaveBeenCalledWith(
       { id: 6, status: 'submitting' },
       { status: 'failed' },
     );

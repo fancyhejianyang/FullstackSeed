@@ -11,8 +11,8 @@ import { formatDateTime } from "@/utils/format";
 import { getPermissionActionColor } from "@/utils/permission";
 import { getProductOptions, type ProductOption } from "@/api/productCatalog";
 import {
-  cancelAgentDraft,
-  confirmAgentDraft,
+  cancelAgentPendingAction,
+  confirmAgentPendingAction,
   createAgentSession,
   getAgentExecutionByRequest,
   getAgentExecutionProgress,
@@ -22,10 +22,10 @@ import {
   getAvailableAgentApps,
   sendAgentMessage,
   stopAgentExecution,
-  updateAgentDraft,
+  updateAgentPendingAction,
   uploadAgentImage,
   type AgentImageReference,
-  type AgentDraft,
+  type AgentPendingAction,
   type AgentExecutionProgress,
   type AgentMessage,
   type AgentSession,
@@ -319,7 +319,7 @@ const promptSuggestions = computed<AgentPromptSuggestion[]>(() => {
   if (writeTool) {
     result.push({
       kind: "write",
-      title: "创建录入草稿",
+      title: "创建待确认操作",
       description: "整理信息，确认后再受控写入",
       prompt: `我想${writeTool.name}，请引导我补充所需信息。`,
     });
@@ -697,45 +697,45 @@ function handleEnter(event: KeyboardEvent) {
   void send();
 }
 
-async function handleDraftUpdate(draft: AgentDraft, data: AgentDraft["data"]) {
+async function handlePendingActionUpdate(pendingAction: AgentPendingAction, data: AgentPendingAction["data"]) {
   if (!activeSession.value) return;
   actionBusy.value = true;
   try {
-    await updateAgentDraft(draft.id, { version: draft.version, data });
-    confirmationKeys.delete(draft.id);
+    await updateAgentPendingAction(pendingAction.id, { version: pendingAction.version, data });
+    confirmationKeys.delete(pendingAction.id);
     await loadSession(activeSession.value.id);
-    ElMessage.success("草稿已更新，旧版本确认已失效");
+    ElMessage.success("待确认操作已更新，旧版本确认已失效");
   } finally {
     actionBusy.value = false;
   }
 }
 
-async function handleDraftConfirm(draft: AgentDraft) {
+async function handlePendingActionConfirm(pendingAction: AgentPendingAction) {
   if (!activeSession.value) return;
-  const key = confirmationKeys.get(draft.id) ?? makeKey();
-  confirmationKeys.set(draft.id, key);
-  const requestId = `draft:${draft.id}:${key}`;
+  const key = confirmationKeys.get(pendingAction.id) ?? makeKey();
+  confirmationKeys.set(pendingAction.id, key);
+  const requestId = `pendingAction:${pendingAction.id}:${key}`;
   actionBusy.value = true;
   try {
-    const result = await confirmAgentDraft(draft.id, {
-      version: draft.version,
+    const result = await confirmAgentPendingAction(pendingAction.id, {
+      version: pendingAction.version,
       idempotencyKey: key,
     });
     const receipt = result.execution.result;
     const hasReceipt =
-      receipt?.recordType === draft.toolKey.split(".")[0] &&
+      receipt?.recordType === pendingAction.toolKey.split(".")[0] &&
       typeof receipt.recordId === "number" &&
       Number.isInteger(receipt.recordId) &&
       receipt.recordId > 0;
     if (result.execution.status === "succeeded" && hasReceipt) {
-      confirmationKeys.delete(draft.id);
+      confirmationKeys.delete(pendingAction.id);
       ElMessage.success("业务数据已成功录入");
     } else {
       ElMessage.warning(
         result.execution.errorMessage ||
           (result.execution.status === "succeeded"
             ? "缺少真实录入回执，请先核实结果，不要重复提交"
-            : "录入未完成，请检查草稿"),
+            : "录入未完成，请检查待确认操作"),
       );
     }
     await Promise.all([loadSession(activeSession.value.id), loadSessions()]);
@@ -752,14 +752,14 @@ async function handleDraftConfirm(draft: AgentDraft) {
   }
 }
 
-async function handleDraftCancel(draft: AgentDraft) {
+async function handlePendingActionCancel(pendingAction: AgentPendingAction) {
   if (!activeSession.value) return;
   actionBusy.value = true;
   try {
-    await cancelAgentDraft(draft.id);
-    confirmationKeys.delete(draft.id);
+    await cancelAgentPendingAction(pendingAction.id);
+    confirmationKeys.delete(pendingAction.id);
     await loadSession(activeSession.value.id);
-    ElMessage.info("草稿已取消");
+    ElMessage.info("待确认操作已取消");
   } finally {
     actionBusy.value = false;
   }
@@ -926,16 +926,16 @@ onUnmounted(() => {
             :responsibility="currentApp?.responsibility || ''"
             :suggestions="promptSuggestions"
             :messages="visibleMessages"
-            :drafts="activeSession?.drafts || []"
+            :pendingActions="activeSession?.pendingActions || []"
             :executions="activeSession?.executions || []"
             :products="products"
             :busy="hasPendingMessages || actionBusy || debugBusy"
             :processing="processingMessage"
             :has-more="hasOlderMessages"
             :loading-older="loadingOlderMessages"
-            @update-draft="handleDraftUpdate"
-            @confirm-draft="handleDraftConfirm"
-            @cancel-draft="handleDraftCancel"
+            @update-pendingAction="handlePendingActionUpdate"
+            @confirm-pendingAction="handlePendingActionConfirm"
+            @cancel-pendingAction="handlePendingActionCancel"
             @prompt="sendPrompt"
             @load-older="loadOlderMessages"
           />

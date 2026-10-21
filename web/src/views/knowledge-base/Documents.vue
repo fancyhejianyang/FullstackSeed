@@ -81,7 +81,7 @@ function getSourceTypeLabel(value?: string) {
 
 function getStatusLabel(value?: string) {
   const map: Record<string, string> = {
-    draft: '草稿',
+    empty: '待补充',
     parsed: '已解析',
     pending: '待处理',
     processing: '处理中',

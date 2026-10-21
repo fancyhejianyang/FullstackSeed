@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import ts from 'typescript';
 import * as vue from 'vue';
 
-// 使用真实组件脚本与 Vue 响应式，覆盖 v-model 返回值后的草稿行为。
+// 使用真实组件脚本与 Vue 响应式，覆盖 v-model 返回值后的输入缓冲行为。
 // 不依赖 DOM，不把这些用例当作浏览器输入/光标测试。
 function transpile(source) {
   return ts.transpileModule(source, {
@@ -40,7 +40,7 @@ async function loadSetup(file, exported) {
 }
 
 const setupNumber = await loadSetup('./InputNumber.vue', [
-  'draftValue',
+  'inputBuffer',
   'error',
   'handleInput',
   'handleChange',
@@ -95,7 +95,7 @@ test('typing 1 -> 18 -> 180 is not clamped by min=10, even after model watchers 
   for (const value of ['1', '18', '180']) {
     h.handleInput(value);
     await vue.nextTick();
-    assert.equal(h.draftValue.value, value);
+    assert.equal(h.inputBuffer.value, value);
     assert.equal(h.model.value, Number(value));
     assert.equal(h.error.value, '');
   }
@@ -116,7 +116,7 @@ test('out-of-range values remain unchanged on blur, change and validation; Enter
     h.handleChange(value);
     h.handleBlur({});
     assert.equal(h.model.value, Number(value));
-    assert.equal(h.draftValue.value, value);
+    assert.equal(h.inputBuffer.value, value);
     assert.equal(h.error.value, message);
     assert.equal(h.validate(), message);
     h.handleEnter();
@@ -131,7 +131,7 @@ test('out-of-range values remain unchanged on blur, change and validation; Enter
   assert.deepEqual(h.events.at(-1), ['enter', 300]);
 });
 
-test('negative numbers and decimal drafts survive numeric model echo', async (t) => {
+test('negative numbers and decimal buffers survive numeric model echo', async (t) => {
   const h = harness(setupNumber, { mode: 'money', precision: 2 }, 7);
   t.after(h.stop);
   for (const [text, value] of [
@@ -145,19 +145,19 @@ test('negative numbers and decimal drafts survive numeric model echo', async (t)
   ]) {
     h.handleInput(text);
     await vue.nextTick();
-    assert.equal(h.draftValue.value, text);
+    assert.equal(h.inputBuffer.value, text);
     assert.equal(h.model.value, value);
   }
   h.handleInput('1.234');
   await vue.nextTick();
-  assert.equal(h.draftValue.value, '1.23');
+  assert.equal(h.inputBuffer.value, '1.23');
   assert.equal(h.model.value, 1.23);
   h.handleInput('.');
   await vue.nextTick();
-  assert.equal(h.draftValue.value, '.');
+  assert.equal(h.inputBuffer.value, '.');
   assert.equal(h.model.value, null);
   h.handleBlur({});
-  assert.equal(h.draftValue.value, '');
+  assert.equal(h.inputBuffer.value, '');
 });
 
 test('external model updates, clearing, required and custom rule options still work', async (t) => {
@@ -167,11 +167,11 @@ test('external model updates, clearing, required and custom rule options still w
   assert.equal(h.validate(), '不能小于 10');
   h.model.value = 180;
   await vue.nextTick();
-  assert.equal(h.draftValue.value, '180');
+  assert.equal(h.inputBuffer.value, '180');
   assert.equal(h.error.value, '');
   h.handleClear();
   assert.equal(h.model.value, null);
-  assert.equal(h.draftValue.value, '');
+  assert.equal(h.inputBuffer.value, '');
   assert.equal(h.validate(), '该字段不能为空');
   h.props.rulesEnabled = false;
   assert.equal(h.validate(), true);

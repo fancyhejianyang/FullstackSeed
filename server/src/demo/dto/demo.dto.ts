@@ -8,17 +8,11 @@ import {
   IsArray,
   IsBoolean,
   IsEmail,
-  IsDateString,
   Min,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { PartialType } from '@nestjs/swagger';
-import {
-  DEMO_CATEGORIES,
-  DEMO_STATUSES,
-  type DemoStatus,
-  type DemoCategory,
-} from '../demo.constants';
+import { DEMO_CATEGORIES, type DemoCategory } from '../demo.constants';
 
 export class CreateDemoDto {
   @IsString()
@@ -33,13 +27,9 @@ export class CreateDemoDto {
   @IsOptional()
   category?: DemoCategory;
 
-  @IsIn(DEMO_STATUSES)
+  @IsBoolean()
   @IsOptional()
-  status?: DemoStatus;
-
-  @IsDateString()
-  @IsOptional()
-  publishedAt?: string;
+  isActive?: boolean;
 
   @IsArray()
   @IsString({ each: true })
@@ -122,9 +112,14 @@ export class QueryDemoDto {
   @IsOptional()
   keyword?: string;
 
-  @IsIn(DEMO_STATUSES)
+  @Transform(({ value }: { value: unknown }) => {
+    if (value === true || value === 'true') return true;
+    if (value === false || value === 'false') return false;
+    return value;
+  })
+  @IsBoolean()
   @IsOptional()
-  status?: DemoStatus;
+  isActive?: boolean;
 }
 
 export class BatchDeleteDemoDto {

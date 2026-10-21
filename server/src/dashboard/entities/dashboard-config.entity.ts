@@ -9,16 +9,8 @@ export class DashboardConfig extends BaseEntity {
   key: string;
   @Column({ type: 'int', default: 0 })
   revision: number;
-  @Column({ type: 'int', default: 0 })
-  publishedVersion: number;
   @Column({ type: 'simple-json' })
-  draft: WidgetConfig[];
-  @Column({ type: 'simple-json' })
-  published: WidgetConfig[];
-  @Column({ type: 'simple-json', nullable: true })
-  previous: WidgetConfig[] | null;
+  widgets: WidgetConfig[];
   @Column({ type: 'int', nullable: true })
   updatedBy: number | null;
-  @Column({ type: 'datetime', nullable: true })
-  publishedAt: Date | null;
 }

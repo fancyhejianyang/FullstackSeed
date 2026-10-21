@@ -3,6 +3,7 @@ import { computed, reactive, ref, watch } from 'vue';
 import { ElMessage, type FormRules } from 'element-plus';
 import Dialog from '@/components/Dialog.vue';
 import Form, { type FormField } from '@/components/Form.vue';
+import Switch from '@/components/Switch.vue';
 import {
   createKnowledgeStandardQa,
   getKnowledgeStandardQa,
@@ -35,6 +36,7 @@ type StandardQaEditForm = {
   answer: string;
   sourceChatMessageId: number | null;
   sourceChunkIds: number[];
+  isActive: boolean;
 };
 
 const form = reactive<StandardQaEditForm>({
@@ -43,6 +45,7 @@ const form = reactive<StandardQaEditForm>({
   answer: '',
   sourceChatMessageId: null,
   sourceChunkIds: [],
+  isActive: true,
 });
 
 const fields = computed<FormField[]>(() => [
@@ -63,6 +66,7 @@ const fields = computed<FormField[]>(() => [
     hint: '会忽略大小写、空格和标点；不会按关键词或语义进行模糊猜测。',
   },
   { prop: 'answer', label: '标准答案', type: 'textarea', rows: 8, placeholder: '支持 Markdown、链接和图片' },
+  { prop: 'isActive', label: '是否启用', slot: true },
 ]);
 
 const rules = computed<FormRules>(() => ({
@@ -90,6 +94,7 @@ function resetForm(prefill?: KnowledgeStandardQaPrefill | null) {
   form.answer = prefill?.answer ?? '';
   form.sourceChatMessageId = prefill?.sourceChatMessageId ?? null;
   form.sourceChunkIds = prefill?.sourceChunkIds ?? [];
+  form.isActive = true;
 }
 
 function fillForm(data: KnowledgeStandardQa) {
@@ -98,6 +103,7 @@ function fillForm(data: KnowledgeStandardQa) {
   form.answer = data.answer ?? '';
   form.sourceChatMessageId = data.sourceChatMessageId ?? null;
   form.sourceChunkIds = data.sourceChunkIds ?? [];
+  form.isActive = data.isActive;
 }
 
 function splitTexts(value: string, separator: RegExp) {
@@ -111,6 +117,7 @@ function buildPayload(): KnowledgeStandardQaForm {
     answer: form.answer.trim(),
     sourceChatMessageId: form.sourceChatMessageId,
     sourceChunkIds: form.sourceChunkIds,
+    isActive: form.isActive,
   };
 }
 
@@ -123,7 +130,7 @@ async function handleSubmit() {
       ElMessage.success('标准问答已更新');
     } else {
       await createKnowledgeStandardQa(buildPayload());
-      ElMessage.success('标准问答已创建，请审核后发布');
+      ElMessage.success('标准问答已创建');
     }
     visible.value = false;
     emit('success');
@@ -142,9 +149,11 @@ async function handleSubmit() {
     @confirm="handleSubmit"
   >
     <div v-loading="loading">
-      <Form ref="formRef" v-model="form" :fields="fields" :rules="rules" label-width="120px" />
+      <Form ref="formRef" v-model="form" :fields="fields" :rules="rules" label-width="120px">
+        <template #field-isActive><Switch v-model="form.isActive" /></template>
+      </Form>
       <div class="knowledge-standard-qa-edit__tip">
-        保存后先保留为草稿；编辑确认无误后，请在标准问答库提交审批。管理员通过后，只有标准问题或相似问法被精确命中时才会直接返回固定答案。
+        启用后，只有标准问题或相似问法被精确命中时才会直接返回固定答案；停用后不参与匹配。
       </div>
     </div>
   </Dialog>

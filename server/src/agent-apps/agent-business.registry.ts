@@ -20,7 +20,7 @@ export const AGENT_BUSINESS_MODULES = {
     name: '标准问答',
     permission: 'KnowledgeStandardQa',
     path: '/chat-management/standard-qas',
-    note: '只保存为草稿，发布仍需在标准问答页面走审批。',
+    note: '默认停用；核对答案后可在标准问答页面启用。',
   },
   colloquialTerm: {
     name: '口语词条',
@@ -53,7 +53,7 @@ export const AGENT_BUSINESS_READ_FIELDS: Partial<
   Record<AgentBusinessModuleKey, Array<{ prop: string; label: string }>>
 > = {
   standardQa: [
-    { prop: 'status', label: '发布状态' },
+    { prop: 'isActive', label: '启用状态' },
     { prop: 'version', label: '版本' },
   ],
   knowledgeBase: [

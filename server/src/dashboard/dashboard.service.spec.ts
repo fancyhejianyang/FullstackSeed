@@ -35,9 +35,7 @@ function fixture() {
     getRepository: jest.fn(() => ({ createQueryBuilder: () => qb })),
   };
   const config = {
-    read: jest
-      .fn()
-      .mockResolvedValue({ published: widgets, publishedVersion: 2 }),
+    read: jest.fn().mockResolvedValue({ revision: 2, widgets }),
   };
   return {
     widgets,

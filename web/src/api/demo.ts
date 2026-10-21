@@ -1,11 +1,9 @@
 import request from '@/utils/request';
-import { DEMO_CATEGORY, DEMO_STATUS, DEMO_TAG } from '@/dic';
+import { DEMO_CATEGORY, DEMO_TAG } from '@/dic';
 
 /** 示例分类值（与后端 demo.constants.ts 保持一致） */
 export type DemoCategory = (typeof DEMO_CATEGORY.items)[number]['value'];
 
-/** 示例状态值（与后端 demo.constants.ts 保持一致） */
-export type DemoStatus = (typeof DEMO_STATUS.items)[number]['value'];
 export type DemoTag = (typeof DEMO_TAG.items)[number]['value'];
 
 export interface Demo {
@@ -13,8 +11,7 @@ export interface Demo {
   title: string;
   content: string;
   category: DemoCategory;
-  status: DemoStatus;
-  publishedAt: string;
+  isActive: boolean;
   activeRange: string[];
   contactPhone: string;
   email: string;
@@ -41,15 +38,14 @@ export interface QueryDemoParams {
   page?: number;
   pageSize?: number;
   keyword?: string;
-  status?: DemoStatus | '';
+  isActive?: boolean | '';
 }
 
 export interface DemoForm {
   title: string;
   content?: string;
   category?: DemoCategory;
-  status?: DemoStatus;
-  publishedAt?: string;
+  isActive?: boolean;
   activeRange?: string[];
   contactPhone?: string;
   email?: string;

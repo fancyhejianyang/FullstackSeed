@@ -70,10 +70,6 @@ export interface DashboardHome {
 }
 export interface DashboardConfiguration {
   revision: number;
-  publishedVersion: number;
-  draft: WidgetConfig[];
-  published: WidgetConfig[];
-  canRollback: boolean;
-  publishedAt: string | null;
+  widgets: WidgetConfig[];
   definitions: WidgetDefinition[];
 }

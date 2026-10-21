@@ -173,9 +173,9 @@ describe('Agent reusable business adapters', () => {
       service.validate('standardQa.create', {
         question: '保修多久',
         answer: '一年',
-        status: 'published',
+        isActive: 'yes',
       }).validationErrors[0],
-    ).toContain('status');
+    ).toContain('isActive');
     expect(
       service.validate('knowledgeBase.create', {
         name: '售后',
@@ -186,7 +186,7 @@ describe('Agent reusable business adapters', () => {
     ).toContain('fileUrl');
   });
 
-  it('uses safe defaults and transaction-scoped business services, with QA remaining draft', async () => {
+  it('uses safe defaults and transaction-scoped business services, with QA disabled by default', async () => {
     const manager = {} as EntityManager;
     await service.create(
       'standardQa.create',
@@ -195,7 +195,7 @@ describe('Agent reusable business adapters', () => {
       manager,
     );
     expect(qa.create).toHaveBeenCalledWith(
-      { question: '保修多久', answer: '一年', status: 'draft' },
+      { question: '保修多久', answer: '一年', isActive: false },
       manager,
     );
     await service.create(
@@ -243,7 +243,7 @@ describe('Agent reusable business adapters', () => {
     expect(form.note).toContain('索引须在知识库页面执行');
   });
 
-  it('prepares an article generation draft and queues it only through confirmation', async () => {
+  it('prepares an article generation pendingAction and queues it only through confirmation', async () => {
     const prepared = await service.prepare(
       'contentArticle.generate',
       { idea: '这是我的文章想法\n后续素材' },
@@ -304,7 +304,7 @@ describe('Agent reusable business adapters', () => {
     );
     await expect(
       service.query('knowledgeCategory.create', { name: '禁止直写' }, admin),
-    ).rejects.toThrow('草稿确认');
+    ).rejects.toThrow('待确认操作确认');
   });
 
   it('accepts only constrained JSON plans and never dispatches supplied URLs', () => {

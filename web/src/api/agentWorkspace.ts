@@ -2,7 +2,7 @@ import request from "@/utils/request";
 import type { AgentBusinessToolOption, AgentToolKey } from "./agentApp";
 import type { ProductSkuChatContext } from "./knowledgeAiChat";
 
-export type AgentDraftStatus =
+export type AgentPendingActionStatus =
   | "collecting"
   | "pending_confirmation"
   | "submitting"
@@ -33,7 +33,7 @@ export type AgentProgressStage =
   | "understanding"
   | "querying"
   | "retrieving"
-  | "preparing_draft"
+  | "preparing_confirmation"
   | "generating"
   | "summarizing";
 
@@ -83,8 +83,8 @@ export interface AgentMessageStructuredData {
   queryStatus?: "matched" | "not_matched";
   context?: ProductSkuChatContext | null;
   businessContext?: ProductSkuChatContext | null;
-  draftId?: number;
-  draftVersion?: number;
+  pendingActionId?: number;
+  pendingActionVersion?: number;
   candidateContext?: ProductSkuChatContext | null;
   recordId?: number;
   recordCode?: string;
@@ -106,7 +106,7 @@ export interface AgentMessage {
   messageType:
     | "text"
     | "query_result"
-    | "draft"
+    | "pending_action"
     | "receipt"
     | "status"
     | "error";
@@ -118,7 +118,7 @@ export interface AgentMessage {
   updatedAt: string;
 }
 
-export interface AgentSkuDraftData extends Record<string, unknown> {
+export interface AgentSkuPendingActionData extends Record<string, unknown> {
   productId: number | null;
   productName: string;
   skuCode: string;
@@ -156,13 +156,13 @@ export interface AgentBusinessQueryResult {
   detailPath: string;
 }
 
-export interface AgentDraft {
+export interface AgentPendingAction {
   id: number;
   sessionId: number;
   userId: number;
   agentAppId: number;
   toolKey: string;
-  status: AgentDraftStatus;
+  status: AgentPendingActionStatus;
   version: number;
   data: Record<string, unknown>;
   form?: AgentBusinessForm;
@@ -181,7 +181,7 @@ export interface AgentExecution {
   userId: number;
   agentAppId: number;
   messageId: number | null;
-  draftId: number | null;
+  pendingActionId: number | null;
   toolKey: AgentExecutionToolKey;
   status: AgentExecutionStatus;
   parameterSummary:
@@ -248,7 +248,7 @@ export type AgentExecutionRecord = Pick<
 export interface AgentSessionDetail extends AgentSession {
   messages: AgentMessage[];
   messageTotal: number;
-  drafts: AgentDraft[];
+  pendingActions: AgentPendingAction[];
   executions: AgentExecution[];
 }
 
@@ -267,7 +267,7 @@ export interface AgentActionResult {
   userMessage?: AgentMessage;
   assistantMessage?: AgentMessage | null;
   execution: AgentExecution;
-  draft?: AgentDraft | null;
+  pendingAction?: AgentPendingAction | null;
 }
 
 export function getAvailableAgentApps() {
@@ -351,30 +351,30 @@ export function getAgentImage(sessionId: number, imageId: number) {
   );
 }
 
-export function updateAgentDraft(
+export function updateAgentPendingAction(
   id: number,
   data: { version: number; data: Record<string, unknown> },
 ) {
-  return request.patch<unknown, AgentDraft>(
-    `/agent-workspace/drafts/${id}`,
+  return request.patch<unknown, AgentPendingAction>(
+    `/agent-workspace/pending-actions/${id}`,
     data,
   );
 }
 
-export function confirmAgentDraft(
+export function confirmAgentPendingAction(
   id: number,
   data: { version: number; idempotencyKey: string },
 ) {
   return request.post<unknown, AgentActionResult>(
-    `/agent-workspace/drafts/${id}/confirm`,
+    `/agent-workspace/pending-actions/${id}/confirm`,
     data,
     { timeout: 310000 },
   );
 }
 
-export function cancelAgentDraft(id: number) {
-  return request.post<unknown, AgentDraft>(
-    `/agent-workspace/drafts/${id}/cancel`,
+export function cancelAgentPendingAction(id: number) {
+  return request.post<unknown, AgentPendingAction>(
+    `/agent-workspace/pending-actions/${id}/cancel`,
   );
 }
 

@@ -80,9 +80,9 @@ function formatJson(value: unknown) {
           <el-descriptions-item label="会话 ID">{{
             detail.sessionId
           }}</el-descriptions-item>
-          <el-descriptions-item label="消息 / 草稿 ID"
+          <el-descriptions-item label="消息 / 待确认操作 ID"
             >{{ detail.messageId ?? "—" }} /
-            {{ detail.draftId ?? "—" }}</el-descriptions-item
+            {{ detail.pendingActionId ?? "—" }}</el-descriptions-item
           >
           <el-descriptions-item label="状态">
             <AgentExecutionStatusTag
