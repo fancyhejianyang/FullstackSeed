@@ -189,7 +189,7 @@ onMounted(load);
 </script>
 
 <template>
-  <PageContainer title="ComfyUI 创作">
+  <PageContainer title="创作任务">
     <TaskTable ref="taskTableRef">
       <template #toolbar>
         <Button perm="ComfyTask.create" icon="Plus" @click="openCreate">
@@ -200,7 +200,7 @@ onMounted(load);
 
     <Dialog
       v-model="createVisible"
-      title="新建 ComfyUI 创作任务"
+      title="新建创作任务"
       width="1040px"
       body-max-height="76vh"
       :show-footer="false"
@@ -459,7 +459,7 @@ onMounted(load);
                   :placeholder="
                     materials.length
                       ? `请选择${binding.label}`
-                      : '请先到 ComfyUI 素材上传图片'
+                      : '请先到素材库管理上传图片'
                   "
                   @update:model-value="parameters[binding.key] = $event"
                 />

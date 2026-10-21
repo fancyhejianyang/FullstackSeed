@@ -1,5 +1,36 @@
 # CHANGELOG
 
+### 2026-10-21 精简 ComfyUI 菜单命名与任务入口
+
+- ComfyUI 一级菜单下统一保留“创作任务”“素材库管理”“工作流管理”三个入口，子菜单不再重复 ComfyUI 前缀；页面标题、工作流说明与素材选择提示同步采用新名称。
+- 将原独立“ComfyUI 生成记录”入口并入“创作任务”：既有任务表格继续承接查询、详情与状态操作，旧 `/comfyui/tasks` 地址保留为兼容跳转，菜单初始化会停用历史重复菜单记录。
+- 首页快捷入口同步调整为 ComfyUI 创作任务、素材库管理和工作流管理；生成趋势及最近成果跳转统一进入创作任务页，不再指向重复记录页。
+- 保持现有接口、数据库字段、任务数据和权限码不变；补充菜单初始化与首页快捷入口边界测试，并同步更新设计规范。
+- 验证：3 套 / 31 项后端菜单与首页定向测试、6 项前端首页契约测试、后端目标文件 ESLint、Vue 类型检查及目标页面组件复用扫描通过。按非新功能变更约定未执行构建、启动服务或调用 ComfyUI。
+
+新增文件：无。
+
+修改文件（14）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/dashboard/dashboard.registry.spec.ts`
+- `server/src/dashboard/dashboard.registry.ts`
+- `server/src/dashboard/dashboard.service.ts`
+- `server/src/menus/menus.service.spec.ts`
+- `server/src/menus/menus.service.ts`
+- `web/src/router/index.ts`
+- `web/src/views/comfy-create/Index.vue`
+- `web/src/views/comfy-material/Index.vue`
+- `web/src/views/comfy-workflow/Edit.vue`
+- `web/src/views/comfy-workflow/Index.vue`
+- `web/src/views/comfy-workflow/workflowDetection.ts`
+- `web/src/views/home/dashboardPreview.ts`
+
+删除文件（1）：
+
+- `web/src/views/comfy-task/Index.vue`
+
 ### 2026-10-20 Agent 接入文章异步生成任务
 
 - 新增受控业务指令 `contentArticle.generate`，Agent 可把员工提供的想法整理为文章生成草稿；仍须在 Agent 应用中授权该工具、开启写入总开关，并由员工人工确认后才会执行，不允许模型直接写入或宣称成功。

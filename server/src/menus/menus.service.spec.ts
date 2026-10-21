@@ -201,6 +201,32 @@ describe('MenusService Agent menu reconciliation', () => {
     ).toBe(false);
   });
 
+  it('uses concise ComfyUI child names and retires the duplicate task-record menu', async () => {
+    rows.push(
+      menu({
+        id: 20,
+        name: 'ComfyUI 生成记录',
+        path: '/comfyui/tasks',
+        permissionCode: 'ComfyTask.read',
+      }),
+    );
+    await service.onModuleInit();
+
+    const retired = rows.find((item) => item.path === '/comfyui/tasks');
+    expect(retired).toMatchObject({ id: 20, isActive: false });
+    const tree = await service.findMine(false, [
+      'ComfyTask.read',
+      'ComfyMaterial.read',
+      'ComfyWorkflow.read',
+    ]);
+    const root = tree.find((item) => item.path === '/comfyui');
+    expect(root?.children.map(({ name, path }) => ({ name, path }))).toEqual([
+      { name: '创作任务', path: '/comfyui/create' },
+      { name: '素材库管理', path: '/comfyui/materials' },
+      { name: '工作流管理', path: '/comfyui/workflows' },
+    ]);
+  });
+
   it('AI 配置收敛为单一菜单并停用历史子菜单', async () => {
     rows.push(
       menu({

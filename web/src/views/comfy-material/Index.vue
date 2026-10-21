@@ -132,7 +132,7 @@ function formatBytes(value: number) {
 </script>
 
 <template>
-  <PageContainer title="ComfyUI 素材">
+  <PageContainer title="素材库管理">
     <Table
       ref="tableRef"
       perm-module="comfyMaterial"

@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import {
+  DASHBOARD_LINKS,
   DASHBOARD_WIDGETS,
   canViewWidget,
   defaultWidgets,
@@ -15,6 +16,30 @@ const user = (permissions: string[]): AuthUser => ({
   permissions,
 });
 describe('dashboard registry boundary', () => {
+  it('offers the three current ComfyUI entries without the retired duplicate record link', () => {
+    expect(
+      DASHBOARD_LINKS.filter((item) => item.key.startsWith('comfy')).map(
+        ({ key, label, path }) => ({ key, label, path }),
+      ),
+    ).toEqual([
+      {
+        key: 'comfyCreate',
+        label: 'ComfyUI 创作任务',
+        path: '/comfyui/create',
+      },
+      {
+        key: 'comfyMaterials',
+        label: 'ComfyUI 素材库管理',
+        path: '/comfyui/materials',
+      },
+      {
+        key: 'comfyTasks',
+        label: 'ComfyUI 工作流管理',
+        path: '/comfyui/workflows',
+      },
+    ]);
+  });
+
   it('recent activity requires independent log access rather than menu management access', () => {
     const definition = DASHBOARD_WIDGETS.find(
       (w) => w.key === 'activity.recent',

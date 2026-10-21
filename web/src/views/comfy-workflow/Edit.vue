@@ -484,7 +484,7 @@ async function submit() {
   <Dialog
     v-model="visible"
     class="workflow-dialog"
-    :title="row ? '编辑 ComfyUI 工作流' : '导入 ComfyUI 工作流'"
+    :title="row ? '编辑工作流' : '导入工作流'"
     width="1040px"
     body-max-height="76vh"
     :confirm-loading="submitting"
@@ -495,7 +495,7 @@ async function submit() {
         <div>
           <span class="workflow-editor__heading-title">基础信息</span>
           <span class="workflow-editor__heading-description">
-            导入并保存工作流，启用后即可在 ComfyUI 创作中调用
+            导入并保存工作流，启用后即可在创作任务中调用
           </span>
         </div>
         <Button
@@ -646,7 +646,7 @@ async function submit() {
                   </span>
                 </div>
                 <div class="workflow-section__description">
-                  保存后，这些参数会出现在 ComfyUI 创作表单中
+                  保存后，这些参数会出现在创作任务表单中
                 </div>
               </div>
               <Button

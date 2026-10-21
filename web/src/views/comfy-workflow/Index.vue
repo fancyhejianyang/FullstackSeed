@@ -64,7 +64,7 @@ function openEdit(row: ComfyWorkflow) {
 </script>
 
 <template>
-  <PageContainer title="ComfyUI 工作流">
+  <PageContainer title="工作流管理">
     <Table
       ref="tableRef"
       perm-module="comfyWorkflow"

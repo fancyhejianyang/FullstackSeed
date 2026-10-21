@@ -101,21 +101,22 @@ export const DASHBOARD_LINKS = [
   },
   {
     key: 'comfyCreate',
-    label: 'ComfyUI 创作',
+    label: 'ComfyUI 创作任务',
     path: '/comfyui/create',
     permission: 'ComfyTask.read',
   },
   {
     key: 'comfyMaterials',
-    label: 'ComfyUI 素材',
+    label: 'ComfyUI 素材库管理',
     path: '/comfyui/materials',
     permission: 'ComfyMaterial.read',
   },
   {
+    // 保留历史配置键，避免已保存的首页快捷入口因展示职责调整而失效。
     key: 'comfyTasks',
-    label: 'ComfyUI 生成记录',
-    path: '/comfyui/tasks',
-    permission: 'ComfyTask.read',
+    label: 'ComfyUI 工作流管理',
+    path: '/comfyui/workflows',
+    permission: 'ComfyWorkflow.read',
   },
 ];
 const metricOptions = [

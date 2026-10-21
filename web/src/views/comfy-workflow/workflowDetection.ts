@@ -399,7 +399,7 @@ function detectBindings(
       semanticRole: "normal",
       required: true,
       defaultValue: "",
-      hint: "运行时从 ComfyUI 素材库选择图片",
+      hint: "运行时从素材库管理选择图片",
     });
   }
 

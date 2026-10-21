@@ -118,7 +118,7 @@ const BASE_SEED_MENUS: SeedMenu[] = [
     preserveVisibility: true,
   },
   {
-    name: 'ComfyUI 创作',
+    name: '创作任务',
     path: '/comfyui/create',
     icon: '',
     sort: 10,
@@ -129,7 +129,7 @@ const BASE_SEED_MENUS: SeedMenu[] = [
     preserveVisibility: true,
   },
   {
-    name: 'ComfyUI 素材',
+    name: '素材库管理',
     path: '/comfyui/materials',
     icon: '',
     sort: 20,
@@ -140,7 +140,7 @@ const BASE_SEED_MENUS: SeedMenu[] = [
     preserveVisibility: true,
   },
   {
-    name: 'ComfyUI 工作流',
+    name: '工作流管理',
     path: '/comfyui/workflows',
     icon: '',
     sort: 30,
@@ -160,6 +160,7 @@ const BASE_SEED_MENUS: SeedMenu[] = [
     parentPath: '/comfyui',
     reconcile: true,
     preserveVisibility: true,
+    retired: true,
   },
   {
     name: 'Agent 管理',

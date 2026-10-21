@@ -399,7 +399,7 @@ export class DashboardService {
           ? '/content-generation'
           : materialAccess
             ? '/ai-materials'
-            : '/comfyui/tasks',
+            : '/comfyui/create',
       });
     }
     if (all && allowed(user, 'KnowledgeBase.read')) {
@@ -1071,12 +1071,12 @@ export class DashboardService {
     return value === 'video' ? 'video' : 'image';
   }
   private generationPath(source: string | undefined, user: AuthUser) {
-    if (source === 'comfyui') return '/comfyui/tasks';
+    if (source === 'comfyui') return '/comfyui/create';
     if (source === 'aiMaterial') return '/ai-materials';
     if (source === 'content') return '/content-generation';
     if (allowed(user, 'ContentArticle.read')) return '/content-generation';
     if (allowed(user, 'AiMaterial.read')) return '/ai-materials';
-    return '/comfyui/tasks';
+    return '/comfyui/create';
   }
   private isoTime(value: Date | string) {
     const date = value instanceof Date ? value : new Date(value);

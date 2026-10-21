@@ -344,15 +344,20 @@ export function previewWidget(widget: WidgetConfig): DashboardWidget {
             detail: '进入模块',
           },
           { id: 'materials', title: '素材管理', detail: '进入模块' },
-          { id: 'comfyCreate', title: 'ComfyUI 创作', detail: '进入模块' },
           {
-            id: 'comfyMaterials',
-            title: 'ComfyUI 素材',
+            id: 'comfyCreate',
+            title: 'ComfyUI 创作任务',
             detail: '进入模块',
           },
           {
+            id: 'comfyMaterials',
+            title: 'ComfyUI 素材库管理',
+            detail: '进入模块',
+          },
+          {
+            // 与后端保留的历史快捷入口键一致，避免旧首页配置失效。
             id: 'comfyTasks',
-            title: 'ComfyUI 生成记录',
+            title: 'ComfyUI 工作流管理',
             detail: '进入模块',
           },
         ].filter((x) => (widget.params.links as string[]).includes(x.id)),
