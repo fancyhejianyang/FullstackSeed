@@ -61,6 +61,14 @@ $spaces: (
   text-overflow: ellipsis;
 }
 
+// Element Plus 单列描述表格：标签保持单行，内容列仍可自然换行。
+.descriptions-label-nowrap .el-descriptions__label {
+  width: var(--descriptions-label-width, 96px);
+  min-width: var(--descriptions-label-width, 96px);
+  white-space: nowrap;
+  word-break: keep-all;
+}
+
 // ===== 文本颜色 =====
 .text-primary { color: $color-primary; }
 .text-success { color: $color-success; }

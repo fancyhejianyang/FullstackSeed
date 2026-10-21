@@ -43,7 +43,12 @@ onBeforeUnmount(() => {
     :show-footer="false"
   >
     <div v-loading="loading">
-      <el-descriptions v-if="detail" :column="1" border>
+      <el-descriptions
+        v-if="detail"
+        class="descriptions-label-nowrap"
+        :column="1"
+        border
+      >
         <el-descriptions-item label="模板名称">{{
           detail.name
         }}</el-descriptions-item>
