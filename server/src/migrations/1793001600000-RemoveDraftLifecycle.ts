@@ -35,20 +35,20 @@ export class RemoveDraftLifecycle1793001600000 implements MigrationInterface {
             isNullable: true,
           }),
         );
-        const source = hadLatestCopy
-          ? '`draft`'
-          : hadPublishedCopy
-            ? '`published`'
-            : "'[]'";
-        await runner.query(
-          `UPDATE \`dashboard_configs\` SET \`widgets\` = COALESCE(${source}, '[]')`,
-        );
-        await runner.changeColumn(
-          'dashboard_configs',
-          'widgets',
-          new TableColumn({ name: 'widgets', type: 'text', isNullable: false }),
-        );
       }
+      const source = hadLatestCopy
+        ? "CASE WHEN JSON_VALID(`draft`) = 1 THEN `draft` ELSE '[]' END"
+        : hadPublishedCopy
+          ? "CASE WHEN JSON_VALID(`published`) = 1 THEN `published` ELSE '[]' END"
+          : "'[]'";
+      await runner.query(
+        `UPDATE \`dashboard_configs\` SET \`widgets\` = CASE WHEN JSON_VALID(\`widgets\`) = 1 THEN \`widgets\` ELSE ${source} END`,
+      );
+      await runner.changeColumn(
+        'dashboard_configs',
+        'widgets',
+        new TableColumn({ name: 'widgets', type: 'text', isNullable: false }),
+      );
       for (const column of [
         'publishedVersion',
         'draft',
@@ -141,6 +141,28 @@ export class RemoveDraftLifecycle1793001600000 implements MigrationInterface {
       await this.dropColumnIfPresent(runner, 'demo', 'publishedAt');
     }
 
+    // 早期版本曾使用 articles 表；当前文章模块已迁至 content_articles，
+    // 但升级库可能仍保留历史数据。保留记录并统一转换为启用状态字段。
+    if (await runner.hasTable('articles')) {
+      if (!(await runner.hasColumn('articles', 'isActive'))) {
+        await runner.addColumn(
+          'articles',
+          new TableColumn({
+            name: 'isActive',
+            type: 'tinyint',
+            width: 1,
+            default: 1,
+          }),
+        );
+        if (await runner.hasColumn('articles', 'status')) {
+          await runner.query(
+            "UPDATE `articles` SET `isActive` = IF(`status` IN ('published', 'active', 'enabled'), 1, 0)",
+          );
+        }
+      }
+      await this.dropColumnIfPresent(runner, 'articles', 'status');
+    }
+
     if (await runner.hasTable('knowledge_base_documents')) {
       await runner.query(
         "UPDATE `knowledge_base_documents` SET `status` = 'empty' WHERE `status` = 'draft'",
@@ -150,8 +172,16 @@ export class RemoveDraftLifecycle1793001600000 implements MigrationInterface {
       );
     }
 
-    if (await runner.hasTable('agent_drafts')) {
+    const hasLegacyActions = await runner.hasTable('agent_drafts');
+    const hasPendingActions = await runner.hasTable('agent_pending_actions');
+    if (hasLegacyActions && !hasPendingActions) {
       await runner.renameTable('agent_drafts', 'agent_pending_actions');
+    } else if (hasLegacyActions && hasPendingActions) {
+      // development synchronize 会先创建新表但不会搬迁旧数据；合并后移除旧表。
+      await runner.query(
+        'INSERT IGNORE INTO `agent_pending_actions` (`id`, `createdAt`, `updatedAt`, `deletedAt`, `sessionId`, `userId`, `agentAppId`, `toolKey`, `status`, `version`, `data`, `missingFields`, `validationErrors`, `submittedRecordId`, `lastExecutionId`) SELECT `id`, `createdAt`, `updatedAt`, `deletedAt`, `sessionId`, `userId`, `agentAppId`, `toolKey`, `status`, `version`, `data`, `missingFields`, `validationErrors`, `submittedRecordId`, `lastExecutionId` FROM `agent_drafts`',
+      );
+      await runner.dropTable('agent_drafts');
     }
     if (await runner.hasTable('agent_pending_actions')) {
       const actionTable = await runner.getTable('agent_pending_actions');
@@ -179,16 +209,27 @@ export class RemoveDraftLifecycle1793001600000 implements MigrationInterface {
         );
       }
     }
-    if (
-      (await runner.hasTable('agent_executions')) &&
-      (await runner.hasColumn('agent_executions', 'draftId')) &&
-      !(await runner.hasColumn('agent_executions', 'pendingActionId'))
-    ) {
-      await runner.renameColumn(
+    if (await runner.hasTable('agent_executions')) {
+      const hasLegacyActionId = await runner.hasColumn(
         'agent_executions',
         'draftId',
+      );
+      const hasPendingActionId = await runner.hasColumn(
+        'agent_executions',
         'pendingActionId',
       );
+      if (hasLegacyActionId && !hasPendingActionId) {
+        await runner.renameColumn(
+          'agent_executions',
+          'draftId',
+          'pendingActionId',
+        );
+      } else if (hasLegacyActionId && hasPendingActionId) {
+        await runner.query(
+          'UPDATE `agent_executions` SET `pendingActionId` = COALESCE(`pendingActionId`, `draftId`)',
+        );
+        await runner.dropColumn('agent_executions', 'draftId');
+      }
     }
     if (await runner.hasTable('agent_messages')) {
       await runner.query(
@@ -286,6 +327,24 @@ export class RemoveDraftLifecycle1793001600000 implements MigrationInterface {
       await runner.query(
         "ALTER TABLE `knowledge_base_documents` MODIFY `status` varchar(30) NOT NULL DEFAULT 'draft'",
       );
+    }
+
+    if (await runner.hasTable('articles')) {
+      if (!(await runner.hasColumn('articles', 'status'))) {
+        await runner.addColumn(
+          'articles',
+          new TableColumn({
+            name: 'status',
+            type: 'varchar',
+            length: '20',
+            default: "'draft'",
+          }),
+        );
+        await runner.query(
+          "UPDATE `articles` SET `status` = IF(`isActive` = 1, 'published', 'disabled')",
+        );
+      }
+      await this.dropColumnIfPresent(runner, 'articles', 'isActive');
     }
 
     if (await runner.hasTable('demo')) {

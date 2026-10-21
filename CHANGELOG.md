@@ -1,5 +1,28 @@
 # CHANGELOG
 
+### 2026-10-21 修复移除草稿生命周期后的旧库兼容
+
+- 修复首页与首页配置同时加载失败：开发库经 TypeORM `synchronize` 新增的 `dashboard_configs.widgets` 可能为空字符串，原 `simple-json` 会在进入服务前抛出 JSON 解析异常；改为容错转换器，并将空值、损坏 JSON、空数组统一恢复为系统默认板块。
+- 修复 TypeORM CLI 将 `migrations/*.spec.ts` 误当迁移加载而报 `describe is not defined`；迁移入口明确排除规格测试，`migration:show/run` 可正常发现实际迁移类。
+- 强化 `1793001600000-RemoveDraftLifecycle` 的部分同步兼容：新旧 Agent 表同时存在时先合并数据再移除旧表；执行关联新旧列同时存在时先回填再删旧列；首页 JSON 无效时回填可用值。早期遗留 `articles` 表保留记录并将状态转换为 `isActive`。
+- 已修复当前项目数据库：首页配置恢复 12 个有效板块；1 条旧 Agent 数据已迁入待确认操作，旧表、旧消息类型及执行快照字段已清理；早期文章表的 2 条记录保留并转换为启用状态。全库已无列名或默认值使用草稿语义，现行业务接口也未检出旧契约字段。
+- 验证：后端全量 74 suites / 629 tests、TypeORM 实体列检查、生产 TypeScript 静态检查通过；使用真实实体仓储读取当前首页配置，返回 `revision=1`、12 个板块。全量包含规格测试的 TypeScript 检查仍有 4 处既有测试夹具类型断言问题，不影响生产源码检查与 Jest 执行。
+
+新增文件：无。
+
+修改文件（8）：
+
+- `CHANGELOG.md`
+- `server/src/data-source.ts`
+- `server/src/dashboard/entities/dashboard-config.entity.ts`
+- `server/src/dashboard/dashboard.registry.ts`
+- `server/src/dashboard/dashboard.registry.spec.ts`
+- `server/src/dashboard/dashboard-config.service.spec.ts`
+- `server/src/migrations/1793001600000-RemoveDraftLifecycle.ts`
+- `server/src/migrations/1793001600000-RemoveDraftLifecycle.spec.ts`
+
+删除文件：无。
+
 ### 2026-10-21 统一业务资源启停并移除草稿生命周期
 
 - 全项目业务资源统一为启用/关闭：示例数据与标准问答改用 `isActive`，ComfyUI 工作流只保留 `isEnabled`；首页配置取消草稿、发布、回退及双份配置，单次保存立即生效。知识库文档的空内容处理阶段由 `draft` 更名为 `empty`。

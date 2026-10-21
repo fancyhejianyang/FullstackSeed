@@ -116,4 +116,11 @@ describe('dashboard registry boundary', () => {
         .every((x) => x.enabled === false),
     ).toBe(true);
   });
+
+  it.each([null, undefined, []])(
+    'restores the enabled defaults for an unusable persisted value: %p',
+    (value) => {
+      expect(resolveWidgets(value)).toEqual(defaultWidgets());
+    },
+  );
 });

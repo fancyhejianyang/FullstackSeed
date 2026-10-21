@@ -8,6 +8,31 @@ import { KnowledgeStandardQa } from '../knowledge-standard-qas/entities/knowledg
 import { RemoveDraftLifecycle1793001600000 } from './1793001600000-RemoveDraftLifecycle';
 
 describe('移除业务资源草稿生命周期迁移', () => {
+  it('保留早期文章记录并将遗留状态转换为启用字段', async () => {
+    const runner = {
+      hasTable: jest.fn((table: string) =>
+        Promise.resolve(table === 'articles'),
+      ),
+      hasColumn: jest.fn((_table: string, column: string) =>
+        Promise.resolve(column === 'status'),
+      ),
+      addColumn: jest.fn(),
+      dropColumn: jest.fn(),
+      query: jest.fn(),
+    };
+
+    await new RemoveDraftLifecycle1793001600000().up(runner as never);
+
+    expect(runner.addColumn).toHaveBeenCalledWith(
+      'articles',
+      expect.objectContaining({ name: 'isActive' }),
+    );
+    expect(runner.query).toHaveBeenCalledWith(
+      expect.stringContaining("`status` IN ('published', 'active', 'enabled')"),
+    );
+    expect(runner.dropColumn).toHaveBeenCalledWith('articles', 'status');
+  });
+
   it('迁移 Agent 待确认操作表、执行关联字段和消息类型', async () => {
     const tables = new Set([
       'agent_drafts',
@@ -28,15 +53,17 @@ describe('移除业务资源草稿生命周期迁移', () => {
       }),
       dropIndex: jest.fn(),
       createIndex: jest.fn(),
+      dropTable: jest.fn(),
+      dropColumn: jest.fn(),
       query: jest.fn(),
     };
 
     await new RemoveDraftLifecycle1793001600000().up(runner as never);
 
-    expect(runner.renameTable).toHaveBeenCalledWith(
-      'agent_drafts',
-      'agent_pending_actions',
+    expect(runner.query).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT IGNORE INTO `agent_pending_actions`'),
     );
+    expect(runner.dropTable).toHaveBeenCalledWith('agent_drafts');
     expect(runner.renameColumn).toHaveBeenCalledWith(
       'agent_executions',
       'draftId',

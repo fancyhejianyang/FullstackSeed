@@ -1,7 +1,10 @@
 import { ConflictException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { DashboardConfigService } from './dashboard-config.service';
-import { DashboardConfig } from './entities/dashboard-config.entity';
+import {
+  DashboardConfig,
+  dashboardWidgetsTransformer,
+} from './entities/dashboard-config.entity';
 import { defaultWidgets } from './dashboard.registry';
 
 const user = {
@@ -57,6 +60,15 @@ function fixture(createQueryBuilder?: () => unknown) {
 }
 
 describe('dashboard immediate configuration', () => {
+  it('tolerates empty or malformed legacy widget JSON before service resolution', () => {
+    expect(dashboardWidgetsTransformer.from('')).toBeNull();
+    expect(dashboardWidgetsTransformer.from('{invalid')).toBeNull();
+    expect(dashboardWidgetsTransformer.from('[]')).toEqual([]);
+    expect(
+      JSON.parse(dashboardWidgetsTransformer.to(defaultWidgets()) as string),
+    ).toEqual(defaultWidgets());
+  });
+
   it('does not hydrate an ignored insert and saves the locked persisted entity', async () => {
     const { service, row, insert, repo } = fixture();
     insert.execute.mockImplementation(() => {
@@ -106,6 +118,16 @@ describe('dashboard immediate configuration', () => {
         },
       }),
     );
+  });
+
+  it('restores default widgets when a legacy row contains no valid configuration', async () => {
+    const { service, row } = fixture();
+    row.widgets = null;
+
+    await expect(service.read()).resolves.toMatchObject({
+      revision: 0,
+      widgets: defaultWidgets(),
+    });
   });
 
   it('rejects a stale writer after acquiring the row lock', async () => {

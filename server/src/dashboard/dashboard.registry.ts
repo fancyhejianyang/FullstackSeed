@@ -535,7 +535,8 @@ export function validateWidgets(input: unknown): WidgetConfig[] {
 }
 /** 运行时兼容：未知板块跳过；参数升级回退该板块；新增板块以关闭状态加入旧配置。 */
 export function resolveWidgets(input: unknown): WidgetConfig[] {
-  if (!Array.isArray(input)) return defaultWidgets();
+  // 空数组不是合法的可保存配置；它通常来自旧表兼容或异常数据，恢复系统默认值。
+  if (!Array.isArray(input) || !input.length) return defaultWidgets();
   const resolved = input
     .flatMap((x: WidgetConfig) => {
       const fallback = defaultWidgets().find(

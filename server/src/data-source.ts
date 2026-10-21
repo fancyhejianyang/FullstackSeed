@@ -34,7 +34,9 @@ const dataSource = new DataSource({
   password: process.env.DB_PASS || '',
   database: process.env.DB_NAME || 'fullstack_seed',
   entities: [__dirname + '/**/*.entity{.ts,.js}'],
-  migrations: [__dirname + '/migrations/*{.ts,.js}'],
+  // 迁移目录内同时保留 Jest 规格测试；使用 extglob 明确排除 *.spec，
+  // 避免 TypeORM CLI 将测试文件当作迁移加载并触发 `describe is not defined`。
+  migrations: [__dirname + '/migrations/!(*.spec){.ts,.js}'],
   synchronize: false,
 });
 
