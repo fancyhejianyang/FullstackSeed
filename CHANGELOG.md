@@ -1,5 +1,28 @@
 # CHANGELOG
 
+### 2026-10-21 修复首页配置保存异常并增加板块拖拽排序
+
+- 修复已有首页配置保存时 `Cannot update entity because entity id is not set in the entity.`：幂等初始化的 `INSERT IGNORE` 不再触发 TypeORM 实体回填；后续仍按唯一 key 加锁读取真实记录并执行版本校验，不修改既有草稿、发布版本或表结构。
+- 首页配置从独立手柄拖拽板块，显示拖动状态与前后落点，保留上移/下移；共用原有 `layout.order` 排序契约，无新增接口或依赖。排序保存为草稿，只有发布后才改变首页展示。
+- 只读、加载或保存期间禁止排序，取消拖拽与原位放下不产生额外修改；保留未保存离开提醒。
+- 后端验证：真实 TypeORM/MySQL 查询构造器离线复现旧错误，并验证首次插入与重复忽略插入均能完成保存；看板 3 suites / 35 tests、定向 ESLint 与生产 TypeScript 检查通过。未连接数据库、未执行迁移、未重启服务。
+- 前端验证：8 项排序/落点测试、6 项既有首页图表/契约测试、真实应用 `vue-tsc --noEmit --project tsconfig.app.json`、组件复用扫描及生产构建通过；构建仅有既有依赖 PURE 注释与大分包告警。未启动服务，未在实际浏览器中联调拖拽。
+
+新增文件（2）：
+
+- `web/src/views/dashboard-config/widgetOrder.ts`
+- `web/src/views/dashboard-config/widgetOrder.test.mjs`
+
+修改文件（5）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/dashboard/dashboard-config.service.ts`
+- `server/src/dashboard/dashboard-config.service.spec.ts`
+- `web/src/views/dashboard-config/Index.vue`
+
+删除文件：无。
+
 ### 2026-10-21 新增抖音优先的热点选题、来源管理与异步推荐
 
 - 内容创作增加“热点选题”列表，第三方配置增加“热点来源”；支持个人偏好、收藏/忽略、手动获取、按现有资料重新推荐和每日计划。计划默认关闭，Asia/Shanghai，每日按设定时间执行；停机期间最多补一次当前发现，不回放历史新闻。

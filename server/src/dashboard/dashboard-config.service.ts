@@ -52,6 +52,9 @@ export class DashboardConfigService {
           published: defaultWidgets(),
         })
         .orIgnore()
+        // 已存在时 INSERT IGNORE 不返回主键，禁止 TypeORM 再按新实体回填。
+        // 下方按唯一 key 加锁读取真实记录，统一处理首次和后续保存。
+        .updateEntity(false)
         .execute();
       const row = await repo.findOneOrFail({
         where: { key: 'home' },
