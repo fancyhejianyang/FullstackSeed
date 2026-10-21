@@ -129,7 +129,7 @@ const fields = computed<FormField[]>(() => {
       label: "目标模型",
       type: "input",
       placeholder: "如 flux1-dev、sdxl_base_1.0",
-      hint: "填写工作流实际加载的模型标识，用于匹配对应提示词模板和模型规则。",
+      hint: "填写工作流实际加载的模型标识，用于匹配对应模型提示词规范和规则。",
     },
     { prop: "description", label: "使用说明", type: "textarea", rows: 2 },
     {
@@ -459,14 +459,14 @@ async function submit() {
       : await createComfyWorkflow(payload);
     if (detectedSourcePrompt.value && !saved.visualPromptTemplateId) {
       ElMessage.warning(
-        "工作流已保存，但没有可用的“视觉提示词”AI 配置，暂未建立提示词模板",
+        "工作流已保存，但没有可用的“模型提示词规范”AI 配置，暂未建立规范",
       );
     } else {
       ElMessage.success(
         saved.visualPromptTemplateId
           ? props.row
-            ? "工作流与视觉提示词模板已更新"
-            : "工作流已导入，并自动建立视觉提示词模板"
+            ? "工作流与模型提示词规范已更新"
+            : "工作流已导入，并自动建立模型提示词规范"
           : props.row
             ? "工作流已保存并生成新版本"
             : "工作流已导入",
@@ -618,18 +618,18 @@ async function submit() {
             >
               <el-icon><MagicStick /></el-icon>
               <div>
-                <strong>视觉提示词模板</strong>
+                <strong>模型提示词规范</strong>
                 <span v-if="detectedSourcePrompt">
-                  已从工作流识别正向示例{{
-                    detectedNegativePrompt ? "和负向示例" : ""
-                  }}，保存时会自动建立或更新绑定模板。
+                  已从工作流识别正向 Demo{{
+                    detectedNegativePrompt ? "和负向 Demo" : ""
+                  }}，保存时会自动建立或更新绑定规范。
                 </span>
                 <span v-else-if="boundVisualTemplateId">
-                  当前工作流已绑定模板；重新导入包含示例提示词的 JSON
+                  当前工作流已绑定规范；重新导入包含 Demo 提示词的 JSON
                   后会自动更新。
                 </span>
                 <span v-else>
-                  未识别到正向示例，仍可保存，但创作时需要手工填写提示词。
+                  未识别到正向 Demo，仍可保存，但创作时需要手工填写提示词。
                 </span>
               </div>
             </div>

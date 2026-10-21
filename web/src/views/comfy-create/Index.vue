@@ -77,7 +77,7 @@ function openCreate() {
 
 async function composePrompt() {
   if (!current.value?.visualPromptTemplateId) {
-    ElMessage.warning("该工作流尚未从示例提示词建立视觉模板");
+    ElMessage.warning("该工作流尚未从 Demo 提示词建立模型提示词规范");
     return;
   }
   if (!creativeIdea.value.trim()) {
@@ -343,7 +343,7 @@ onMounted(load);
             <section v-if="promptBindings.length" class="prompt-composer">
               <div class="prompt-composer__heading">
                 <div>
-                  <h4>AI 视觉提示词</h4>
+                  <h4>模型提示词转换</h4>
                   <p>
                     按
                     {{ current?.targetModel || "通用模型" }}
@@ -380,7 +380,7 @@ onMounted(load);
                 </div>
               </div>
               <div v-else class="prompt-composer__empty">
-                该工作流没有绑定自动提取的视觉提示词模板，仍可手工填写下方正向、负向提示词。重新导入包含示例提示词的
+                该工作流没有绑定模型提示词规范，仍可手工填写下方正向、负向提示词。重新导入包含 Demo 提示词的
                 API JSON 后即可使用自动转换。
               </div>
               <p v-if="composeNotes" class="prompt-composer__notes">

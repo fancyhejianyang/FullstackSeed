@@ -43,7 +43,7 @@ const form = reactive<EditorForm>({
 const fields = computed<FormField[]>(() => [
   {
     prop: "name",
-    label: "模板名称",
+    label: "规范名称",
     type: "input",
     placeholder: "如：Flux 写实人像",
   },
@@ -65,9 +65,9 @@ const fields = computed<FormField[]>(() => [
   },
   {
     prop: "sourcePlatform",
-    label: "示例来源",
+    label: "Demo 来源",
     type: "input",
-    placeholder: "如 ComfyUI 官方示例",
+    placeholder: "如 ComfyUI 官方 Demo",
   },
   {
     prop: "aiConfigId",
@@ -77,35 +77,35 @@ const fields = computed<FormField[]>(() => [
       label: `${item.name}${item.model ? ` · ${item.model}` : ""}`,
       value: item.id,
     })),
-    hint: "只使用“视觉提示词”类型的 AI 配置，不调用 Agent。",
+    hint: "只使用“模型提示词规范”类型的 AI 配置，不调用 Agent。",
   },
   {
     prop: "sourcePrompt",
-    label: "正向示例",
+    label: "正向 Demo",
     type: "textarea",
     rows: 7,
     span: 2,
-    placeholder: "粘贴官方或优秀示例中的正向提示词",
+    placeholder: "粘贴官方或优质 Demo 中的正向提示词",
   },
   {
     prop: "sourceNegativePrompt",
-    label: "负向示例",
+    label: "负向 Demo",
     type: "textarea",
     rows: 5,
     span: 2,
-    placeholder: "可选；粘贴示例中的负向提示词",
+    placeholder: "可选；粘贴 Demo 中的负向提示词",
   },
   {
     prop: "positiveTemplate",
-    label: "正向模板",
+    label: "正向提示词格式",
     type: "textarea",
     rows: 6,
     span: 2,
-    placeholder: "可手动维护，也可保存后在列表点击 AI 提炼",
+    placeholder: "可手动维护，也可保存后在列表点击“AI 提炼”",
   },
   {
     prop: "negativeTemplate",
-    label: "负向模板",
+    label: "负向提示词格式",
     type: "textarea",
     rows: 5,
     span: 2,
@@ -128,7 +128,7 @@ const fields = computed<FormField[]>(() => [
   },
   {
     prop: "variablesText",
-    label: "模板变量",
+    label: "可变参数",
     type: "input",
     span: 2,
     placeholder: "逗号分隔，如 主体,场景,光线,镜头",
@@ -141,13 +141,17 @@ const fields = computed<FormField[]>(() => [
   },
 ]);
 const rules: FormRules = {
-  name: [{ required: true, message: "请输入模板名称", trigger: "blur" }],
+  name: [{ required: true, message: "请输入规范名称", trigger: "blur" }],
   mediaType: [{ required: true, message: "请选择媒体类型", trigger: "change" }],
   aiConfigId: [
-    { required: true, message: "请选择视觉提示词 AI 配置", trigger: "change" },
+    {
+      required: true,
+      message: "请选择模型提示词规范 AI 配置",
+      trigger: "change",
+    },
   ],
   sourcePrompt: [
-    { required: true, message: "请输入正向示例", trigger: "blur" },
+    { required: true, message: "请输入正向 Demo", trigger: "blur" },
   ],
 };
 function reset() {
@@ -210,7 +214,7 @@ async function submit() {
   try {
     if (props.row) await updateVisualPromptTemplate(props.row.id, payload);
     else await createVisualPromptTemplate(payload);
-    ElMessage.success("视觉提示词模板已保存");
+    ElMessage.success("模型提示词规范已保存");
     visible.value = false;
     emit("success");
   } finally {
@@ -222,7 +226,7 @@ async function submit() {
 <template>
   <Dialog
     v-model="visible"
-    :title="row ? '编辑视觉提示词模板' : '新增视觉提示词模板'"
+    :title="row ? '编辑模型提示词规范' : '新增模型提示词规范'"
     width="960px"
     body-max-height="76vh"
     :confirm-loading="submitting"
@@ -231,7 +235,7 @@ async function submit() {
     <div v-loading="loading">
       <el-alert
         v-if="!configs.length && !loading"
-        title="请先在 AI 功能配置中新增并启用“视觉提示词”配置"
+        title="请先在 AI 功能配置中新增并启用“模型提示词规范”配置"
         type="warning"
         :closable="false"
         show-icon

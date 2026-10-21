@@ -1,5 +1,36 @@
 # CHANGELOG
 
+### 2026-10-21 迁移并重命名 ComfyUI 提示词规范模块
+
+- 将原“视觉提示词”菜单从“内容创作”迁移到 ComfyUI 分组，并统一更名为“模型提示词规范”；ComfyUI 现在依次包含创作任务、素材库管理、工作流管理和模型提示词规范。
+- 现有 `/visual-prompt-templates` 菜单记录按原 ID 迁移父级，继续沿用 `VisualPromptTemplate.*` 权限、接口地址、实体和历史数据，不新增数据库迁移。
+- 页面字段改为规范名称、Demo 来源、正向/负向 Demo、正向/负向提示词格式和可变参数；人工触发操作统一命名为“AI 提炼”，确认说明仍明确以 Demo 和目标模型为提炼依据。
+- AI 功能配置、ComfyUI 工作流导入、创作任务提示词转换以及服务端错误信息同步采用“模型提示词规范”术语，内部 `visualPrompt` 类型和值保持兼容。
+- 验证：4 套 / 31 项后端菜单、AI 配置、提示词规范及 ComfyUI 工作流定向测试、10 项前端导航契约测试、TypeORM 实体检查、后端目标文件 ESLint、Vue 类型检查和目标页面组件复用扫描通过；当前运行服务的 `/menus/mine` 已确认菜单完成迁移。按非新功能改动约定未执行构建或另行启动服务。
+
+新增文件：无。
+
+修改文件（16）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/ai-feature-configs/ai-feature-configs.service.ts`
+- `server/src/comfyui/comfy-workflows.service.ts`
+- `server/src/menus/menus.service.spec.ts`
+- `server/src/menus/menus.service.ts`
+- `server/src/visual-prompt-templates/visual-prompt-templates.service.ts`
+- `web/src/router/index.ts`
+- `web/src/views/ai-feature-config/Edit.vue`
+- `web/src/views/ai-feature-config/Index.vue`
+- `web/src/views/comfy-create/Index.vue`
+- `web/src/views/comfy-workflow/Edit.vue`
+- `web/src/views/comfy-workflow/Index.vue`
+- `web/src/views/visual-prompt-template/Edit.vue`
+- `web/src/views/visual-prompt-template/Index.vue`
+- `web/src/views/visual-prompt-template/View.vue`
+
+删除文件：无。
+
 ### 2026-10-21 恢复 ComfyUI 工作流管理菜单
 
 - 修复既有 `/comfyui/workflows` 菜单记录处于停用状态时，菜单同步因保留历史可见性而继续隐藏“工作流管理”的问题；该正式入口现在会恢复为启用、非系统菜单，并继续使用 `ComfyWorkflow.read` 权限控制。

@@ -201,8 +201,14 @@ describe('MenusService Agent menu reconciliation', () => {
     ).toBe(false);
   });
 
-  it('uses concise ComfyUI child names and retires the duplicate task-record menu', async () => {
+  it('moves prompt specifications under ComfyUI and retires the duplicate task-record menu', async () => {
     rows.push(
+      menu({
+        id: 18,
+        name: '视觉提示词',
+        path: '/visual-prompt-templates',
+        permissionCode: 'VisualPromptTemplate.read',
+      }),
       menu({
         id: 19,
         name: 'ComfyUI 工作流',
@@ -233,12 +239,18 @@ describe('MenusService Agent menu reconciliation', () => {
       'ComfyTask.read',
       'ComfyMaterial.read',
       'ComfyWorkflow.read',
+      'VisualPromptTemplate.read',
     ]);
     const root = tree.find((item) => item.path === '/comfyui');
+    expect(rows.find((item) => item.id === 18)).toMatchObject({
+      name: '模型提示词规范',
+      parentId: root?.id,
+    });
     expect(root?.children.map(({ name, path }) => ({ name, path }))).toEqual([
       { name: '创作任务', path: '/comfyui/create' },
       { name: '素材库管理', path: '/comfyui/materials' },
       { name: '工作流管理', path: '/comfyui/workflows' },
+      { name: '模型提示词规范', path: '/visual-prompt-templates' },
     ]);
   });
 

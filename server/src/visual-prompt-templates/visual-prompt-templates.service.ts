@@ -63,12 +63,12 @@ export class VisualPromptTemplatesService
   onModuleInit() {
     this.timer = setInterval(() => {
       void this.tick().catch(() =>
-        this.logger.warn('视觉提示词任务调度暂不可用，将稍后检查'),
+        this.logger.warn('模型提示词规范任务调度暂不可用，将稍后检查'),
       );
     }, 2000);
     this.timer.unref();
     void this.tick().catch(() =>
-      this.logger.warn('视觉提示词任务首次调度失败，将稍后重试'),
+      this.logger.warn('模型提示词规范任务首次调度失败，将稍后重试'),
     );
   }
 
@@ -113,7 +113,7 @@ export class VisualPromptTemplatesService
 
   async findOne(id: number, userId: number) {
     const row = await this.repository.findOne({ where: { id, userId } });
-    if (!row) throw new NotFoundException('视觉提示词模板不存在');
+    if (!row) throw new NotFoundException('模型提示词规范不存在');
     return row;
   }
 
@@ -211,7 +211,7 @@ export class VisualPromptTemplatesService
       sourceNegativePrompt: negativePrompt,
       positiveTemplate: sourcePrompt,
       negativeTemplate: negativePrompt,
-      styleSummary: `从 ComfyUI 工作流“${input.workflowName.trim()}”的示例提示词自动建立`,
+      styleSummary: `从 ComfyUI 工作流“${input.workflowName.trim()}”的 Demo 提示词自动建立`,
       modelRules: null,
       variables: null,
       isEnabled: true,
@@ -282,7 +282,7 @@ export class VisualPromptTemplatesService
     requestId?: string,
   ) {
     const row = await this.repository.findOne({ where: { id } });
-    if (!row) throw new NotFoundException('工作流绑定的视觉提示词模板不存在');
+    if (!row) throw new NotFoundException('工作流绑定的模型提示词规范不存在');
     return this.submitTask({
       userId,
       taskType: 'compose',
@@ -305,7 +305,7 @@ export class VisualPromptTemplatesService
   ) {
     const task = await this.tasks.findOne({ where: { id, userId, taskType } });
     if (!task || (workflowId && task.workflowId !== workflowId)) {
-      throw new NotFoundException('视觉提示词任务不存在');
+      throw new NotFoundException('模型提示词规范任务不存在');
     }
     return this.taskSummary(task);
   }
@@ -318,7 +318,7 @@ export class VisualPromptTemplatesService
   ): Promise<VisualPromptTaskResult> {
     const row = await this.findOne(id, userId);
     if (row.version !== expectedVersion) {
-      throw new ConflictException('模板已修改，请按最新内容重新发起 AI 提炼');
+      throw new ConflictException('规范已修改，请按最新内容重新发起 AI 提炼');
     }
     const config = await this.configs.findUsableVisualPromptConfig(
       row.aiConfigId,
@@ -339,7 +339,7 @@ export class VisualPromptTemplatesService
     const parsed = parseExtractedVisualPrompt(response);
     if (!parsed)
       throw new BadGatewayException(
-        'AI 未返回有效的视觉提示词模板结构，请调整配置后重试',
+        'AI 未返回有效的模型提示词规范结构，请调整配置后重试',
       );
     const extractedAt = new Date();
     const update = await this.repository.update(
@@ -348,7 +348,7 @@ export class VisualPromptTemplatesService
     );
     if (update.affected !== 1) {
       throw new ConflictException(
-        '模板在 AI 提炼期间已被修改，结果未覆盖；请重新发起提炼',
+        '规范在 AI 提炼期间已被修改，结果未覆盖；请重新发起提炼',
       );
     }
     return {
@@ -365,9 +365,9 @@ export class VisualPromptTemplatesService
     signal: AbortSignal,
   ) {
     const row = await this.repository.findOne({ where: { id } });
-    if (!row) throw new NotFoundException('工作流绑定的视觉提示词模板不存在');
+    if (!row) throw new NotFoundException('工作流绑定的模型提示词规范不存在');
     if (row.version !== expectedVersion) {
-      throw new ConflictException('视觉提示词模板已更新，请重新发起转换');
+      throw new ConflictException('模型提示词规范已更新，请重新发起转换');
     }
     return this.composeRow(row, dto, signal);
   }
@@ -377,7 +377,7 @@ export class VisualPromptTemplatesService
     dto: ComposeVisualPromptDto,
     signal: AbortSignal,
   ) {
-    if (!row.isEnabled) throw new BadRequestException('该视觉提示词模板已停用');
+    if (!row.isEnabled) throw new BadRequestException('该模型提示词规范已停用');
     const targetModel =
       dto.targetModel?.trim() || row.targetModel || '通用模型';
     if (
@@ -385,7 +385,7 @@ export class VisualPromptTemplatesService
       dto.targetModel &&
       row.targetModel !== dto.targetModel.trim()
     )
-      throw new BadRequestException(`该模板仅适用于模型 ${row.targetModel}`);
+      throw new BadRequestException(`该规范仅适用于模型 ${row.targetModel}`);
     const config = await this.configs.findUsableVisualPromptConfig(
       row.aiConfigId,
     );
@@ -441,7 +441,7 @@ export class VisualPromptTemplatesService
     const active = await this.tasks.findOne({ where: { activeKey } });
     if (active) {
       if (this.isSameTask(active, input)) return this.taskSummary(active);
-      throw new ConflictException('已有视觉提示词任务正在执行，请等待完成');
+      throw new ConflictException('已有模型提示词规范任务正在执行，请等待完成');
     }
     try {
       const saved = await this.tasks.save(
@@ -460,7 +460,7 @@ export class VisualPromptTemplatesService
         }),
       );
       void this.tick().catch(() =>
-        this.logger.warn('视觉提示词任务提交后调度失败，将稍后重试'),
+        this.logger.warn('模型提示词规范任务提交后调度失败，将稍后重试'),
       );
       return this.taskSummary(saved);
     } catch (error) {
@@ -471,7 +471,7 @@ export class VisualPromptTemplatesService
       if (retried && this.isSameTask(retried, input)) {
         return this.taskSummary(retried);
       }
-      throw new ConflictException('已有视觉提示词任务正在执行，请等待完成');
+      throw new ConflictException('已有模型提示词规范任务正在执行，请等待完成');
     }
   }
 
@@ -483,7 +483,7 @@ export class VisualPromptTemplatesService
     >,
   ) {
     if (!this.isSameTask(task, input)) {
-      throw new ConflictException('请求号已用于其它视觉提示词任务');
+      throw new ConflictException('请求号已用于其它模型提示词规范任务');
     }
   }
 
@@ -531,7 +531,7 @@ export class VisualPromptTemplatesService
           status: 'running',
           stage:
             task.taskType === 'extract'
-              ? 'AI 正在提炼模板'
+              ? 'AI 正在从 Demo 提炼规范'
               : 'AI 正在转换提示词',
           workerId: this.workerId,
           startedAt: new Date(),
@@ -594,7 +594,7 @@ export class VisualPromptTemplatesService
         stage:
           status === 'succeeded'
             ? task.taskType === 'extract'
-              ? '模板提炼完成'
+              ? '提示词规范提炼完成'
               : '提示词转换完成'
             : status === 'interrupted'
               ? '执行中断'
@@ -650,7 +650,7 @@ export class VisualPromptTemplatesService
       (await this.repository.count({ where: { id: In(unique), userId } })) !==
       unique.length
     )
-      throw new NotFoundException('部分视觉提示词模板不存在');
+      throw new NotFoundException('部分模型提示词规范不存在');
     await this.repository.softDelete({ id: In(unique), userId });
     return { ids: unique };
   }
@@ -698,7 +698,7 @@ export class VisualPromptTemplatesService
     );
     if (!response.isSuccess)
       throw new BadGatewayException(
-        '视觉提示词 AI 调用失败，请检查模型账号、模型和网络后重试',
+        '模型提示词规范 AI 调用失败，请检查模型账号、模型和网络后重试',
       );
     return response.answer;
   }

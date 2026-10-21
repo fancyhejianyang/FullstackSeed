@@ -26,8 +26,8 @@ const columns: TableColumn[] = [
   { prop: "targetModel", label: "目标模型", minWidth: 160 },
   {
     prop: "visualPromptTemplateId",
-    label: "提示词模板",
-    width: 110,
+    label: "提示词规范",
+    width: 120,
     slot: true,
   },
   { prop: "bindingCount", label: "开放参数", width: 100, slot: true },

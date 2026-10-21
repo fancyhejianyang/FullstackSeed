@@ -76,7 +76,7 @@ const routes: RouteRecordRaw[] = [
         name: "visual-prompt-templates",
         component: () => import("@/views/visual-prompt-template/Index.vue"),
         meta: {
-          title: "视觉提示词",
+          title: "模型提示词规范",
           permission: "VisualPromptTemplate.read",
         },
       },

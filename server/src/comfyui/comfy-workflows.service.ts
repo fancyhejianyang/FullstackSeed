@@ -288,7 +288,7 @@ export class ComfyWorkflowsService {
     if (!workflow.isEnabled) throw new BadRequestException('工作流已停用');
     if (!workflow.visualPromptTemplateId) {
       throw new BadRequestException(
-        '该工作流尚未绑定视觉提示词模板，请重新导入包含正向示例的 API 工作流',
+        '该工作流尚未绑定模型提示词规范，请重新导入包含正向 Demo 的 API 工作流',
       );
     }
     return this.visualPromptTemplates.submitBoundComposition(

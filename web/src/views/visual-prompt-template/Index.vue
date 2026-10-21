@@ -28,7 +28,7 @@ const viewingRow = ref<VisualPromptTemplateSummary | null>(null);
 const extractingId = ref<number | null>(null);
 const extractStage = ref("");
 const columns: TableColumn[] = [
-  { prop: "name", label: "模板名称", minWidth: 180 },
+  { prop: "name", label: "规范名称", minWidth: 180 },
   { prop: "mediaType", label: "媒体", width: 90, slot: true },
   { prop: "targetModel", label: "适用模型", minWidth: 170 },
   { prop: "styleSummary", label: "风格摘要", minWidth: 220 },
@@ -70,8 +70,8 @@ function openView(row: VisualPromptTemplateSummary) {
 async function extract(row: VisualPromptTemplateSummary) {
   try {
     await ElMessageBox.confirm(
-      "AI 将根据示例、负面示例和目标模型重新提炼模板，成功后覆盖当前提炼结果。是否继续？",
-      "AI 提炼视觉提示词",
+      "AI 将根据正向 Demo、负向 Demo 和目标模型重新提炼提示词规范，成功后覆盖当前提炼结果。是否继续？",
+      "AI 提炼提示词规范",
       { type: "warning" },
     );
   } catch {
@@ -87,10 +87,12 @@ async function extract(row: VisualPromptTemplateSummary) {
       task = await getVisualPromptExtractTask(task.id);
     }
     if (task.status !== "succeeded") {
-      ElMessage.error(task.errorMessage || "AI 提炼失败，请检查配置后重试");
+      ElMessage.error(
+        task.errorMessage || "AI 提炼失败，请检查配置后重试",
+      );
       return;
     }
-    ElMessage.success("模型规则与正负提示词模板已更新");
+    ElMessage.success("模型规则与正负提示词格式已更新");
     await tableRef.value?.refresh();
   } finally {
     extractingId.value = null;
@@ -100,7 +102,7 @@ async function extract(row: VisualPromptTemplateSummary) {
 </script>
 
 <template>
-  <PageContainer title="视觉提示词">
+  <PageContainer title="模型提示词规范">
     <Table
       ref="tableRef"
       perm-module="visualPromptTemplate"
@@ -119,7 +121,7 @@ async function extract(row: VisualPromptTemplateSummary) {
           perm="VisualPromptTemplate.create"
           icon="Plus"
           @click="openCreate"
-          >新增模板</Button
+          >新增规范</Button
         >
         <Button
           perm="VisualPromptTemplate.batchDelete"
@@ -136,7 +138,9 @@ async function extract(row: VisualPromptTemplateSummary) {
           :loading="extractingId === row.id"
           @click="extract(row)"
           >{{
-            extractingId === row.id ? extractStage || "AI 提炼中" : "AI 提炼"
+            extractingId === row.id
+              ? extractStage || "AI 提炼中"
+              : "AI 提炼"
           }}</Button
         >
       </template>

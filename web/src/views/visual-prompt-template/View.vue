@@ -23,7 +23,7 @@ watch(visible, async (open) => {
 <template>
   <Dialog
     v-model="visible"
-    title="视觉提示词模板"
+    title="模型提示词规范"
     width="860px"
     :show-footer="false"
   >
@@ -44,15 +44,15 @@ watch(visible, async (open) => {
           <pre>{{ detail.modelRules || "尚未配置" }}</pre>
         </section>
         <section>
-          <h4>正向模板</h4>
+          <h4>正向提示词格式</h4>
           <pre>{{ detail.positiveTemplate || detail.sourcePrompt }}</pre>
         </section>
         <section>
-          <h4>负向模板</h4>
+          <h4>负向提示词格式</h4>
           <pre>{{
             detail.negativeTemplate ||
             detail.sourceNegativePrompt ||
-            "该模板未配置负向提示词"
+            "该规范未配置负向提示词"
           }}</pre>
         </section>
       </template>
