@@ -473,10 +473,12 @@ export class KnowledgeAiProvidersService {
         throw new BadRequestException(
           '请在模型账号中配置完整的视频生成接口地址',
         );
-      url = this.applyWorkspaceId({
-        ...provider,
-        apiUrl: provider.videoGenerationApiUrl,
-      });
+      url = this.normalizeVideoGenerationUrl(
+        this.applyWorkspaceId({
+          ...provider,
+          apiUrl: provider.videoGenerationApiUrl,
+        }),
+      );
       this.assertVideoGenerationUrl(url);
       taskUrlTemplate = this.buildVideoTaskUrlTemplate(url);
     }
@@ -522,14 +524,23 @@ export class KnowledgeAiProvidersService {
         !url.password &&
         !url.hash &&
         !url.search &&
-        url.pathname.includes('/services/')
+        /^\/api\/v1\/services\/aigc\/video-generation\/video-synthesis\/?$/.test(
+          url.pathname,
+        )
       )
         return;
     } catch {
       /* 统一返回配置错误，不回显密钥或地址。 */
     }
     throw new BadRequestException(
-      '视频生成接口须为包含 /services/ 的完整 DashScope HTTPS 地址，不能包含账号、密码、查询参数或片段',
+      '视频生成接口须为完整 DashScope HTTPS 地址，路径必须是 /api/v1/services/aigc/video-generation/video-synthesis',
+    );
+  }
+
+  private normalizeVideoGenerationUrl(value: string) {
+    return value.replace(
+      '/api/v1/services/aigcvideo-generation/video-synthesis',
+      '/api/v1/services/aigc/video-generation/video-synthesis',
     );
   }
 
@@ -1110,7 +1121,9 @@ export class KnowledgeAiProvidersService {
       );
     }
     if (dto.videoGenerationApiUrl !== undefined) {
-      const url = dto.videoGenerationApiUrl.trim();
+      const url = this.normalizeVideoGenerationUrl(
+        dto.videoGenerationApiUrl.trim(),
+      );
       if (url) this.assertVideoGenerationUrl(url);
       payload.videoGenerationApiUrl = url || null;
     }
@@ -1140,7 +1153,9 @@ export class KnowledgeAiProvidersService {
       imageGenerationProtocol: provider.imageGenerationProtocol || 'openai',
       imageGenerationApiUrl: provider.imageGenerationApiUrl ?? '',
       videoGenerationModels: provider.videoGenerationModels ?? '',
-      videoGenerationApiUrl: provider.videoGenerationApiUrl ?? '',
+      videoGenerationApiUrl: provider.videoGenerationApiUrl
+        ? this.normalizeVideoGenerationUrl(provider.videoGenerationApiUrl)
+        : '',
       embeddingModels: provider.embeddingModels ?? '',
       isEnabled: !!provider.isEnabled,
       description: provider.description ?? '',

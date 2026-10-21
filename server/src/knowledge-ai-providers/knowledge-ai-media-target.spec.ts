@@ -71,6 +71,26 @@ describe('Agent media targets', () => {
         'https://workspace.cn-beijing.maas.aliyuncs.com/api/v1/tasks/{taskId}',
     });
   });
+  it('兼容修正历史视频接口中缺失的 aigc 路径分隔符', async () => {
+    const { service, provider } = harness();
+    provider.videoGenerationApiUrl =
+      'https://old.cn-beijing.maas.aliyuncs.com/api/v1/services/aigcvideo-generation/video-synthesis';
+    await expect(
+      service.resolveMediaTarget(2, 'wan', 'videoGeneration'),
+    ).resolves.toMatchObject({
+      url: 'https://workspace.cn-beijing.maas.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis',
+      taskUrlTemplate:
+        'https://workspace.cn-beijing.maas.aliyuncs.com/api/v1/tasks/{taskId}',
+    });
+  });
+  it('拒绝不是视频合成服务的宽泛 services 地址', async () => {
+    const { service, provider } = harness();
+    provider.videoGenerationApiUrl =
+      'https://old.cn-beijing.maas.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation';
+    await expect(
+      service.resolveMediaTarget(2, 'wan', 'videoGeneration'),
+    ).rejects.toThrow('video-generation/video-synthesis');
+  });
   it('内容封面直接选同账号首个有效生图模型，缺配置跳过且不调用 Agent 入口', async () => {
     const { service, provider } = harness();
     const agent = jest.spyOn(service, 'resolveAgentMediaTarget');

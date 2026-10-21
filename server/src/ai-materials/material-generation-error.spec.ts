@@ -74,6 +74,22 @@ describe('material generation errors', () => {
     expect(result.message).not.toContain('sk-secret-value');
   });
 
+  it('将异步协议拒绝与普通鉴权失败区分开', () => {
+    const result = describeMaterialGenerationFailure(
+      new MaterialProviderHttpError(403, {
+        code: 'AccessDenied',
+        message: 'current user api does not support asynchronous calls',
+      }),
+      { ...context, mediaType: 'video' },
+    );
+    expect(result.status).toBe('failed');
+    expect(result.message).toContain('拒绝异步视频协议');
+    expect(result.message).toContain(
+      '/api/v1/services/aigc/video-generation/video-synthesis',
+    );
+    expect(result.message).not.toContain('鉴权失败');
+  });
+
   it('区分已生成图片后的存储失败', () => {
     const result = describeMaterialGenerationFailure(
       new Error('对象存储不可用'),

@@ -1,5 +1,25 @@
 # CHANGELOG
 
+### 2026-10-21 修复视频生成接口路径与异步协议报错
+
+- 定位到当前视频账号配置将官方路径 `/api/v1/services/aigc/video-generation/video-synthesis` 错写为 `/api/v1/services/aigcvideo-generation/video-synthesis`；媒体目标解析和配置回显现会兼容修正这一处确定性历史拼写，重启后原配置即可使用，重新保存时写回规范地址。
+- 视频端点校验由宽泛的“包含 `/services/`”收紧为官方 `video-synthesis` 完整路径，避免把生图、多模态或其它服务地址误当作视频异步接口；任务查询地址继续从同地域 `/api/v1/tasks/{taskId}` 生成。
+- `current user api does not support asynchronous calls` 不再归类为普通鉴权失败，而是明确提示检查视频路径以及模型、API Key、Workspace 地域一致性。Wan 3.0 官方 HTTP 接口只支持异步调用，因此系统不会错误移除异步请求头，也不会自动重复可能计费的任务。
+- 验证：视频媒体目标与生成错误定向测试 2 suites / 17 tests 通过，TypeORM 实体列检查通过。
+
+新增文件（0）。
+
+修改文件（6）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/ai-materials/material-generation-error.spec.ts`
+- `server/src/ai-materials/material-generation-error.ts`
+- `server/src/knowledge-ai-providers/knowledge-ai-media-target.spec.ts`
+- `server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`
+
+删除文件（0）。
+
 ### 2026-10-21 接入 Wan 3.0 多参考素材生视频协议
 
 - 保留原有文生视频与 `first_frame` 单首帧链路，并将界面名称明确为“首帧生视频”；新增独立“多参考生视频”模式，按用户排列顺序向 DashScope 提交 `reference_image` / `reference_video`，不混用两类协议。

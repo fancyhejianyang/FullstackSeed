@@ -74,6 +74,13 @@ export function describeMaterialGenerationFailure(
     };
   }
   if (error instanceof MaterialProviderHttpError) {
+    if (context.mediaType === 'video' && providerRejectsAsyncCall(error)) {
+      return {
+        status: 'failed',
+        message:
+          '供应商拒绝异步视频协议；请确认视频接口路径为 /api/v1/services/aigc/video-generation/video-synthesis，并确保模型、API Key、Workspace 属于同一地域。万相视频接口只支持异步调用，系统不会改用同步请求或自动重试',
+      };
+    }
     return {
       status: 'failed',
       message: providerHttpMessage(
@@ -101,6 +108,15 @@ export function describeMaterialGenerationFailure(
     status: 'failed',
     message: `${prefix[context.phase]}${knownMessage ? `：${knownMessage}` : ''}；原素材未修改，系统不会自动重试`,
   };
+}
+
+function providerRejectsAsyncCall(error: MaterialProviderHttpError) {
+  return (
+    error.statusCode === 403 &&
+    /current user api does not support asynchronous calls/i.test(
+      error.providerMessage,
+    )
+  );
 }
 
 export function materialLeaseExpiredMessage(mediaType: AiMaterialMediaType) {
