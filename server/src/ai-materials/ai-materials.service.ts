@@ -9,7 +9,14 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'node:crypto';
-import { In, IsNull, LessThan, Like, Repository } from 'typeorm';
+import {
+  In,
+  IsNull,
+  LessThan,
+  Like,
+  Repository,
+  type UpdateResult,
+} from 'typeorm';
 import { AiFeatureConfig } from '../ai-feature-configs/entities/ai-feature-config.entity';
 import { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-configs.service';
 import {
@@ -460,7 +467,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
             requestId: dto.requestId,
             status: 'pending',
             activeMaterialId: materialId,
-            activeUserId: userId,
+            activeUserId: null,
             snapshot,
             resultFileId: null,
             providerTaskId: null,
@@ -477,8 +484,22 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
         return this.taskSummary(task);
       });
     } catch (error) {
-      if ((error as { code?: string }).code === 'ER_DUP_ENTRY')
-        throw new ConflictException('已有素材正在生成，请等待完成后再提交');
+      if (this.isDuplicateEntry(error)) {
+        const duplicateRequest = await this.tasks.findOne({
+          where: { userId, requestId: dto.requestId },
+        });
+        if (duplicateRequest) {
+          if (
+            duplicateRequest.materialId !== materialId ||
+            duplicateRequest.materialVersion !== dto.version
+          )
+            throw new ConflictException('请求号已用于不同素材或版本');
+          return this.taskSummary(duplicateRequest);
+        }
+        throw new ConflictException(
+          '该素材已有排队或生成任务，请等待完成后再提交',
+        );
+      }
       throw error;
     }
   }
@@ -521,22 +542,42 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
     this.draining = true;
     try {
       await this.expireLeases();
-      const task = await this.tasks.findOne({
-        where: { status: 'pending' },
-        order: { id: 'ASC' },
-      });
+      const task = await this.tasks
+        .createQueryBuilder('task')
+        .where('task.status = :pendingStatus', { pendingStatus: 'pending' })
+        .andWhere('task.deletedAt IS NULL')
+        .andWhere(
+          `NOT EXISTS (
+            SELECT 1
+            FROM material_generation_tasks active_task
+            WHERE active_task.activeUserId = task.userId
+              AND active_task.status IN (:...executionStatuses)
+              AND active_task.deletedAt IS NULL
+          )`,
+          { executionStatuses: ['running', 'storing'] },
+        )
+        .orderBy('task.id', 'ASC')
+        .getOne();
       if (!task || this.stopped) return;
-      const claim = await this.tasks.update(
-        { id: task.id, status: 'pending', deletedAt: IsNull() },
-        {
-          status: 'running',
-          workerId: this.workerId,
-          startedAt: new Date(),
-          leaseExpiresAt: new Date(
-            Date.now() + materialTaskLease(task.snapshot?.mediaType ?? 'image'),
-          ),
-        },
-      );
+      let claim: UpdateResult;
+      try {
+        claim = await this.tasks.update(
+          { id: task.id, status: 'pending', deletedAt: IsNull() },
+          {
+            status: 'running',
+            activeUserId: task.userId,
+            workerId: this.workerId,
+            startedAt: new Date(),
+            leaseExpiresAt: new Date(
+              Date.now() +
+                materialTaskLease(task.snapshot?.mediaType ?? 'image'),
+            ),
+          },
+        );
+      } catch (error) {
+        if (this.isDuplicateEntry(error)) return;
+        throw error;
+      }
       if (claim.affected !== 1) return;
       await this.materials.update(
         { id: task.materialId, userId: task.userId },
@@ -1013,5 +1054,9 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
       startedAt: task.startedAt,
       finishedAt: task.finishedAt,
     };
+  }
+
+  private isDuplicateEntry(error: unknown) {
+    return (error as { code?: string }).code === 'ER_DUP_ENTRY';
   }
 }

@@ -1,5 +1,30 @@
 # CHANGELOG
 
+### 2026-10-21 支持 AI 素材连续排队与工作流模型筛选
+
+- 修正 AI 素材任务锁的生命周期：任务提交为 `pending` 时只占用素材锁，后台从队列原子领取为 `running` 时才占用用户执行锁；同一用户可以连续提交多个不同素材，并保持同一用户同一时刻只执行一个任务。
+- 调度器按任务 ID 先进先出地选择当前用户没有运行任务的最早待执行记录；多服务实例并发领取时继续由数据库唯一锁裁决，竞争失败等待下一轮，不重复请求可能计费的供应商。原有租约、超时恢复、结果落盘和失败保留旧素材策略不变。
+- 同一素材已有排队或生成任务时仍拒绝重复提交，错误文案明确到素材维度；相同请求号并发提交继续按幂等请求返回已有任务。前端提交成功提示调整为“已加入生成队列”。
+- 工作流管理将“目标模型”移至操作列后的首个业务列，并新增独立目标模型搜索条件；后端按 `targetModel` 执行去空格后的模糊查询。
+- 验证：后端相关文件 ESLint、完整 77 suites / 663 tests、TypeORM 实体列检查及 NestJS build 通过；前端 `vue-tsc`、组件复用线索检查及 Vite 生产构建通过。
+
+新增文件（1）：
+
+- `server/src/ai-materials/ai-materials.service.spec.ts`
+
+修改文件（8）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/ai-materials/ai-materials.service.ts`
+- `server/src/comfyui/comfy-workflows.service.spec.ts`
+- `server/src/comfyui/comfy-workflows.service.ts`
+- `server/src/comfyui/dto/comfyui.dto.ts`
+- `web/src/views/ai-material/Index.vue`
+- `web/src/views/comfy-workflow/Index.vue`
+
+删除文件（0）。
+
 ### 2026-10-21 修复视频生成接口路径与异步协议报错
 
 - 定位到当前视频账号配置将官方路径 `/api/v1/services/aigc/video-generation/video-synthesis` 错写为 `/api/v1/services/aigcvideo-generation/video-synthesis`；媒体目标解析和配置回显现会兼容修正这一处确定性历史拼写，重启后原配置即可使用，重新保存时写回规范地址。

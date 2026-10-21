@@ -56,6 +56,11 @@ export class ComfyWorkflowsService {
         { keyword: `%${query.keyword}%` },
       );
     }
+    if (query.targetModel?.trim()) {
+      qb.andWhere('workflow.targetModel LIKE :targetModel', {
+        targetModel: `%${query.targetModel.trim()}%`,
+      });
+    }
     if (query.connectionId) {
       qb.andWhere('workflow.connectionId = :connectionId', {
         connectionId: query.connectionId,

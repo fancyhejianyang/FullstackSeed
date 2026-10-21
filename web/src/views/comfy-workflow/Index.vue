@@ -20,10 +20,10 @@ const tableRef = ref<{
 const editVisible = ref(false);
 const editingRow = ref<ComfyWorkflow | null>(null);
 const columns: TableColumn[] = [
+  { prop: "targetModel", label: "目标模型", minWidth: 180 },
   { prop: "name", label: "工作流模板", minWidth: 180 },
   { prop: "connectionName", label: "执行服务", minWidth: 150 },
   { prop: "outputType", label: "输出类型", width: 100, slot: true },
-  { prop: "targetModel", label: "目标模型", minWidth: 160 },
   {
     prop: "visualPromptTemplateId",
     label: "提示词规范",
@@ -41,6 +41,12 @@ const searchFields: FormField[] = [
     label: "关键词",
     type: "input",
     placeholder: "名称或说明",
+  },
+  {
+    prop: "targetModel",
+    label: "目标模型",
+    type: "input",
+    placeholder: "搜索模型名称",
   },
   {
     prop: "outputType",

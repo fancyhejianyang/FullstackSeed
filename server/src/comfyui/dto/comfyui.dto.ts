@@ -246,6 +246,11 @@ export class UpdateComfyWorkflowDto extends PartialType(
 ) {}
 
 export class QueryComfyWorkflowDto extends PageQueryDto {
+  @IsString()
+  @MaxLength(120)
+  @IsOptional()
+  targetModel?: string;
+
   @Type(() => Number)
   @IsInt()
   @Min(1)

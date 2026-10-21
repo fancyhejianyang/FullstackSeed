@@ -262,6 +262,30 @@ describe('ComfyUI 工作流版本快照保存', () => {
 });
 
 describe('ComfyUI 工作流可用状态', () => {
+  it('可按目标模型模糊过滤工作流', async () => {
+    const queryBuilder = {
+      orderBy: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+    };
+    const service = new ComfyWorkflowsService(
+      { createQueryBuilder: jest.fn().mockReturnValue(queryBuilder) } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    await service.findAll({ targetModel: ' z_image_turbo ', page: 1 });
+
+    expect(queryBuilder.andWhere).toHaveBeenCalledWith(
+      'workflow.targetModel LIKE :targetModel',
+      { targetModel: '%z_image_turbo%' },
+    );
+  });
+
   it('启用的工作流会出现在创作选项中', async () => {
     const workflows = {
       find: jest.fn().mockResolvedValue([

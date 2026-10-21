@@ -150,7 +150,7 @@ async function generate(row: AiMaterialSummary) {
   generatingId.value = row.id;
   try {
     await generateAiMaterial(row.id, row.version, crypto.randomUUID());
-    ElMessage.success("已提交后台生成；旧素材会保留到新素材保存成功");
+    ElMessage.success("已加入生成队列；旧素材会保留到新素材保存成功");
     tableRef.value?.clearSelection();
     await tableRef.value?.refresh();
   } finally {
