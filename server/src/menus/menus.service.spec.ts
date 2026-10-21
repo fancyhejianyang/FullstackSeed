@@ -204,6 +204,14 @@ describe('MenusService Agent menu reconciliation', () => {
   it('uses concise ComfyUI child names and retires the duplicate task-record menu', async () => {
     rows.push(
       menu({
+        id: 19,
+        name: 'ComfyUI 工作流',
+        path: '/comfyui/workflows',
+        permissionCode: 'ComfyWorkflow.read',
+        isSystem: true,
+        isActive: false,
+      }),
+      menu({
         id: 20,
         name: 'ComfyUI 生成记录',
         path: '/comfyui/tasks',
@@ -214,6 +222,13 @@ describe('MenusService Agent menu reconciliation', () => {
 
     const retired = rows.find((item) => item.path === '/comfyui/tasks');
     expect(retired).toMatchObject({ id: 20, isActive: false });
+    const workflow = rows.find((item) => item.path === '/comfyui/workflows');
+    expect(workflow).toMatchObject({
+      id: 19,
+      name: '工作流管理',
+      isSystem: false,
+      isActive: true,
+    });
     const tree = await service.findMine(false, [
       'ComfyTask.read',
       'ComfyMaterial.read',

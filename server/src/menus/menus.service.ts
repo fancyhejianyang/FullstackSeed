@@ -146,9 +146,9 @@ const BASE_SEED_MENUS: SeedMenu[] = [
     sort: 30,
     permissionCode: 'ComfyWorkflow.read',
     isSystem: false,
+    isActive: true,
     parentPath: '/comfyui',
     reconcile: true,
-    preserveVisibility: true,
   },
   {
     name: 'ComfyUI 生成记录',
