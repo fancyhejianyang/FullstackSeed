@@ -32,7 +32,9 @@ import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge
 import { ManagedFilesService } from '../managed-files/managed-files.service';
 import type { UploadedStorageFile } from '../uploads/uploads.service';
 import {
+  AI_MATERIAL_IMAGE_REFERENCE_LIMIT_BYTES,
   AI_MATERIAL_STYLE_VERSION,
+  AI_MATERIAL_VIDEO_REFERENCE_LIMIT_BYTES,
   buildMaterialPrompt,
   materialMediaType,
   materialNeedsReferenceImage,
@@ -61,8 +63,6 @@ import {
 } from './material-generation-error';
 
 const ACTIVE_STATUSES: MaterialTaskStatus[] = ['pending', 'running', 'storing'];
-const MAX_REFERENCE_IMAGE_SIZE = 5 * 1024 * 1024;
-
 @Injectable()
 export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
   private readonly workerId = randomUUID();
@@ -198,7 +198,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
             mediaType,
             currentMediaType: null,
             videoResolution: dto.videoResolution ?? '720P',
-            videoRatio: dto.videoRatio ?? '16:9',
+            videoRatio: dto.videoRatio ?? 'adaptive',
             videoDuration: dto.videoDuration ?? 5,
             referenceFileId: null,
             referenceImageUrl: null,
@@ -755,7 +755,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
           generationMode,
           referenceImageDataUrl,
           resolution: task.snapshot.videoResolution ?? '720P',
-          ratio: task.snapshot.videoRatio ?? '16:9',
+          ratio: task.snapshot.videoRatio ?? 'adaptive',
           duration: task.snapshot.videoDuration ?? 5,
         }),
       ),
@@ -793,8 +793,13 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
   private async assertProviderResponse(response: Response) {
     if (response.ok) return;
     const statusCode = response.status;
-    await response.body?.cancel();
-    throw new MaterialProviderHttpError(statusCode);
+    let providerResponse: unknown;
+    try {
+      providerResponse = await readMediaJson(response, 64 * 1024);
+    } catch {
+      await response.body?.cancel().catch(() => undefined);
+    }
+    throw new MaterialProviderHttpError(statusCode, providerResponse);
   }
 
   private waitForPoll(signal: AbortSignal) {
@@ -899,12 +904,15 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException('图生图/图生视频必须上传参考图片');
     }
     if (!file.buffer?.length) throw new BadRequestException('参考图片内容为空');
-    if (
-      file.size > MAX_REFERENCE_IMAGE_SIZE ||
-      file.buffer.length > MAX_REFERENCE_IMAGE_SIZE
-    )
-      throw new BadRequestException('参考图片不能超过 5MB');
-    const mimeType = imageMime(file.buffer, MAX_REFERENCE_IMAGE_SIZE);
+    const limit =
+      materialMediaType(generationMode) === 'video'
+        ? AI_MATERIAL_VIDEO_REFERENCE_LIMIT_BYTES
+        : AI_MATERIAL_IMAGE_REFERENCE_LIMIT_BYTES;
+    if (file.size > limit || file.buffer.length > limit)
+      throw new BadRequestException(
+        `参考图片不能超过 ${limit / 1024 / 1024}MB`,
+      );
+    const mimeType = imageMime(file.buffer, limit);
     return { ...file, mimetype: mimeType };
   }
 

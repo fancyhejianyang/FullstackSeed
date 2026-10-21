@@ -46,6 +46,7 @@ export type AiMaterialVideoResolution =
 
 export const AI_MATERIAL_VIDEO_RATIOS = [
   'adaptive',
+  '21:9',
   '16:9',
   '9:16',
   '1:1',
@@ -54,9 +55,14 @@ export const AI_MATERIAL_VIDEO_RATIOS = [
 ] as const;
 export type AiMaterialVideoRatio = (typeof AI_MATERIAL_VIDEO_RATIOS)[number];
 
-export const AI_MATERIAL_VIDEO_DURATIONS = [5, 10] as const;
-export type AiMaterialVideoDuration =
-  (typeof AI_MATERIAL_VIDEO_DURATIONS)[number];
+export const AI_MATERIAL_VIDEO_DURATIONS = [
+  -1,
+  ...Array.from({ length: 29 }, (_, index) => index + 2),
+] as const;
+export type AiMaterialVideoDuration = number;
+
+export const AI_MATERIAL_IMAGE_REFERENCE_LIMIT_BYTES = 5 * 1024 * 1024;
+export const AI_MATERIAL_VIDEO_REFERENCE_LIMIT_BYTES = 20 * 1024 * 1024;
 
 export function materialMediaType(
   mode: AiMaterialGenerationMode,

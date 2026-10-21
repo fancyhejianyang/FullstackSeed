@@ -6,6 +6,8 @@ import type {
   AiMaterialVideoResolution,
 } from '../../ai-materials/ai-material.constants';
 
+const WAN_VIDEO_PROMPT_MAX_LENGTH = 20000;
+
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -29,7 +31,7 @@ export function videoGenerationRequest(payload: {
   return {
     model: payload.model,
     input: {
-      prompt: payload.prompt,
+      prompt: payload.prompt.slice(0, WAN_VIDEO_PROMPT_MAX_LENGTH),
       ...(payload.referenceImageDataUrl
         ? {
             media: [

@@ -57,6 +57,23 @@ describe('material generation errors', () => {
     expect(result.message).toContain(`HTTP ${statusCode}`);
   });
 
+  it('保留脱敏后的供应商错误码和参数说明', () => {
+    const result = describeMaterialGenerationFailure(
+      new MaterialProviderHttpError(400, {
+        code: 'InvalidParameter',
+        message:
+          'duration 超出范围，查看 https://example.com，密钥 sk-secret-value',
+      }),
+      context,
+    );
+    expect(result.message).toContain('InvalidParameter');
+    expect(result.message).toContain('duration 超出范围');
+    expect(result.message).toContain('[已隐藏地址]');
+    expect(result.message).toContain('[已隐藏密钥]');
+    expect(result.message).not.toContain('https://example.com');
+    expect(result.message).not.toContain('sk-secret-value');
+  });
+
   it('区分已生成图片后的存储失败', () => {
     const result = describeMaterialGenerationFailure(
       new Error('对象存储不可用'),

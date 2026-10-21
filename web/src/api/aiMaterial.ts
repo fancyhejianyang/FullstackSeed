@@ -16,12 +16,13 @@ export type AiMaterialMediaType = "image" | "video";
 export type AiMaterialVideoResolution = "480P" | "720P" | "1080P";
 export type AiMaterialVideoRatio =
   | "adaptive"
+  | "21:9"
   | "16:9"
   | "9:16"
   | "1:1"
   | "4:3"
   | "3:4";
-export type AiMaterialVideoDuration = 5 | 10;
+export type AiMaterialVideoDuration = number;
 export type AiMaterialStatus =
   | "idle"
   | "pending"

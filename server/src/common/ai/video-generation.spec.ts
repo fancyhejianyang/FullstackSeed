@@ -38,6 +38,25 @@ describe('video generation protocol', () => {
     ).toThrow(BadRequestException);
   });
 
+  it('透传 Wan 3.0 的超宽画幅与 30 秒时长并限制提示词长度', () => {
+    const request = videoGenerationRequest({
+      model: 'wan3.0-video',
+      prompt: '画'.repeat(20010),
+      generationMode: 'textToVideo',
+      resolution: '1080P',
+      ratio: '21:9',
+      duration: 30,
+    });
+    expect(request.input.prompt).toHaveLength(20000);
+    expect(request.parameters).toMatchObject({
+      resolution: '1080P',
+      ratio: '21:9',
+      duration: 30,
+      prompt_extend: true,
+    });
+    expect(request.input).not.toHaveProperty('media');
+  });
+
   it('解析异步任务编号、运行状态与视频地址', () => {
     expect(videoTaskId({ output: { task_id: 'task-1' } })).toBe('task-1');
     expect(videoTaskResult({ output: { task_status: 'RUNNING' } })).toEqual({

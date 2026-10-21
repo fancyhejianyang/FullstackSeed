@@ -33,7 +33,7 @@ const form = reactive<AiMaterialForm>({
   referenceImageUrl: "",
   referenceImageFile: null,
   videoResolution: "720P",
-  videoRatio: "16:9",
+  videoRatio: "adaptive",
   videoDuration: 5,
 });
 
@@ -94,6 +94,10 @@ const fields = computed<FormField[]>(() => [
     type: "textarea",
     rows: 7,
     placeholder: "描述主体、场景、构图和希望表达的画面",
+    componentProps: {
+      maxlength: isVideoMode.value ? 20000 : 4000,
+      showWordLimit: true,
+    },
     hint: "不会额外调用文本模型润色；实际请求由默认画面要求、提示词和风格组合。",
   },
   {
@@ -128,22 +132,35 @@ const fields = computed<FormField[]>(() => [
           prop: "videoRatio",
           label: "画面比例",
           type: "select" as const,
-          options: ["adaptive", "16:9", "9:16", "1:1", "4:3", "3:4"].map(
-            (value) => ({
-              label: value === "adaptive" ? "自适应" : value,
-              value,
-            }),
-          ),
+          options: [
+            "adaptive",
+            "21:9",
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+          ].map((value) => ({
+            label: value === "adaptive" ? "自适应" : value,
+            value,
+          })),
+          hint:
+            form.generationMode === "imageToVideo"
+              ? "首帧生视频建议选择自适应，使输出比例跟随参考图。"
+              : "支持自适应及常用横屏、竖屏比例。",
         },
         {
           prop: "videoDuration",
           label: "视频时长",
           type: "select" as const,
           options: [
-            { label: "5 秒", value: 5 },
-            { label: "10 秒", value: 10 },
+            { label: "智能时长（默认约 5 秒）", value: -1 },
+            ...Array.from({ length: 29 }, (_, index) => {
+              const seconds = index + 2;
+              return { label: `${seconds} 秒`, value: seconds };
+            }),
           ],
-          hint: "具体分辨率、比例和时长仍受所选视频模型能力限制。",
+          hint: "Wan 3.0 支持智能时长或 2～30 秒；其它模型仍以供应商实际能力为准。",
         },
       ]
     : []),
@@ -215,7 +232,7 @@ watch(visible, async (value) => {
           ?.id ?? "";
       form.referenceImageUrl = "";
       form.videoResolution = "720P";
-      form.videoRatio = "16:9";
+      form.videoRatio = "adaptive";
       form.videoDuration = 5;
     }
     referenceImageFile.value = null;
@@ -340,7 +357,7 @@ async function submit() {
           <UploadImage
             v-model="form.referenceImageUrl"
             accept=".png,.jpg,.jpeg,.webp"
-            :max-size-mb="5"
+            :max-size-mb="isVideoMode ? 20 : 5"
             :upload-request="selectReferenceImage"
             @remove="clearReferenceImage"
           />

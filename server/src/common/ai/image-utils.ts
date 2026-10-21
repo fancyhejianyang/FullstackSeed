@@ -154,7 +154,10 @@ export function videoMime(data: Buffer): 'video/mp4' {
 }
 
 /** 限制模型 JSON 响应大小，避免无界读取 Base64。 */
-export async function readMediaJson(response: Response): Promise<unknown> {
+export async function readMediaJson(
+  response: Response,
+  maxBytes = 16 * 1024 * 1024,
+): Promise<unknown> {
   if (!response.body) throw new BadRequestException('模型响应为空');
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -164,8 +167,10 @@ export async function readMediaJson(response: Response): Promise<unknown> {
       const { done, value } = await reader.read();
       if (done) break;
       size += value.length;
-      if (size > 16 * 1024 * 1024)
-        throw new BadRequestException('模型响应超过 16 MB');
+      if (size > maxBytes)
+        throw new BadRequestException(
+          `模型响应超过 ${Math.ceil(maxBytes / 1024 / 1024)} MB`,
+        );
       chunks.push(value);
     }
     return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;

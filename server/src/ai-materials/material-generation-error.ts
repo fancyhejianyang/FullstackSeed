@@ -27,9 +27,18 @@ export type MaterialGenerationPhase =
   | 'attachingResult';
 
 export class MaterialProviderHttpError extends Error {
-  constructor(readonly statusCode: number) {
+  readonly providerCode: string;
+  readonly providerMessage: string;
+
+  constructor(
+    readonly statusCode: number,
+    providerResponse?: unknown,
+  ) {
     super(`provider_http_${statusCode}`);
     this.name = 'MaterialProviderHttpError';
+    const details = providerErrorDetails(providerResponse);
+    this.providerCode = details.code;
+    this.providerMessage = details.message;
   }
 }
 
@@ -67,7 +76,11 @@ export function describeMaterialGenerationFailure(
   if (error instanceof MaterialProviderHttpError) {
     return {
       status: 'failed',
-      message: providerHttpMessage(error.statusCode),
+      message: providerHttpMessage(
+        error.statusCode,
+        error.providerCode,
+        error.providerMessage,
+      ),
     };
   }
 
@@ -111,26 +124,61 @@ function isTimeout(error: unknown) {
   );
 }
 
-function providerHttpMessage(statusCode: number) {
+function providerHttpMessage(
+  statusCode: number,
+  providerCode = '',
+  providerMessage = '',
+) {
+  const providerDetail = [providerCode, providerMessage]
+    .filter(Boolean)
+    .join('：');
+  const detail = providerDetail ? `，供应商返回：${providerDetail}` : '';
   if (statusCode === 400 || statusCode === 422) {
-    return `供应商拒绝了生成参数（HTTP ${statusCode}），请检查模型、接口协议、参考图和提示词配置；原素材未修改，系统不会自动重试`;
+    return `供应商拒绝了生成参数（HTTP ${statusCode}）${detail}，请检查模型、接口协议、参考图和提示词配置；原素材未修改，系统不会自动重试`;
   }
   if (statusCode === 401 || statusCode === 403) {
-    return `供应商鉴权失败（HTTP ${statusCode}），请检查模型账号密钥、权限和服务状态；原素材未修改，系统不会自动重试`;
+    return `供应商鉴权失败（HTTP ${statusCode}）${detail}，请检查模型账号密钥、权限和服务状态；原素材未修改，系统不会自动重试`;
   }
   if (statusCode === 404) {
-    return '生成接口或模型不存在（HTTP 404），请检查完整接口地址和模型编码；原素材未修改，系统不会自动重试';
+    return `生成接口或模型不存在（HTTP 404）${detail}，请检查完整接口地址和模型编码；原素材未修改，系统不会自动重试`;
   }
   if (statusCode === 408 || statusCode === 504) {
     return `供应商返回请求超时（HTTP ${statusCode}）；供应商可能仍在处理或计费，原素材未修改，系统不会自动重试`;
   }
   if (statusCode === 429) {
-    return '供应商限流或额度不足（HTTP 429），请检查调用频率、并发、配额和余额；原素材未修改，系统不会自动重试';
+    return `供应商限流或额度不足（HTTP 429）${detail}，请检查调用频率、并发、配额和余额；原素材未修改，系统不会自动重试`;
   }
   if (statusCode >= 500) {
-    return `供应商服务异常（HTTP ${statusCode}），请稍后检查服务状态；原素材未修改，系统不会自动重试`;
+    return `供应商服务异常（HTTP ${statusCode}）${detail}，请稍后检查服务状态；原素材未修改，系统不会自动重试`;
   }
-  return `生成服务请求失败（HTTP ${statusCode}），请检查接口配置；原素材未修改，系统不会自动重试`;
+  return `生成服务请求失败（HTTP ${statusCode}）${detail}，请检查接口配置；原素材未修改，系统不会自动重试`;
+}
+
+function providerErrorDetails(value: unknown) {
+  const body = record(value);
+  const output = record(body.output);
+  return {
+    code: safeProviderText(output.code ?? body.code, 80, true),
+    message: safeProviderText(output.message ?? body.message, 180),
+  };
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function safeProviderText(value: unknown, limit: number, codeOnly = false) {
+  if (typeof value !== 'string') return '';
+  const sanitized = value
+    .replace(/Bearer\s+\S+/gi, 'Bearer [已隐藏]')
+    .replace(/\bsk-[a-z0-9_-]+\b/gi, '[已隐藏密钥]')
+    .replace(/https?:\/\/\S+/gi, '[已隐藏地址]')
+    .replace(/[\r\n\t]+/g, ' ')
+    .trim();
+  if (codeOnly && !/^[a-z0-9_.:-]+$/i.test(sanitized)) return '';
+  return sanitized.slice(0, limit);
 }
 
 function applicationErrorMessage(error: unknown) {

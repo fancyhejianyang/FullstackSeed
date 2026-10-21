@@ -1,6 +1,20 @@
-import { buildMaterialPrompt } from './ai-material.constants';
+import {
+  AI_MATERIAL_VIDEO_DURATIONS,
+  AI_MATERIAL_VIDEO_RATIOS,
+  AI_MATERIAL_VIDEO_REFERENCE_LIMIT_BYTES,
+  buildMaterialPrompt,
+} from './ai-material.constants';
 
 describe('buildMaterialPrompt', () => {
+  it('同步 Wan 3.0 的视频画幅、时长和参考图上限', () => {
+    expect(AI_MATERIAL_VIDEO_RATIOS).toContain('21:9');
+    expect(AI_MATERIAL_VIDEO_DURATIONS).toEqual([
+      -1,
+      ...Array.from({ length: 29 }, (_, index) => index + 2),
+    ]);
+    expect(AI_MATERIAL_VIDEO_REFERENCE_LIMIT_BYTES).toBe(20 * 1024 * 1024);
+  });
+
   it('按默认要求、用户提示词和风格组合且不执行额外润色', () => {
     expect(
       buildMaterialPrompt({

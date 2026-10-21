@@ -17,6 +17,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator';
 import type { UploadedStorageFile } from '../uploads/uploads.service';
+import { AI_MATERIAL_VIDEO_REFERENCE_LIMIT_BYTES } from './ai-material.constants';
 import { AiMaterialsService } from './ai-materials.service';
 import {
   BatchDeleteAiMaterialDto,
@@ -72,7 +73,7 @@ export class AiMaterialsController {
   @RequirePermissions('AiMaterial.create')
   @UseInterceptors(
     FileInterceptor('referenceImage', {
-      limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+      limits: { fileSize: AI_MATERIAL_VIDEO_REFERENCE_LIMIT_BYTES, files: 1 },
     }),
   )
   create(
@@ -87,7 +88,7 @@ export class AiMaterialsController {
   @RequirePermissions('AiMaterial.update')
   @UseInterceptors(
     FileInterceptor('referenceImage', {
-      limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+      limits: { fileSize: AI_MATERIAL_VIDEO_REFERENCE_LIMIT_BYTES, files: 1 },
     }),
   )
   update(

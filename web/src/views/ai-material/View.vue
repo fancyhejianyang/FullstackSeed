@@ -118,7 +118,11 @@ function download() {
             label="视频参数"
           >
             {{ detail.videoResolution }} · {{ detail.videoRatio }} ·
-            {{ detail.videoDuration }} 秒
+            {{
+              detail.videoDuration === -1
+                ? "智能时长"
+                : `${detail.videoDuration} 秒`
+            }}
           </el-descriptions-item>
           <el-descriptions-item label="提示词">
             <div class="material-view__text">{{ detail.prompt }}</div>

@@ -1,5 +1,38 @@
 # CHANGELOG
 
+### 2026-10-21 对齐 Wan 3.0 视频生成参数与错误回执
+
+- 保持现有 DashScope 异步 `video-synthesis`、`first_frame` 和任务轮询协议，未增加 PPTX、文档、网页、音频或多参考素材入口；视频比例新增 `21:9`，时长扩展为智能时长 `-1` 或 2～30 秒，新建素材默认使用 `adaptive` 画幅。
+- 视频提示词允许录入至 20000 字符并在供应商请求边界截断；视频首帧参考图上限提升至 20MB，图生图继续保持 5MB，上传拦截与服务端内容校验保持双重限制。
+- 供应商非成功响应最多读取 64KB JSON，只保存经过密钥、URL、换行脱敏和长度限制的错误码/错误说明；原有 HTTP 状态分类、15 分钟视频执行上限和不自动重试策略不变。
+- 素材编辑页同步增加超宽画幅、智能时长及 2～30 秒选项，首帧模式提示使用自适应画幅；详情页将 `-1` 显示为“智能时长”，不再显示为负秒数。
+- 验证：后端 5 suites / 31 tests、TypeORM 实体检查、生产 TypeScript 检查及 NestJS build 通过；前端 3 项素材协议/模板测试与 `vue-tsc` 通过，主要协议与表单改动完成后 Vite 生产构建通过；补充详情文案后的重复构建因运行中的自动声明插件占用 `components.d.ts` 中断，未修改该生成文件。
+
+新增文件（2）：
+
+- `server/src/ai-materials/dto/ai-material.dto.spec.ts`
+- `web/src/views/ai-material/aiMaterial.test.mjs`
+
+修改文件（15）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/ai-materials/ai-material.constants.spec.ts`
+- `server/src/ai-materials/ai-material.constants.ts`
+- `server/src/ai-materials/ai-materials.controller.ts`
+- `server/src/ai-materials/ai-materials.service.ts`
+- `server/src/ai-materials/dto/ai-material.dto.ts`
+- `server/src/ai-materials/material-generation-error.spec.ts`
+- `server/src/ai-materials/material-generation-error.ts`
+- `server/src/common/ai/image-utils.ts`
+- `server/src/common/ai/video-generation.spec.ts`
+- `server/src/common/ai/video-generation.ts`
+- `web/src/api/aiMaterial.ts`
+- `web/src/views/ai-material/Edit.vue`
+- `web/src/views/ai-material/View.vue`
+
+删除文件：无。
+
 ### 2026-10-21 修正热点行内操作图标语义
 
 - 热点列表“忽略/恢复”操作改为仅图标展示，分别使用隐藏与恢复图标；补充悬停标题和 `aria-label`，在保持单行紧凑排列的同时避免无文字按钮语义不清。

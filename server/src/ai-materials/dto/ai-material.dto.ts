@@ -32,7 +32,7 @@ import type { AiMaterialGenerationStatus } from '../entities/ai-material.entity'
 export class CreateAiMaterialDto {
   @IsString()
   @IsNotEmpty()
-  @MaxLength(4000)
+  @MaxLength(20000)
   prompt: string;
 
   @IsIn(AI_MATERIAL_STYLE_KEYS)
