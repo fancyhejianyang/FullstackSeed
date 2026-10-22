@@ -98,6 +98,52 @@ describe('ComfyUI 工作流提示词语义绑定', () => {
   });
 });
 
+describe('ComfyUI API 工作流格式校验', () => {
+  const service = new ComfyWorkflowsService(
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+  );
+  const parse = (value: Record<string, unknown>) =>
+    (
+      service as unknown as {
+        parseAndValidateGraph: (source: string) => Record<string, unknown>;
+      }
+    ).parseAndValidateGraph(JSON.stringify(value));
+
+  it('允许 ComfyUI 子图生成的冒号分隔层级节点 ID', () => {
+    const graph = {
+      '13': {
+        class_type: 'ResolutionSelector',
+        inputs: { aspect_ratio: '1:1' },
+      },
+      '459:451': {
+        class_type: 'UNETLoader',
+        inputs: { unet_name: 'qwen_image.safetensors' },
+      },
+      '459:457:2': {
+        class_type: 'SaveImage',
+        inputs: { images: ['459:451', 0] },
+      },
+    };
+
+    expect(parse(graph)).toEqual(graph);
+  });
+
+  it.each(['node', '459::451', '459:node', '459/451'])(
+    '继续拒绝非法 API 节点 ID：%s',
+    (nodeId) => {
+      expect(() =>
+        parse({
+          [nodeId]: { class_type: 'SaveImage', inputs: {} },
+        }),
+      ).toThrow('仅支持 ComfyUI API 格式工作流');
+    },
+  );
+});
+
 describe('ComfyUI 工作流版本快照保存', () => {
   it('不依赖主记录保存后回传 select:false 的 apiWorkflow', async () => {
     const workflowRepository = {

@@ -366,7 +366,7 @@ export class ComfyWorkflowsService {
       throw new BadRequestException('工作流节点数量无效');
     }
     for (const [nodeId, node] of entries) {
-      if (!/^\d+$/.test(nodeId) || !node || typeof node !== 'object') {
+      if (!/^\d+(?::\d+)*$/.test(nodeId) || !node || typeof node !== 'object') {
         throw new BadRequestException('仅支持 ComfyUI API 格式工作流');
       }
       if (
