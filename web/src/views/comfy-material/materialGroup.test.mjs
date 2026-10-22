@@ -27,3 +27,12 @@ test("单删、批删和收藏均展开为组内素材 IDs", () => {
   assert.match(apiSource, /\/comfyui\/materials\/group\/favorite/);
   assert.match(apiSource, /\/comfyui\/materials\/group/);
 });
+
+test("视频使用首帧与播放图标预览，素材库不提供主动上传入口", () => {
+  assert.match(indexSource, /<video/);
+  assert.match(indexSource, /preload="metadata"/);
+  assert.match(indexSource, /<VideoPlay/);
+  assert.doesNotMatch(indexSource, /上传输入素材/);
+  assert.doesNotMatch(indexSource, /uploadComfyMaterial/);
+  assert.doesNotMatch(indexSource, /<Dialog/);
+});

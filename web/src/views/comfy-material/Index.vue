@@ -3,9 +3,7 @@ import { ref } from "vue";
 import { ElMessage } from "element-plus";
 import PageContainer from "@/components/PageContainer.vue";
 import Table, { type TableColumn } from "@/components/Table.vue";
-import Dialog from "@/components/Dialog.vue";
 import Button from "@/components/Button.vue";
-import Input from "@/components/Input.vue";
 import type { FormField } from "@/components/Form.vue";
 import { formatDateTime } from "@/utils/format";
 import {
@@ -17,7 +15,6 @@ import {
   deleteComfyMaterialGroup,
   getComfyMaterials,
   updateComfyMaterialGroupFavorite,
-  uploadComfyMaterial,
   type ComfyMaterialListItem,
 } from "@/api/comfyUi";
 
@@ -25,11 +22,6 @@ const tableRef = ref<{
   refresh: () => Promise<void>;
   runBatchDelete: () => Promise<void>;
 }>();
-const uploadVisible = ref(false);
-const uploading = ref(false);
-const fileInput = ref<HTMLInputElement>();
-const selectedFile = ref<File | null>(null);
-const materialName = ref("");
 const cleanupFileIds = ref<number[]>([]);
 const cleanupLoading = ref(false);
 const columns: TableColumn[] = [
@@ -71,32 +63,6 @@ const searchFields: FormField[] = [
     ],
   },
 ];
-function openUpload() {
-  selectedFile.value = null;
-  materialName.value = "";
-  uploadVisible.value = true;
-}
-function chooseFile(event: Event) {
-  selectedFile.value = (event.target as HTMLInputElement).files?.[0] || null;
-  if (selectedFile.value && !materialName.value)
-    materialName.value = selectedFile.value.name;
-  (event.target as HTMLInputElement).value = "";
-}
-async function submitUpload() {
-  if (!selectedFile.value) {
-    ElMessage.warning("请选择要上传的素材文件");
-    return;
-  }
-  uploading.value = true;
-  try {
-    await uploadComfyMaterial(selectedFile.value, materialName.value);
-    ElMessage.success("素材已上传");
-    uploadVisible.value = false;
-    await tableRef.value?.refresh();
-  } finally {
-    uploading.value = false;
-  }
-}
 async function removeGroup(row: ComfyMaterialListItem) {
   await deleteComfyMaterialGroup(row.materialIds);
   ElMessage.success(`已删除 ${row.itemCount} 个素材`);
@@ -110,6 +76,9 @@ function imagePreviewUrls(row: ComfyMaterialListItem) {
   return row.items
     .filter((item) => item.mediaType === "image" && item.fileUrl)
     .map((item) => item.fileUrl as string);
+}
+function videoPreviewUrl(fileUrl: string) {
+  return fileUrl.includes("#") ? fileUrl : `${fileUrl}#t=0.1`;
 }
 async function previewCleanup() {
   cleanupLoading.value = true;
@@ -160,9 +129,6 @@ function formatBytes(value: number) {
       action-width="180"
     >
       <template #toolbar>
-        <Button perm="ComfyMaterial.create" icon="Upload" @click="openUpload"
-          >上传输入素材</Button
-        >
         <Button
           perm="ComfyMaterial.batchDelete"
           :confirm="false"
@@ -207,16 +173,43 @@ function formatBytes(value: number) {
               </template>
             </el-image>
             <a
+              v-else-if="item.fileUrl && item.mediaType === 'video'"
+              :href="item.fileUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="preview-video-link"
+              title="打开视频"
+              :aria-label="`打开视频 ${item.name}`"
+            >
+              <video
+                class="preview-video"
+                :src="videoPreviewUrl(item.fileUrl)"
+                preload="metadata"
+                muted
+                playsinline
+                aria-hidden="true"
+              />
+              <span class="preview-video-link__icon" aria-hidden="true">
+                <el-icon><VideoPlay /></el-icon>
+              </span>
+            </a>
+            <a
               v-else-if="item.fileUrl"
               :href="item.fileUrl"
               target="_blank"
               rel="noopener noreferrer"
               class="preview-link"
-              :title="item.mediaType === 'video' ? '打开视频' : '打开文件'"
+              title="打开文件"
+              :aria-label="`打开文件 ${item.name}`"
             >
-              <span>{{ item.mediaType === "video" ? "视频" : "文件" }}</span>
+              <el-icon><Document /></el-icon>
             </a>
-            <span v-else class="preview-image preview-image__empty">—</span>
+            <span v-else class="preview-link" aria-hidden="true">
+              <el-icon>
+                <VideoPlay v-if="item.mediaType === 'video'" />
+                <Document v-else />
+              </el-icon>
+            </span>
           </template>
           <span v-if="row.itemCount > 4" class="preview-more">
             +{{ row.itemCount - 4 }}
@@ -272,38 +265,15 @@ function formatBytes(value: number) {
         </Button>
       </template>
     </Table>
-
-    <Dialog
-      v-model="uploadVisible"
-      title="上传 ComfyUI 输入素材"
-      width="560px"
-      confirm-text="上传素材"
-      :confirm-loading="uploading"
-      @confirm="submitUpload"
-    >
-      <div class="upload-panel">
-        <Input
-          v-model="materialName"
-          placeholder="素材名称（不填则使用文件名）"
-        />
-        <button class="file-picker" type="button" @click="fileInput?.click()">
-          <span>{{
-            selectedFile
-              ? selectedFile.name
-              : "点击选择图片、视频或工作流需要的文件"
-          }}</span>
-          <small>单个文件最大 100MB；文件将进入 ComfyUI 独立受管目录</small>
-        </button>
-        <input ref="fileInput" hidden type="file" @change="chooseFile" />
-      </div>
-    </Dialog>
   </PageContainer>
 </template>
 
 <style scoped>
 .preview-image,
-.preview-link {
+.preview-link,
+.preview-video-link {
   display: inline-flex;
+  position: relative;
   width: 44px;
   height: 44px;
   border-radius: 6px;
@@ -312,7 +282,8 @@ function formatBytes(value: number) {
   justify-content: center;
   background: #f2f6fc;
   color: #606266;
-  font-size: 12px;
+  font-size: 18px;
+  text-decoration: none;
 }
 
 .preview-group {
@@ -365,29 +336,22 @@ function formatBytes(value: number) {
   justify-content: center;
 }
 
-.upload-panel {
-  display: grid;
-  gap: 16px;
+.preview-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
 }
-.file-picker {
-  min-height: 130px;
-  border: 1px dashed #b8c4d6;
-  border-radius: 10px;
-  background: #f8fbff;
-  color: #303133;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
+
+.preview-video-link__icon {
+  display: inline-flex;
+  position: absolute;
+  inset: 0;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 20px;
-}
-.file-picker:hover {
-  border-color: #409eff;
-  background: #f2f8ff;
-}
-.file-picker small {
-  color: #909399;
+  background: rgb(0 0 0 / 24%);
+  color: #fff;
+  font-size: 22px;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 55%);
 }
 </style>
