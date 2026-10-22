@@ -174,19 +174,31 @@ function formatBytes(value: number) {
         >
       </template>
       <template #column-fileUrl="{ row }">
+        <el-image
+          v-if="row.fileUrl && row.mediaType === 'image'"
+          class="preview-image"
+          :src="row.fileUrl"
+          :alt="row.name"
+          :preview-src-list="[row.fileUrl]"
+          :close-on-press-escape="true"
+          :infinite="false"
+          fit="cover"
+          hide-on-click-modal
+          preview-teleported
+        >
+          <template #error>
+            <span class="preview-image__empty">—</span>
+          </template>
+        </el-image>
         <a
-          v-if="row.fileUrl"
+          v-else-if="row.fileUrl"
           :href="row.fileUrl"
           target="_blank"
           rel="noopener noreferrer"
           class="preview-link"
+          :title="row.mediaType === 'video' ? '打开视频' : '打开文件'"
         >
-          <img
-            v-if="row.mediaType === 'image'"
-            :src="row.fileUrl"
-            :alt="row.name"
-          />
-          <span v-else>{{ row.mediaType === "video" ? "视频" : "文件" }}</span>
+          <span>{{ row.mediaType === "video" ? "视频" : "文件" }}</span>
         </a>
         <span v-else>—</span>
       </template>
@@ -249,6 +261,7 @@ function formatBytes(value: number) {
 </template>
 
 <style scoped>
+.preview-image,
 .preview-link {
   display: inline-flex;
   width: 44px;
@@ -261,11 +274,25 @@ function formatBytes(value: number) {
   color: #606266;
   font-size: 12px;
 }
-.preview-link img {
+
+.preview-image {
+  cursor: zoom-in;
+}
+
+.preview-image :deep(.el-image__inner) {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
+
+.preview-image__empty {
+  display: inline-flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+}
+
 .upload-panel {
   display: grid;
   gap: 16px;
