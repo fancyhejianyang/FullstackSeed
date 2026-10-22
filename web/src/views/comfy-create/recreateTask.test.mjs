@@ -117,3 +117,12 @@ test("completed task action loads detail into create flow instead of retrying it
   assert.match(indexSource, /await getComfyTask\(row\.id\)/);
   assert.match(indexSource, /await createComfyTask\(/);
 });
+
+test("task media is selected locally and uploaded only when submitting", () => {
+  assert.match(indexSource, /<UploadImage/);
+  assert.match(indexSource, /<UploadFile/);
+  assert.match(indexSource, /URL\.createObjectURL\(file\)/);
+  assert.match(indexSource, /await uploadComfyTaskInput\(file, file\.name\)/);
+  assert.match(indexSource, /const taskParameters = await prepareTaskParameters/);
+  assert.doesNotMatch(indexSource, /materialOptions\[binding\.type\]/);
+});

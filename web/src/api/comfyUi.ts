@@ -332,6 +332,15 @@ export function uploadComfyMaterial(file: File, name?: string) {
     data,
   );
 }
+export function uploadComfyTaskInput(file: File, name?: string) {
+  const data = new FormData();
+  data.append("file", file);
+  if (name?.trim()) data.append("name", name.trim());
+  return request.post<unknown, ComfyMaterial>(
+    "/comfyui/materials/task-input",
+    data,
+  );
+}
 export function updateComfyMaterial(
   id: number,
   data: { name?: string; isFavorite?: boolean },

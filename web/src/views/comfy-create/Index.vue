@@ -1,5 +1,13 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+  watch,
+} from "vue";
 import { ElMessage } from "element-plus";
 import { useRouter } from "vue-router";
 import PageContainer from "@/components/PageContainer.vue";
@@ -9,7 +17,10 @@ import Input from "@/components/Input.vue";
 import InputNumber from "@/components/InputNumber.vue";
 import Select from "@/components/Select.vue";
 import Switch from "@/components/Switch.vue";
+import UploadFile from "@/components/UploadFile.vue";
+import UploadImage from "@/components/UploadImage.vue";
 import TaskTable from "@/views/comfy-task/TaskTable.vue";
+import type { UploadResult } from "@/api/upload";
 import {
   composeComfyWorkflowPrompt,
   createComfyTask,
@@ -17,6 +28,8 @@ import {
   getComfyTask,
   getComfyWorkflowPromptTask,
   getComfyWorkflowOptions,
+  uploadComfyTaskInput,
+  type ComfyInputBinding,
   type ComfyMaterialOption,
   type ComfyTask,
   type ComfyWorkflowOption,
@@ -32,6 +45,9 @@ const workflows = ref<ComfyWorkflowOption[]>([]);
 const materials = ref<ComfyMaterialOption[]>([]);
 const workflowId = ref<string | null>("");
 const parameters = reactive<Record<string, unknown>>({});
+const stagedMediaFiles = reactive<Record<string, File | undefined>>({});
+const mediaPreviewUrls = reactive<Record<string, string | null>>({});
+const mediaFileNames = reactive<Record<string, string>>({});
 const creativeIdea = ref("");
 const composing = ref(false);
 const composeStage = ref("");
@@ -39,14 +55,6 @@ const composeNotes = ref("");
 const recreateSourceTaskId = ref<number | null>(null);
 let composeRunToken = 0;
 const promptRoles = ["mainPrompt", "positivePrompt", "negativePrompt"];
-const materialOptions = computed(() => ({
-  image: materials.value
-    .filter((item) => item.mediaType === "image")
-    .map((item) => ({ value: String(item.id), text: item.name })),
-  video: materials.value
-    .filter((item) => item.mediaType === "video")
-    .map((item) => ({ value: String(item.id), text: item.name })),
-}));
 const current = computed(
   () =>
     workflows.value.find((item) => item.id === Number(workflowId.value)) ||
@@ -57,10 +65,98 @@ const promptBindings = computed(() =>
     promptRoles.includes(binding.semanticRole || "normal"),
   ),
 );
+function isMediaBinding(binding: ComfyInputBinding) {
+  return binding.type === "image" || binding.type === "video";
+}
+function releaseMediaPreview(key: string) {
+  const previewUrl = mediaPreviewUrls[key];
+  if (previewUrl?.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
+}
+function clearMediaState(clearParameters = false) {
+  const keys = new Set([
+    ...Object.keys(stagedMediaFiles),
+    ...Object.keys(mediaPreviewUrls),
+    ...Object.keys(mediaFileNames),
+  ]);
+  for (const key of keys) {
+    releaseMediaPreview(key);
+    delete stagedMediaFiles[key];
+    delete mediaPreviewUrls[key];
+    delete mediaFileNames[key];
+    if (clearParameters) parameters[key] = "";
+  }
+}
+function initializeMediaState() {
+  for (const binding of current.value?.inputBindings || []) {
+    if (!isMediaBinding(binding)) continue;
+    const materialId = Number(parameters[binding.key]);
+    const material = materials.value.find((item) => item.id === materialId);
+    mediaPreviewUrls[binding.key] = material?.fileUrl || "";
+    mediaFileNames[binding.key] = material?.name || "";
+  }
+}
+async function stageMediaFile(
+  binding: ComfyInputBinding,
+  file: File,
+): Promise<UploadResult> {
+  releaseMediaPreview(binding.key);
+  const previewUrl = URL.createObjectURL(file);
+  stagedMediaFiles[binding.key] = file;
+  parameters[binding.key] = "";
+  mediaPreviewUrls[binding.key] = previewUrl;
+  mediaFileNames[binding.key] = file.name;
+  return {
+    url: previewUrl,
+    fileName: file.name,
+    originalName: file.name,
+    mimeType: file.type || "application/octet-stream",
+    size: file.size,
+  };
+}
+function removeMediaFile(binding: ComfyInputBinding) {
+  releaseMediaPreview(binding.key);
+  delete stagedMediaFiles[binding.key];
+  mediaPreviewUrls[binding.key] = "";
+  mediaFileNames[binding.key] = "";
+  parameters[binding.key] = "";
+}
+function hasBindingValue(binding: ComfyInputBinding) {
+  if (isMediaBinding(binding) && stagedMediaFiles[binding.key]) return true;
+  const value = parameters[binding.key];
+  return value !== "" && value !== null && value !== undefined;
+}
+async function prepareTaskParameters() {
+  const prepared = { ...parameters };
+  for (const binding of current.value?.inputBindings || []) {
+    if (!isMediaBinding(binding)) continue;
+    const file = stagedMediaFiles[binding.key];
+    if (!file) continue;
+    const material = await uploadComfyTaskInput(file, file.name);
+    prepared[binding.key] = material.id;
+    parameters[binding.key] = material.id;
+    materials.value = [
+      {
+        id: material.id,
+        name: material.name,
+        sourceType: material.sourceType,
+        mediaType: material.mediaType,
+        fileUrl: material.fileUrl,
+        mimeType: material.mimeType,
+      },
+      ...materials.value.filter((item) => item.id !== material.id),
+    ];
+    releaseMediaPreview(binding.key);
+    delete stagedMediaFiles[binding.key];
+    mediaPreviewUrls[binding.key] = material.fileUrl || "";
+    mediaFileNames[binding.key] = material.name;
+  }
+  return prepared;
+}
 function initializeForm(parameterSnapshot?: Record<string, unknown>) {
   composeRunToken += 1;
   composing.value = false;
   composeStage.value = "";
+  clearMediaState();
   Object.keys(parameters).forEach((key) => delete parameters[key]);
   const draft = buildComfyTaskParameterDraft(
     current.value?.inputBindings || [],
@@ -68,6 +164,7 @@ function initializeForm(parameterSnapshot?: Record<string, unknown>) {
     new Set(materials.value.map((item) => item.id)),
   );
   Object.assign(parameters, draft.parameters);
+  initializeMediaState();
   creativeIdea.value = "";
   composeNotes.value = "";
   return draft;
@@ -102,7 +199,7 @@ async function openRecreate(row: ComfyTask) {
     const draft = initializeForm(task.parameterSnapshot || {});
     if (draft.missingMaterialLabels.length) {
       ElMessage.warning(
-        `${draft.missingMaterialLabels.join("、")}引用的原素材已不可用，请重新选择`,
+        `${draft.missingMaterialLabels.join("、")}引用的原素材已不可用，请重新上传`,
       );
     }
   } catch {
@@ -206,9 +303,7 @@ async function submit() {
     return;
   }
   const missing = current.value.inputBindings.find(
-    (binding) =>
-      binding.required &&
-      (parameters[binding.key] === "" || parameters[binding.key] == null),
+    (binding) => binding.required && !hasBindingValue(binding),
   );
   if (missing) {
     ElMessage.warning(`请填写${missing.label}`);
@@ -216,9 +311,10 @@ async function submit() {
   }
   submitting.value = true;
   try {
+    const taskParameters = await prepareTaskParameters();
     const task = await createComfyTask({
       workflowId: current.value.id,
-      parameters: { ...parameters },
+      parameters: taskParameters,
       requestId: crypto.randomUUID(),
     });
     ElMessage.success(
@@ -233,6 +329,10 @@ async function submit() {
     submitting.value = false;
   }
 }
+watch(createVisible, (visible) => {
+  if (!visible) clearMediaState();
+});
+onBeforeUnmount(() => clearMediaState());
 onMounted(load);
 </script>
 
@@ -451,10 +551,12 @@ onMounted(load);
             <div v-if="current?.inputBindings.length" class="parameter-list">
               <div
                 v-for="binding in current.inputBindings"
-                :key="binding.key"
+                :key="`${current.id}:${binding.key}`"
                 class="parameter-item"
                 :class="{
                   'parameter-item--full': binding.type === 'textarea',
+                  'parameter-item--media':
+                    binding.type === 'image' || binding.type === 'video',
                 }"
               >
                 <label
@@ -512,18 +614,23 @@ onMounted(load);
                   :placeholder="`请选择${binding.label}`"
                   @update:model-value="parameters[binding.key] = $event"
                 />
-                <Select
-                  v-else-if="
-                    binding.type === 'image' || binding.type === 'video'
-                  "
-                  :model-value="String(parameters[binding.key] ?? '')"
-                  :options="materialOptions[binding.type]"
-                  :placeholder="
-                    materialOptions[binding.type].length
-                      ? `请选择${binding.label}`
-                      : `暂无可用${binding.type === 'image' ? '图片' : '视频'}素材`
-                  "
-                  @update:model-value="parameters[binding.key] = $event"
+                <UploadImage
+                  v-else-if="binding.type === 'image'"
+                  v-model="mediaPreviewUrls[binding.key]"
+                  accept="image/*"
+                  :max-size-mb="20"
+                  :upload-request="(file) => stageMediaFile(binding, file)"
+                  @remove="removeMediaFile(binding)"
+                />
+                <UploadFile
+                  v-else-if="binding.type === 'video'"
+                  v-model="mediaPreviewUrls[binding.key]"
+                  v-model:name="mediaFileNames[binding.key]"
+                  accept="video/*"
+                  :max-size-mb="100"
+                  drag-text="将视频拖到此处，或点击选择本地视频"
+                  :upload-request="(file) => stageMediaFile(binding, file)"
+                  @remove="removeMediaFile(binding)"
                 />
                 <small v-if="binding.hint">{{ binding.hint }}</small>
               </div>
@@ -924,6 +1031,10 @@ onMounted(load);
   grid-column: 1 / -1;
 }
 
+.parameter-item--media {
+  grid-column: 1 / -1;
+}
+
 .parameter-item label {
   color: var(--color-text-primary);
   font-size: var(--font-size-sm);
@@ -993,7 +1104,8 @@ onMounted(load);
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .parameter-item--full {
+  .parameter-item--full,
+  .parameter-item--media {
     grid-column: auto;
   }
 }

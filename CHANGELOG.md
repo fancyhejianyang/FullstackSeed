@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-10-22 改为创建任务时本地上传参考媒体
+
+- 创作任务中的图片、视频参数由素材库下拉选择改为本地上传控件：图片展示本地预览，视频支持点击或拖拽选择，并分别限制图片/视频文件类型与大小。
+- 选择文件时仅在浏览器暂存并使用 Blob URL 回显；只有点击“开始生成”才上传为受管任务输入素材，再将素材 ID 写入任务参数，取消弹窗不会产生素材记录。
+- 新增 `POST /comfyui/materials/task-input`，按 `ComfyTask.create` 权限接收任务参考文件；素材库上传入口仍保持移除，不要求任务创建者拥有素材库新增权限。
+- 再次创作继续回显原任务可用的参考媒体，允许本地替换；原素材失效时提示重新上传。上传成功但任务提交失败时保留已返回的素材 ID，重试不会重复上传。
+- 新增文件（1）：`server/src/comfyui/comfy-materials.controller.spec.ts`。修改文件（8）：`server/src/comfyui/comfy-materials.controller.ts`、`web/src/api/comfyUi.ts`、`web/src/views/comfy-create/Index.vue`、`web/src/views/comfy-create/recreateTask.test.mjs`、`web/src/views/comfy-workflow/workflowDetection.ts`、`web/src/views/comfy-workflow/workflowDetection.test.mjs`、`.design-spec.md`、本文件。删除文件：无。
+- 验证：前端工作流识别 / 再次创作测试 10/10 通过，`npm.cmd run type-check`、组件复用扫描通过；后端 ComfyUI 定向测试 10/10、定向 ESLint 与 TypeORM 实体列检查通过；前后端 `npm.cmd run build` 均通过（前端仅保留既有 Rollup 大分块提示）。
+
 ### 2026-10-22 补齐 Wan Animate 图片、视频与动作参数识别
 
 - ComfyUI API 工作流自动识别新增视频素材绑定；`LoadImage.image` 与 `LoadVideo.file/video/filename` 可同时形成参考图片和动作参考视频字段，不再把视频文件名留在工作流中直接执行。

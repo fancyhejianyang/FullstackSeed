@@ -615,7 +615,7 @@ function detectBindings(
         semanticRole: "normal",
         required: true,
         defaultValue: "",
-        hint: `运行时从素材库选择${label}`,
+        hint: `创建任务时从本地上传${label}`,
       });
     }
   }

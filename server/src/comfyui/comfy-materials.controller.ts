@@ -64,6 +64,21 @@ export class ComfyMaterialsController {
     return this.service.upload(user.userId, file, name);
   }
 
+  @Post('task-input')
+  @RequirePermissions('ComfyTask.create')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 100 * 1024 * 1024 } }),
+  )
+  uploadTaskInput(
+    @CurrentUser() user: AuthUser,
+    @UploadedFile() file?: UploadedStorageFile,
+    @Body('name') name?: string,
+  ) {
+    if (!file) throw new BadRequestException('请上传任务参考文件');
+    return this.service.upload(user.userId, file, name);
+  }
+
   @Patch('group/favorite')
   @RequirePermissions('ComfyMaterial.update')
   updateGroupFavorite(

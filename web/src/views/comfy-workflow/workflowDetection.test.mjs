@@ -228,6 +228,7 @@ test("识别 Wan Animate 的动作提示词、参考图片和动作参考视频"
   assert.equal(video?.label, "动作参考视频");
   assert.equal(video?.required, true);
   assert.equal(video?.defaultValue, "");
+  assert.match(video?.hint || "", /本地上传动作参考视频/);
   const byKey = Object.fromEntries(
     result.bindings.map((binding) => [binding.key, binding]),
   );
