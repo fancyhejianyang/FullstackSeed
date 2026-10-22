@@ -5,6 +5,7 @@ import PageContainer from "@/components/PageContainer.vue";
 import Button from "@/components/Button.vue";
 import Table, { type TableColumn } from "@/components/Table.vue";
 import type { FormField } from "@/components/Form.vue";
+import { useUserStore } from "@/stores/user";
 import { formatDateTime } from "@/utils/format";
 import {
   batchDeleteVisualPromptTemplates,
@@ -16,6 +17,8 @@ import {
 } from "@/api/visualPromptTemplate";
 import Edit from "./Edit.vue";
 import View from "./View.vue";
+
+const user = useUserStore();
 
 const tableRef = ref<{
   refresh: () => Promise<void>;
@@ -71,7 +74,7 @@ function openView(row: VisualPromptTemplateSummary) {
 async function extract(row: VisualPromptTemplateSummary) {
   try {
     await ElMessageBox.confirm(
-      "AI 将根据正向 Demo、负向 Demo 和目标模型生成提示词格式、风格摘要与模型规则，成功后覆盖当前总结结果。是否继续？",
+      "AI 将根据工作流中的正向、负向原始提示词和目标模型，重新生成提示词格式、风格摘要与模型规则。是否继续？",
       "AI 提炼提示词总结",
       { type: "warning" },
     );
@@ -113,16 +116,18 @@ async function extract(row: VisualPromptTemplateSummary) {
       :delete-request="(row) => deleteVisualPromptTemplate(row.id)"
       :batch-delete-request="({ ids }) => batchDeleteVisualPromptTemplates(ids)"
       :check-able="true"
+      :show-edit="user.hasPermission('ComfyWorkflow.update')"
       action-width="260"
       @view="openView"
       @edit="openEdit"
     >
       <template #toolbar>
         <Button
+          v-if="user.hasPermission('ComfyWorkflow.update')"
           perm="VisualPromptTemplate.create"
           icon="Plus"
           @click="openCreate"
-          >新增总结</Button
+          >提炼提示词</Button
         >
         <Button
           perm="VisualPromptTemplate.batchDelete"
@@ -153,7 +158,7 @@ async function extract(row: VisualPromptTemplateSummary) {
       <template #column-version="{ row }">v{{ row.version }}</template>
       <template #column-extractedAt="{ row }">
         <el-tag :type="row.extractedAt ? 'success' : 'warning'">
-          {{ row.extractedAt ? "已 AI 提炼" : "Demo 待提炼" }}
+          {{ row.extractedAt ? "已 AI 提炼" : "待 AI 提炼" }}
         </el-tag>
       </template>
       <template #column-isEnabled="{ row }"

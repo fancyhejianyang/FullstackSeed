@@ -115,6 +115,27 @@ export interface ComfyWorkflowOption {
   inputBindings: ComfyInputBinding[];
 }
 
+export interface ComfyPromptSummaryWorkflowOption {
+  id: number;
+  name: string;
+  outputType: ComfyOutputType;
+  targetModel: string | null;
+  visualPromptTemplateId: number | null;
+  version: number;
+  isEnabled: boolean;
+}
+
+export interface ComfyPromptSummaryDraft {
+  workflowId: number;
+  visualPromptTemplateId: number | null;
+  name: string;
+  mediaType: ComfyOutputType;
+  targetModel: string | null;
+  sourcePlatform: string;
+  sourcePrompt: string;
+  sourceNegativePrompt: string | null;
+}
+
 export interface ComfyMaterial {
   id: number;
   name: string;
@@ -224,6 +245,16 @@ export function getComfyWorkflow(id: number) {
 export function getComfyWorkflowOptions() {
   return request.get<unknown, ComfyWorkflowOption[]>(
     "/comfyui/workflows/options",
+  );
+}
+export function getComfyPromptSummaryWorkflowOptions() {
+  return request.get<unknown, ComfyPromptSummaryWorkflowOption[]>(
+    "/comfyui/workflows/prompt-summary-options",
+  );
+}
+export function getComfyPromptSummaryDraft(id: number) {
+  return request.get<unknown, ComfyPromptSummaryDraft>(
+    `/comfyui/workflows/${id}/prompt-summary-draft`,
   );
 }
 export function createComfyWorkflow(data: ComfyWorkflowForm) {

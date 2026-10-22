@@ -127,4 +127,92 @@ describe('VisualPromptTemplatesService 异步任务', () => {
     );
     expect(completion?.result?.negativePrompt).toBe('blur, watermark');
   });
+
+  it('选择工作流时从原始 JSON 建立总结记录并回写绑定', async () => {
+    const templateRepository = {
+      create: jest.fn((value: Record<string, unknown>) => value),
+      save: jest.fn((value: Record<string, unknown>) =>
+        Promise.resolve({ ...value, id: 26 }),
+      ),
+    };
+    const workflowRepository = {
+      createQueryBuilder: jest.fn().mockReturnValue({
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue({
+          id: 4,
+          name: '商品图工作流',
+          outputType: 'image',
+          targetModel: 'flux-dev',
+          apiWorkflow: JSON.stringify({
+            '1': {
+              class_type: 'CLIPTextEncode',
+              inputs: { text: 'product, studio lighting' },
+            },
+          }),
+          inputBindings: [
+            {
+              key: 'positivePrompt',
+              label: '正向提示词',
+              type: 'textarea',
+              nodeId: '1',
+              inputKey: 'text',
+              semanticRole: 'positivePrompt',
+            },
+          ],
+        }),
+      }),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+    };
+    const manager = {
+      getRepository: jest.fn((entity: unknown) =>
+        String(entity).includes('ComfyWorkflow')
+          ? workflowRepository
+          : templateRepository,
+      ),
+    };
+    const repository = {
+      manager: {
+        transaction: jest.fn(
+          (callback: (value: typeof manager) => Promise<unknown>) =>
+            callback(manager),
+        ),
+      },
+    };
+    const service = new VisualPromptTemplatesService(
+      repository as never,
+      {} as never,
+      {
+        findUsableVisualPromptConfig: jest.fn().mockResolvedValue({
+          id: 6,
+          name: '提示词总结配置',
+        }),
+      } as never,
+      {} as never,
+    );
+
+    const saved = await service.create(
+      {
+        workflowId: 4,
+        name: '商品图总结',
+        mediaType: 'video',
+        aiConfigId: 6,
+        sourcePrompt: '客户端值不会覆盖工作流原文',
+      },
+      7,
+    );
+
+    expect(saved).toMatchObject({
+      id: 26,
+      userId: 7,
+      mediaType: 'image',
+      targetModel: 'flux-dev',
+      sourcePrompt: 'product, studio lighting',
+      extractedAt: null,
+    });
+    expect(workflowRepository.update).toHaveBeenCalledWith(4, {
+      visualPromptTemplateId: 26,
+    });
+  });
 });

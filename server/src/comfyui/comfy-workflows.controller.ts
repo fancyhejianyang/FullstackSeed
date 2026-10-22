@@ -39,6 +39,18 @@ export class ComfyWorkflowsController {
     return this.service.options();
   }
 
+  @Get('prompt-summary-options')
+  @RequirePermissions('VisualPromptTemplate.read')
+  promptSummaryOptions() {
+    return this.service.promptSummaryOptions();
+  }
+
+  @Get(':id/prompt-summary-draft')
+  @RequirePermissions('VisualPromptTemplate.read')
+  promptSummaryDraft(@Param('id', ParseIntPipe) id: number) {
+    return this.service.promptSummaryDraft(id);
+  }
+
   @Get('compose-tasks/:taskId')
   @RequirePermissions('ComfyTask.read')
   composeTask(

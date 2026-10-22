@@ -466,7 +466,7 @@ async function submit() {
         saved.visualPromptTemplateId
           ? props.row
             ? "工作流与提示词总结记录已更新"
-            : "工作流已导入，并从 Demo 建立提示词总结记录"
+            : "工作流已导入，并从原始提示词建立总结记录"
           : props.row
             ? "工作流已保存并生成新版本"
             : "工作流已导入",
@@ -620,16 +620,16 @@ async function submit() {
               <div>
                 <strong>提示词总结</strong>
                 <span v-if="detectedSourcePrompt">
-                  已从工作流识别正向 Demo{{
-                    detectedNegativePrompt ? "和负向 Demo" : ""
+                  已从工作流识别正向原始提示词{{
+                    detectedNegativePrompt ? "和负向原始提示词" : ""
                   }}，保存时会自动建立或更新总结记录；可随后执行 AI 提炼。
                 </span>
                 <span v-else-if="boundVisualTemplateId">
-                  当前工作流已绑定提示词总结；重新导入包含 Demo 提示词的 JSON
+                  当前工作流已绑定提示词总结；重新导入包含原始提示词的 JSON
                   后会自动更新。
                 </span>
                 <span v-else>
-                  未识别到正向 Demo，仍可保存，但创作时需要手工填写提示词。
+                  未识别到正向提示词，仍可保存，但创作时需要手工填写提示词。
                 </span>
               </div>
             </div>

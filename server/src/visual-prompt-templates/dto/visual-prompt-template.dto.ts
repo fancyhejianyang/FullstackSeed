@@ -16,6 +16,7 @@ const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
 
 export class SaveVisualPromptTemplateDto {
+  @Type(() => Number) @IsInt() @Min(1) @IsOptional() workflowId?: number;
   @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(120) name: string;
   @IsIn(['image', 'video']) mediaType: 'image' | 'video';
   @Transform(trim)

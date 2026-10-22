@@ -20,6 +20,11 @@ import {
   Repository,
 } from 'typeorm';
 import { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-configs.service';
+import {
+  extractPromptExamples,
+  type ComfyApiGraph,
+} from '../comfyui/comfy-workflow-sanitizer';
+import { ComfyWorkflow } from '../comfyui/entities/comfy-workflow.entity';
 import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
 import {
   ComposeVisualPromptDto,
@@ -156,14 +161,39 @@ export class VisualPromptTemplatesService
     const config = await this.configs.findUsableVisualPromptConfig(
       dto.aiConfigId,
     );
-    return this.repository.save(
-      this.repository.create({
-        ...this.payload(dto),
-        userId,
-        aiConfigName: config.name,
-        version: 1,
-      }),
-    );
+    if (!dto.workflowId) {
+      return this.repository.save(
+        this.repository.create({
+          ...this.payload(dto),
+          userId,
+          aiConfigName: config.name,
+          version: 1,
+        }),
+      );
+    }
+    return this.repository.manager.transaction(async (manager) => {
+      const source = await this.workflowSource(dto.workflowId!, manager);
+      const repository = manager.getRepository(VisualPromptTemplate);
+      const saved = await repository.save(
+        repository.create({
+          ...this.payload(dto),
+          ...source.payload,
+          positiveTemplate: source.payload.sourcePrompt,
+          negativeTemplate: source.payload.sourceNegativePrompt,
+          styleSummary: null,
+          modelRules: null,
+          variables: null,
+          userId,
+          aiConfigName: config.name,
+          version: 1,
+          extractedAt: null,
+        }),
+      );
+      await manager.getRepository(ComfyWorkflow).update(source.workflow.id, {
+        visualPromptTemplateId: saved.id,
+      });
+      return saved;
+    });
   }
 
   async syncFromComfyWorkflow(
@@ -211,7 +241,7 @@ export class VisualPromptTemplatesService
       sourceNegativePrompt: negativePrompt,
       positiveTemplate: sourcePrompt,
       negativeTemplate: negativePrompt,
-      styleSummary: `从 ComfyUI 工作流“${input.workflowName.trim()}”的 Demo 提示词自动建立`,
+      styleSummary: `从 ComfyUI 工作流“${input.workflowName.trim()}”的原始提示词建立`,
       modelRules: null,
       variables: null,
       isEnabled: true,
@@ -234,11 +264,33 @@ export class VisualPromptTemplatesService
     const config = await this.configs.findUsableVisualPromptConfig(
       dto.aiConfigId,
     );
-    Object.assign(row, this.payload(dto), {
-      aiConfigName: config.name,
-      version: row.version + 1,
+    if (!dto.workflowId) {
+      Object.assign(row, this.payload(dto), {
+        aiConfigName: config.name,
+        version: row.version + 1,
+      });
+      return this.repository.save(row);
+    }
+    return this.repository.manager.transaction(async (manager) => {
+      const source = await this.workflowSource(dto.workflowId!, manager);
+      const previousResult = {
+        positiveTemplate: row.positiveTemplate,
+        negativeTemplate: row.negativeTemplate,
+        styleSummary: row.styleSummary,
+        modelRules: row.modelRules,
+        variables: row.variables,
+        extractedAt: row.extractedAt,
+      };
+      Object.assign(row, this.payload(dto), source.payload, previousResult, {
+        aiConfigName: config.name,
+        version: row.version + 1,
+      });
+      const saved = await manager.getRepository(VisualPromptTemplate).save(row);
+      await manager.getRepository(ComfyWorkflow).update(source.workflow.id, {
+        visualPromptTemplateId: saved.id,
+      });
+      return saved;
     });
-    return this.repository.save(row);
   }
 
   async submitExtraction(id: number, userId: number, requestId?: string) {
@@ -531,7 +583,7 @@ export class VisualPromptTemplatesService
           status: 'running',
           stage:
             task.taskType === 'extract'
-              ? 'AI 正在从 Demo 提炼规范'
+              ? 'AI 正在提炼提示词风格与格式'
               : 'AI 正在转换提示词',
           workerId: this.workerId,
           startedAt: new Date(),
@@ -672,6 +724,39 @@ export class VisualPromptTemplatesService
       variables:
         dto.variables?.map((item) => item.trim()).filter(Boolean) || null,
       isEnabled: dto.isEnabled ?? true,
+    };
+  }
+
+  private async workflowSource(workflowId: number, manager: EntityManager) {
+    const repository = manager.getRepository(ComfyWorkflow);
+    const workflow = await repository
+      .createQueryBuilder('workflow')
+      .addSelect('workflow.apiWorkflow')
+      .where('workflow.id = :workflowId', { workflowId })
+      .andWhere('workflow.deletedAt IS NULL')
+      .getOne();
+    if (!workflow) throw new NotFoundException('选择的 ComfyUI 工作流不存在');
+    let graph: ComfyApiGraph;
+    try {
+      graph = JSON.parse(workflow.apiWorkflow) as ComfyApiGraph;
+    } catch {
+      throw new BadRequestException('工作流 JSON 格式错误，无法提取提示词');
+    }
+    const prompts = extractPromptExamples(graph, workflow.inputBindings);
+    if (!prompts.positivePrompt) {
+      throw new BadRequestException(
+        '该工作流未识别到正向提示词，请先配置正向提示词节点映射',
+      );
+    }
+    return {
+      workflow,
+      payload: {
+        mediaType: workflow.outputType,
+        targetModel: workflow.targetModel,
+        sourcePlatform: `ComfyUI 工作流 · ${workflow.name}`.slice(0, 120),
+        sourcePrompt: prompts.positivePrompt,
+        sourceNegativePrompt: prompts.negativePrompt || null,
+      },
     };
   }
 

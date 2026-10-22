@@ -1,5 +1,39 @@
 # CHANGELOG
 
+### 2026-10-22 保留 ComfyUI 原始提示词并按工作流 AI 提炼
+
+- 调整工作流持久化边界：新导入或重新保存的 API 工作流及版本快照完整保留正向、负向提示词；创建创作任务时才复制到独立运行快照、清空工作流原始提示词并注入本次用户确认的提示词，避免污染模板和误用导入正文。
+- “提示词总结”改为从已导入工作流中选择来源，后端按节点语义映射自动识别媒体类型、目标模型、正向提示词和负向提示词；界面不再要求人工填写 Demo 类字段，并统一移除相关 Demo 文案。
+- 保存提示词总结时由后端重新读取工作流原始 JSON、创建或更新总结记录并绑定工作流，随后立即提交异步 AI 任务提炼提示词风格、格式、模型规则和变量；AI 失败时保留工作流原文及此前成功结果，可直接重新提炼。
+- 提示词总结新增工作流候选项和自动识别草稿接口；创建、更新总结因会修改工作流绑定关系，额外要求 `ComfyWorkflow.update` 权限。既有已被旧逻辑清空的工作流无法自动还原原始提示词，需重新导入原始 API JSON。
+- 验证：后端变更文件 ESLint 通过；工作流保留/任务快照清理/按工作流创建总结等 5 suites / 19 tests 通过；前端 `vue-tsc` 与组件复用检查通过；TypeORM 实体列检查、NestJS build 和 Vite 生产构建通过。
+
+新增文件（1）：
+
+- `server/src/comfyui/comfy-tasks.service.spec.ts`
+
+修改文件（17）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/comfyui/comfy-workflows.controller.ts`
+- `server/src/comfyui/comfy-workflows.service.spec.ts`
+- `server/src/comfyui/comfy-workflows.service.ts`
+- `server/src/visual-prompt-templates/dto/visual-prompt-template.dto.ts`
+- `server/src/visual-prompt-templates/visual-prompt-templates.controller.ts`
+- `server/src/visual-prompt-templates/visual-prompt-templates.service.spec.ts`
+- `server/src/visual-prompt-templates/visual-prompt-templates.service.ts`
+- `server/src/visual-prompt-templates/visual-prompt.protocol.ts`
+- `web/src/api/comfyUi.ts`
+- `web/src/api/visualPromptTemplate.ts`
+- `web/src/views/ai-feature-config/Edit.vue`
+- `web/src/views/comfy-create/Index.vue`
+- `web/src/views/comfy-workflow/Edit.vue`
+- `web/src/views/visual-prompt-template/Edit.vue`
+- `web/src/views/visual-prompt-template/Index.vue`
+
+删除文件（0）。
+
 ### 2026-10-22 明确 ComfyUI 提示词总结链路与模块命名
 
 - 核对并明确完整链路：导入 API 工作流时先从正向/负向节点提取 Demo，再清空工作流及版本快照中的示例正文并绑定总结记录；用户明确执行“AI 提炼”后，系统异步生成提示词格式、风格摘要和模型规则；创作任务再将用户原始想法交给绑定的 `visualPrompt` 配置转换，回填正向/负向参数，用户确认后才提交 ComfyUI 队列并按白名单节点映射注入。

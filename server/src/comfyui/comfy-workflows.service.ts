@@ -22,7 +22,6 @@ import { ComfyWorkflowVersion } from './entities/comfy-workflow-version.entity';
 import { ComfyTask } from './entities/comfy-task.entity';
 import {
   extractPromptExamples,
-  sanitizeComfyWorkflow,
   withoutPromptBindingDefaults,
   type ComfyApiGraph,
   type ComfyApiNode,
@@ -127,6 +126,51 @@ export class ComfyWorkflowsService {
       }));
   }
 
+  async promptSummaryOptions() {
+    const workflows = await this.workflows.find({
+      order: { id: 'DESC' },
+      select: {
+        id: true,
+        name: true,
+        outputType: true,
+        targetModel: true,
+        visualPromptTemplateId: true,
+        version: true,
+        isEnabled: true,
+      },
+    });
+    return workflows.map((item) => ({
+      id: item.id,
+      name: item.name,
+      outputType: item.outputType,
+      targetModel: item.targetModel,
+      visualPromptTemplateId: item.visualPromptTemplateId,
+      version: item.version,
+      isEnabled: item.isEnabled,
+    }));
+  }
+
+  async promptSummaryDraft(id: number) {
+    const workflow = await this.findOne(id);
+    const graph = this.parseAndValidateGraph(workflow.apiWorkflow);
+    const prompts = extractPromptExamples(graph, workflow.inputBindings);
+    if (!prompts.positivePrompt) {
+      throw new BadRequestException(
+        '该工作流未识别到正向提示词，请先在工作流管理中配置正向提示词节点映射',
+      );
+    }
+    return {
+      workflowId: workflow.id,
+      visualPromptTemplateId: workflow.visualPromptTemplateId,
+      name: `${workflow.name} · 提示词总结`.slice(0, 120),
+      mediaType: workflow.outputType,
+      targetModel: workflow.targetModel,
+      sourcePlatform: `ComfyUI 工作流 · ${workflow.name}`.slice(0, 120),
+      sourcePrompt: prompts.positivePrompt,
+      sourceNegativePrompt: prompts.negativePrompt || null,
+    };
+  }
+
   async create(dto: CreateComfyWorkflowDto, userId: number) {
     await this.assertConnection(dto.connectionId);
     const sourceGraph = this.parseAndValidateGraph(dto.apiWorkflow);
@@ -134,13 +178,11 @@ export class ComfyWorkflowsService {
       sourceGraph,
       dto.inputBindings as ComfyInputBinding[],
     );
-    const sanitized = sanitizeComfyWorkflow(
-      sourceGraph,
+    const bindings = withoutPromptBindingDefaults(
       dto.inputBindings as ComfyInputBinding[],
     );
-    const { graph, bindings } = sanitized;
-    this.validateBindings(graph, bindings, dto.outputNodeIds ?? []);
-    const apiWorkflow = JSON.stringify(graph);
+    this.validateBindings(sourceGraph, bindings, dto.outputNodeIds ?? []);
+    const apiWorkflow = JSON.stringify(sourceGraph);
     const outputNodeIds = dto.outputNodeIds?.length ? dto.outputNodeIds : null;
     const id = await this.workflows.manager.transaction(async (manager) => {
       const repo = manager.getRepository(ComfyWorkflow);
@@ -196,11 +238,10 @@ export class ComfyWorkflowsService {
     const inputBindings = (dto.inputBindings ??
       current.inputBindings) as ComfyInputBinding[];
     const promptExamples = extractPromptExamples(sourceGraph, inputBindings);
-    const sanitized = sanitizeComfyWorkflow(sourceGraph, inputBindings);
-    const { graph, bindings } = sanitized;
+    const bindings = withoutPromptBindingDefaults(inputBindings);
     const outputNodeIds = dto.outputNodeIds ?? current.outputNodeIds ?? [];
-    this.validateBindings(graph, bindings, outputNodeIds);
-    const apiWorkflow = JSON.stringify(graph);
+    this.validateBindings(sourceGraph, bindings, outputNodeIds);
+    const apiWorkflow = JSON.stringify(sourceGraph);
     const savedOutputNodeIds = outputNodeIds.length ? outputNodeIds : null;
     const savedId = await this.workflows.manager.transaction(
       async (manager) => {
@@ -291,7 +332,7 @@ export class ComfyWorkflowsService {
     if (!workflow.isEnabled) throw new BadRequestException('工作流已停用');
     if (!workflow.visualPromptTemplateId) {
       throw new BadRequestException(
-        '该工作流尚未绑定提示词总结，请重新导入包含正向 Demo 的 API 工作流',
+        '该工作流尚未绑定提示词总结，请先在“提示词总结”中选择该工作流并完成 AI 提炼',
       );
     }
     return this.visualPromptTemplates.submitBoundComposition(

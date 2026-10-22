@@ -3,6 +3,7 @@ import request from "@/utils/request";
 export type VisualPromptMediaType = "image" | "video";
 
 export interface VisualPromptTemplateForm {
+  workflowId?: number | "";
   name: string;
   mediaType: VisualPromptMediaType;
   targetModel?: string;

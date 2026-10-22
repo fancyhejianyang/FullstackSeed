@@ -72,7 +72,7 @@ export class VisualPromptTemplatesController {
     return this.service.findOne(id, userId);
   }
   @Post()
-  @RequirePermissions('VisualPromptTemplate.create')
+  @RequirePermissions('VisualPromptTemplate.create', 'ComfyWorkflow.update')
   create(
     @Body() dto: SaveVisualPromptTemplateDto,
     @CurrentUser('userId') userId: number,
@@ -80,7 +80,7 @@ export class VisualPromptTemplatesController {
     return this.service.create(dto, userId);
   }
   @Patch(':id')
-  @RequirePermissions('VisualPromptTemplate.update')
+  @RequirePermissions('VisualPromptTemplate.update', 'ComfyWorkflow.update')
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: SaveVisualPromptTemplateDto,

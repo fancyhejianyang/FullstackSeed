@@ -161,7 +161,7 @@ describe('ComfyUI 工作流版本快照保存', () => {
     expect(versionValue?.apiWorkflow).toContain('SaveImage');
   });
 
-  it('保存前提取示例提示词并绑定自动模板，快照仍保存清空后的工作流', async () => {
+  it('保存前提取原始提示词并绑定总结记录，工作流版本完整保留原提示词', async () => {
     const workflowRepository = {
       create: jest.fn((value: Record<string, unknown>) => value),
       save: jest.fn((value: Record<string, unknown>) =>
@@ -256,12 +256,67 @@ describe('ComfyUI 工作流版本快照保存', () => {
       string,
       { inputs: Record<string, unknown> }
     >;
-    expect(graph['1'].inputs.text).toBe('');
-    expect(graph['2'].inputs.text).toBe('');
+    expect(graph['1'].inputs.text).toBe('cinematic cat');
+    expect(graph['2'].inputs.text).toBe('blur, watermark');
   });
 });
 
 describe('ComfyUI 工作流可用状态', () => {
+  it('可从已保存工作流自动生成提示词总结草稿', async () => {
+    const service = new ComfyWorkflowsService(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+    jest.spyOn(service, 'findOne').mockResolvedValue({
+      id: 8,
+      name: '商品图工作流',
+      outputType: 'image',
+      targetModel: 'flux-dev',
+      visualPromptTemplateId: 12,
+      apiWorkflow: JSON.stringify({
+        '1': {
+          class_type: 'CLIPTextEncode',
+          inputs: { text: 'product photography, soft light' },
+        },
+        '2': {
+          class_type: 'CLIPTextEncode',
+          inputs: { text: 'blur, watermark' },
+        },
+      }),
+      inputBindings: [
+        {
+          key: 'positivePrompt',
+          label: '正向提示词',
+          type: 'textarea',
+          nodeId: '1',
+          inputKey: 'text',
+          semanticRole: 'positivePrompt',
+        },
+        {
+          key: 'negativePrompt',
+          label: '负向提示词',
+          type: 'textarea',
+          nodeId: '2',
+          inputKey: 'text',
+          semanticRole: 'negativePrompt',
+        },
+      ],
+    } as ComfyWorkflow);
+
+    await expect(service.promptSummaryDraft(8)).resolves.toMatchObject({
+      workflowId: 8,
+      visualPromptTemplateId: 12,
+      name: '商品图工作流 · 提示词总结',
+      mediaType: 'image',
+      targetModel: 'flux-dev',
+      sourcePrompt: 'product photography, soft light',
+      sourceNegativePrompt: 'blur, watermark',
+    });
+  });
+
   it('可按目标模型模糊过滤工作流', async () => {
     const queryBuilder = {
       orderBy: jest.fn().mockReturnThis(),
