@@ -279,11 +279,13 @@ defineExpose({ validate, resetFields });
 .form--two-columns {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
   column-gap: 24px;
 }
 
 .form--two-columns :deep(.el-form-item) {
   min-width: 0;
+  align-self: start;
 }
 
 .form--two-columns :deep(.el-form-item__content) {
