@@ -33,6 +33,8 @@ import type {
 import type { QueryDashboardDto } from './dto/dashboard.dto';
 
 const n = (value: unknown) => Number(value ?? 0);
+// 列表类板块最多展示 8 条，历史已保存的大数值配置同样被钳制（图表类不受限）。
+const listLimit = (value: unknown) => Math.min(Number(value) || 8, 8);
 const EXEC_PATH = '/agent-management/executions';
 type GenerationSource = 'content' | 'aiMaterial' | 'comfyui';
 type GenerationMediaType = 'article' | 'image' | 'video';
@@ -188,17 +190,17 @@ export class DashboardService {
               user,
               String(w.params.source),
               String(w.params.mediaType),
-              Number(w.params.limit),
+              listLimit(w.params.limit),
             );
             break;
           case 'knowledge.health':
             data = await load('knowledge', () => this.knowledge());
             break;
           case 'operations.todo':
-            data = await this.todos(user, Number(w.params.limit), now);
+            data = await this.todos(user, listLimit(w.params.limit), now);
             break;
           case 'activity.recent':
-            data = await this.activities(user, Number(w.params.limit));
+            data = await this.activities(user, listLimit(w.params.limit));
             break;
           default:
             data = {

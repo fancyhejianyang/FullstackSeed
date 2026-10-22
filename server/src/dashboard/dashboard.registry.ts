@@ -24,6 +24,15 @@ const limit: WidgetParameter = {
   min: 5,
   max: 10,
 };
+// 列表类板块上限 8 条，避免首页卡片被条目撑得过高（图表类不受限）。
+const listLimit: WidgetParameter = {
+  key: 'limit',
+  label: '显示数量',
+  type: 'integer',
+  defaultValue: 8,
+  min: 5,
+  max: 8,
+};
 const businessPermissions = [
   'AgentApp.read',
   'CustomerService.read',
@@ -350,7 +359,7 @@ export const DASHBOARD_WIDGETS: WidgetDefinition[] = [
           { label: '视频', value: 'video' },
         ],
       },
-      limit,
+      listLimit,
     ],
   },
   {
@@ -377,7 +386,7 @@ export const DASHBOARD_WIDGETS: WidgetDefinition[] = [
     allowedSpans: [4, 6, 8, 12],
     defaultSpan: 8,
     schemaVersion: 1,
-    parameters: [limit],
+    parameters: [listLimit],
   },
   {
     key: 'activity.recent',
@@ -388,7 +397,7 @@ export const DASHBOARD_WIDGETS: WidgetDefinition[] = [
     allowedSpans: [4, 6, 8, 12],
     defaultSpan: 8,
     schemaVersion: 1,
-    parameters: [limit],
+    parameters: [listLimit],
   },
   {
     key: 'quick.actions',

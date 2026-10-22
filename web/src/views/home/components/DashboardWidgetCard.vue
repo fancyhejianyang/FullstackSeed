@@ -88,6 +88,7 @@ function format(value: number | null) {
           class="list-item"
           :class="{
             'list-item--creation': widget.widgetKey === 'creation.recent',
+            'list-item--inline': widget.widgetKey === 'activity.recent',
           }"
         >
           <div
@@ -142,7 +143,6 @@ function format(value: number | null) {
   border-radius: 14px;
   padding: 20px;
   min-width: 0;
-  height: 100%;
   box-sizing: border-box;
   box-shadow: 0 3px 14px #26344505;
 }
@@ -158,6 +158,16 @@ h3 {
   font-weight: 650;
   color: #263445;
   margin: 0;
+}
+h3::before {
+  content: '';
+  display: inline-block;
+  width: 3px;
+  height: 13px;
+  border-radius: 2px;
+  background: #409eff;
+  margin-right: 8px;
+  vertical-align: -1.5px;
 }
 .preview-badge {
   background: #edf3fb;
@@ -196,6 +206,9 @@ h3 {
   padding: 0;
   height: auto;
   line-height: 1.3;
+}
+.metric-link {
+  color: #409eff;
 }
 .metric small {
   font-weight: 400;
@@ -280,6 +293,35 @@ h3 {
   font-size: 12px;
   color: #687587;
   margin: 5px 0 0;
+}
+.list-item time {
+  color: #94a3b8;
+}
+.list-item--inline {
+  padding: 10px 0;
+}
+.list-item--inline > div {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+.list-item--inline b {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.list-item--inline p {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin: 0;
+}
+.list-item--inline time {
+  flex: 0 0 auto;
+  margin: 0;
 }
 .quick-grid {
   display: grid;

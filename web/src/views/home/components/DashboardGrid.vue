@@ -36,6 +36,7 @@ defineEmits<{ retry: [instanceId: string] }>();
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 18px;
+  align-items: start;
 }
 .dashboard-cell {
   grid-column: span var(--widget-span);

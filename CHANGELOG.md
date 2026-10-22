@@ -1,5 +1,11 @@
 # CHANGELOG
 
+### 2026-10-22 首页展示优化（不等高 / 列表上限 8 条 / 业务动态单行 / 配色）
+- `web/src/views/home/components/DashboardGrid.vue`：栅格增加 `align-items: start`，卡片按内容自然高度展示，不再同行等高拉伸出大片空白。
+- `web/src/views/home/components/DashboardWidgetCard.vue`：移除卡片 `height: 100%`；「最近业务动态」每条改为单行展示（标题 · 详情 · 时间 · 进入，超长省略）；配色优化——卡片标题增加品牌蓝装饰条、可点击指标值改为品牌蓝 `#409EFF`、时间戳用更浅中性灰 `#94a3b8` 拉开层级。
+- `server/src/dashboard/dashboard.registry.ts`：新增列表类板块专用 `listLimit` 参数（默认 8、上限 8），最近创作成果 / 待办与异常 / 最近业务动态改用它；图表类（产品与 SKU 分布）保留原 `limit`（上限 10）不受限。
+- `server/src/dashboard/dashboard.service.ts`：列表类板块条目数在服务端钳制为最多 8 条，历史已保存的更大配置同样生效。
+
 ### 2026-10-22 首页板块支持 4/12 显示宽度
 - 修改 `server/src/dashboard/dashboard.registry.ts`：为 8 个原仅支持 `[6, 8, 12]` 的板块（Agent 执行趋势、产品与 SKU 分布、客服 AI 任务趋势、内容与媒体生成趋势、生成任务健康度、最近创作成果、待办与异常、最近业务动态）的 `allowedSpans` 补上 `4`，升级为 `[4, 6, 8, 12]`。
 - 「核心数据」为通栏指标条，保持仅 `[12]`；「业务健康概览 / 知识库健康度 / 快捷入口」原本已支持 4/12，不变。
