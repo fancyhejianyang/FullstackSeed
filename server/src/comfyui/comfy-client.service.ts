@@ -36,6 +36,9 @@ export class ComfyClientService {
     workflow: Record<string, unknown>,
     clientId: string,
   ) {
+    const body = this.isOfficialComfyCloud(connection)
+      ? { prompt: workflow }
+      : { prompt: workflow, client_id: clientId };
     return this.requestJson<{
       prompt_id?: string;
       number?: number;
@@ -44,7 +47,7 @@ export class ComfyClientService {
     }>(connection, '/prompt', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: workflow, client_id: clientId }),
+      body: JSON.stringify(body),
     });
   }
 
@@ -63,13 +66,27 @@ export class ComfyClientService {
         error_message?: string | null;
       }>(connection, `/job/${encodedId}/status`);
       const state = status.status ?? 'pending';
-      const terminal = ['completed', 'error', 'cancelled'].includes(state);
-      const detail = terminal
+      const terminal = [
+        'completed',
+        'success',
+        'succeeded',
+        'error',
+        'failed',
+        'cancelled',
+      ].includes(state);
+      const history = terminal
         ? await this.requestJson<Record<string, unknown>>(
             connection,
-            `/jobs/${encodedId}`,
+            `/history/${encodedId}`,
           )
         : {};
+      const nestedDetail = history[promptId];
+      const detail =
+        nestedDetail &&
+        typeof nestedDetail === 'object' &&
+        !Array.isArray(nestedDetail)
+          ? (nestedDetail as Record<string, unknown>)
+          : history;
       return {
         [promptId]: {
           ...detail,
@@ -203,7 +220,9 @@ export class ComfyClientService {
         !response.ok &&
         !(options.acceptedStatuses ?? []).includes(response.status)
       ) {
-        throw new BadGatewayException(this.statusError(connection, response));
+        throw new BadGatewayException(
+          await this.statusError(connection, response, path, init.method),
+        );
       }
       return response;
     } catch (error) {
@@ -253,28 +272,79 @@ export class ComfyClientService {
   }
 
   private normalizeCloudStatus(status: string) {
-    if (status === 'completed') return 'success';
-    if (status === 'error' || status === 'cancelled') return 'error';
-    if (status === 'in_progress') return 'running';
+    if (['completed', 'success', 'succeeded'].includes(status))
+      return 'success';
+    if (['error', 'failed', 'cancelled'].includes(status)) return 'error';
+    if (['in_progress', 'running'].includes(status)) return 'running';
     return 'queued';
   }
 
-  private statusError(connection: ComfyConnection, response: Response) {
+  private async statusError(
+    connection: ComfyConnection,
+    response: Response,
+    path: string,
+    method?: string,
+  ) {
+    const endpoint = this.endpointLabel(connection, path, method);
+    const providerDetail = await this.responseErrorDetail(
+      response,
+      connection.secret,
+    );
+    const detail = providerDetail ? `：${providerDetail}` : '';
     if (this.isOfficialComfyCloud(connection)) {
       if (response.status === 401) {
-        return 'Comfy Cloud API Key 无效或已失效（HTTP 401）';
+        return `Comfy Cloud API Key 无效或已失效（${endpoint}，HTTP 401）${detail}`;
       }
       if (response.status === 402) {
-        return 'Comfy Cloud 额度不足（HTTP 402）';
+        return `Comfy Cloud 额度不足（${endpoint}，HTTP 402）${detail}`;
       }
       if (response.status === 403) {
-        return 'Comfy Cloud API Key 无权访问该接口（HTTP 403）';
+        return `Comfy Cloud 拒绝访问（${endpoint}，HTTP 403）${detail}；请检查 API Key 权限、套餐和接口路径`;
       }
       if (response.status === 429) {
-        return 'Comfy Cloud 请求受限或账号未开通所需套餐（HTTP 429）';
+        return `Comfy Cloud 请求受限或账号未开通所需套餐（${endpoint}，HTTP 429）${detail}`;
       }
     }
-    return `ComfyUI 请求失败（HTTP ${response.status}）`;
+    return `ComfyUI 请求失败（${endpoint}，HTTP ${response.status}）${detail}`;
+  }
+
+  private endpointLabel(
+    connection: ComfyConnection,
+    path: string,
+    method?: string,
+  ) {
+    const requestMethod = (method || 'GET').toUpperCase();
+    try {
+      return `${requestMethod} ${new URL(this.buildUrl(connection, path)).pathname}`;
+    } catch {
+      return `${requestMethod} ${path.split('?')[0]}`;
+    }
+  }
+
+  private async responseErrorDetail(response: Response, secret: string | null) {
+    try {
+      const raw = (await response.text()).trim();
+      if (!raw || /^\s*</.test(raw)) return '';
+      let detail = raw;
+      try {
+        const parsed = JSON.parse(raw) as unknown;
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          const value = parsed as Record<string, unknown>;
+          const candidate =
+            value.message ??
+            value.detail ??
+            value.error_message ??
+            (typeof value.error === 'string' ? value.error : undefined);
+          if (typeof candidate === 'string') detail = candidate;
+        }
+      } catch {
+        // 非 JSON 文本仍可作为供应商错误摘要。
+      }
+      const sanitized = secret ? detail.split(secret).join('***') : detail;
+      return sanitized.replace(/\s+/g, ' ').slice(0, 300);
+    } catch {
+      return '';
+    }
   }
 
   private async downloadSignedOutput(location: string, timeoutMs: number) {

@@ -1,5 +1,23 @@
 # CHANGELOG
 
+### 2026-10-22 修正 Comfy Cloud 任务接口与 403 诊断
+
+- 按官方常用接口重新对齐云端任务链路：提交仍使用 `POST /api/prompt` 且请求体只发送 `prompt`；状态继续查询 `GET /api/job/{prompt_id}/status`，终态输出改为官方兼容的 `GET /api/history/{prompt_id}`，移除未公开且会触发 403 的 `/api/jobs/{prompt_id}` 请求。
+- 云端历史响应同时兼容以 `prompt_id` 为键和直接详情两种结构，并补充 `success/succeeded/failed/running` 状态别名，继续映射为系统现有排队、运行、成功和失败状态。
+- 401/402/403/429 及普通请求错误现在包含请求方法、API 路径和脱敏截断后的供应商错误摘要，避免把错误接口路径统一误报为“API Key 无权限”；密钥不会进入错误信息。
+- 验证：后端定向 ESLint、TypeORM 实体列检查及 ComfyUI 客户端/连接/任务 3 suites / 11 tests 通过；按缺陷修复范围未执行 build 或启动服务，也未使用用户密钥连接真实云端环境。
+
+新增文件（0）。
+
+修改文件（4）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/comfyui/comfy-client.service.spec.ts`
+- `server/src/comfyui/comfy-client.service.ts`
+
+删除文件（0）。
+
 ### 2026-10-22 支持 ComfyUI 普通主提示词工作流
 
 - 提示词语义新增“主提示词”：工作流可使用主提示词或正向提示词之一，负向提示词改为可选；创作任务会把 AI 返回的主结果回填到实际绑定字段，不再要求所有模型都具备正向、负向两套提示词。

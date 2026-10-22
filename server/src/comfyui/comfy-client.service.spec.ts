@@ -99,6 +99,11 @@ describe('ComfyClientService', () => {
     expect(requestUrl(fetchMock.mock.calls[0]?.[0])).toBe(
       'https://cloud.comfy.org/api/prompt',
     );
+    expect(fetchMock.mock.calls[0]?.[1]?.body).toBe(
+      JSON.stringify({
+        prompt: { '1': { class_type: 'SaveImage', inputs: {} } },
+      }),
+    );
   });
 
   it('云端任务状态与详情转换为现有历史结构', async () => {
@@ -112,9 +117,11 @@ describe('ComfyClientService', () => {
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
-            id: 'job-1',
-            status: 'completed',
-            outputs: { '9': { images: [{ filename: 'result.png' }] } },
+            'job-1': {
+              id: 'job-1',
+              status: 'completed',
+              outputs: { '9': { images: [{ filename: 'result.png' }] } },
+            },
           }),
           { headers: { 'content-type': 'application/json' } },
         ),
@@ -131,13 +138,36 @@ describe('ComfyClientService', () => {
 
     expect(fetchMock.mock.calls.map(([input]) => requestUrl(input))).toEqual([
       'https://cloud.comfy.org/api/job/job-1/status',
-      'https://cloud.comfy.org/api/jobs/job-1',
+      'https://cloud.comfy.org/api/history/job-1',
     ]);
     expect(result['job-1']).toEqual(
       expect.objectContaining({
         status: { status_str: 'success', completed: true },
         outputs: { '9': { images: [{ filename: 'result.png' }] } },
       }),
+    );
+  });
+
+  it('云端拒绝请求时保留接口和供应商错误摘要', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ message: 'plan does not allow prompt' }), {
+        status: 403,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    await expect(
+      service.submitPrompt(
+        connection({
+          baseUrl: 'https://cloud.comfy.org',
+          authType: 'apiKey',
+          secret: 'cloud-key',
+        }),
+        { '1': { class_type: 'SaveImage', inputs: {} } },
+        'client-id',
+      ),
+    ).rejects.toThrow(
+      'Comfy Cloud 拒绝访问（POST /api/prompt，HTTP 403）：plan does not allow prompt',
     );
   });
 
