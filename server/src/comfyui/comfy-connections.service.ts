@@ -204,10 +204,8 @@ export class ComfyConnectionsService {
     ) {
       throw new BadRequestException('ComfyUI 服务地址仅支持 HTTP/HTTPS');
     }
-    if (!this.isAllowedHost(url.hostname)) {
-      throw new BadRequestException(
-        '同机直连仅允许 localhost、回环地址、host.docker.internal 或私有网段地址',
-      );
+    if (url.protocol === 'http:' && !this.isLocalOrPrivateHost(url.hostname)) {
+      throw new BadRequestException('公网 ComfyUI 服务地址必须使用 HTTPS');
     }
     url.pathname = url.pathname.replace(/\/+$/, '');
     url.search = '';
@@ -215,7 +213,7 @@ export class ComfyConnectionsService {
     return url.toString().replace(/\/+$/, '');
   }
 
-  private isAllowedHost(hostname: string) {
+  private isLocalOrPrivateHost(hostname: string) {
     const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
     if (
       ['localhost', '127.0.0.1', '::1', 'host.docker.internal'].includes(host)

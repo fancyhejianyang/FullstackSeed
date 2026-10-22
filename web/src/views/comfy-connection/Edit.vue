@@ -43,8 +43,8 @@ const fields = computed<FormField[]>(() => [
     prop: "baseUrl",
     label: "服务地址",
     type: "input",
-    placeholder: "http://127.0.0.1:8188",
-    hint: "NestJS 与 ComfyUI 同机时优先使用回环地址；Docker 中可使用 host.docker.internal。",
+    placeholder: "http://127.0.0.1:8188 或 https://cloud.example.com",
+    hint: "本机可使用 localhost、回环、host.docker.internal 或私有网地址；云端服务请使用 HTTPS，并按服务要求配置认证。",
   },
   {
     prop: "authType",

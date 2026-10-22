@@ -72,4 +72,36 @@ describe('ComfyConnectionsService', () => {
     );
     expect(connections.update).not.toHaveBeenCalledWith({}, expect.anything());
   });
+
+  it('允许创建使用 HTTPS 与 Bearer 认证的云端服务', async () => {
+    const { service, connections } = createService();
+
+    await service.create({
+      name: '云端 ComfyUI',
+      baseUrl: 'https://cloud.comfy.org/',
+      authType: 'bearer',
+      secret: 'cloud-token',
+    });
+
+    expect(connections.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: '云端 ComfyUI',
+        baseUrl: 'https://cloud.comfy.org',
+        authType: 'bearer',
+        secret: 'cloud-token',
+      }),
+    );
+  });
+
+  it('公网服务使用明文 HTTP 时给出明确错误', async () => {
+    const { service } = createService();
+
+    await expect(
+      service.create({
+        name: '不安全的云端 ComfyUI',
+        baseUrl: 'http://cloud.comfy.org',
+        authType: 'none',
+      }),
+    ).rejects.toThrow('公网 ComfyUI 服务地址必须使用 HTTPS');
+  });
 });

@@ -1,5 +1,24 @@
 # CHANGELOG
 
+### 2026-10-22 允许配置云端 ComfyUI 服务
+
+- 修复 ComfyUI 服务地址被无条件套用同机白名单的问题：本机、Docker 宿主机及私有网地址继续支持 HTTP/HTTPS，公网或云端服务现可使用 HTTPS 地址保存，`https://cloud.comfy.org` 不再被误拦截。
+- 保留地址安全边界：继续拒绝非 HTTP/HTTPS 协议、畸形 URL 和 URL 内嵌账号密码；公网明文 HTTP 会返回“公网 ComfyUI 服务地址必须使用 HTTPS”，Basic/Bearer 凭据仍由独立密钥字段保存。
+- 服务配置表单同步补充本机和云端地址示例及认证提示；未新增连接类型或数据库字段，现有接口字段与本机配置保持兼容。
+- 验证：后端相关文件 ESLint、TypeORM 实体列检查及服务配置 1 suite / 4 tests 通过；前端 `vue-tsc` 与服务配置页面组件复用检查通过。按缺陷修复范围未执行 build、启动服务或连接真实云端环境。
+
+新增文件（0）。
+
+修改文件（5）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/comfyui/comfy-connections.service.spec.ts`
+- `server/src/comfyui/comfy-connections.service.ts`
+- `web/src/views/comfy-connection/Edit.vue`
+
+删除文件（0）。
+
 ### 2026-10-22 兼容 ComfyUI 子图层级节点 ID
 
 - 修复 API 工作流格式误判：后端节点校验从仅接受纯数字 ID 调整为同时接受 ComfyUI 子图生成的冒号分隔层级 ID（如 `459:451`、`459:457:2`），不改写节点 ID、连线引用、参数映射或输出节点。
