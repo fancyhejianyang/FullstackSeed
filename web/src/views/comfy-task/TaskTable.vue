@@ -10,6 +10,7 @@ import {
   cancelComfyTask,
   deleteComfyTask,
   getComfyTasks,
+  retryComfyTask,
   type ComfyTask,
   type ComfyTaskStatus,
 } from "@/api/comfyUi";
@@ -22,6 +23,7 @@ const tableRef = ref<{
 const viewVisible = ref(false);
 const viewingId = ref<number | null>(null);
 const cancellingId = ref<number | null>(null);
+const retryingId = ref<number | null>(null);
 let timer: number | undefined;
 
 const columns: TableColumn[] = [
@@ -84,6 +86,16 @@ async function cancel(row: ComfyTask) {
     cancellingId.value = null;
   }
 }
+async function retry(row: ComfyTask) {
+  retryingId.value = row.id;
+  try {
+    const task = await retryComfyTask(row.id, crypto.randomUUID());
+    ElMessage.success(`已创建重新执行任务 #${task.id}`);
+    await tableRef.value?.refresh();
+  } finally {
+    retryingId.value = null;
+  }
+}
 async function refresh() {
   await tableRef.value?.refresh();
 }
@@ -107,7 +119,7 @@ defineExpose({ refresh });
     :batch-delete-request="({ ids }) => batchDeleteComfyTasks(ids as number[])"
     :check-able="true"
     :show-edit="false"
-    action-width="210"
+    action-width="270"
     @view="openView"
   >
     <template #toolbar>
@@ -132,6 +144,17 @@ defineExpose({ refresh });
       formatDateTime(row.createdAt)
     }}</template>
     <template #actions="{ row }">
+      <Button
+        v-if="row.status === 'failed'"
+        perm="ComfyTask.create"
+        link
+        icon="RefreshRight"
+        confirm
+        :confirm-text="`重新执行将创建新任务并保留失败任务 #${row.id}，确认继续？`"
+        :loading="retryingId === row.id"
+        @click="retry(row)"
+        >重新执行</Button
+      >
       <Button
         v-if="row.status === 'pending'"
         perm="ComfyTask.update"

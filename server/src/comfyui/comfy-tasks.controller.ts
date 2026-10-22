@@ -19,6 +19,7 @@ import {
   BatchIdsDto,
   CreateComfyTaskDto,
   QueryComfyTaskDto,
+  RetryComfyTaskDto,
 } from './dto/comfyui.dto';
 
 @ApiTags('ComfyTask')
@@ -46,6 +47,16 @@ export class ComfyTasksController {
   @RequirePermissions('ComfyTask.create')
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateComfyTaskDto) {
     return this.service.create(user.userId, dto);
+  }
+
+  @Post(':id/retry')
+  @RequirePermissions('ComfyTask.create')
+  retry(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: AuthUser,
+    @Body() dto: RetryComfyTaskDto,
+  ) {
+    return this.service.retry(id, user.userId, dto.requestId);
   }
 
   @Post(':id/cancel')

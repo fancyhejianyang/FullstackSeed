@@ -174,6 +174,46 @@ export class ComfyTasksService implements OnModuleInit, OnModuleDestroy {
     return this.findOne(id, userId);
   }
 
+  async retry(id: number, userId: number, retryRequestId?: string) {
+    const source = await this.findOwnedWithSnapshot(id, userId);
+    if (source.status !== 'failed') {
+      throw new ConflictException('只有失败的任务可以重新执行');
+    }
+    const requestId = retryRequestId?.trim() || randomUUID();
+    const existing = await this.tasks.findOne({ where: { userId, requestId } });
+    if (existing) return this.findOne(existing.id, userId);
+    const connection = await this.connections.getWithSecret(
+      source.connectionId,
+    );
+    if (!connection.isEnabled) {
+      throw new BadRequestException('原任务使用的 ComfyUI 服务已停用');
+    }
+    const saved = await this.tasks.save(
+      this.tasks.create({
+        userId,
+        workflowId: source.workflowId,
+        workflowVersionId: source.workflowVersionId,
+        connectionId: source.connectionId,
+        requestId,
+        outputType: source.outputType,
+        status: 'pending',
+        stage: '等待重新执行',
+        progress: null,
+        parameterSnapshot: { ...source.parameterSnapshot },
+        workflowSnapshot: source.workflowSnapshot,
+        bindingSnapshot: source.bindingSnapshot.map((binding) => ({
+          ...(binding as Record<string, unknown>),
+        })),
+        promptId: null,
+        errorMessage: null,
+        startedAt: null,
+        finishedAt: null,
+      }),
+    );
+    void this.tick();
+    return this.findOne(saved.id, userId);
+  }
+
   async remove(id: number, userId: number) {
     const task = await this.findOwned(id, userId);
     if (['pending', ...ACTIVE_STATUSES].includes(task.status)) {
@@ -573,6 +613,21 @@ export class ComfyTasksService implements OnModuleInit, OnModuleDestroy {
 
   private async findOwned(id: number, userId: number) {
     const task = await this.tasks.findOne({ where: { id, userId } });
+    if (!task) throw new NotFoundException('ComfyUI 任务不存在');
+    return task;
+  }
+
+  private async findOwnedWithSnapshot(id: number, userId: number) {
+    const task = await this.tasks
+      .createQueryBuilder('task')
+      .addSelect([
+        'task.parameterSnapshot',
+        'task.workflowSnapshot',
+        'task.bindingSnapshot',
+      ])
+      .where('task.id = :id AND task.userId = :userId', { id, userId })
+      .andWhere('task.deletedAt IS NULL')
+      .getOne();
     if (!task) throw new NotFoundException('ComfyUI 任务不存在');
     return task;
   }

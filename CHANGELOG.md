@@ -1,5 +1,28 @@
 # CHANGELOG
 
+### 2026-10-22 支持失败的 ComfyUI 任务重新执行
+
+- 创作任务列表为失败记录新增“重新执行”操作；操作前明确提示可能再次生成，提交期间锁定按钮，成功后显示新任务编号并刷新列表。
+- 新增 `POST /api/comfyui/tasks/:id/retry`：仅允许任务所有者重试 `failed` 状态，复用 `ComfyTask.create` 权限，并使用原任务保存的工作流版本、参数、绑定及服务关联创建新的排队任务；原失败任务、错误原因和历史输出保持不变。
+- 新任务清空旧 `promptId`、输出关联、进度和执行时间，并使用独立 `requestId` 保证前端重复点击或同一次网络请求重放时不会重复建任务；原服务停用时明确拒绝。
+- 成功、取消、运行中和状态待核实任务均不开放重试，避免对可能已被供应商受理的未知任务重复生成或计费。
+- 验证：后端定向 ESLint、TypeORM 实体列检查及 ComfyUI 客户端/连接/任务 3 suites / 13 tests 通过；前端 `vue-tsc` 和任务列表组件复用检查通过。按缺陷补全范围未执行 build 或启动服务。
+
+新增文件（0）。
+
+修改文件（8）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/comfyui/comfy-tasks.controller.ts`
+- `server/src/comfyui/comfy-tasks.service.spec.ts`
+- `server/src/comfyui/comfy-tasks.service.ts`
+- `server/src/comfyui/dto/comfyui.dto.ts`
+- `web/src/api/comfyUi.ts`
+- `web/src/views/comfy-task/TaskTable.vue`
+
+删除文件（0）。
+
 ### 2026-10-22 修正 Comfy Cloud 任务接口与 403 诊断
 
 - 按官方常用接口重新对齐云端任务链路：提交仍使用 `POST /api/prompt` 且请求体只发送 `prompt`；状态继续查询 `GET /api/job/{prompt_id}/status`，终态输出改为官方兼容的 `GET /api/history/{prompt_id}`，移除未公开且会触发 403 的 `/api/jobs/{prompt_id}` 请求。

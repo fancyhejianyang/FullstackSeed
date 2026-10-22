@@ -309,6 +309,13 @@ export class CreateComfyTaskDto {
   requestId?: string;
 }
 
+export class RetryComfyTaskDto {
+  @IsString()
+  @MaxLength(80)
+  @IsOptional()
+  requestId?: string;
+}
+
 export class ComposeComfyWorkflowPromptDto {
   @IsString()
   @IsNotEmpty()
