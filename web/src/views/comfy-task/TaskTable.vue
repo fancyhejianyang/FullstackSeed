@@ -89,8 +89,8 @@ async function cancel(row: ComfyTask) {
 async function retry(row: ComfyTask) {
   retryingId.value = row.id;
   try {
-    const task = await retryComfyTask(row.id, crypto.randomUUID());
-    ElMessage.success(`已创建重新执行任务 #${task.id}`);
+    const task = await retryComfyTask(row.id);
+    ElMessage.success(`任务 #${task.id} 已重新进入执行队列`);
     await tableRef.value?.refresh();
   } finally {
     retryingId.value = null;
@@ -150,7 +150,7 @@ defineExpose({ refresh });
         link
         icon="RefreshRight"
         confirm
-        :confirm-text="`重新执行将创建新任务并保留失败任务 #${row.id}，确认继续？`"
+        :confirm-text="`确认重新执行任务 #${row.id}？原错误状态将被新的执行状态替换。`"
         :loading="retryingId === row.id"
         @click="retry(row)"
         >重新执行</Button

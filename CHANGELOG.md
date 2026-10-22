@@ -1,5 +1,31 @@
 # CHANGELOG
 
+### 2026-10-22 原任务重试与提示词提炼状态修正
+
+- ComfyUI 失败任务的“重新执行”改为原任务原地重置：任务 ID 和已保存运行快照保持不变，状态原子切回等待执行，清空旧 `promptId`、错误、进度、执行时间及旧输出关联，不再新增任务行。
+- 重试继续只允许 `failed` 状态；服务停用或并发导致状态已变化时明确拒绝，成功、取消、运行中和待核实任务仍不允许重投。
+- 提示词总结列表直接返回真实 `extractedAt` 判断是否完成过 AI 提炼，不再因历史结果缺少后来新增的提示词规则字段而错误显示“待 AI 提炼”；创作转换仍仅在提炼字段完整时使用总结结果，否则安全回退工作流原始提示词。
+- 行内“AI 提炼”按钮加载时固定显示 loading 图标和“提炼中”，不再把后台阶段长文案放入操作列造成换行；列表查询同步移除不再参与状态判断的长文本字段。
+- 验证：后端定向 ESLint、TypeORM 实体列检查及 ComfyUI/提示词总结 5 suites / 35 tests 通过；前端 `vue-tsc` 和两个列表页面的组件复用检查通过。按缺陷修复范围未执行 build 或启动服务。
+
+新增文件（0）。
+
+修改文件（11）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/comfyui/comfy-tasks.controller.ts`
+- `server/src/comfyui/comfy-tasks.service.spec.ts`
+- `server/src/comfyui/comfy-tasks.service.ts`
+- `server/src/comfyui/dto/comfyui.dto.ts`
+- `server/src/visual-prompt-templates/visual-prompt-templates.service.spec.ts`
+- `server/src/visual-prompt-templates/visual-prompt-templates.service.ts`
+- `web/src/api/comfyUi.ts`
+- `web/src/views/comfy-task/TaskTable.vue`
+- `web/src/views/visual-prompt-template/Index.vue`
+
+删除文件（0）。
+
 ### 2026-10-22 支持失败的 ComfyUI 任务重新执行
 
 - 创作任务列表为失败记录新增“重新执行”操作；操作前明确提示可能再次生成，提交期间锁定按钮，成功后显示新任务编号并刷新列表。

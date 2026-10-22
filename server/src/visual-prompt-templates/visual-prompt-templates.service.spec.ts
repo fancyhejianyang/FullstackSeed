@@ -192,7 +192,7 @@ describe('VisualPromptTemplatesService 异步任务', () => {
     });
   });
 
-  it('历史提炼结果缺少提示词规则时列表标记为待提炼', async () => {
+  it('历史提炼结果缺少提示词规则时仍保留真实提炼时间', async () => {
     const repository = {
       findAndCount: jest.fn().mockResolvedValue([
         [
@@ -215,7 +215,9 @@ describe('VisualPromptTemplatesService 异步任务', () => {
 
     const result = await service.findAll({ page: 1, pageSize: 10 }, 7);
 
-    expect(result.list[0]?.extractedAt).toBeNull();
+    expect(result.list[0]?.extractedAt).toEqual(
+      new Date('2026-10-22T00:00:00.000Z'),
+    );
     expect(result.list[0]).not.toHaveProperty('modelRules');
     expect(result.list[0]).not.toHaveProperty('positiveTemplate');
   });

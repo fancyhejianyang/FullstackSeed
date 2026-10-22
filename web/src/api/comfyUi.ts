@@ -342,10 +342,8 @@ export function createComfyTask(data: {
 export function cancelComfyTask(id: number) {
   return request.post<unknown, ComfyTask>(`/comfyui/tasks/${id}/cancel`);
 }
-export function retryComfyTask(id: number, requestId?: string) {
-  return request.post<unknown, ComfyTask>(`/comfyui/tasks/${id}/retry`, {
-    requestId,
-  });
+export function retryComfyTask(id: number) {
+  return request.post<unknown, ComfyTask>(`/comfyui/tasks/${id}/retry`);
 }
 export function deleteComfyTask(id: number) {
   return request.delete(`/comfyui/tasks/${id}`);

@@ -71,35 +71,30 @@ describe('ComfyUI 任务运行快照', () => {
     });
   });
 
-  it('失败任务重新执行时创建独立排队任务并保留原记录', async () => {
-    const source = {
+  it('失败任务重新执行时原子重置原任务并清理旧输出关联', async () => {
+    const task = {
       id: 18,
       userId: 9,
-      workflowId: 3,
-      workflowVersionId: 7,
       connectionId: 2,
-      outputType: 'image',
       status: 'failed',
       errorMessage: 'cloud rejected request',
-      parameterSnapshot: { prompt: 'a cat' },
-      workflowSnapshot: '{"1":{"class_type":"SaveImage","inputs":{}}}',
-      bindingSnapshot: [
-        { key: 'prompt', nodeId: '1', inputKey: 'text', type: 'textarea' },
-      ],
     } as ComfyTask;
-    const queryBuilder = {
-      addSelect: jest.fn().mockReturnThis(),
-      where: jest.fn().mockReturnThis(),
-      andWhere: jest.fn().mockReturnThis(),
-      getOne: jest.fn().mockResolvedValue(source),
+    const taskUpdate = jest.fn().mockResolvedValue({ affected: 1 });
+    const outputSoftDelete = jest.fn().mockResolvedValue({ affected: 1 });
+    const manager = {
+      getRepository: jest
+        .fn()
+        .mockReturnValueOnce({ update: taskUpdate })
+        .mockReturnValueOnce({ softDelete: outputSoftDelete }),
     };
     const taskRepository = {
-      createQueryBuilder: jest.fn().mockReturnValue(queryBuilder),
-      findOne: jest.fn().mockResolvedValue(null),
-      create: jest.fn((value: ComfyTask) => value),
-      save: jest.fn((value: ComfyTask) =>
-        Promise.resolve({ ...value, id: 19 }),
-      ),
+      findOne: jest.fn().mockResolvedValue(task),
+      manager: {
+        transaction: jest.fn(
+          (callback: (value: typeof manager) => Promise<unknown>) =>
+            callback(manager),
+        ),
+      },
     };
     const connections = {
       getWithSecret: jest.fn().mockResolvedValue({ isEnabled: true }),
@@ -115,45 +110,42 @@ describe('ComfyUI 任务运行快照', () => {
       {} as never,
       {} as never,
     );
-    jest.spyOn(service, 'findOne').mockResolvedValue({ id: 19 } as ComfyTask);
+    jest.spyOn(service, 'findOne').mockResolvedValue({
+      ...task,
+      status: 'pending',
+      stage: '等待重新执行',
+    } as ComfyTask);
     jest
       .spyOn(service as unknown as { tick: () => Promise<void> }, 'tick')
       .mockResolvedValue();
 
-    await service.retry(18, 9, 'retry-request');
+    const result = await service.retry(18, 9);
 
-    expect(taskRepository.save).toHaveBeenCalledWith(
-      expect.objectContaining({
-        workflowId: 3,
-        workflowVersionId: 7,
-        connectionId: 2,
-        requestId: 'retry-request',
+    expect(taskUpdate).toHaveBeenCalledWith(
+      { id: 18, userId: 9, status: 'failed' },
+      {
         status: 'pending',
         stage: '等待重新执行',
-        parameterSnapshot: { prompt: 'a cat' },
+        progress: null,
         promptId: null,
         errorMessage: null,
         startedAt: null,
         finishedAt: null,
-      }),
+      },
     );
-    expect(source.status).toBe('failed');
-    expect(source.errorMessage).toBe('cloud rejected request');
+    expect(outputSoftDelete).toHaveBeenCalledWith({ taskId: 18 });
+    expect(result.id).toBe(18);
   });
 
   it('非失败任务不能重新执行', async () => {
-    const queryBuilder = {
-      addSelect: jest.fn().mockReturnThis(),
-      where: jest.fn().mockReturnThis(),
-      andWhere: jest.fn().mockReturnThis(),
-      getOne: jest.fn().mockResolvedValue({
-        id: 18,
-        userId: 9,
-        status: 'unknown',
-      }),
-    };
     const service = new ComfyTasksService(
-      { createQueryBuilder: jest.fn().mockReturnValue(queryBuilder) } as never,
+      {
+        findOne: jest.fn().mockResolvedValue({
+          id: 18,
+          userId: 9,
+          status: 'unknown',
+        }),
+      } as never,
       {} as never,
       {} as never,
       {} as never,
@@ -164,7 +156,7 @@ describe('ComfyUI 任务运行快照', () => {
       {} as never,
     );
 
-    await expect(service.retry(18, 9, 'retry-request')).rejects.toThrow(
+    await expect(service.retry(18, 9)).rejects.toThrow(
       '只有失败的任务可以重新执行',
     );
   });

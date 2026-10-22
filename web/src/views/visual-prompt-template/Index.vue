@@ -29,7 +29,6 @@ const viewVisible = ref(false);
 const editingRow = ref<VisualPromptTemplateSummary | null>(null);
 const viewingRow = ref<VisualPromptTemplateSummary | null>(null);
 const extractingId = ref<number | null>(null);
-const extractStage = ref("");
 const columns: TableColumn[] = [
   { prop: "name", label: "总结名称", minWidth: 180 },
   { prop: "mediaType", label: "媒体", width: 90, slot: true },
@@ -82,11 +81,9 @@ async function extract(row: VisualPromptTemplateSummary) {
     return;
   }
   extractingId.value = row.id;
-  extractStage.value = "正在提交";
   try {
     let task = await extractVisualPromptTemplate(row.id, crypto.randomUUID());
     while (["pending", "running"].includes(task.status)) {
-      extractStage.value = task.stage;
       await new Promise((resolve) => window.setTimeout(resolve, 1200));
       task = await getVisualPromptExtractTask(task.id);
     }
@@ -98,7 +95,6 @@ async function extract(row: VisualPromptTemplateSummary) {
     await tableRef.value?.refresh();
   } finally {
     extractingId.value = null;
-    extractStage.value = "";
   }
 }
 </script>
@@ -141,9 +137,7 @@ async function extract(row: VisualPromptTemplateSummary) {
           :confirm="false"
           :loading="extractingId === row.id"
           @click="extract(row)"
-          >{{
-            extractingId === row.id ? extractStage || "AI 提炼中" : "AI 提炼"
-          }}</Button
+          >{{ extractingId === row.id ? "提炼中" : "AI 提炼" }}</Button
         >
       </template>
       <template #column-mediaType="{ row }">
