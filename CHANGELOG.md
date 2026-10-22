@@ -1,5 +1,10 @@
 # CHANGELOG
 
+### 2026-10-22 移除指标第三行提示并加高图表
+- `web/src/views/home/components/DashboardWidgetCard.vue`：彻底移除指标第三行提示（`metric.hint`，如「失败 5 · 取消 0」「启用 50」「有回执 1 / 19 次」）的渲染与相关样式，配置页预览同步生效；每个指标固定为「标签 + 数值」两行。
+- 卡片高度 380px → 420px，图表最小高度 160px → 200px，图表展示空间明显增加。
+- 后端 `hint` 字段保留（接口契约不变），仅前端不再展示。
+
 ### 2026-10-22 首页卡片固定高度与指标提示单行
 - `web/src/views/home/components/DashboardWidgetCard.vue`：
   - 卡片统一固定高度 380px（内容区 `.widget-body` 内部滚动、细滚动条），行内卡片完全对齐，不再随条目/图表内容撑高；「核心数据」通栏指标条与配置页预览卡片保持内容自适应。

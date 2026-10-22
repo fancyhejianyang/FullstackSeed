@@ -70,7 +70,6 @@ function format(value: number | null) {
           <strong v-else
             >{{ format(metric.value) }}<small>{{ metric.unit }}</small></strong
           >
-          <p v-if="metric.hint">{{ metric.hint }}</p>
         </div>
       </div>
       <template v-if="data.series">
@@ -151,7 +150,7 @@ function format(value: number | null) {
   min-width: 0;
   box-sizing: border-box;
   box-shadow: 0 3px 14px #26344505;
-  height: 380px;
+  height: 420px;
   display: flex;
   flex-direction: column;
 }
@@ -186,7 +185,7 @@ header {
 .widget-card:not(.widget-card--compact) .widget-body > :deep(.dashboard-chart) {
   flex: 1 1 auto;
   height: auto;
-  min-height: 160px;
+  min-height: 200px;
 }
 .widget-card > .widget-empty {
   flex: 1;
@@ -255,14 +254,6 @@ h3::before {
   font-size: 12px;
   margin-left: 5px;
   color: #606266;
-}
-.metric p {
-  font-size: 12px;
-  color: #606b7b;
-  margin: 7px 0 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .widget-note {
   font-size: 12px;
@@ -394,8 +385,7 @@ h3::before {
 .widget-card--compact .metric strong {
   font-size: 18px;
 }
-.widget-card--compact .metric > span,
-.widget-card--compact .metric p {
+.widget-card--compact .metric > span {
   font-size: 10px;
 }
 </style>
