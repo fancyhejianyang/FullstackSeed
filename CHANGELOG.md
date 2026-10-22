@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-10-22 修复提示词总结多任务状态互相覆盖
+
+- 现象与原因：“提示词总结”列表仅使用单个 `extractingId` 保存 loading 行；点击另一条会覆盖前一条显示状态，且任一任务结束都会把该单值清空，因此视觉上像前一任务被中断。后端实际按模板接收任务并串行排队，没有因第二次点击取消第一条。
+- 修复：改为按总结 ID 保存独立任务状态，分别显示“提交中 / 排队中 / 提炼中”；每条任务独立轮询，完成或失败仅清理自身状态。加入运行标识校验，迟到的旧任务不能覆盖或清除同一行的新状态。
+- 交互：AI 提炼确认复用公共 `Button` 的确认与异步并发保护；运行按钮仅显示短状态，完整服务端阶段通过原生提示保留。不同记录仍可继续点击提交，同一记录活动期间禁止重复提交。
+- 后端与契约：不修改接口、数据库或任务状态字段，继续使用既有 `pending/running/succeeded/failed/interrupted`；单服务实例仍串行消费，后提交任务在 UI 中如实显示排队。
+- 新增文件（2）：`web/src/views/visual-prompt-template/extractionState.ts`、`web/src/views/visual-prompt-template/extractionState.test.mjs`。修改文件（3）：`web/src/views/visual-prompt-template/Index.vue`、`.design-spec.md`、本文件。删除文件：无。
+- 验证：4 项多任务与迟到状态回归、Vue 类型检查、变更文件 Prettier、页面组件复用扫描、测试文件语法检查及 `git diff --check` 通过。按修复类改动规则未 build、未启动或重启服务，也未调用真实 AI。
+
 ### 2026-10-22 修正 ComfyUI 素材图片预览
 
 - 素材库管理中的图片缩略图不再通过文件链接打开新窗口或触发下载，改为当前页面遮罩式大图预览。

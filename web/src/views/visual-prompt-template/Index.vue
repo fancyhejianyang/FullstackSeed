@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref } from "vue";
-import { ElMessage, ElMessageBox } from "element-plus";
+import { reactive, ref } from "vue";
+import { ElMessage } from "element-plus";
 import PageContainer from "@/components/PageContainer.vue";
 import Button from "@/components/Button.vue";
 import Table, { type TableColumn } from "@/components/Table.vue";
@@ -17,6 +17,11 @@ import {
 } from "@/api/visualPromptTemplate";
 import Edit from "./Edit.vue";
 import View from "./View.vue";
+import {
+  runVisualPromptExtraction,
+  visualPromptExtractionLabel,
+  type VisualPromptExtractionState,
+} from "./extractionState";
 
 const user = useUserStore();
 
@@ -28,7 +33,9 @@ const editVisible = ref(false);
 const viewVisible = ref(false);
 const editingRow = ref<VisualPromptTemplateSummary | null>(null);
 const viewingRow = ref<VisualPromptTemplateSummary | null>(null);
-const extractingId = ref<number | null>(null);
+const extractionTasks = reactive(
+  new Map<number, VisualPromptExtractionState>(),
+);
 const columns: TableColumn[] = [
   { prop: "name", label: "总结名称", minWidth: 180 },
   { prop: "mediaType", label: "媒体", width: 90, slot: true },
@@ -71,30 +78,27 @@ function openView(row: VisualPromptTemplateSummary) {
   viewVisible.value = true;
 }
 async function extract(row: VisualPromptTemplateSummary) {
-  try {
-    await ElMessageBox.confirm(
-      "AI 将根据工作流中的主提示词、可选负向提示词和目标模型，重新生成提示词格式、风格摘要与提示词规则。是否继续？",
-      "AI 提炼提示词总结",
-      { type: "warning" },
-    );
-  } catch {
+  if (extractionTasks.has(row.id)) {
+    ElMessage.warning("该提示词总结正在排队或提炼");
     return;
   }
-  extractingId.value = row.id;
   try {
-    let task = await extractVisualPromptTemplate(row.id, crypto.randomUUID());
-    while (["pending", "running"].includes(task.status)) {
-      await new Promise((resolve) => window.setTimeout(resolve, 1200));
-      task = await getVisualPromptExtractTask(task.id);
-    }
+    const task = await runVisualPromptExtraction({
+      templateId: row.id,
+      states: extractionTasks,
+      createRunId: () => crypto.randomUUID(),
+      submit: (requestId) => extractVisualPromptTemplate(row.id, requestId),
+      getTask: getVisualPromptExtractTask,
+      wait: () => new Promise((resolve) => window.setTimeout(resolve, 1200)),
+    });
     if (task.status !== "succeeded") {
       ElMessage.error(task.errorMessage || "AI 提炼失败，请检查配置后重试");
       return;
     }
     ElMessage.success("提示词规则与工作流提示词格式已更新");
     await tableRef.value?.refresh();
-  } finally {
-    extractingId.value = null;
+  } catch {
+    // 请求层已统一展示网络或接口错误；这里只保证单行任务状态被释放。
   }
 }
 </script>
@@ -134,10 +138,17 @@ async function extract(row: VisualPromptTemplateSummary) {
         <Button
           perm="VisualPromptTemplate.update"
           link
-          :confirm="false"
-          :loading="extractingId === row.id"
-          @click="extract(row)"
-          >{{ extractingId === row.id ? "提炼中" : "AI 提炼" }}</Button
+          confirm
+          confirm-title="AI 提炼提示词总结"
+          confirm-text="AI 将根据工作流中的主提示词、可选负向提示词和目标模型，重新生成提示词格式、风格摘要与提示词规则。是否继续？"
+          confirm-type="warning"
+          :loading="extractionTasks.has(row.id)"
+          :auto-icon="!extractionTasks.has(row.id)"
+          :title="extractionTasks.get(row.id)?.stage || 'AI 提炼提示词总结'"
+          @click="(_event, done) => done(extract(row))"
+          >{{
+            visualPromptExtractionLabel(extractionTasks.get(row.id))
+          }}</Button
         >
       </template>
       <template #column-mediaType="{ row }">
