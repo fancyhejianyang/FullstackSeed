@@ -11,13 +11,24 @@ type ComfyOutputDescriptor = {
   type?: string;
 };
 
+type ComfyRequestOptions = {
+  redirect?: RequestRedirect;
+  acceptedStatuses?: number[];
+};
+
 @Injectable()
 export class ComfyClientService {
   async systemStats(connection: ComfyConnection) {
-    return this.requestJson<Record<string, unknown>>(
+    const stats = await this.requestJson<Record<string, unknown>>(
       connection,
       '/system_stats',
     );
+    if (!this.isOfficialComfyCloud(connection)) return stats;
+    const user = await this.requestJson<{ status?: string }>(
+      connection,
+      '/user',
+    );
+    return { ...stats, cloudUserStatus: user.status ?? null };
   }
 
   async submitPrompt(
@@ -45,6 +56,32 @@ export class ComfyClientService {
   }
 
   async history(connection: ComfyConnection, promptId: string) {
+    if (this.isOfficialComfyCloud(connection)) {
+      const encodedId = encodeURIComponent(promptId);
+      const status = await this.requestJson<{
+        status?: string;
+        error_message?: string | null;
+      }>(connection, `/job/${encodedId}/status`);
+      const state = status.status ?? 'pending';
+      const terminal = ['completed', 'error', 'cancelled'].includes(state);
+      const detail = terminal
+        ? await this.requestJson<Record<string, unknown>>(
+            connection,
+            `/jobs/${encodedId}`,
+          )
+        : {};
+      return {
+        [promptId]: {
+          ...detail,
+          outputs: detail.outputs ?? {},
+          status: {
+            status_str: this.normalizeCloudStatus(state),
+            completed: terminal,
+          },
+          errorMessage: status.error_message ?? detail.execution_error ?? null,
+        },
+      };
+    }
     return this.requestJson<Record<string, unknown>>(
       connection,
       `/history/${encodeURIComponent(promptId)}`,
@@ -84,12 +121,28 @@ export class ComfyClientService {
       subfolder: output.subfolder || '',
       type: output.type || 'output',
     });
-    const response = await this.request(
+    let response = await this.request(
       connection,
       `/view?${params.toString()}`,
       {},
       Math.max(connection.requestTimeoutMs, 120_000),
+      this.isOfficialComfyCloud(connection)
+        ? {
+            redirect: 'manual',
+            acceptedStatuses: [301, 302, 303, 307, 308],
+          }
+        : undefined,
     );
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location');
+      if (!location) {
+        throw new BadGatewayException('Comfy Cloud 未返回输出下载地址');
+      }
+      response = await this.downloadSignedOutput(
+        location,
+        Math.max(connection.requestTimeoutMs, 120_000),
+      );
+    }
     const size = Number(response.headers.get('content-length') || 0);
     if (size > 250 * 1024 * 1024) {
       throw new BadGatewayException('ComfyUI 输出文件超过 250MB 限制');
@@ -120,7 +173,10 @@ export class ComfyClientService {
     try {
       return JSON.parse(text) as T;
     } catch {
-      throw new BadGatewayException('ComfyUI 返回了无法解析的数据');
+      const contentType = response.headers.get('content-type') || '未知类型';
+      throw new BadGatewayException(
+        `ComfyUI 返回非 JSON 数据（${contentType}），请检查服务地址是否为 API 根地址`,
+      );
     }
   }
 
@@ -129,25 +185,25 @@ export class ComfyClientService {
     path: string,
     init: RequestInit = {},
     timeoutMs = connection.requestTimeoutMs,
+    options: ComfyRequestOptions = {},
   ) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const headers = new Headers(init.headers);
       this.applyAuth(headers, connection);
-      const response = await fetch(
-        `${connection.baseUrl.replace(/\/+$/, '')}${path}`,
-        {
-          ...init,
-          headers,
-          signal: controller.signal,
-          redirect: 'error',
-        },
-      );
-      if (!response.ok) {
-        throw new BadGatewayException(
-          `ComfyUI 请求失败（HTTP ${response.status}）`,
-        );
+      const url = this.buildUrl(connection, path);
+      const response = await fetch(url, {
+        ...init,
+        headers,
+        signal: controller.signal,
+        redirect: options.redirect ?? 'error',
+      });
+      if (
+        !response.ok &&
+        !(options.acceptedStatuses ?? []).includes(response.status)
+      ) {
+        throw new BadGatewayException(this.statusError(connection, response));
       }
       return response;
     } catch (error) {
@@ -162,6 +218,10 @@ export class ComfyClientService {
   }
 
   private applyAuth(headers: Headers, connection: ComfyConnection) {
+    if (this.isOfficialComfyCloud(connection) && connection.secret) {
+      headers.set('X-API-Key', connection.secret);
+      return;
+    }
     if (connection.authType === 'basic') {
       const token = Buffer.from(
         `${connection.username || ''}:${connection.secret || ''}`,
@@ -169,6 +229,85 @@ export class ComfyClientService {
       headers.set('Authorization', `Basic ${token}`);
     } else if (connection.authType === 'bearer' && connection.secret) {
       headers.set('Authorization', `Bearer ${connection.secret}`);
+    } else if (connection.authType === 'apiKey' && connection.secret) {
+      headers.set('X-API-Key', connection.secret);
+    }
+  }
+
+  private buildUrl(connection: ComfyConnection, path: string) {
+    let baseUrl = connection.baseUrl.replace(/\/+$/, '');
+    if (!this.isOfficialComfyCloud(connection)) return `${baseUrl}${path}`;
+    baseUrl = baseUrl.replace(/\/api$/i, '');
+    const cloudPath = path.startsWith('/api/') ? path : `/api${path}`;
+    return `${baseUrl}${cloudPath}`;
+  }
+
+  private isOfficialComfyCloud(connection: ComfyConnection) {
+    try {
+      return (
+        new URL(connection.baseUrl).hostname.toLowerCase() === 'cloud.comfy.org'
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  private normalizeCloudStatus(status: string) {
+    if (status === 'completed') return 'success';
+    if (status === 'error' || status === 'cancelled') return 'error';
+    if (status === 'in_progress') return 'running';
+    return 'queued';
+  }
+
+  private statusError(connection: ComfyConnection, response: Response) {
+    if (this.isOfficialComfyCloud(connection)) {
+      if (response.status === 401) {
+        return 'Comfy Cloud API Key 无效或已失效（HTTP 401）';
+      }
+      if (response.status === 402) {
+        return 'Comfy Cloud 额度不足（HTTP 402）';
+      }
+      if (response.status === 403) {
+        return 'Comfy Cloud API Key 无权访问该接口（HTTP 403）';
+      }
+      if (response.status === 429) {
+        return 'Comfy Cloud 请求受限或账号未开通所需套餐（HTTP 429）';
+      }
+    }
+    return `ComfyUI 请求失败（HTTP ${response.status}）`;
+  }
+
+  private async downloadSignedOutput(location: string, timeoutMs: number) {
+    let url: URL;
+    try {
+      url = new URL(location);
+    } catch {
+      throw new BadGatewayException('Comfy Cloud 输出下载地址无效');
+    }
+    if (url.protocol !== 'https:') {
+      throw new BadGatewayException('Comfy Cloud 输出下载地址不是 HTTPS');
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, {
+        signal: controller.signal,
+        redirect: 'follow',
+      });
+      if (!response.ok) {
+        throw new BadGatewayException(
+          `Comfy Cloud 输出下载失败（HTTP ${response.status}）`,
+        );
+      }
+      return response;
+    } catch (error) {
+      if (error instanceof BadGatewayException) throw error;
+      if ((error as Error).name === 'AbortError') {
+        throw new BadGatewayException('Comfy Cloud 输出下载超时');
+      }
+      throw new BadGatewayException('无法下载 Comfy Cloud 输出文件');
+    } finally {
+      clearTimeout(timer);
     }
   }
 

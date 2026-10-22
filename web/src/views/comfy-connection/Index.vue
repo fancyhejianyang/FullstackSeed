@@ -104,7 +104,9 @@ function statusText(status: ComfyConnection["lastTestStatus"]) {
             ? "无认证"
             : row.authType === "basic"
               ? "账号密码"
-              : "Token"
+              : row.authType === "apiKey"
+                ? "API Key"
+                : "Token"
         }}
       </template>
       <template #column-lastTestStatus="{ row }">

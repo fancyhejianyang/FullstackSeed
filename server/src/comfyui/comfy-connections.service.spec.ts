@@ -73,13 +73,13 @@ describe('ComfyConnectionsService', () => {
     expect(connections.update).not.toHaveBeenCalledWith({}, expect.anything());
   });
 
-  it('允许创建使用 HTTPS 与 Bearer 认证的云端服务', async () => {
+  it('允许使用官方 Comfy Cloud API Key 并规范化 /api 地址', async () => {
     const { service, connections } = createService();
 
     await service.create({
       name: '云端 ComfyUI',
-      baseUrl: 'https://cloud.comfy.org/',
-      authType: 'bearer',
+      baseUrl: 'https://cloud.comfy.org/api/',
+      authType: 'apiKey',
       secret: 'cloud-token',
     });
 
@@ -87,10 +87,22 @@ describe('ComfyConnectionsService', () => {
       expect.objectContaining({
         name: '云端 ComfyUI',
         baseUrl: 'https://cloud.comfy.org',
-        authType: 'bearer',
+        authType: 'apiKey',
         secret: 'cloud-token',
       }),
     );
+  });
+
+  it('官方 Comfy Cloud 未配置 API Key 时给出明确错误', async () => {
+    const { service } = createService();
+
+    await expect(
+      service.create({
+        name: '云端 ComfyUI',
+        baseUrl: 'https://cloud.comfy.org',
+        authType: 'none',
+      }),
+    ).rejects.toThrow('Comfy Cloud 需要使用 API Key（X-API-Key）认证');
   });
 
   it('公网服务使用明文 HTTP 时给出明确错误', async () => {

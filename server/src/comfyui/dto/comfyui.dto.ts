@@ -58,9 +58,9 @@ export class CreateComfyConnectionDto {
   @MaxLength(500)
   baseUrl: string;
 
-  @IsIn(['none', 'basic', 'bearer'])
+  @IsIn(['none', 'basic', 'bearer', 'apiKey'])
   @IsOptional()
-  authType?: 'none' | 'basic' | 'bearer' = 'none';
+  authType?: 'none' | 'basic' | 'bearer' | 'apiKey' = 'none';
 
   @IsString()
   @MaxLength(120)

@@ -61,7 +61,9 @@ export class ComfyConnectionsService {
 
   async create(dto: CreateComfyConnectionDto) {
     const baseUrl = this.normalizeBaseUrl(dto.baseUrl);
-    this.validateAuth(dto.authType ?? 'none', dto.username, dto.secret);
+    const authType = dto.authType ?? 'none';
+    this.validateAuth(authType, dto.username, dto.secret);
+    this.validateServiceAuth(baseUrl, authType, dto.secret);
     if (await this.connections.exists({ where: { name: dto.name.trim() } })) {
       throw new ConflictException('配置名称已存在');
     }
@@ -72,7 +74,7 @@ export class ComfyConnectionsService {
         ...dto,
         name: dto.name.trim(),
         baseUrl,
-        authType: dto.authType ?? 'none',
+        authType,
         username: dto.username?.trim() || null,
         secret: dto.secret?.trim() || null,
         description: dto.description?.trim() || null,
@@ -96,18 +98,21 @@ export class ComfyConnectionsService {
       throw new ConflictException('配置名称已存在');
     }
     const authType = dto.authType ?? current.authType;
+    const baseUrl =
+      dto.baseUrl !== undefined
+        ? this.normalizeBaseUrl(dto.baseUrl)
+        : current.baseUrl;
     const username = dto.username ?? current.username ?? undefined;
     const secret = dto.clearSecret
       ? undefined
       : dto.secret?.trim() || current.secret || undefined;
     this.validateAuth(authType, username, secret);
+    this.validateServiceAuth(baseUrl, authType, secret);
     if (dto.isDefault) await this.clearDefaultConnection();
     Object.assign(current, {
       ...dto,
       ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
-      ...(dto.baseUrl !== undefined
-        ? { baseUrl: this.normalizeBaseUrl(dto.baseUrl) }
-        : {}),
+      ...(dto.baseUrl !== undefined ? { baseUrl } : {}),
       ...(dto.username !== undefined
         ? { username: dto.username.trim() || null }
         : {}),
@@ -207,6 +212,15 @@ export class ComfyConnectionsService {
     if (url.protocol === 'http:' && !this.isLocalOrPrivateHost(url.hostname)) {
       throw new BadRequestException('公网 ComfyUI 服务地址必须使用 HTTPS');
     }
+    if (this.isOfficialComfyCloud(url.hostname)) {
+      const path = url.pathname.replace(/\/+$/, '');
+      if (path && path !== '/api') {
+        throw new BadRequestException(
+          'Comfy Cloud 服务地址请填写 https://cloud.comfy.org',
+        );
+      }
+      url.pathname = '';
+    }
     url.pathname = url.pathname.replace(/\/+$/, '');
     url.search = '';
     url.hash = '';
@@ -232,6 +246,10 @@ export class ComfyConnectionsService {
     );
   }
 
+  private isOfficialComfyCloud(hostname: string) {
+    return hostname.toLowerCase() === 'cloud.comfy.org';
+  }
+
   private validateAuth(
     authType: string,
     username?: string | null,
@@ -242,6 +260,22 @@ export class ComfyConnectionsService {
     }
     if (authType === 'bearer' && !secret?.trim()) {
       throw new BadRequestException('Bearer 认证需要访问令牌');
+    }
+    if (authType === 'apiKey' && !secret?.trim()) {
+      throw new BadRequestException('API Key 认证需要密钥');
+    }
+  }
+
+  private validateServiceAuth(
+    baseUrl: string,
+    authType: string,
+    secret?: string | null,
+  ) {
+    if (!this.isOfficialComfyCloud(new URL(baseUrl).hostname)) return;
+    if (!['apiKey', 'bearer'].includes(authType) || !secret?.trim()) {
+      throw new BadRequestException(
+        'Comfy Cloud 需要使用 API Key（X-API-Key）认证',
+      );
     }
   }
 
@@ -256,7 +290,9 @@ export class ComfyConnectionsService {
       os: system.os ?? null,
       pythonVersion: system.python_version ?? null,
       embeddedPython: system.embedded_python ?? null,
+      comfyUiVersion: system.comfyui_version ?? null,
       deviceCount: devices.length,
+      cloudUserStatus: stats.cloudUserStatus ?? null,
     };
   }
 }

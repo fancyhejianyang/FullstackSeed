@@ -300,12 +300,21 @@ export class ComfyTasksService implements OnModuleInit, OnModuleDestroy {
         | undefined;
       if (record) {
         const status = (record.status ?? {}) as Record<string, unknown>;
+        const reportedStatus =
+          typeof status.status_str === 'string' ? status.status_str : '';
         const hasOutputs =
           !!record.outputs &&
           typeof record.outputs === 'object' &&
           Object.keys(record.outputs).length > 0;
-        if (status.status_str === 'error') {
-          await this.failTask(task.id, 'failed', 'ComfyUI 执行工作流失败');
+        if (reportedStatus === 'error') {
+          const cloudError = record.errorMessage;
+          await this.failTask(
+            task.id,
+            'failed',
+            typeof cloudError === 'string' && cloudError.trim()
+              ? `ComfyUI 执行工作流失败：${cloudError.trim()}`
+              : 'ComfyUI 执行工作流失败',
+          );
           return;
         }
         if (
@@ -315,6 +324,23 @@ export class ComfyTasksService implements OnModuleInit, OnModuleDestroy {
         ) {
           await this.archive(task, connection, record);
           return;
+        }
+        if (['running', 'queued'].includes(reportedStatus)) {
+          const nextStatus: ComfyTaskStatus =
+            reportedStatus === 'running' ? 'running' : 'queued';
+          if (task.status !== nextStatus) {
+            task.status = nextStatus;
+            task.stage =
+              nextStatus === 'running'
+                ? 'ComfyUI 正在执行'
+                : '等待 ComfyUI 执行';
+            await this.tasks.update(task.id, {
+              status: task.status,
+              stage: task.stage,
+            });
+          }
+          await this.delay(2000);
+          continue;
         }
       }
       const queue = await this.client.queue(connection);

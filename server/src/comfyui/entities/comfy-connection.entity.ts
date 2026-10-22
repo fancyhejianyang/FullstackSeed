@@ -1,7 +1,7 @@
 import { Column, Entity, Index } from 'typeorm';
 import { BaseEntity } from '../../common/entities/base.entity';
 
-export type ComfyAuthType = 'none' | 'basic' | 'bearer';
+export type ComfyAuthType = 'none' | 'basic' | 'bearer' | 'apiKey';
 export type ComfyConnectionStatus = 'untested' | 'available' | 'unavailable';
 
 @Entity('comfy_connections')

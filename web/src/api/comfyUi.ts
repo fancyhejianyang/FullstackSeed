@@ -23,7 +23,7 @@ export interface ComfyConnection {
   id: number;
   name: string;
   baseUrl: string;
-  authType: "none" | "basic" | "bearer";
+  authType: "none" | "basic" | "bearer" | "apiKey";
   username: string | null;
   secretConfigured?: boolean;
   requestTimeoutMs: number;

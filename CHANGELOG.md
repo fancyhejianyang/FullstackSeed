@@ -1,5 +1,33 @@
 # CHANGELOG
 
+### 2026-10-22 接入官方 Comfy Cloud API 协议
+
+- 修复 `https://cloud.comfy.org` 连接测试返回 HTML 后被误报为“无法解析的数据”：官方云端地址现自动映射 `/api`，使用 `X-API-Key` 校验当前用户；新增独立 `apiKey` 认证类型，已有官方云端 Bearer 配置在请求层继续兼容并按 API Key 发送。
+- 打通云端创作完整链路：工作流提交仍使用兼容的 `/api/prompt`，任务轮询改用云端 Job 状态与详情接口并映射为系统现有队列状态；输入素材上传自动走云端 `/api/upload/image`。
+- 兼容云端产物下载的 302 签名地址，并确保第二跳不携带 `X-API-Key`，避免凭据泄漏；401、402、403、429 分别返回密钥失效、额度不足、权限不足和套餐限制等明确原因，非 JSON 响应会提示检查 API 根地址及响应类型。
+- 服务配置表单补充“Comfy Cloud API Key”认证选项和官方地址说明；官方地址统一规范化为 `https://cloud.comfy.org`，仍保留本机及其他远程自托管 ComfyUI 的原认证与接口行为。
+- 验证：后端相关文件定向 ESLint、TypeORM 实体列检查及 ComfyUI 客户端/连接/任务 3 suites / 10 tests 通过；前端 `vue-tsc` 与服务配置页面组件复用检查通过。按缺陷修复范围未执行 build、启动服务或使用用户密钥连接真实云端环境。
+
+新增文件（1）：
+
+- `server/src/comfyui/comfy-client.service.spec.ts`
+
+修改文件（11）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/comfyui/comfy-client.service.ts`
+- `server/src/comfyui/comfy-connections.service.spec.ts`
+- `server/src/comfyui/comfy-connections.service.ts`
+- `server/src/comfyui/comfy-tasks.service.ts`
+- `server/src/comfyui/dto/comfyui.dto.ts`
+- `server/src/comfyui/entities/comfy-connection.entity.ts`
+- `web/src/api/comfyUi.ts`
+- `web/src/views/comfy-connection/Edit.vue`
+- `web/src/views/comfy-connection/Index.vue`
+
+删除文件（0）。
+
 ### 2026-10-22 允许配置云端 ComfyUI 服务
 
 - 修复 ComfyUI 服务地址被无条件套用同机白名单的问题：本机、Docker 宿主机及私有网地址继续支持 HTTP/HTTPS，公网或云端服务现可使用 HTTPS 地址保存，`https://cloud.comfy.org` 不再被误拦截。

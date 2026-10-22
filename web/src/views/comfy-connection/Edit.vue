@@ -43,8 +43,8 @@ const fields = computed<FormField[]>(() => [
     prop: "baseUrl",
     label: "服务地址",
     type: "input",
-    placeholder: "http://127.0.0.1:8188 或 https://cloud.example.com",
-    hint: "本机可使用 localhost、回环、host.docker.internal 或私有网地址；云端服务请使用 HTTPS，并按服务要求配置认证。",
+    placeholder: "http://127.0.0.1:8188 或 https://cloud.comfy.org",
+    hint: "本机可使用 localhost、回环、host.docker.internal 或私有网地址；官方 Comfy Cloud 填写 https://cloud.comfy.org 并选择 API Key。",
   },
   {
     prop: "authType",
@@ -54,6 +54,7 @@ const fields = computed<FormField[]>(() => [
       { label: "无认证", value: "none" },
       { label: "账号密码（Basic）", value: "basic" },
       { label: "访问令牌（Bearer）", value: "bearer" },
+      { label: "Comfy Cloud API Key", value: "apiKey" },
     ],
   },
   ...(form.authType === "basic"
@@ -70,7 +71,12 @@ const fields = computed<FormField[]>(() => [
     ? [
         {
           prop: "secret",
-          label: form.authType === "basic" ? "密码" : "访问令牌",
+          label:
+            form.authType === "basic"
+              ? "密码"
+              : form.authType === "apiKey"
+                ? "API Key"
+                : "访问令牌",
           type: "input" as const,
           inputMode: "password" as const,
           placeholder: secretConfigured.value
