@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
 import { useRouter } from "vue-router";
 import PageContainer from "@/components/PageContainer.vue";
@@ -14,11 +14,14 @@ import {
   composeComfyWorkflowPrompt,
   createComfyTask,
   getComfyMaterialOptions,
+  getComfyTask,
   getComfyWorkflowPromptTask,
   getComfyWorkflowOptions,
   type ComfyMaterial,
+  type ComfyTask,
   type ComfyWorkflowOption,
 } from "@/api/comfyUi";
+import { buildComfyTaskParameterDraft } from "./recreateTask";
 
 const router = useRouter();
 const taskTableRef = ref<{ refresh: () => Promise<void> }>();
@@ -33,6 +36,7 @@ const creativeIdea = ref("");
 const composing = ref(false);
 const composeStage = ref("");
 const composeNotes = ref("");
+const recreateSourceTaskId = ref<number | null>(null);
 let composeRunToken = 0;
 const promptRoles = ["mainPrompt", "positivePrompt", "negativePrompt"];
 const materialOptions = computed(() =>
@@ -51,27 +55,60 @@ const promptBindings = computed(() =>
     promptRoles.includes(binding.semanticRole || "normal"),
   ),
 );
-function initializeForm() {
+function initializeForm(parameterSnapshot?: Record<string, unknown>) {
   composeRunToken += 1;
   composing.value = false;
   composeStage.value = "";
   Object.keys(parameters).forEach((key) => delete parameters[key]);
-  for (const binding of current.value?.inputBindings || []) {
-    parameters[binding.key] = promptRoles.includes(
-      binding.semanticRole || "normal",
-    )
-      ? ""
-      : (binding.defaultValue ?? (binding.type === "boolean" ? false : ""));
-  }
+  const draft = buildComfyTaskParameterDraft(
+    current.value?.inputBindings || [],
+    parameterSnapshot,
+    new Set(materials.value.map((item) => item.id)),
+  );
+  Object.assign(parameters, draft.parameters);
   creativeIdea.value = "";
   composeNotes.value = "";
+  return draft;
 }
 
-watch(workflowId, initializeForm);
+watch(workflowId, () => initializeForm());
 
 function openCreate() {
+  recreateSourceTaskId.value = null;
   createVisible.value = true;
   initializeForm();
+}
+
+async function openRecreate(row: ComfyTask) {
+  recreateSourceTaskId.value = row.id;
+  createVisible.value = true;
+  initializeForm();
+  loading.value = true;
+  try {
+    const task = await getComfyTask(row.id);
+    const workflow = workflows.value.find(
+      (item) => item.id === task.workflowId,
+    );
+    if (!workflow) {
+      ElMessage.warning("原任务工作流已停用或不可用，无法再次创作");
+      createVisible.value = false;
+      recreateSourceTaskId.value = null;
+      return;
+    }
+    workflowId.value = String(workflow.id);
+    await nextTick();
+    const draft = initializeForm(task.parameterSnapshot || {});
+    if (draft.missingMaterialLabels.length) {
+      ElMessage.warning(
+        `${draft.missingMaterialLabels.join("、")}引用的原素材已不可用，请重新选择`,
+      );
+    }
+  } catch {
+    createVisible.value = false;
+    recreateSourceTaskId.value = null;
+  } finally {
+    loading.value = false;
+  }
 }
 
 async function composePrompt() {
@@ -182,8 +219,13 @@ async function submit() {
       parameters: { ...parameters },
       requestId: crypto.randomUUID(),
     });
-    ElMessage.success(`任务 #${task.id} 已提交`);
+    ElMessage.success(
+      recreateSourceTaskId.value
+        ? `已基于任务 #${recreateSourceTaskId.value} 创建新任务 #${task.id}`
+        : `任务 #${task.id} 已提交`,
+    );
     createVisible.value = false;
+    recreateSourceTaskId.value = null;
     await taskTableRef.value?.refresh();
   } finally {
     submitting.value = false;
@@ -194,7 +236,7 @@ onMounted(load);
 
 <template>
   <PageContainer title="创作任务">
-    <TaskTable ref="taskTableRef">
+    <TaskTable ref="taskTableRef" @recreate="openRecreate">
       <template #toolbar>
         <Button perm="ComfyTask.create" icon="Plus" @click="openCreate">
           新建创作任务
@@ -204,12 +246,23 @@ onMounted(load);
 
     <Dialog
       v-model="createVisible"
-      title="新建创作任务"
+      :title="
+        recreateSourceTaskId
+          ? `基于任务 #${recreateSourceTaskId} 再次创作`
+          : '新建创作任务'
+      "
       width="1040px"
       body-max-height="76vh"
       :show-footer="false"
     >
       <div v-loading="loading" class="create-page">
+        <el-alert
+          v-if="recreateSourceTaskId"
+          type="info"
+          :closable="false"
+          show-icon
+          title="已带入原任务参数；请调整提示词或其它参数后再提交。提交会创建新任务，原任务和结果保持不变。"
+        />
         <section v-if="!workflows.length" class="setup-empty">
           <div class="setup-empty__header">
             <div class="setup-empty__mark" aria-hidden="true">

@@ -16,6 +16,9 @@ import {
 } from "@/api/comfyUi";
 import View from "./View.vue";
 
+const emit = defineEmits<{
+  recreate: [task: ComfyTask];
+}>();
 const tableRef = ref<{
   refresh: () => Promise<void>;
   runBatchDelete: () => Promise<void>;
@@ -172,6 +175,15 @@ defineExpose({ refresh });
       formatDateTime(row.createdAt)
     }}</template>
     <template #actions="{ row }">
+      <Button
+        v-if="row.status === 'succeeded'"
+        perm="ComfyTask.create"
+        link
+        icon="RefreshRight"
+        :confirm="false"
+        @click="emit('recreate', row)"
+        >再次创作</Button
+      >
       <Button
         v-if="row.status === 'failed'"
         perm="ComfyTask.create"
