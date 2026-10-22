@@ -148,7 +148,7 @@ describe('ComfyClientService', () => {
     );
   });
 
-  it('云端拒绝请求时保留接口和供应商错误摘要', async () => {
+  it('云端 403 明确提示必须开通付费订阅并保留错误摘要', async () => {
     jest.spyOn(global, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ message: 'plan does not allow prompt' }), {
         status: 403,
@@ -167,7 +167,7 @@ describe('ComfyClientService', () => {
         'client-id',
       ),
     ).rejects.toThrow(
-      'Comfy Cloud 拒绝访问（POST /api/prompt，HTTP 403）：plan does not allow prompt',
+      'Comfy Cloud API 调用仅对付费订阅账户开放（POST /api/prompt，HTTP 403）：plan does not allow prompt；免费账户只能在网页编辑器中运行，单独充值额度不能解锁 API，必须开通付费订阅',
     );
   });
 

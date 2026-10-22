@@ -1,5 +1,23 @@
 # CHANGELOG
 
+### 2026-10-22 明确 Comfy Cloud 订阅限制失败原因
+
+- 官方 Comfy Cloud 返回 HTTP 403 时，失败原因明确说明 API 调用仅对付费订阅账户开放；免费账户只能在网页编辑器中运行，单独充值额度不能解锁 API，必须开通付费订阅。错误仍保留请求方法、接口路径和脱敏后的供应商摘要，便于进一步排查。
+- ComfyUI 创作任务列表将“当前阶段”扩展为“阶段 / 失败原因”：失败行直接显示红色错误摘要，保持单行省略并可悬浮查看全文，不再只显示笼统的“执行失败”。历史 Comfy Cloud HTTP 403 记录会在前端补充同一订阅说明，无需修改旧数据。
+- 验证：后端定向 ESLint、TypeORM 实体列检查及 ComfyUI 客户端 1 suite / 5 tests 通过；前端 `vue-tsc` 和任务列表组件复用检查通过。按缺陷修复范围未执行 build 或启动服务。
+
+新增文件（0）。
+
+修改文件（5）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/comfyui/comfy-client.service.spec.ts`
+- `server/src/comfyui/comfy-client.service.ts`
+- `web/src/views/comfy-task/TaskTable.vue`
+
+删除文件（0）。
+
 ### 2026-10-22 原任务重试与提示词提炼状态修正
 
 - ComfyUI 失败任务的“重新执行”改为原任务原地重置：任务 ID 和已保存运行快照保持不变，状态原子切回等待执行，清空旧 `promptId`、错误、进度、执行时间及旧输出关联，不再新增任务行。

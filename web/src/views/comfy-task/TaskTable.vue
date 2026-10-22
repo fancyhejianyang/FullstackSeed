@@ -31,7 +31,12 @@ const columns: TableColumn[] = [
   { prop: "workflowName", label: "工作流", minWidth: 180 },
   { prop: "outputType", label: "类型", width: 80, slot: true },
   { prop: "status", label: "状态", width: 110, slot: true },
-  { prop: "stage", label: "当前阶段", minWidth: 180 },
+  {
+    prop: "stage",
+    label: "阶段 / 失败原因",
+    minWidth: 420,
+    slot: true,
+  },
   { prop: "promptId", label: "ComfyUI Prompt ID", minWidth: 220 },
   { prop: "createdAt", label: "提交时间", width: 180, slot: true },
 ];
@@ -71,6 +76,21 @@ const statusMap: Record<
 
 function statusInfo(status: ComfyTaskStatus) {
   return statusMap[status] || statusMap.unknown;
+}
+const COMFY_CLOUD_SUBSCRIPTION_HINT =
+  "Comfy Cloud API 调用仅对付费订阅账户开放；免费账户只能在网页编辑器中运行，单独充值额度不能解锁 API，必须开通付费订阅。";
+
+function taskStageText(row: ComfyTask) {
+  if (row.status !== "failed") return row.stage;
+  const errorMessage = row.errorMessage?.trim();
+  if (!errorMessage) return row.stage || "执行失败";
+  const isHistoricalCloud403 =
+    /(?:Comfy Cloud|cloud\.comfy\.org)/i.test(errorMessage) &&
+    /(?:HTTP\s*403|AccessDenied|无权访问)/i.test(errorMessage) &&
+    !errorMessage.includes("付费订阅");
+  return isHistoricalCloud403
+    ? `${COMFY_CLOUD_SUBSCRIPTION_HINT} 原始错误：${errorMessage}`
+    : errorMessage;
 }
 function openView(row: ComfyTask) {
   viewingId.value = row.id;
@@ -140,6 +160,14 @@ defineExpose({ refresh });
         statusInfo(row.status).text
       }}</el-tag>
     </template>
+    <template #column-stage="{ row }">
+      <span
+        class="task-stage"
+        :class="{ 'task-stage--failed': row.status === 'failed' }"
+        :title="taskStageText(row)"
+        >{{ taskStageText(row) }}</span
+      >
+    </template>
     <template #column-createdAt="{ row }">{{
       formatDateTime(row.createdAt)
     }}</template>
@@ -168,3 +196,17 @@ defineExpose({ refresh });
   </Table>
   <View v-model:visible="viewVisible" :task-id="viewingId" />
 </template>
+
+<style scoped>
+.task-stage {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-stage--failed {
+  color: var(--el-color-danger);
+  font-weight: 500;
+}
+</style>

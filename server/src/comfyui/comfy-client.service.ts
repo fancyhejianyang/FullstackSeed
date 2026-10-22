@@ -299,7 +299,7 @@ export class ComfyClientService {
         return `Comfy Cloud 额度不足（${endpoint}，HTTP 402）${detail}`;
       }
       if (response.status === 403) {
-        return `Comfy Cloud 拒绝访问（${endpoint}，HTTP 403）${detail}；请检查 API Key 权限、套餐和接口路径`;
+        return `Comfy Cloud API 调用仅对付费订阅账户开放（${endpoint}，HTTP 403）${detail}；免费账户只能在网页编辑器中运行，单独充值额度不能解锁 API，必须开通付费订阅`;
       }
       if (response.status === 429) {
         return `Comfy Cloud 请求受限或账号未开通所需套餐（${endpoint}，HTTP 429）${detail}`;
