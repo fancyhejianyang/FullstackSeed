@@ -174,13 +174,13 @@ header {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 .widget-body::-webkit-scrollbar {
-  width: 6px;
-}
-.widget-body::-webkit-scrollbar-thumb {
-  background: #d4dbe6;
-  border-radius: 3px;
+  width: 0;
+  height: 0;
+  display: none;
 }
 .widget-card:not(.widget-card--compact) .widget-body > :deep(.dashboard-chart) {
   flex: 1 1 auto;

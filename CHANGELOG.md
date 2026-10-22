@@ -1,5 +1,8 @@
 # CHANGELOG
 
+### 2026-10-22 首页板块隐藏滚动条
+- `web/src/views/home/components/DashboardWidgetCard.vue`：卡片内容区滚动条隐藏（`scrollbar-width: none` + `::-webkit-scrollbar` 隐藏 + `-ms-overflow-style`），保留滚轮与触屏滚动能力，列表超出 8 条仍可在卡片内滚动。
+
 ### 2026-10-22 移除指标第三行提示并加高图表
 - `web/src/views/home/components/DashboardWidgetCard.vue`：彻底移除指标第三行提示（`metric.hint`，如「失败 5 · 取消 0」「启用 50」「有回执 1 / 19 次」）的渲染与相关样式，配置页预览同步生效；每个指标固定为「标签 + 数值」两行。
 - 卡片高度 380px → 420px，图表最小高度 160px → 200px，图表展示空间明显增加。
