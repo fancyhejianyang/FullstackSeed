@@ -1,5 +1,27 @@
 # CHANGELOG
 
+### 2026-10-22 修复提示词规则为空仍判定提炼成功
+
+- 收紧提示词总结协议：正向提示词格式、风格摘要和提示词规则均为 AI 提炼成功的必要结果，任一为空时任务明确失败并保留旧结果，不再出现“已提炼但规则为空”。
+- 强化提炼指令：目标模型规则可以确认时保留专用语法；仅有自定义模型文件名时不得编造官方能力，必须根据工作流原提示词归纳语言、分隔方式、标签顺序和结构，并明确标记为示例推断。
+- 历史不完整记录在列表中重新显示为“待 AI 提炼”；创作转换不会使用缺少提示词规则的半成品，而是安全回退到工作流原始正向、负向提示词。界面“模型规则”统一更名为“提示词规则”，内部 `modelRules` 字段保持兼容，无数据库迁移。
+- 验证：后端相关文件 ESLint、TypeORM 实体列检查及提示词协议/服务 2 suites / 10 tests 通过；前端 `vue-tsc` 与提示词总结组件复用检查通过。按缺陷修复范围未执行 build 或启动服务。
+
+新增文件（0）。
+
+修改文件（8）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/visual-prompt-templates/visual-prompt-templates.service.spec.ts`
+- `server/src/visual-prompt-templates/visual-prompt-templates.service.ts`
+- `server/src/visual-prompt-templates/visual-prompt.protocol.spec.ts`
+- `server/src/visual-prompt-templates/visual-prompt.protocol.ts`
+- `web/src/views/visual-prompt-template/Index.vue`
+- `web/src/views/visual-prompt-template/View.vue`
+
+删除文件（0）。
+
 ### 2026-10-22 统一双列表单提示文案场景的顶部对齐
 
 - 修复公共 `Form` 双列栅格的纵向拉伸问题：同排字段统一从顶部对齐，带提示文案的字段只向下扩展当前栅格行，不再把无提示字段的输入控件垂直居中或下移。

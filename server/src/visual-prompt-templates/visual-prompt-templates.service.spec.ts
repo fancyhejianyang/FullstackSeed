@@ -128,6 +128,98 @@ describe('VisualPromptTemplatesService 异步任务', () => {
     expect(completion?.result?.negativePrompt).toBe('blur, watermark');
   });
 
+  it('历史提炼结果缺少提示词规则时回退工作流原始提示词', async () => {
+    const callChat = jest
+      .fn<
+        Promise<{ isSuccess: boolean; answer: string }>,
+        [{ question: string }]
+      >()
+      .mockResolvedValue({
+        isSuccess: true,
+        answer: JSON.stringify({
+          positivePrompt: 'new prompt',
+          negativePrompt: 'new negative prompt',
+          notes: '',
+        }),
+      });
+    const providers = {
+      withExecutionSignal: jest.fn(
+        (_signal: AbortSignal, callback: () => Promise<unknown>) => callback(),
+      ),
+      callChat,
+    };
+    const service = new VisualPromptTemplatesService(
+      {} as never,
+      {} as never,
+      {
+        findUsableVisualPromptConfig: jest.fn().mockResolvedValue({
+          providerId: 2,
+          model: 'qwen-plus',
+          temperature: 0.5,
+        }),
+      } as never,
+      providers as never,
+    );
+    const incomplete = {
+      ...template,
+      extractedAt: new Date(),
+      modelRules: null,
+    } as VisualPromptTemplate;
+
+    await (
+      service as unknown as {
+        composeRow: (
+          row: VisualPromptTemplate,
+          dto: { idea: string },
+          signal: AbortSignal,
+        ) => Promise<unknown>;
+      }
+    ).composeRow(
+      incomplete,
+      { idea: '雨夜街道' },
+      new AbortController().signal,
+    );
+
+    const question = JSON.parse(
+      callChat.mock.calls[0]?.[0].question ?? '',
+    ) as Record<string, unknown>;
+    expect(question).toMatchObject({
+      positiveTemplate: 'cinematic portrait',
+      negativeTemplate: 'blur',
+      styleSummary: null,
+      modelRules: null,
+      variables: null,
+    });
+  });
+
+  it('历史提炼结果缺少提示词规则时列表标记为待提炼', async () => {
+    const repository = {
+      findAndCount: jest.fn().mockResolvedValue([
+        [
+          {
+            ...template,
+            extractedAt: new Date('2026-10-22T00:00:00.000Z'),
+            modelRules: null,
+            updatedAt: new Date('2026-10-22T00:00:00.000Z'),
+          },
+        ],
+        1,
+      ]),
+    };
+    const service = new VisualPromptTemplatesService(
+      repository as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    const result = await service.findAll({ page: 1, pageSize: 10 }, 7);
+
+    expect(result.list[0]?.extractedAt).toBeNull();
+    expect(result.list[0]).not.toHaveProperty('modelRules');
+    expect(result.list[0]).not.toHaveProperty('positiveTemplate');
+  });
+
   it('选择工作流时从原始 JSON 建立总结记录并回写绑定', async () => {
     const templateRepository = {
       create: jest.fn((value: Record<string, unknown>) => value),

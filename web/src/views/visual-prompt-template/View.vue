@@ -40,8 +40,8 @@ watch(visible, async (open) => {
           <p>{{ detail.styleSummary || "尚未提炼" }}</p>
         </section>
         <section>
-          <h4>模型规则</h4>
-          <pre>{{ detail.modelRules || "尚未配置" }}</pre>
+          <h4>提示词规则</h4>
+          <pre>{{ detail.modelRules || "尚未提炼" }}</pre>
         </section>
         <section>
           <h4>正向提示词格式</h4>

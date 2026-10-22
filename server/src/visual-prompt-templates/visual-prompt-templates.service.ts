@@ -95,7 +95,9 @@ export class VisualPromptTemplatesService
         name: true,
         mediaType: true,
         targetModel: true,
+        positiveTemplate: true,
         styleSummary: true,
+        modelRules: true,
         aiConfigName: true,
         version: true,
         isEnabled: true,
@@ -113,7 +115,21 @@ export class VisualPromptTemplatesService
       skip: ((query.page ?? 1) - 1) * (query.pageSize ?? 10),
       take: query.pageSize ?? 10,
     });
-    return { list, total };
+    return {
+      list: list.map((row) => ({
+        id: row.id,
+        name: row.name,
+        mediaType: row.mediaType,
+        targetModel: row.targetModel,
+        styleSummary: row.styleSummary,
+        aiConfigName: row.aiConfigName,
+        version: row.version,
+        isEnabled: row.isEnabled,
+        extractedAt: this.hasCompleteExtraction(row) ? row.extractedAt : null,
+        updatedAt: row.updatedAt,
+      })),
+      total,
+    };
   }
 
   async findOne(id: number, userId: number) {
@@ -391,7 +407,7 @@ export class VisualPromptTemplatesService
     const parsed = parseExtractedVisualPrompt(response);
     if (!parsed)
       throw new BadGatewayException(
-        'AI 未返回有效的提示词总结结构，请调整配置后重试',
+        'AI 未返回完整的提示词总结，正向格式、风格摘要和提示词规则均不能为空；请重新提炼',
       );
     const extractedAt = new Date();
     const update = await this.repository.update(
@@ -441,6 +457,7 @@ export class VisualPromptTemplatesService
     const config = await this.configs.findUsableVisualPromptConfig(
       row.aiConfigId,
     );
+    const hasCompleteExtraction = this.hasCompleteExtraction(row);
     const response = await this.call(
       config,
       VISUAL_PROMPT_COMPOSE_SYSTEM,
@@ -448,11 +465,15 @@ export class VisualPromptTemplatesService
         mediaType: row.mediaType,
         targetModel,
         idea: dto.idea,
-        positiveTemplate: row.positiveTemplate || row.sourcePrompt,
-        negativeTemplate: row.negativeTemplate || row.sourceNegativePrompt,
-        styleSummary: row.styleSummary,
-        modelRules: row.modelRules,
-        variables: row.variables,
+        positiveTemplate: hasCompleteExtraction
+          ? row.positiveTemplate
+          : row.sourcePrompt,
+        negativeTemplate: hasCompleteExtraction
+          ? row.negativeTemplate
+          : row.sourceNegativePrompt,
+        styleSummary: hasCompleteExtraction ? row.styleSummary : null,
+        modelRules: hasCompleteExtraction ? row.modelRules : null,
+        variables: hasCompleteExtraction ? row.variables : null,
       },
       signal,
     );
@@ -725,6 +746,15 @@ export class VisualPromptTemplatesService
         dto.variables?.map((item) => item.trim()).filter(Boolean) || null,
       isEnabled: dto.isEnabled ?? true,
     };
+  }
+
+  private hasCompleteExtraction(row: VisualPromptTemplate) {
+    return Boolean(
+      row.extractedAt &&
+      row.positiveTemplate?.trim() &&
+      row.styleSummary?.trim() &&
+      row.modelRules?.trim(),
+    );
   }
 
   private async workflowSource(workflowId: number, manager: EntityManager) {

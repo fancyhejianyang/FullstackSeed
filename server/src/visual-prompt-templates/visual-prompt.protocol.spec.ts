@@ -36,6 +36,19 @@ describe('视觉提示词协议', () => {
     });
   });
 
+  it.each([
+    [
+      '风格摘要',
+      '{"positiveTemplate":"{{subject}}, cinematic light","styleSummary":"","modelRules":"使用英文逗号分隔"}',
+    ],
+    [
+      '提示词规则',
+      '{"positiveTemplate":"{{subject}}, cinematic light","styleSummary":"电影感","modelRules":""}',
+    ],
+  ])('缺少%s时拒绝把提炼任务标记为成功', (_field, answer) => {
+    expect(parseExtractedVisualPrompt(answer)).toBeNull();
+  });
+
   it('缺少正向结果时拒绝采用', () => {
     expect(parseComposedVisualPrompt('{"negativePrompt":"blur"}')).toBeNull();
   });

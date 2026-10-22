@@ -74,7 +74,7 @@ function openView(row: VisualPromptTemplateSummary) {
 async function extract(row: VisualPromptTemplateSummary) {
   try {
     await ElMessageBox.confirm(
-      "AI 将根据工作流中的正向、负向原始提示词和目标模型，重新生成提示词格式、风格摘要与模型规则。是否继续？",
+      "AI 将根据工作流中的正向、负向原始提示词和目标模型，重新生成提示词格式、风格摘要与提示词规则。是否继续？",
       "AI 提炼提示词总结",
       { type: "warning" },
     );
@@ -96,7 +96,7 @@ async function extract(row: VisualPromptTemplateSummary) {
       );
       return;
     }
-    ElMessage.success("模型规则与正负提示词格式已更新");
+    ElMessage.success("提示词规则与正负提示词格式已更新");
     await tableRef.value?.refresh();
   } finally {
     extractingId.value = null;
