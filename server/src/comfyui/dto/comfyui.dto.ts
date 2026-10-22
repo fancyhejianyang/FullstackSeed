@@ -142,6 +142,7 @@ export class ComfyInputBindingDto {
     'boolean',
     'select',
     'image',
+    'video',
     'seed',
     'outputPrefix',
   ])

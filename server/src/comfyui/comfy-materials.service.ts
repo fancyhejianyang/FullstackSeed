@@ -153,8 +153,8 @@ export class ComfyMaterialsService {
 
   async options(userId: number) {
     return this.materials.find({
-      where: { userId, sourceType: 'input', mediaType: 'image' },
-      select: ['id', 'name', 'fileUrl', 'mimeType'],
+      where: { userId, mediaType: In(['image', 'video']) },
+      select: ['id', 'name', 'sourceType', 'mediaType', 'fileUrl', 'mimeType'],
       order: { id: 'DESC' },
       take: 200,
     });

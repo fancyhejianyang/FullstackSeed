@@ -193,6 +193,7 @@ const bindingTypes = [
   { value: "boolean", text: "开关" },
   { value: "select", text: "下拉选项" },
   { value: "image", text: "图片素材" },
+  { value: "video", text: "视频素材" },
   { value: "seed", text: "随机种子" },
   { value: "outputPrefix", text: "系统输出前缀" },
 ];

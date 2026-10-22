@@ -37,7 +37,14 @@ export interface WorkflowDetectionResult {
 
 type TextInput = { nodeId: string; inputKey: string; value: string };
 type PromptInputs = Partial<
-  Record<"mainPrompt" | "positivePrompt" | "negativePrompt", TextInput>
+  Record<
+    | "mainPrompt"
+    | "positivePrompt"
+    | "negativePrompt"
+    | "videoMotion"
+    | "cameraMotion",
+    TextInput
+  >
 >;
 
 const MODEL_INPUT_PRIORITIES: Record<string, number> = {
@@ -219,15 +226,21 @@ function traceTextInput(
 function detectPromptInputs(graph: Record<string, ComfyApiNode>) {
   const found: PromptInputs = {};
 
-  // First honor workflows that explicitly distinguish positive/negative inputs.
+  // First honor workflows that explicitly distinguish prompt purposes.
   for (const [nodeId, node] of nodeEntries(graph)) {
     for (const [inputKey, value] of Object.entries(node.inputs || {})) {
       const normalized = inputKey.toLowerCase();
-      const role = normalized.includes("negative")
-        ? "negativePrompt"
-        : normalized.includes("positive")
-          ? "positivePrompt"
-          : null;
+      const role = /camera.*(?:motion|movement)|(?:motion|movement).*camera/.test(
+        normalized,
+      )
+        ? "cameraMotion"
+        : /pose|motion|movement/.test(normalized)
+          ? "videoMotion"
+          : normalized.includes("negative")
+            ? "negativePrompt"
+            : normalized.includes("positive")
+              ? "positivePrompt"
+              : null;
       if (!role || found[role]) continue;
       if (typeof value === "string") {
         if (value.trim()) found[role] = { nodeId, inputKey, value };
@@ -382,6 +395,34 @@ function detectBindings(
       hint: "描述需要避免的画面问题与元素",
     });
   }
+  if (prompts.videoMotion) {
+    const prompt = prompts.videoMotion;
+    add({
+      key: "videoMotion",
+      label: "动作描述",
+      type: "textarea",
+      nodeId: prompt.nodeId,
+      inputKey: prompt.inputKey,
+      semanticRole: "videoMotion",
+      required: true,
+      defaultValue: "",
+      hint: "描述主体动作、姿态变化、运动节奏及背景是否保持稳定",
+    });
+  }
+  if (prompts.cameraMotion) {
+    const prompt = prompts.cameraMotion;
+    add({
+      key: "cameraMotion",
+      label: "镜头运动",
+      type: "textarea",
+      nodeId: prompt.nodeId,
+      inputKey: prompt.inputKey,
+      semanticRole: "cameraMotion",
+      required: false,
+      defaultValue: "",
+      hint: "描述推、拉、摇、移、跟拍等镜头运动",
+    });
+  }
 
   const numericRules = [
     {
@@ -432,7 +473,7 @@ function detectBindings(
     },
   ];
   const samplerNodes = nodeEntries(graph).filter(([, node]) =>
-    /sampler|采样/i.test(nodeText(node)),
+    /sampler|scheduler|采样|调度/i.test(nodeText(node)),
   );
   for (const rule of numericRules) {
     const target = samplerNodes.find(
@@ -441,6 +482,52 @@ function detectBindings(
     if (!target) continue;
     add({
       ...rule,
+      nodeId: target[0],
+      inputKey: rule.inputKey,
+      semanticRole: "normal",
+      required: false,
+      defaultValue: target[1].inputs[rule.inputKey] as number,
+    });
+  }
+
+  const mediaConditioningRules = [
+    {
+      inputKey: "reference_image_strength",
+      key: "referenceImageStrength",
+      label: "参考图片强度",
+      min: 0,
+      max: 10,
+    },
+    {
+      inputKey: "pose_strength",
+      key: "poseStrength",
+      label: "动作参考强度",
+      min: 0,
+      max: 10,
+    },
+    {
+      inputKey: "pose_start_percent",
+      key: "poseStartPercent",
+      label: "动作开始比例",
+      min: 0,
+      max: 1,
+    },
+    {
+      inputKey: "pose_end_percent",
+      key: "poseEndPercent",
+      label: "动作结束比例",
+      min: 0,
+      max: 1,
+    },
+  ];
+  for (const rule of mediaConditioningRules) {
+    const target = nodeEntries(graph).find(
+      ([, node]) => typeof node.inputs?.[rule.inputKey] === "number",
+    );
+    if (!target) continue;
+    add({
+      ...rule,
+      type: "number",
       nodeId: target[0],
       inputKey: rule.inputKey,
       semanticRole: "normal",
@@ -485,23 +572,52 @@ function detectBindings(
     });
   }
 
-  const imageLoader = nodeEntries(graph).find(
-    ([, node]) =>
-      /load.*image|image.*loader|加载.*图像/i.test(nodeText(node)) &&
-      typeof node.inputs?.image === "string",
-  );
-  if (imageLoader) {
-    add({
+  const mediaRules = [
+    {
+      type: "image" as const,
       key: "inputImage",
-      label: "输入图片",
-      type: "image",
-      nodeId: imageLoader[0],
-      inputKey: "image",
-      semanticRole: "normal",
-      required: true,
-      defaultValue: "",
-      hint: "运行时从素材库管理选择图片",
-    });
+      matcher: /load.*image|image.*loader|加载.*图像/i,
+      inputKeys: ["image", "file", "filename"],
+    },
+    {
+      type: "video" as const,
+      key: "inputVideo",
+      matcher: /load.*video|video.*loader|加载.*视频/i,
+      inputKeys: ["video", "file", "filename"],
+    },
+  ];
+  for (const rule of mediaRules) {
+    for (const [nodeId, node] of nodeEntries(graph)) {
+      const text = nodeText(node);
+      if (!rule.matcher.test(text)) continue;
+      const inputKey = rule.inputKeys.find(
+        (key) => typeof node.inputs?.[key] === "string",
+      );
+      if (!inputKey) continue;
+      const isReference = /reference|参考/i.test(text);
+      const isPose = /pose|motion|姿态|动作/i.test(text);
+      const label =
+        rule.type === "image"
+          ? isReference
+            ? "参考图片"
+            : "输入图片"
+          : isPose
+            ? "动作参考视频"
+            : isReference
+              ? "参考视频"
+              : "输入视频";
+      add({
+        key: rule.key,
+        label,
+        type: rule.type,
+        nodeId,
+        inputKey,
+        semanticRole: "normal",
+        required: true,
+        defaultValue: "",
+        hint: `运行时从素材库选择${label}`,
+      });
+    }
   }
 
   const outputPrefix = nodeEntries(graph).find(

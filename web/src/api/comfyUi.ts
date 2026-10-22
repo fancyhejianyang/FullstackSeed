@@ -10,6 +10,7 @@ export type ComfyBindingType =
   | "boolean"
   | "select"
   | "image"
+  | "video"
   | "seed"
   | "outputPrefix";
 export type ComfyBindingSemanticRole =
@@ -151,6 +152,11 @@ export interface ComfyMaterial {
   createdAt: string;
   updatedAt: string;
 }
+
+export type ComfyMaterialOption = Pick<
+  ComfyMaterial,
+  "id" | "name" | "sourceType" | "mediaType" | "fileUrl" | "mimeType"
+>;
 
 export interface ComfyMaterialListItem {
   id: string;
@@ -313,7 +319,9 @@ export function getComfyMaterials(params: Record<string, unknown>) {
   );
 }
 export function getComfyMaterialOptions() {
-  return request.get<unknown, ComfyMaterial[]>("/comfyui/materials/options");
+  return request.get<unknown, ComfyMaterialOption[]>(
+    "/comfyui/materials/options",
+  );
 }
 export function uploadComfyMaterial(file: File, name?: string) {
   const data = new FormData();

@@ -35,6 +35,16 @@ describe('ComfyUI 工作流提示词清理', () => {
       inputKey: 'steps',
       defaultValue: 8,
     },
+    {
+      key: 'videoMotion',
+      label: '动作描述',
+      type: 'textarea',
+      nodeId: '75',
+      inputKey: 'text',
+      semanticRole: 'videoMotion',
+      required: true,
+      defaultValue: '工作流内置的动作描述',
+    },
   ];
 
   it('清空语义提示词默认值，但保留普通参数默认值', () => {
@@ -42,6 +52,7 @@ describe('ComfyUI 工作流提示词清理', () => {
     expect(sanitized[0].defaultValue).toBe('');
     expect(sanitized[1].defaultValue).toBe('');
     expect(sanitized[2].defaultValue).toBe(8);
+    expect(sanitized[3].defaultValue).toBe('');
   });
 
   it('清空直接输入和连线上游文本节点中的示例提示词', () => {
@@ -62,6 +73,10 @@ describe('ComfyUI 工作流提示词清理', () => {
         class_type: 'CLIPTextEncode',
         inputs: { text: 'low quality', clip: ['62', 0] },
       },
+      '75': {
+        class_type: 'CLIPTextEncode',
+        inputs: { text: 'energetic street dance', clip: ['62', 0] },
+      },
       '80': {
         class_type: 'CustomPromptNode',
         inputs: {
@@ -80,6 +95,7 @@ describe('ComfyUI 工作流提示词清理', () => {
 
     expect(result.graph['67'].inputs.text).toBe('');
     expect(result.graph['71'].inputs.text).toBe('');
+    expect(result.graph['75'].inputs.text).toBe('');
     expect(result.graph['80'].inputs.positive_prompt).toBe('');
     expect(result.graph['80'].inputs.negative_prompt).toBe('');
     expect(result.graph['80'].inputs.model_name).toBe('model.safetensors');

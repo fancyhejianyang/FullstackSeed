@@ -49,13 +49,20 @@ const bindings = [
     nodeId: "3",
     inputKey: "image",
   },
+  {
+    key: "poseVideo",
+    label: "动作参考视频",
+    type: "video",
+    nodeId: "4",
+    inputKey: "file",
+  },
 ];
 
 test("new task keeps prompt empty and applies current workflow defaults", () => {
   assert.deepEqual(
     buildComfyTaskParameterDraft(bindings, undefined, new Set([8])),
     {
-      parameters: { prompt: "", steps: 20, reference: "" },
+      parameters: { prompt: "", steps: 20, reference: "", poseVideo: "" },
       missingMaterialLabels: [],
     },
   );
@@ -66,20 +73,27 @@ test("recreation copies editable values, drops stale keys and preserves snapshot
     prompt: "一只橘猫",
     steps: 32,
     reference: "8",
+    poseVideo: "9",
     removedBinding: "不会带入",
   };
 
-  const result = buildComfyTaskParameterDraft(bindings, snapshot, new Set([8]));
+  const result = buildComfyTaskParameterDraft(
+    bindings,
+    snapshot,
+    new Set([8, 9]),
+  );
 
   assert.deepEqual(result.parameters, {
     prompt: "一只橘猫",
     steps: 32,
     reference: "8",
+    poseVideo: "9",
   });
   assert.deepEqual(snapshot, {
     prompt: "一只橘猫",
     steps: 32,
     reference: "8",
+    poseVideo: "9",
     removedBinding: "不会带入",
   });
 });
@@ -87,12 +101,13 @@ test("recreation copies editable values, drops stale keys and preserves snapshot
 test("recreation clears deleted material references and reports their labels", () => {
   const result = buildComfyTaskParameterDraft(
     bindings,
-    { prompt: "测试", steps: 20, reference: "99" },
+    { prompt: "测试", steps: 20, reference: "99", poseVideo: "98" },
     new Set([8]),
   );
 
   assert.equal(result.parameters.reference, "");
-  assert.deepEqual(result.missingMaterialLabels, ["参考图"]);
+  assert.equal(result.parameters.poseVideo, "");
+  assert.deepEqual(result.missingMaterialLabels, ["参考图", "动作参考视频"]);
 });
 
 test("completed task action loads detail into create flow instead of retrying it", () => {

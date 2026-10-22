@@ -26,7 +26,7 @@ export function buildComfyTaskParameterDraft(
         : (binding.defaultValue ?? (binding.type === "boolean" ? false : ""));
 
     if (
-      binding.type === "image" &&
+      (binding.type === "image" || binding.type === "video") &&
       value !== "" &&
       value != null &&
       !availableMaterialIds.has(Number(value))

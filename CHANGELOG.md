@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-10-22 补齐 Wan Animate 图片、视频与动作参数识别
+
+- ComfyUI API 工作流自动识别新增视频素材绑定；`LoadImage.image` 与 `LoadVideo.file/video/filename` 可同时形成参考图片和动作参考视频字段，不再把视频文件名留在工作流中直接执行。
+- `positive_pose`、`motion` 与 `camera motion` 连线分别识别为动作描述或镜头运动；运行快照会清空这些示例文本并在执行时注入用户本次填写内容，避免动作提示词被清空后无法回填。
+- 调度器节点现可识别采样步数和降噪，并补充参考图片强度、动作参考强度及动作起止比例；内部缓存、循环和连线参数仍不开放。
+- 创作任务按图片/视频类型分别筛选当前用户已有素材，同时允许复用历史生成结果；后端在创建任务和执行注入阶段双重校验素材类型，再通过 ComfyUI 输入文件接口写入对应加载节点。
+- 新增文件：无。修改文件（18）：`server/src/comfyui/comfy-client.service.ts`、`server/src/comfyui/comfy-materials.service.ts`、`server/src/comfyui/comfy-materials.service.spec.ts`、`server/src/comfyui/comfy-tasks.service.ts`、`server/src/comfyui/comfy-tasks.service.spec.ts`、`server/src/comfyui/comfy-workflow-sanitizer.ts`、`server/src/comfyui/comfy-workflow-sanitizer.spec.ts`、`server/src/comfyui/dto/comfyui.dto.ts`、`server/src/comfyui/entities/comfy-workflow.entity.ts`、`web/src/api/comfyUi.ts`、`web/src/views/comfy-create/Index.vue`、`web/src/views/comfy-create/recreateTask.ts`、`web/src/views/comfy-create/recreateTask.test.mjs`、`web/src/views/comfy-workflow/Edit.vue`、`web/src/views/comfy-workflow/workflowDetection.ts`、`web/src/views/comfy-workflow/workflowDetection.test.mjs`、`.design-spec.md`、本文件。删除文件：无。
+- 验证：使用用户提供的 `video_wan_animate2.json` 实际解析确认 14 个开放/系统参数及节点映射；前端 9 项相关测试、前端类型检查与生产构建、后端 3 个测试套件 12 项测试、TypeORM 实体列检查、后端生产构建、本次 ComfyUI 文件定向 ESLint、页面组件复用扫描及 `git diff --check` 通过。后端全量 lint 仍被非本次模块的既有规则错误阻断；未启动或重启服务，未向 ComfyUI 提交真实生成任务。
+
 ### 2026-10-22 优化视频素材预览并移除页面上传入口
 
 - 视频产物不再显示纯文字块，列表通过静音、非自动播放的 metadata 请求尝试提取首帧，并叠加统一播放图标；无法读取首帧时仍保留视频专属视觉，点击后才打开视频。

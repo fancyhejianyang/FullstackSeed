@@ -479,22 +479,28 @@ export class ComfyTasksService implements OnModuleInit, OnModuleDestroy {
         throw new BadRequestException(`请填写 ${binding.label}`);
       }
       if (value === undefined || value === null || value === '') continue;
-      if (binding.type === 'image') {
+      if (binding.type === 'image' || binding.type === 'video') {
         const materialId = Number(value);
         const material = await this.materials.findOwned(
           materialId,
           task.userId,
         );
-        if (!material.fileId || material.mediaType !== 'image') {
-          throw new BadRequestException(`${binding.label} 不是有效图片素材`);
+        if (!material.fileId || material.mediaType !== binding.type) {
+          throw new BadRequestException(
+            `${binding.label} 不是有效${binding.type === 'image' ? '图片' : '视频'}素材`,
+          );
         }
         const source = await this.files.read(material.fileId, task.userId);
-        const uploaded = await this.client.uploadImage(connection, {
+        const uploaded = await this.client.uploadInputFile(connection, {
           buffer: source.buffer,
           fileName: source.fileName,
           mimeType: source.mimeType,
         });
-        if (!uploaded.name) throw new BadRequestException('参考图片上传失败');
+        if (!uploaded.name) {
+          throw new BadRequestException(
+            `${binding.type === 'image' ? '参考图片' : '参考视频'}上传到执行服务失败`,
+          );
+        }
         value = uploaded.subfolder
           ? `${uploaded.subfolder}/${uploaded.name}`
           : uploaded.name;
@@ -557,12 +563,17 @@ export class ComfyTasksService implements OnModuleInit, OnModuleDestroy {
         throw new BadRequestException(`请填写 ${binding.label}`);
       }
       if (
-        binding.type === 'image' &&
+        (binding.type === 'image' || binding.type === 'video') &&
         value !== undefined &&
         value !== null &&
         value !== ''
       ) {
-        await this.materials.findOwned(Number(value), userId);
+        const material = await this.materials.findOwned(Number(value), userId);
+        if (!material.fileId || material.mediaType !== binding.type) {
+          throw new BadRequestException(
+            `${binding.label} 不是有效${binding.type === 'image' ? '图片' : '视频'}素材`,
+          );
+        }
       }
     }
   }

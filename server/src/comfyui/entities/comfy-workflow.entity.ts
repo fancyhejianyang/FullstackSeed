@@ -9,6 +9,7 @@ export type ComfyBindingType =
   | 'boolean'
   | 'select'
   | 'image'
+  | 'video'
   | 'seed'
   | 'outputPrefix';
 export type ComfyBindingSemanticRole =

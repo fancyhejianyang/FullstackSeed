@@ -1,4 +1,4 @@
-import { Repository } from 'typeorm';
+import type { FindManyOptions, FindOptionsWhere, Repository } from 'typeorm';
 import { ComfyFilesService } from './comfy-files.service';
 import {
   buildComfyMaterialListItem,
@@ -153,5 +153,30 @@ describe('ComfyMaterialsService', () => {
       '部分 ComfyUI 素材不存在',
     );
     expect(repository.save).not.toHaveBeenCalled();
+  });
+
+  it('创作素材选项同时返回图片和视频，不限制为手工上传来源', async () => {
+    const find = jest.fn().mockResolvedValue([]);
+    const service = new ComfyMaterialsService(
+      { find } as unknown as Repository<ComfyMaterial>,
+      {} as ComfyFilesService,
+    );
+
+    await service.options(7);
+
+    expect(find).toHaveBeenCalledTimes(1);
+    const [options] = find.mock.calls[0] as unknown as [
+      FindManyOptions<ComfyMaterial>,
+    ];
+    const where = options.where as FindOptionsWhere<ComfyMaterial>;
+    expect(where.userId).toBe(7);
+    expect(where.sourceType).toBeUndefined();
+    expect(where.mediaType).toMatchObject({
+      _type: 'in',
+      _value: ['image', 'video'],
+    });
+    expect(options.select).toEqual(
+      expect.arrayContaining(['sourceType', 'mediaType']),
+    );
   });
 });

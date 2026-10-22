@@ -160,4 +160,81 @@ describe('ComfyUI 任务运行快照', () => {
       '只有失败的任务可以重新执行',
     );
   });
+
+  it('按绑定类型把参考图片和动作视频上传并注入对应加载节点', async () => {
+    const materials = {
+      findOwned: jest
+        .fn()
+        .mockResolvedValueOnce({ fileId: 101, mediaType: 'image' })
+        .mockResolvedValueOnce({ fileId: 102, mediaType: 'video' }),
+    };
+    const files = {
+      read: jest
+        .fn()
+        .mockResolvedValueOnce({
+          buffer: Buffer.from('image'),
+          fileName: 'reference.png',
+          mimeType: 'image/png',
+        })
+        .mockResolvedValueOnce({
+          buffer: Buffer.from('video'),
+          fileName: 'pose.mp4',
+          mimeType: 'video/mp4',
+        }),
+    };
+    const client = {
+      uploadInputFile: jest
+        .fn()
+        .mockResolvedValueOnce({ name: 'reference.png', subfolder: 'input' })
+        .mockResolvedValueOnce({ name: 'pose.mp4', subfolder: 'input' }),
+    };
+    const service = new ComfyTasksService(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      materials as never,
+      files as never,
+      client as never,
+    );
+    const graph = {
+      '189': { class_type: 'LoadImage', inputs: { image: 'old.png' } },
+      '240': { class_type: 'LoadVideo', inputs: { file: 'old.mp4' } },
+    };
+
+    await (
+      service as unknown as {
+        applyBindings: (...args: unknown[]) => Promise<void>;
+      }
+    ).applyBindings(
+      graph,
+      [
+        {
+          key: 'referenceImage',
+          label: '参考图片',
+          type: 'image',
+          nodeId: '189',
+          inputKey: 'image',
+          required: true,
+        },
+        {
+          key: 'poseVideo',
+          label: '动作参考视频',
+          type: 'video',
+          nodeId: '240',
+          inputKey: 'file',
+          required: true,
+        },
+      ],
+      { referenceImage: 11, poseVideo: 12 },
+      { id: 20, userId: 9 },
+      {},
+    );
+
+    expect(graph['189'].inputs.image).toBe('input/reference.png');
+    expect(graph['240'].inputs.file).toBe('input/pose.mp4');
+    expect(client.uploadInputFile).toHaveBeenCalledTimes(2);
+  });
 });

@@ -21,6 +21,11 @@ const PROMPT_ROLES = new Set([
   'positivePrompt',
   'negativePrompt',
 ]);
+const CREATIVE_TEXT_ROLES = new Set([
+  ...PROMPT_ROLES,
+  'videoMotion',
+  'cameraMotion',
+]);
 
 const PROMPT_VALUE_KEYS = new Set([
   'text',
@@ -259,7 +264,7 @@ function clearLinkedPromptBranch(startId: string, graph: ComfyApiGraph) {
 
 export function withoutPromptBindingDefaults(bindings: ComfyInputBinding[]) {
   return bindings.map((binding) =>
-    PROMPT_ROLES.has(binding.semanticRole ?? 'normal')
+    CREATIVE_TEXT_ROLES.has(binding.semanticRole ?? 'normal')
       ? { ...binding, defaultValue: '' }
       : { ...binding },
   );
@@ -296,7 +301,7 @@ export function sanitizeComfyWorkflow(
   );
 
   for (const binding of sanitizedBindings) {
-    if (!PROMPT_ROLES.has(binding.semanticRole ?? 'normal')) {
+    if (!CREATIVE_TEXT_ROLES.has(binding.semanticRole ?? 'normal')) {
       continue;
     }
     const node = graph[binding.nodeId];

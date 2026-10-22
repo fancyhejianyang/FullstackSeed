@@ -17,7 +17,7 @@ import {
   getComfyTask,
   getComfyWorkflowPromptTask,
   getComfyWorkflowOptions,
-  type ComfyMaterial,
+  type ComfyMaterialOption,
   type ComfyTask,
   type ComfyWorkflowOption,
 } from "@/api/comfyUi";
@@ -29,7 +29,7 @@ const createVisible = ref(false);
 const loading = ref(false);
 const submitting = ref(false);
 const workflows = ref<ComfyWorkflowOption[]>([]);
-const materials = ref<ComfyMaterial[]>([]);
+const materials = ref<ComfyMaterialOption[]>([]);
 const workflowId = ref<string | null>("");
 const parameters = reactive<Record<string, unknown>>({});
 const creativeIdea = ref("");
@@ -39,12 +39,14 @@ const composeNotes = ref("");
 const recreateSourceTaskId = ref<number | null>(null);
 let composeRunToken = 0;
 const promptRoles = ["mainPrompt", "positivePrompt", "negativePrompt"];
-const materialOptions = computed(() =>
-  materials.value.map((item) => ({
-    value: String(item.id),
-    text: item.name,
-  })),
-);
+const materialOptions = computed(() => ({
+  image: materials.value
+    .filter((item) => item.mediaType === "image")
+    .map((item) => ({ value: String(item.id), text: item.name })),
+  video: materials.value
+    .filter((item) => item.mediaType === "video")
+    .map((item) => ({ value: String(item.id), text: item.name })),
+}));
 const current = computed(
   () =>
     workflows.value.find((item) => item.id === Number(workflowId.value)) ||
@@ -511,13 +513,15 @@ onMounted(load);
                   @update:model-value="parameters[binding.key] = $event"
                 />
                 <Select
-                  v-else-if="binding.type === 'image'"
+                  v-else-if="
+                    binding.type === 'image' || binding.type === 'video'
+                  "
                   :model-value="String(parameters[binding.key] ?? '')"
-                  :options="materialOptions"
+                  :options="materialOptions[binding.type]"
                   :placeholder="
-                    materials.length
+                    materialOptions[binding.type].length
                       ? `请选择${binding.label}`
-                      : '请先到素材库管理上传图片'
+                      : `暂无可用${binding.type === 'image' ? '图片' : '视频'}素材`
                   "
                   @update:model-value="parameters[binding.key] = $event"
                 />

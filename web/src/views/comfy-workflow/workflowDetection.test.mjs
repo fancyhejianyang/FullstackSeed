@@ -153,6 +153,104 @@ test("识别视频输出和图生视频输入，但不把原文件名当素材�
   assert.equal(image?.defaultValue, "");
 });
 
+test("识别 Wan Animate 的动作提示词、参考图片和动作参考视频", () => {
+  const result = detectComfyWorkflow({
+    189: {
+      inputs: { image: "reference.png" },
+      class_type: "LoadImage",
+      _meta: { title: "Load Image (Reference Image)" },
+    },
+    240: {
+      inputs: { file: "pose.mp4" },
+      class_type: "LoadVideo",
+      _meta: { title: "Load Video (Pose Video)" },
+    },
+    581: {
+      inputs: { text: "low quality" },
+      class_type: "CLIPTextEncode",
+      _meta: { title: "Negative Prompt" },
+    },
+    582: {
+      inputs: { text: "Character description" },
+      class_type: "CLIPTextEncode",
+      _meta: { title: "Positive Prompt" },
+    },
+    585: {
+      inputs: { text: "Energetic street dance" },
+      class_type: "CLIPTextEncode",
+      _meta: { title: "Pose Prompt" },
+    },
+    587: {
+      inputs: {
+        reference_image_strength: 1,
+        pose_strength: 1,
+        pose_start_percent: 0,
+        pose_end_percent: 1,
+        positive: ["582", 0],
+        negative: ["581", 0],
+        positive_pose: ["585", 0],
+        reference_image: ["189", 0],
+        pose_video: ["240", 0],
+      },
+      class_type: "WanAnimate2ToVideo",
+      _meta: { title: "WanAnimate2ToVideo" },
+    },
+    597: {
+      inputs: { noise_seed: 42, cfg: 1, positive: ["587", 0] },
+      class_type: "SamplerCustom",
+      _meta: { title: "自定义采样器" },
+    },
+    591: {
+      inputs: { steps: 6, denoise: 1 },
+      class_type: "BasicScheduler",
+      _meta: { title: "基本调度器" },
+    },
+    246: {
+      inputs: { filename_prefix: "video/ComfyUI", video: ["587", 0] },
+      class_type: "SaveVideo",
+      _meta: { title: "保存视频" },
+    },
+  });
+
+  const byRole = Object.fromEntries(
+    result.bindings.map((binding) => [binding.semanticRole, binding]),
+  );
+  const image = result.bindings.find((binding) => binding.type === "image");
+  const video = result.bindings.find((binding) => binding.type === "video");
+  assert.deepEqual(
+    [byRole.videoMotion?.nodeId, byRole.videoMotion?.inputKey],
+    ["585", "text"],
+  );
+  assert.equal(byRole.videoMotion?.label, "动作描述");
+  assert.deepEqual([image?.nodeId, image?.inputKey], ["189", "image"]);
+  assert.equal(image?.label, "参考图片");
+  assert.deepEqual([video?.nodeId, video?.inputKey], ["240", "file"]);
+  assert.equal(video?.label, "动作参考视频");
+  assert.equal(video?.required, true);
+  assert.equal(video?.defaultValue, "");
+  const byKey = Object.fromEntries(
+    result.bindings.map((binding) => [binding.key, binding]),
+  );
+  assert.deepEqual(
+    [
+      "steps",
+      "denoise",
+      "referenceImageStrength",
+      "poseStrength",
+      "poseStartPercent",
+      "poseEndPercent",
+    ].map((key) => [key, byKey[key]?.defaultValue]),
+    [
+      ["steps", 6],
+      ["denoise", 1],
+      ["referenceImageStrength", 1],
+      ["poseStrength", 1],
+      ["poseStartPercent", 0],
+      ["poseEndPercent", 1],
+    ],
+  );
+});
+
 test("直接提示词可以映射，且 CLIP/VAE 依赖不会被误判为主模型", () => {
   const result = detectComfyWorkflow({
     1: {

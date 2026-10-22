@@ -105,7 +105,7 @@ export class ComfyClientService {
     );
   }
 
-  async uploadImage(
+  async uploadInputFile(
     connection: ComfyConnection,
     file: { buffer: Buffer; fileName: string; mimeType: string },
   ) {
