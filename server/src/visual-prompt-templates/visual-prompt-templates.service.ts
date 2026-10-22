@@ -34,6 +34,7 @@ import {
 import { VisualPromptTemplate } from './entities/visual-prompt-template.entity';
 import {
   VisualPromptTask,
+  type VisualPromptRequestedOutput,
   type VisualPromptTaskResult,
   type VisualPromptTaskStatus,
   type VisualPromptTaskType,
@@ -342,7 +343,9 @@ export class VisualPromptTemplatesService
 
   async submitBoundComposition(
     id: number,
-    dto: ComposeVisualPromptDto,
+    dto: ComposeVisualPromptDto & {
+      requestedOutputs?: VisualPromptRequestedOutput[];
+    },
     userId: number,
     workflowId: number,
     requestId?: string,
@@ -359,6 +362,7 @@ export class VisualPromptTemplatesService
         templateVersion: row.version,
         idea: dto.idea.trim(),
         targetModel: dto.targetModel?.trim() || row.targetModel || undefined,
+        requestedOutputs: dto.requestedOutputs,
       },
     });
   }
@@ -426,7 +430,9 @@ export class VisualPromptTemplatesService
 
   private async composeBound(
     id: number,
-    dto: ComposeVisualPromptDto,
+    dto: ComposeVisualPromptDto & {
+      requestedOutputs?: VisualPromptRequestedOutput[];
+    },
     expectedVersion: number,
     signal: AbortSignal,
   ) {
@@ -440,7 +446,9 @@ export class VisualPromptTemplatesService
 
   private async composeRow(
     row: VisualPromptTemplate,
-    dto: ComposeVisualPromptDto,
+    dto: ComposeVisualPromptDto & {
+      requestedOutputs?: VisualPromptRequestedOutput[];
+    },
     signal: AbortSignal,
   ) {
     if (!row.isEnabled) throw new BadRequestException('该提示词总结已停用');
@@ -472,6 +480,7 @@ export class VisualPromptTemplatesService
         styleSummary: hasCompleteExtraction ? row.styleSummary : null,
         modelRules: hasCompleteExtraction ? row.modelRules : null,
         variables: hasCompleteExtraction ? row.variables : null,
+        requestedOutputs: dto.requestedOutputs ?? [],
       },
       signal,
     );
@@ -480,6 +489,16 @@ export class VisualPromptTemplatesService
       throw new BadGatewayException(
         'AI 未返回有效的主提示词结构，请调整配置后重试',
       );
+    const missingOutput = (dto.requestedOutputs ?? []).find(
+      (output) => !parsed[output],
+    );
+    if (missingOutput) {
+      throw new BadGatewayException(
+        missingOutput === 'videoMotion'
+          ? 'AI 未返回有效的动作描述，请补充创作想法后重试'
+          : 'AI 未返回有效的镜头运动描述，请补充创作想法后重试',
+      );
+    }
     return {
       ...parsed,
       templateId: row.id,
@@ -571,7 +590,10 @@ export class VisualPromptTemplatesService
       task.workflowId === input.workflowId &&
       task.snapshot.templateVersion === input.snapshot.templateVersion &&
       (task.snapshot.idea ?? '') === (input.snapshot.idea ?? '') &&
-      (task.snapshot.targetModel ?? '') === (input.snapshot.targetModel ?? '')
+      (task.snapshot.targetModel ?? '') ===
+        (input.snapshot.targetModel ?? '') &&
+      JSON.stringify(task.snapshot.requestedOutputs ?? []) ===
+        JSON.stringify(input.snapshot.requestedOutputs ?? [])
     );
   }
 
@@ -636,6 +658,7 @@ export class VisualPromptTemplatesService
           {
             idea: task.snapshot.idea || '',
             targetModel: task.snapshot.targetModel,
+            requestedOutputs: task.snapshot.requestedOutputs,
           },
           task.snapshot.templateVersion,
           this.activeAbort.signal,

@@ -24,13 +24,19 @@ export class ComfyFilesService {
 
   async store(
     file: UploadedStorageFile,
-    context: { ownerId: number; materialId: number; revision?: number },
+    context: {
+      ownerId: number;
+      materialId: number;
+      revision?: number;
+      storagePolicy?: 'configured' | 'local';
+    },
   ) {
     const target = await this.uploads.reserveManagedFile(file, {
       scope: 'comfyui',
       ownerId: context.ownerId,
       businessId: context.materialId,
       revision: context.revision ?? 1,
+      storagePolicy: context.storagePolicy,
     });
     const managed = await this.files.save(
       this.files.create({

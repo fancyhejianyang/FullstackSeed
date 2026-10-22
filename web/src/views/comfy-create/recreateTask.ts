@@ -1,6 +1,12 @@
 import type { ComfyInputBinding } from "@/api/comfyUi";
 
-const promptRoles = new Set(["mainPrompt", "positivePrompt", "negativePrompt"]);
+const promptRoles = new Set([
+  "mainPrompt",
+  "positivePrompt",
+  "negativePrompt",
+  "videoMotion",
+  "cameraMotion",
+]);
 
 export interface ComfyTaskParameterDraft {
   parameters: Record<string, unknown>;

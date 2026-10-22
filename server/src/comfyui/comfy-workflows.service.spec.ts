@@ -523,6 +523,16 @@ describe('ComfyUI 工作流可用状态', () => {
       isEnabled: true,
       targetModel: 'flux-dev',
       visualPromptTemplateId: 21,
+      inputBindings: [
+        {
+          key: 'motion',
+          semanticRole: 'videoMotion',
+        },
+        {
+          key: 'camera',
+          semanticRole: 'cameraMotion',
+        },
+      ],
     } as ComfyWorkflow);
 
     const result = await service.composePrompt(
@@ -536,6 +546,7 @@ describe('ComfyUI 工作流可用状态', () => {
       {
         idea: '雨夜城市街道',
         targetModel: 'flux-dev',
+        requestedOutputs: ['videoMotion', 'cameraMotion'],
       },
       7,
       1,

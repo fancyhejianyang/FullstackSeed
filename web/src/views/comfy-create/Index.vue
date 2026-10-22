@@ -54,7 +54,13 @@ const composeStage = ref("");
 const composeNotes = ref("");
 const recreateSourceTaskId = ref<number | null>(null);
 let composeRunToken = 0;
-const promptRoles = ["mainPrompt", "positivePrompt", "negativePrompt"];
+const promptRoles = [
+  "mainPrompt",
+  "positivePrompt",
+  "negativePrompt",
+  "videoMotion",
+  "cameraMotion",
+];
 const current = computed(
   () =>
     workflows.value.find((item) => item.id === Number(workflowId.value)) ||
@@ -257,6 +263,12 @@ async function composePrompt() {
       }
       if (binding.semanticRole === "negativePrompt") {
         parameters[binding.key] = result.negativePrompt || "";
+      }
+      if (binding.semanticRole === "videoMotion") {
+        parameters[binding.key] = result.videoMotion || "";
+      }
+      if (binding.semanticRole === "cameraMotion") {
+        parameters[binding.key] = result.cameraMotion || "";
       }
     }
     composeNotes.value = result.notes || "";
@@ -506,7 +518,7 @@ onMounted(load);
                   <p>
                     按
                     {{ current?.targetModel || "通用模型" }}
-                    的规则生成工作流所需提示词，并只回填已绑定的参数；负向提示词仅在工作流支持时生成。
+                    的规则生成工作流所需提示词，并只回填已绑定的参数；视频工作流支持时也会分别生成动作描述与镜头运动。
                   </p>
                 </div>
                 <Button

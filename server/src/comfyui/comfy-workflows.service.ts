@@ -351,11 +351,22 @@ export class ComfyWorkflowsService {
         '该工作流尚未绑定提示词总结，请先在“提示词总结”中选择该工作流并完成 AI 提炼',
       );
     }
+    const requestedOutputs = Array.from(
+      new Set(
+        (workflow.inputBindings || [])
+          .map((binding) => binding.semanticRole)
+          .filter(
+            (role): role is 'videoMotion' | 'cameraMotion' =>
+              role === 'videoMotion' || role === 'cameraMotion',
+          ),
+      ),
+    );
     return this.visualPromptTemplates.submitBoundComposition(
       workflow.visualPromptTemplateId,
       {
         idea: dto.idea.trim(),
         targetModel: workflow.targetModel || undefined,
+        requestedOutputs,
       },
       userId,
       workflow.id,

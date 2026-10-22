@@ -78,6 +78,7 @@ describe('VisualPromptTemplatesService 异步任务', () => {
         templateVersion: 3,
         idea: '雨夜城市街道',
         targetModel: 'flux-dev',
+        requestedOutputs: ['videoMotion', 'cameraMotion'],
       },
     } as VisualPromptTask;
     const update = jest
@@ -89,18 +90,26 @@ describe('VisualPromptTemplatesService 异步任务', () => {
       update,
       findOne: jest.fn().mockResolvedValue(task),
     };
-    const providers = {
-      withExecutionSignal: jest.fn(
-        (_signal: AbortSignal, callback: () => Promise<unknown>) => callback(),
-      ),
-      callChat: jest.fn().mockResolvedValue({
+    const callChat = jest
+      .fn<
+        Promise<{ isSuccess: boolean; answer: string }>,
+        [{ question: string }]
+      >()
+      .mockResolvedValue({
         isSuccess: true,
         answer: JSON.stringify({
           positivePrompt: 'rainy city street, cinematic lighting',
           negativePrompt: 'blur, watermark',
+          videoMotion: '人物转身后向前奔跑，动作连贯',
+          cameraMotion: '镜头从中景平稳推进到近景',
           notes: '已按模型格式转换',
         }),
-      }),
+      });
+    const providers = {
+      withExecutionSignal: jest.fn(
+        (_signal: AbortSignal, callback: () => Promise<unknown>) => callback(),
+      ),
+      callChat,
     };
     const service = new VisualPromptTemplatesService(
       { findOne: jest.fn().mockResolvedValue(template) } as never,
@@ -126,6 +135,14 @@ describe('VisualPromptTemplatesService 异步任务', () => {
       'rainy city street, cinematic lighting',
     );
     expect(completion?.result?.negativePrompt).toBe('blur, watermark');
+    expect(completion?.result?.videoMotion).toBe(
+      '人物转身后向前奔跑，动作连贯',
+    );
+    expect(completion?.result?.cameraMotion).toBe('镜头从中景平稳推进到近景');
+    const question = JSON.parse(
+      callChat.mock.calls[0]?.[0].question ?? '',
+    ) as Record<string, unknown>;
+    expect(question.requestedOutputs).toEqual(['videoMotion', 'cameraMotion']);
   });
 
   it('历史提炼结果缺少提示词规则时回退工作流原始提示词', async () => {
@@ -190,6 +207,52 @@ describe('VisualPromptTemplatesService 异步任务', () => {
       modelRules: null,
       variables: null,
     });
+  });
+
+  it('工作流要求动作描述时不接受模型返回空动作字段', async () => {
+    const service = new VisualPromptTemplatesService(
+      {} as never,
+      {} as never,
+      {
+        findUsableVisualPromptConfig: jest.fn().mockResolvedValue({
+          providerId: 2,
+          model: 'qwen-plus',
+          temperature: 0.5,
+        }),
+      } as never,
+      {
+        withExecutionSignal: jest.fn(
+          (_signal: AbortSignal, callback: () => Promise<unknown>) =>
+            callback(),
+        ),
+        callChat: jest.fn().mockResolvedValue({
+          isSuccess: true,
+          answer: JSON.stringify({
+            positivePrompt: 'character portrait',
+            negativePrompt: '',
+            videoMotion: '',
+            cameraMotion: '',
+            notes: '',
+          }),
+        }),
+      } as never,
+    );
+
+    await expect(
+      (
+        service as unknown as {
+          composeRow: (
+            row: VisualPromptTemplate,
+            dto: { idea: string; requestedOutputs: string[] },
+            signal: AbortSignal,
+          ) => Promise<unknown>;
+        }
+      ).composeRow(
+        template,
+        { idea: '人物转身', requestedOutputs: ['videoMotion'] },
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow('AI 未返回有效的动作描述');
   });
 
   it('历史提炼结果缺少提示词规则时仍保留真实提炼时间', async () => {

@@ -76,7 +76,7 @@ export class ComfyMaterialsController {
     @Body('name') name?: string,
   ) {
     if (!file) throw new BadRequestException('请上传任务参考文件');
-    return this.service.upload(user.userId, file, name);
+    return this.service.uploadTaskInput(user.userId, file, name);
   }
 
   @Patch('group/favorite')

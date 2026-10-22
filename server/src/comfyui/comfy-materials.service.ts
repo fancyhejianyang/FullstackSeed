@@ -161,6 +161,23 @@ export class ComfyMaterialsService {
   }
 
   async upload(userId: number, file: UploadedStorageFile, name?: string) {
+    return this.storeInput(userId, file, name, 'configured');
+  }
+
+  async uploadTaskInput(
+    userId: number,
+    file: UploadedStorageFile,
+    name?: string,
+  ) {
+    return this.storeInput(userId, file, name, 'local');
+  }
+
+  private async storeInput(
+    userId: number,
+    file: UploadedStorageFile,
+    name: string | undefined,
+    storagePolicy: 'configured' | 'local',
+  ) {
     const material = await this.materials.save(
       this.materials.create({
         userId,
@@ -179,6 +196,7 @@ export class ComfyMaterialsService {
       const managed = await this.files.store(file, {
         ownerId: userId,
         materialId: material.id,
+        storagePolicy,
       });
       material.fileId = managed.id;
       material.fileUrl = managed.publicUrl;

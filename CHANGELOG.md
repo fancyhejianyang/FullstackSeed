@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-10-22 AI 动作提示词与本地参考媒体链路
+
+- 修复 ComfyUI 工作流已识别“动作描述 / 镜头运动”，但 AI 转换只回填正负提示词的问题；工作流存在 `videoMotion` 或 `cameraMotion` 绑定时，服务端现在会将所需输出写入异步任务快照并要求模型分别返回。
+- 结构化提示词协议新增 `videoMotion`、`cameraMotion`，仅对当前工作流实际绑定的字段强制非空；普通生图工作流继续只生成主/正向及可选负向提示词，不增加无关要求。
+- 创作表单把动作描述与镜头运动纳入 AI 回填范围；新建任务时清空工作流内置动作示例，再次创作则保留原任务已生成或手工修改的动作内容。
+- 创建任务时上传的参考图片与参考视频强制写入服务端本地受管目录，即使全局已启用 OSS/CDN 也不上传远端；执行时从本地读取并上传到目标 ComfyUI `input` 目录，生成结果仍沿用全局存储配置。
+- 本地任务输入返回同源 `/uploads/...` 地址供预览和受管文件读取，不暴露浏览器本机路径，也不要求本服务与 ComfyUI 共享磁盘；远程 ComfyUI 继续通过其上传接口接收文件。
+- 新增文件（1）：`server/src/uploads/uploads.service.spec.ts`。修改文件（19）：`server/src/comfyui/comfy-files.service.ts`、`server/src/comfyui/comfy-materials.controller.ts`、`server/src/comfyui/comfy-materials.controller.spec.ts`、`server/src/comfyui/comfy-materials.service.ts`、`server/src/comfyui/comfy-materials.service.spec.ts`、`server/src/comfyui/comfy-workflows.service.ts`、`server/src/comfyui/comfy-workflows.service.spec.ts`、`server/src/uploads/uploads.service.ts`、`server/src/visual-prompt-templates/entities/visual-prompt-task.entity.ts`、`server/src/visual-prompt-templates/visual-prompt-templates.service.ts`、`server/src/visual-prompt-templates/visual-prompt-templates.service.spec.ts`、`server/src/visual-prompt-templates/visual-prompt.protocol.ts`、`server/src/visual-prompt-templates/visual-prompt.protocol.spec.ts`、`web/src/api/visualPromptTemplate.ts`、`web/src/views/comfy-create/Index.vue`、`web/src/views/comfy-create/recreateTask.ts`、`web/src/views/comfy-create/recreateTask.test.mjs`、`.design-spec.md`、本文件。删除文件：无。
+- 验证：前端创作参数测试 6/6、`npm.cmd run type-check` 与组件复用扫描通过；后端提示词协议 / 工作流 / 素材 / 本地受管存储定向测试 37/37、定向 ESLint 与 TypeORM 实体列检查通过；前后端 `npm.cmd run build` 均通过（前端仅保留既有 Rollup 大分块提示，首次写自动声明文件遇瞬时占用后重试成功）。
+
 ### 2026-10-22 改为创建任务时本地上传参考媒体
 
 - 创作任务中的图片、视频参数由素材库下拉选择改为本地上传控件：图片展示本地预览，视频支持点击或拖拽选择，并分别限制图片/视频文件类型与大小。

@@ -28,6 +28,7 @@ export interface ManagedUploadContext {
   ownerId: number;
   businessId: number;
   revision: number;
+  storagePolicy?: 'configured' | 'local';
 }
 
 export interface ManagedUploadTarget extends UploadResult {
@@ -52,7 +53,7 @@ export class UploadsService {
 
     const storageConfig = await this.storageConfigService.getConfig();
     if (storageConfig.enabled && storageConfig.provider !== 'local') {
-      return this.saveFileToOss(file, storageConfig, requestOrigin);
+      return this.saveFileToOss(file, storageConfig);
     }
 
     return this.saveFileAsLocal(file, storageConfig, requestOrigin);
@@ -85,7 +86,11 @@ export class UploadsService {
       fileName,
     );
     const provider =
-      config.enabled && config.provider !== 'local' ? config.provider : 'local';
+      context.storagePolicy === 'local'
+        ? 'local'
+        : config.enabled && config.provider !== 'local'
+          ? config.provider
+          : 'local';
     if (provider !== 'local' && provider !== 'aliyun-oss')
       throw new BadRequestException('当前存储类型暂未接入受管文件');
     if (provider === 'aliyun-oss') this.assertAliyunOssConfig(config);
@@ -99,7 +104,9 @@ export class UploadsService {
     const url =
       provider === 'aliyun-oss'
         ? this.buildOssPublicUrl(config.publicBaseUrl, objectKey)
-        : this.buildPublicUrl(`/uploads/${objectKey}`, config, '');
+        : context.storagePolicy === 'local'
+          ? `/uploads/${objectKey}`
+          : this.buildPublicUrl(`/uploads/${objectKey}`, config, '');
     return {
       url,
       fileName,
@@ -147,8 +154,7 @@ export class UploadsService {
     if (target.provider !== 'local' && target.provider !== 'aliyun-oss')
       throw new BadRequestException('不支持清理该存储类型');
     if (
-      target.storageIdentity !==
-      this.storageIdentity(config, target.provider as 'local' | 'aliyun-oss')
+      target.storageIdentity !== this.storageIdentity(config, target.provider)
     )
       throw new BadRequestException('文件所属存储位置与当前配置不一致');
     if (target.provider === 'aliyun-oss') {
@@ -167,7 +173,6 @@ export class UploadsService {
   private async saveFileToOss(
     file: UploadedStorageFile,
     storageConfig: StorageConfig,
-    _requestOrigin: string,
   ): Promise<UploadResult> {
     if (storageConfig.provider !== 'aliyun-oss') {
       throw new BadRequestException('当前存储类型暂未接入上传实现');

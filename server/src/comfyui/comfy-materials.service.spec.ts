@@ -179,4 +179,42 @@ describe('ComfyMaterialsService', () => {
       expect.arrayContaining(['sourceType', 'mediaType']),
     );
   });
+
+  it('任务参考媒体强制使用本地受管存储', async () => {
+    const repository = {
+      create: jest.fn((value: Partial<ComfyMaterial>) => ({
+        ...value,
+        id: 21,
+      })),
+      save: jest.fn((value: ComfyMaterial) => Promise.resolve(value)),
+      softDelete: jest.fn(),
+    };
+    const files = {
+      store: jest.fn().mockResolvedValue({
+        id: 42,
+        publicUrl: '/uploads/comfyui/development/objects/7/21/1/input.mp4',
+      }),
+    };
+    const service = new ComfyMaterialsService(
+      repository as unknown as Repository<ComfyMaterial>,
+      files as unknown as ComfyFilesService,
+    );
+    const file = {
+      buffer: Buffer.from('video'),
+      originalname: 'pose.mp4',
+      mimetype: 'video/mp4',
+      size: 5,
+    };
+
+    const result = await service.uploadTaskInput(7, file, '动作参考视频');
+
+    expect(files.store).toHaveBeenCalledWith(file, {
+      ownerId: 7,
+      materialId: 21,
+      storagePolicy: 'local',
+    });
+    expect(result.fileUrl).toBe(
+      '/uploads/comfyui/development/objects/7/21/1/input.mp4',
+    );
+  });
 });

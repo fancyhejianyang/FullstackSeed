@@ -27,12 +27,28 @@ describe('视觉提示词协议', () => {
   it('解析可直接注入工作流的正负提示词', () => {
     expect(
       parseComposedVisualPrompt(
-        '{"positivePrompt":"a calm lake","negativePrompt":"text, blur","notes":"适配 SDXL"}',
+        '{"positivePrompt":"a calm lake","negativePrompt":"text, blur","videoMotion":"人物缓慢转身","cameraMotion":"镜头平稳推进","notes":"适配视频工作流"}',
       ),
     ).toEqual({
       positivePrompt: 'a calm lake',
       negativePrompt: 'text, blur',
-      notes: '适配 SDXL',
+      videoMotion: '人物缓慢转身',
+      cameraMotion: '镜头平稳推进',
+      notes: '适配视频工作流',
+    });
+  });
+
+  it('历史结果未包含动作字段时按空字符串兼容', () => {
+    expect(
+      parseComposedVisualPrompt(
+        '{"positivePrompt":"a calm lake","negativePrompt":"","notes":""}',
+      ),
+    ).toEqual({
+      positivePrompt: 'a calm lake',
+      negativePrompt: '',
+      videoMotion: '',
+      cameraMotion: '',
+      notes: '',
     });
   });
 

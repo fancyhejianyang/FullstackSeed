@@ -63,6 +63,8 @@ export type VisualPromptTemplateOption = Pick<
 export interface VisualPromptComposeResult {
   positivePrompt: string;
   negativePrompt: string;
+  videoMotion?: string;
+  cameraMotion?: string;
   notes: string;
   templateId: number;
   templateVersion: number;

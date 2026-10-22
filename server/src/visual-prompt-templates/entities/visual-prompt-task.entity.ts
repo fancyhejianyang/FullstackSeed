@@ -8,11 +8,13 @@ export type VisualPromptTaskStatus =
   | 'succeeded'
   | 'failed'
   | 'interrupted';
+export type VisualPromptRequestedOutput = 'videoMotion' | 'cameraMotion';
 
 export interface VisualPromptTaskSnapshot {
   templateVersion: number;
   idea?: string;
   targetModel?: string;
+  requestedOutputs?: VisualPromptRequestedOutput[];
 }
 
 export interface VisualPromptTaskResult {
@@ -21,6 +23,8 @@ export interface VisualPromptTaskResult {
   targetModel?: string;
   positivePrompt?: string;
   negativePrompt?: string;
+  videoMotion?: string;
+  cameraMotion?: string;
   notes?: string;
   extractedAt?: string;
 }

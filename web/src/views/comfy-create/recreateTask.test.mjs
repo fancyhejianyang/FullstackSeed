@@ -56,13 +56,28 @@ const bindings = [
     nodeId: "4",
     inputKey: "file",
   },
+  {
+    key: "motion",
+    label: "动作描述",
+    type: "textarea",
+    nodeId: "5",
+    inputKey: "prompt",
+    semanticRole: "videoMotion",
+    defaultValue: "工作流原始动作描述",
+  },
 ];
 
 test("new task keeps prompt empty and applies current workflow defaults", () => {
   assert.deepEqual(
     buildComfyTaskParameterDraft(bindings, undefined, new Set([8])),
     {
-      parameters: { prompt: "", steps: 20, reference: "", poseVideo: "" },
+      parameters: {
+        prompt: "",
+        steps: 20,
+        reference: "",
+        poseVideo: "",
+        motion: "",
+      },
       missingMaterialLabels: [],
     },
   );
@@ -74,6 +89,7 @@ test("recreation copies editable values, drops stale keys and preserves snapshot
     steps: 32,
     reference: "8",
     poseVideo: "9",
+    motion: "人物转身并挥手",
     removedBinding: "不会带入",
   };
 
@@ -88,12 +104,14 @@ test("recreation copies editable values, drops stale keys and preserves snapshot
     steps: 32,
     reference: "8",
     poseVideo: "9",
+    motion: "人物转身并挥手",
   });
   assert.deepEqual(snapshot, {
     prompt: "一只橘猫",
     steps: 32,
     reference: "8",
     poseVideo: "9",
+    motion: "人物转身并挥手",
     removedBinding: "不会带入",
   });
 });
@@ -125,4 +143,17 @@ test("task media is selected locally and uploaded only when submitting", () => {
   assert.match(indexSource, /await uploadComfyTaskInput\(file, file\.name\)/);
   assert.match(indexSource, /const taskParameters = await prepareTaskParameters/);
   assert.doesNotMatch(indexSource, /materialOptions\[binding\.type\]/);
+});
+
+test("AI composition fills workflow motion and camera bindings", () => {
+  assert.match(indexSource, /"videoMotion"/);
+  assert.match(indexSource, /"cameraMotion"/);
+  assert.match(
+    indexSource,
+    /parameters\[binding\.key\] = result\.videoMotion \|\| ""/,
+  );
+  assert.match(
+    indexSource,
+    /parameters\[binding\.key\] = result\.cameraMotion \|\| ""/,
+  );
 });
