@@ -159,6 +159,7 @@ export class ComfyInputBindingDto {
 
   @IsIn([
     'normal',
+    'mainPrompt',
     'positivePrompt',
     'negativePrompt',
     'videoMotion',

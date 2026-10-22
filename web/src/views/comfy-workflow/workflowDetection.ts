@@ -37,7 +37,7 @@ export interface WorkflowDetectionResult {
 
 type TextInput = { nodeId: string; inputKey: string; value: string };
 type PromptInputs = Partial<
-  Record<"positivePrompt" | "negativePrompt", TextInput>
+  Record<"mainPrompt" | "positivePrompt" | "negativePrompt", TextInput>
 >;
 
 const MODEL_INPUT_PRIORITIES: Record<string, number> = {
@@ -149,14 +149,33 @@ function primitiveTextInput(
 ): TextInput | null {
   const node = graph[nodeId];
   if (!node) return null;
+  if (
+    /system[_\s-]*prompt|system[_\s-]*instruction|系统提示词/i.test(
+      nodeText(node),
+    )
+  ) {
+    return null;
+  }
+  if (typeof node.inputs?.switch === "boolean") {
+    const inputKey = node.inputs.switch ? "on_true" : "on_false";
+    const value = node.inputs[inputKey];
+    if (typeof value === "string" && value.trim()) {
+      return { nodeId, inputKey, value };
+    }
+  }
   const preferredKeys = ["text", "prompt", "text_g", "text_l"];
   for (const inputKey of preferredKeys) {
     const value = node.inputs?.[inputKey];
-    if (typeof value === "string") return { nodeId, inputKey, value };
+    if (typeof value === "string" && value.trim()) {
+      return { nodeId, inputKey, value };
+    }
   }
   if (!/text.*encode|prompt|conditioning/i.test(nodeText(node))) return null;
   const fallback = Object.entries(node.inputs || {}).find(
-    ([, value]) => typeof value === "string",
+    ([inputKey, value]) =>
+      !/system[_\s-]*prompt|system[_\s-]*instruction/i.test(inputKey) &&
+      typeof value === "string" &&
+      value.trim(),
   );
   return fallback
     ? { nodeId, inputKey: fallback[0], value: String(fallback[1]) }
@@ -177,7 +196,19 @@ function traceTextInput(
     if (textInput) return textInput;
     const node = graph[nodeId];
     if (!node) continue;
-    for (const value of Object.values(node.inputs || {})) {
+    const entries =
+      typeof node.inputs?.switch === "boolean"
+        ? [
+            [
+              node.inputs.switch ? "on_true" : "on_false",
+              node.inputs[node.inputs.switch ? "on_true" : "on_false"],
+            ],
+          ]
+        : Object.entries(node.inputs || {}).filter(
+            ([inputKey]) =>
+              !/system[_\s-]*prompt|system[_\s-]*instruction/i.test(inputKey),
+          );
+    for (const [, value] of entries) {
       const linkedId = linkedNodeId(value, graph);
       if (linkedId && !visited.has(linkedId)) queue.push(linkedId);
     }
@@ -187,6 +218,8 @@ function traceTextInput(
 
 function detectPromptInputs(graph: Record<string, ComfyApiNode>) {
   const found: PromptInputs = {};
+
+  // First honor workflows that explicitly distinguish positive/negative inputs.
   for (const [nodeId, node] of nodeEntries(graph)) {
     for (const [inputKey, value] of Object.entries(node.inputs || {})) {
       const normalized = inputKey.toLowerCase();
@@ -197,11 +230,58 @@ function detectPromptInputs(graph: Record<string, ComfyApiNode>) {
           : null;
       if (!role || found[role]) continue;
       if (typeof value === "string") {
-        found[role] = { nodeId, inputKey, value };
+        if (value.trim()) found[role] = { nodeId, inputKey, value };
         continue;
       }
       const linkedId = linkedNodeId(value, graph);
-      if (linkedId) found[role] = traceTextInput(linkedId, graph) || undefined;
+      if (linkedId) {
+        const linkedNode = graph[linkedId];
+        const usesGenericPrompt = linkedNode && "prompt" in linkedNode.inputs;
+        const explicitRoleKey = Object.keys(linkedNode?.inputs || {}).find(
+          (key) =>
+            key
+              .toLowerCase()
+              .includes(role === "negativePrompt" ? "negative" : "positive"),
+        );
+        const explicitRoleValue = explicitRoleKey
+          ? linkedNode.inputs[explicitRoleKey]
+          : undefined;
+        if (
+          usesGenericPrompt &&
+          (role === "positivePrompt" ||
+            (typeof explicitRoleValue === "string" &&
+              !explicitRoleValue.trim()))
+        ) {
+          continue;
+        }
+        found[role] = traceTextInput(linkedId, graph) || undefined;
+      }
+    }
+  }
+
+  // A generic `prompt` is a primary prompt, not necessarily a positive prompt.
+  if (!found.positivePrompt) {
+    for (const [nodeId, node] of nodeEntries(graph)) {
+      if (
+        /system[_\s-]*prompt|system[_\s-]*instruction|系统提示词/i.test(
+          nodeText(node),
+        )
+      ) {
+        continue;
+      }
+      const value = node.inputs?.prompt;
+      if (typeof value === "string" && value.trim()) {
+        found.mainPrompt = { nodeId, inputKey: "prompt", value };
+        break;
+      }
+      const linkedId = linkedNodeId(value, graph);
+      if (linkedId) {
+        const traced = traceTextInput(linkedId, graph);
+        if (traced) {
+          found.mainPrompt = traced;
+          break;
+        }
+      }
     }
   }
 
@@ -214,12 +294,18 @@ function detectPromptInputs(graph: Record<string, ComfyApiNode>) {
       found.negativePrompt = textInput;
     } else if (/positive|正面|正向/i.test(text) && !found.positivePrompt) {
       found.positivePrompt = textInput;
-    } else {
+    } else if (
+      ![found.mainPrompt, found.positivePrompt, found.negativePrompt].some(
+        (prompt) =>
+          prompt?.nodeId === textInput.nodeId &&
+          prompt.inputKey === textInput.inputKey,
+      )
+    ) {
       unassigned.push(textInput);
     }
   }
-  if (!found.positivePrompt && unassigned.length === 1) {
-    found.positivePrompt = unassigned[0];
+  if (!found.mainPrompt && !found.positivePrompt && unassigned.length === 1) {
+    found.mainPrompt = unassigned[0];
   }
   return found;
 }
@@ -252,6 +338,21 @@ function detectBindings(
       key: uniqueBindingKey(binding.key, bindings),
     });
   };
+
+  if (prompts.mainPrompt) {
+    const prompt = prompts.mainPrompt;
+    add({
+      key: "mainPrompt",
+      label: "主提示词",
+      type: "textarea",
+      nodeId: prompt.nodeId,
+      inputKey: prompt.inputKey,
+      semanticRole: "mainPrompt",
+      required: true,
+      defaultValue: "",
+      hint: "描述本次希望生成的主体、场景、构图、光影与风格",
+    });
+  }
 
   if (prompts.positivePrompt) {
     const prompt = prompts.positivePrompt;
@@ -437,7 +538,10 @@ export function detectComfyWorkflow(
     dependencyNotes: detectDependencies(graph),
     outputNodeIds: outputs.outputNodeIds,
     bindings: detectBindings(graph, prompts),
-    sourcePrompt: prompts.positivePrompt?.value.trim() || "",
+    sourcePrompt:
+      prompts.mainPrompt?.value.trim() ||
+      prompts.positivePrompt?.value.trim() ||
+      "",
     sourceNegativePrompt: prompts.negativePrompt?.value.trim() || "",
   };
 }

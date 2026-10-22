@@ -1,6 +1,7 @@
 import {
   extractPromptExamples,
   sanitizeComfyWorkflow,
+  withDetectedMainPromptBinding,
   withoutPromptBindingDefaults,
 } from './comfy-workflow-sanitizer';
 import type { ComfyInputBinding } from './entities/comfy-workflow.entity';
@@ -83,5 +84,83 @@ describe('ComfyUI 工作流提示词清理', () => {
     expect(result.graph['80'].inputs.negative_prompt).toBe('');
     expect(result.graph['80'].inputs.model_name).toBe('model.safetensors');
     expect(result.graph['70'].inputs.steps).toBe(8);
+  });
+
+  it('把通用 prompt 识别为主提示词并保留系统提示词', () => {
+    const userPrompt = 'Greyscale fashion editorial portrait';
+    const systemPrompt = 'You are an image prompt rewriting expert';
+    const graph = {
+      '459:452': {
+        class_type: 'TextEncodeQwenImage21',
+        inputs: {
+          prompt: ['459:472', 0],
+          negative_prompt: '',
+        },
+      },
+      '459:471': {
+        class_type: 'TextGenerate',
+        inputs: {
+          prompt: userPrompt,
+          system_prompt: ['459:475', 0],
+        },
+      },
+      '459:472': {
+        class_type: 'PreviewAny',
+        inputs: { source: ['459:474', 0] },
+      },
+      '459:474': {
+        class_type: 'ComfySwitchNode',
+        inputs: {
+          switch: false,
+          on_false: userPrompt,
+          on_true: ['459:471', 0],
+        },
+      },
+      '459:475': {
+        class_type: 'PrimitiveStringMultiline',
+        inputs: { value: systemPrompt },
+        _meta: { title: 'Text (System Prompt)' },
+      },
+    };
+
+    const detected = withDetectedMainPromptBinding(graph, []);
+    expect(detected).toEqual([
+      expect.objectContaining({
+        nodeId: '459:474',
+        inputKey: 'on_false',
+        semanticRole: 'mainPrompt',
+      }),
+    ]);
+    expect(extractPromptExamples(graph, [])).toEqual({
+      positivePrompt: userPrompt,
+      negativePrompt: '',
+    });
+    const migrated = withDetectedMainPromptBinding(graph, [
+      {
+        key: 'positivePrompt',
+        label: '正向提示词',
+        type: 'textarea',
+        nodeId: '459:474',
+        inputKey: 'on_false',
+        semanticRole: 'positivePrompt',
+      },
+    ]);
+    expect(migrated[0]).toEqual(
+      expect.objectContaining({
+        label: '主提示词',
+        semanticRole: 'mainPrompt',
+      }),
+    );
+
+    const result = sanitizeComfyWorkflow(graph, []);
+    expect(result.graph['459:474'].inputs.on_false).toBe('');
+    expect(result.graph['459:471'].inputs.prompt).toBe(userPrompt);
+    expect(result.graph['459:475'].inputs.value).toBe(systemPrompt);
+    expect(result.bindings[0]).toEqual(
+      expect.objectContaining({
+        semanticRole: 'mainPrompt',
+        defaultValue: '',
+      }),
+    );
   });
 });

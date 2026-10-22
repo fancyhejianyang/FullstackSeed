@@ -13,6 +13,7 @@ export type ComfyBindingType =
   | 'outputPrefix';
 export type ComfyBindingSemanticRole =
   | 'normal'
+  | 'mainPrompt'
   | 'positivePrompt'
   | 'negativePrompt'
   | 'videoMotion'

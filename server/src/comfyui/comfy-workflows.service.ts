@@ -22,6 +22,7 @@ import { ComfyWorkflowVersion } from './entities/comfy-workflow-version.entity';
 import { ComfyTask } from './entities/comfy-task.entity';
 import {
   extractPromptExamples,
+  withDetectedMainPromptBinding,
   withoutPromptBindingDefaults,
   type ComfyApiGraph,
   type ComfyApiNode,
@@ -97,6 +98,11 @@ export class ComfyWorkflowsService {
       .andWhere('workflow.deletedAt IS NULL')
       .getOne();
     if (!item) throw new NotFoundException('ComfyUI 工作流不存在');
+    const graph = this.parseAndValidateGraph(item.apiWorkflow);
+    item.inputBindings = withDetectedMainPromptBinding(
+      graph,
+      item.inputBindings,
+    );
     return item;
   }
 
@@ -106,10 +112,12 @@ export class ComfyWorkflowsService {
       select: ['id'],
     });
     const connectionIds = new Set(connections.map((item) => item.id));
-    const workflows = await this.workflows.find({
-      where: { isEnabled: true },
-      order: { id: 'DESC' },
-    });
+    const workflows = await this.workflows
+      .createQueryBuilder('workflow')
+      .addSelect('workflow.apiWorkflow')
+      .where('workflow.isEnabled = :isEnabled', { isEnabled: true })
+      .orderBy('workflow.id', 'DESC')
+      .getMany();
     return workflows
       .filter((item) => connectionIds.has(item.connectionId))
       .map((item) => ({
@@ -120,9 +128,12 @@ export class ComfyWorkflowsService {
         visualPromptTemplateId: item.visualPromptTemplateId,
         description: item.description,
         version: item.version,
-        inputBindings: withoutPromptBindingDefaults(item.inputBindings).filter(
-          (binding) => binding.type !== 'outputPrefix',
-        ),
+        inputBindings: withoutPromptBindingDefaults(
+          withDetectedMainPromptBinding(
+            this.parseAndValidateGraph(item.apiWorkflow),
+            item.inputBindings,
+          ),
+        ).filter((binding) => binding.type !== 'outputPrefix'),
       }));
   }
 
@@ -156,7 +167,7 @@ export class ComfyWorkflowsService {
     const prompts = extractPromptExamples(graph, workflow.inputBindings);
     if (!prompts.positivePrompt) {
       throw new BadRequestException(
-        '该工作流未识别到正向提示词，请先在工作流管理中配置正向提示词节点映射',
+        '该工作流未识别到主提示词或正向提示词，请先在工作流管理中配置提示词节点映射',
       );
     }
     return {
@@ -174,13 +185,12 @@ export class ComfyWorkflowsService {
   async create(dto: CreateComfyWorkflowDto, userId: number) {
     await this.assertConnection(dto.connectionId);
     const sourceGraph = this.parseAndValidateGraph(dto.apiWorkflow);
-    const promptExamples = extractPromptExamples(
+    const detectedBindings = withDetectedMainPromptBinding(
       sourceGraph,
       dto.inputBindings as ComfyInputBinding[],
     );
-    const bindings = withoutPromptBindingDefaults(
-      dto.inputBindings as ComfyInputBinding[],
-    );
+    const promptExamples = extractPromptExamples(sourceGraph, detectedBindings);
+    const bindings = withoutPromptBindingDefaults(detectedBindings);
     this.validateBindings(sourceGraph, bindings, dto.outputNodeIds ?? []);
     const apiWorkflow = JSON.stringify(sourceGraph);
     const outputNodeIds = dto.outputNodeIds?.length ? dto.outputNodeIds : null;
@@ -235,8 +245,10 @@ export class ComfyWorkflowsService {
     const sourceGraph = this.parseAndValidateGraph(
       dto.apiWorkflow ?? current.apiWorkflow,
     );
-    const inputBindings = (dto.inputBindings ??
-      current.inputBindings) as ComfyInputBinding[];
+    const inputBindings = withDetectedMainPromptBinding(
+      sourceGraph,
+      (dto.inputBindings ?? current.inputBindings) as ComfyInputBinding[],
+    );
     const promptExamples = extractPromptExamples(sourceGraph, inputBindings);
     const bindings = withoutPromptBindingDefaults(inputBindings);
     const outputNodeIds = dto.outputNodeIds ?? current.outputNodeIds ?? [];
@@ -320,6 +332,10 @@ export class ComfyWorkflowsService {
       where: { workflowId, version: workflow.version },
     });
     if (!version) throw new BadRequestException('工作流当前版本不存在');
+    version.inputBindings = withDetectedMainPromptBinding(
+      this.parseAndValidateGraph(version.apiWorkflow),
+      version.inputBindings,
+    );
     return { workflow, version };
   }
 
@@ -408,12 +424,18 @@ export class ComfyWorkflowsService {
         );
       }
       if (
-        ['positivePrompt', 'negativePrompt'].includes(semanticRole) &&
+        ['mainPrompt', 'positivePrompt', 'negativePrompt'].includes(
+          semanticRole,
+        ) &&
         semanticRoles.has(semanticRole)
       ) {
-        throw new BadRequestException(
-          `${semanticRole === 'positivePrompt' ? '正向' : '负向'}提示词只能绑定一个开放参数`,
-        );
+        const roleLabel =
+          semanticRole === 'mainPrompt'
+            ? '主'
+            : semanticRole === 'positivePrompt'
+              ? '正向'
+              : '负向';
+        throw new BadRequestException(`${roleLabel}提示词只能绑定一个开放参数`);
       }
       semanticRoles.add(semanticRole);
       const node = graph[binding.nodeId];
@@ -439,6 +461,12 @@ export class ComfyWorkflowsService {
       ) {
         throw new BadRequestException(`参数 ${binding.label} 的范围无效`);
       }
+    }
+    if (
+      semanticRoles.has('mainPrompt') &&
+      semanticRoles.has('positivePrompt')
+    ) {
+      throw new BadRequestException('主提示词与正向提示词只能选择一种语义绑定');
     }
     for (const nodeId of outputNodeIds) {
       if (!graph[nodeId]) {

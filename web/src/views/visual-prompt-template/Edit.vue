@@ -63,7 +63,7 @@ const fields = computed<FormField[]>(() => [
       label: `${item.name} · ${item.targetModel || "未识别模型"} · v${item.version}${item.isEnabled ? "" : " · 已停用"}`,
       value: item.id,
     })),
-    hint: "选择后由系统读取工作流 JSON，并自动识别媒体类型、目标模型以及正向、负向原始提示词。",
+    hint: "选择后由系统读取工作流 JSON，并自动识别媒体类型、目标模型、主提示词以及可选的负向提示词。",
   },
   {
     prop: "name",
@@ -107,7 +107,7 @@ const fields = computed<FormField[]>(() => [
   },
   {
     prop: "sourcePrompt",
-    label: "原始正向提示词",
+    label: "原始主提示词",
     type: "textarea",
     rows: 7,
     span: 2,
@@ -145,7 +145,7 @@ const rules: FormRules = {
   sourcePrompt: [
     {
       required: true,
-      message: "所选工作流未识别到正向提示词",
+      message: "所选工作流未识别到主提示词或正向提示词",
       trigger: "change",
     },
   ],

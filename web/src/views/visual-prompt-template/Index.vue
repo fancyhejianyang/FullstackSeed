@@ -74,7 +74,7 @@ function openView(row: VisualPromptTemplateSummary) {
 async function extract(row: VisualPromptTemplateSummary) {
   try {
     await ElMessageBox.confirm(
-      "AI 将根据工作流中的正向、负向原始提示词和目标模型，重新生成提示词格式、风格摘要与提示词规则。是否继续？",
+      "AI 将根据工作流中的主提示词、可选负向提示词和目标模型，重新生成提示词格式、风格摘要与提示词规则。是否继续？",
       "AI 提炼提示词总结",
       { type: "warning" },
     );
@@ -91,12 +91,10 @@ async function extract(row: VisualPromptTemplateSummary) {
       task = await getVisualPromptExtractTask(task.id);
     }
     if (task.status !== "succeeded") {
-      ElMessage.error(
-        task.errorMessage || "AI 提炼失败，请检查配置后重试",
-      );
+      ElMessage.error(task.errorMessage || "AI 提炼失败，请检查配置后重试");
       return;
     }
-    ElMessage.success("提示词规则与正负提示词格式已更新");
+    ElMessage.success("提示词规则与工作流提示词格式已更新");
     await tableRef.value?.refresh();
   } finally {
     extractingId.value = null;
@@ -144,9 +142,7 @@ async function extract(row: VisualPromptTemplateSummary) {
           :loading="extractingId === row.id"
           @click="extract(row)"
           >{{
-            extractingId === row.id
-              ? extractStage || "AI 提炼中"
-              : "AI 提炼"
+            extractingId === row.id ? extractStage || "AI 提炼中" : "AI 提炼"
           }}</Button
         >
       </template>

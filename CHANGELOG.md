@@ -1,5 +1,38 @@
 # CHANGELOG
 
+### 2026-10-22 支持 ComfyUI 普通主提示词工作流
+
+- 提示词语义新增“主提示词”：工作流可使用主提示词或正向提示词之一，负向提示词改为可选；创作任务会把 AI 返回的主结果回填到实际绑定字段，不再要求所有模型都具备正向、负向两套提示词。
+- 工作流识别支持沿通用 `prompt` 连线回溯当前生效的开关分支，空负向输入不再生成负向绑定；明确排除 `system_prompt` 和系统提示词节点，避免把模型改写指令误当作用户提示词。
+- 后端对已保存的旧工作流动态补全或迁移主提示词绑定，无需数据库迁移；提示词总结、创作选项和版本运行快照均兼容旧数据。任务快照只清理实际映射的主/正向/负向输入，保留系统提示词和其它工作流指令。
+- 提示词总结协议和界面统一采用“主提示词 + 可选负向提示词”表述，内部历史字段保持兼容；使用用户提供的 `千文生图.json` 实测识别为 `459:474.on_false` 主提示词、无负向提示词。
+- 验证：前端工作流识别 4 tests、`vue-tsc` 和涉及页面组件复用检查通过；后端 TypeORM 实体列检查、定向 ESLint 及 ComfyUI/提示词总结 5 suites / 31 tests 通过。后端全量 `tsc --noEmit` 仍被仓库既有的 Agent、素材、菜单等无关测试类型错误阻断；按缺陷修复范围未执行 build 或启动服务。
+
+新增文件（0）。
+
+修改文件（18）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/comfyui/comfy-workflow-sanitizer.spec.ts`
+- `server/src/comfyui/comfy-workflow-sanitizer.ts`
+- `server/src/comfyui/comfy-workflows.service.spec.ts`
+- `server/src/comfyui/comfy-workflows.service.ts`
+- `server/src/comfyui/dto/comfyui.dto.ts`
+- `server/src/comfyui/entities/comfy-workflow.entity.ts`
+- `server/src/visual-prompt-templates/visual-prompt-templates.service.ts`
+- `server/src/visual-prompt-templates/visual-prompt.protocol.ts`
+- `web/src/api/comfyUi.ts`
+- `web/src/views/comfy-create/Index.vue`
+- `web/src/views/comfy-workflow/Edit.vue`
+- `web/src/views/comfy-workflow/workflowDetection.test.mjs`
+- `web/src/views/comfy-workflow/workflowDetection.ts`
+- `web/src/views/visual-prompt-template/Edit.vue`
+- `web/src/views/visual-prompt-template/Index.vue`
+- `web/src/views/visual-prompt-template/View.vue`
+
+删除文件（0）。
+
 ### 2026-10-22 接入官方 Comfy Cloud API 协议
 
 - 修复 `https://cloud.comfy.org` 连接测试返回 HTML 后被误报为“无法解析的数据”：官方云端地址现自动映射 `/api`，使用 `X-API-Key` 校验当前用户；新增独立 `apiKey` 认证类型，已有官方云端 Bearer 配置在请求层继续兼容并按 API Key 发送。

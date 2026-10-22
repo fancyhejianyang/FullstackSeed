@@ -194,3 +194,76 @@ test("直接提示词可以映射，且 CLIP/VAE 依赖不会被误判为主模�
   assert.equal(positive?.defaultValue, "");
   assert.equal(negative?.defaultValue, "");
 });
+
+test("识别普通主提示词并排除 Qwen 工作流的系统提示词", () => {
+  const userPrompt = "Greyscale fashion editorial portrait";
+  const result = detectComfyWorkflow({
+    "459:452": {
+      inputs: {
+        prompt: ["459:472", 0],
+        negative_prompt: "",
+        clip: ["459:453", 0],
+      },
+      class_type: "TextEncodeQwenImage21",
+      _meta: { title: "文本编码 Qwen Image 2.1" },
+    },
+    "459:471": {
+      inputs: {
+        prompt: userPrompt,
+        system_prompt: ["459:475", 0],
+      },
+      class_type: "TextGenerate",
+      _meta: { title: "TextGenerate" },
+    },
+    "459:472": {
+      inputs: { source: ["459:474", 0] },
+      class_type: "PreviewAny",
+      _meta: { title: "预览任意" },
+    },
+    "459:474": {
+      inputs: {
+        switch: false,
+        on_false: userPrompt,
+        on_true: ["459:471", 0],
+      },
+      class_type: "ComfySwitchNode",
+      _meta: { title: "切换" },
+    },
+    "459:475": {
+      inputs: { value: "You are an image prompt rewriting expert" },
+      class_type: "PrimitiveStringMultiline",
+      _meta: { title: "Text (System Prompt)" },
+    },
+    "459:458": {
+      inputs: {
+        positive: ["459:452", 0],
+        negative: ["459:452", 1],
+      },
+      class_type: "KSampler",
+      _meta: { title: "K采样器" },
+    },
+    "459:480": {
+      inputs: { images: ["459:452", 0] },
+      class_type: "SaveImage",
+      _meta: { title: "保存图像" },
+    },
+  });
+
+  assert.equal(result.sourcePrompt, userPrompt);
+  assert.equal(result.sourceNegativePrompt, "");
+  const main = result.bindings.find(
+    (binding) => binding.semanticRole === "mainPrompt",
+  );
+  assert.deepEqual([main?.nodeId, main?.inputKey], ["459:474", "on_false"]);
+  assert.equal(main?.label, "主提示词");
+  assert.equal(
+    result.bindings.some(
+      (binding) => binding.semanticRole === "negativePrompt",
+    ),
+    false,
+  );
+  assert.equal(
+    result.bindings.some((binding) => binding.nodeId === "459:475"),
+    false,
+  );
+});

@@ -198,6 +198,7 @@ const bindingTypes = [
 ];
 const semanticRoleOptions = [
   { value: "normal", text: "普通参数" },
+  { value: "mainPrompt", text: "主提示词" },
   { value: "positivePrompt", text: "正向提示词" },
   { value: "negativePrompt", text: "负向提示词" },
   { value: "videoMotion", text: "视频运动描述" },
@@ -620,8 +621,8 @@ async function submit() {
               <div>
                 <strong>提示词总结</strong>
                 <span v-if="detectedSourcePrompt">
-                  已从工作流识别正向原始提示词{{
-                    detectedNegativePrompt ? "和负向原始提示词" : ""
+                  已从工作流识别可提炼的原始提示词{{
+                    detectedNegativePrompt ? "及可选负向提示词" : ""
                   }}，保存时会自动建立或更新总结记录；可随后执行 AI 提炼。
                 </span>
                 <span v-else-if="boundVisualTemplateId">
@@ -629,7 +630,7 @@ async function submit() {
                   后会自动更新。
                 </span>
                 <span v-else>
-                  未识别到正向提示词，仍可保存，但创作时需要手工填写提示词。
+                  未识别到主提示词或正向提示词，仍可保存，但创作时需要手工填写提示词。
                 </span>
               </div>
             </div>

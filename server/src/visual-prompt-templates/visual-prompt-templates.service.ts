@@ -407,7 +407,7 @@ export class VisualPromptTemplatesService
     const parsed = parseExtractedVisualPrompt(response);
     if (!parsed)
       throw new BadGatewayException(
-        'AI 未返回完整的提示词总结，正向格式、风格摘要和提示词规则均不能为空；请重新提炼',
+        'AI 未返回完整的提示词总结，主提示词格式、风格摘要和提示词规则均不能为空；请重新提炼',
       );
     const extractedAt = new Date();
     const update = await this.repository.update(
@@ -480,7 +480,7 @@ export class VisualPromptTemplatesService
     const parsed = parseComposedVisualPrompt(response);
     if (!parsed)
       throw new BadGatewayException(
-        'AI 未返回有效的正向与负向提示词结构，请调整配置后重试',
+        'AI 未返回有效的主提示词结构，请调整配置后重试',
       );
     return {
       ...parsed,
@@ -775,7 +775,7 @@ export class VisualPromptTemplatesService
     const prompts = extractPromptExamples(graph, workflow.inputBindings);
     if (!prompts.positivePrompt) {
       throw new BadRequestException(
-        '该工作流未识别到正向提示词，请先配置正向提示词节点映射',
+        '该工作流未识别到主提示词或正向提示词，请先配置提示词节点映射',
       );
     }
     return {

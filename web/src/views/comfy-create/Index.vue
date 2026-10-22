@@ -34,6 +34,7 @@ const composing = ref(false);
 const composeStage = ref("");
 const composeNotes = ref("");
 let composeRunToken = 0;
+const promptRoles = ["mainPrompt", "positivePrompt", "negativePrompt"];
 const materialOptions = computed(() =>
   materials.value.map((item) => ({
     value: String(item.id),
@@ -47,9 +48,7 @@ const current = computed(
 );
 const promptBindings = computed(() =>
   (current.value?.inputBindings || []).filter((binding) =>
-    ["positivePrompt", "negativePrompt"].includes(
-      binding.semanticRole || "normal",
-    ),
+    promptRoles.includes(binding.semanticRole || "normal"),
   ),
 );
 function initializeForm() {
@@ -58,7 +57,7 @@ function initializeForm() {
   composeStage.value = "";
   Object.keys(parameters).forEach((key) => delete parameters[key]);
   for (const binding of current.value?.inputBindings || []) {
-    parameters[binding.key] = ["positivePrompt", "negativePrompt"].includes(
+    parameters[binding.key] = promptRoles.includes(
       binding.semanticRole || "normal",
     )
       ? ""
@@ -114,7 +113,10 @@ async function composePrompt() {
       return;
     }
     for (const binding of promptBindings.value) {
-      if (binding.semanticRole === "positivePrompt") {
+      if (
+        binding.semanticRole === "mainPrompt" ||
+        binding.semanticRole === "positivePrompt"
+      ) {
         parameters[binding.key] = result.positivePrompt;
       }
       if (binding.semanticRole === "negativePrompt") {
@@ -122,7 +124,7 @@ async function composePrompt() {
       }
     }
     composeNotes.value = result.notes || "";
-    ElMessage.success("正向与负向提示词已生成，可继续手动调整");
+    ElMessage.success("工作流提示词已生成，可继续手动调整");
   } finally {
     if (runToken === composeRunToken) {
       composing.value = false;
@@ -147,13 +149,15 @@ async function submit() {
     ElMessage.warning("请选择可用的工作流");
     return;
   }
-  const positiveBinding = promptBindings.value.find(
-    (binding) => binding.semanticRole === "positivePrompt",
+  const primaryPromptBinding = promptBindings.value.find(
+    (binding) =>
+      binding.semanticRole === "mainPrompt" ||
+      binding.semanticRole === "positivePrompt",
   );
   if (
     current.value.visualPromptTemplateId &&
-    positiveBinding &&
-    !String(parameters[positiveBinding.key] || "").trim()
+    primaryPromptBinding &&
+    !String(parameters[primaryPromptBinding.key] || "").trim()
   ) {
     ElMessage.warning(
       creativeIdea.value.trim()
@@ -347,7 +351,7 @@ onMounted(load);
                   <p>
                     按
                     {{ current?.targetModel || "通用模型" }}
-                    的规则生成正向、负向提示词，并只回填已绑定的工作流参数。
+                    的规则生成工作流所需提示词，并只回填已绑定的参数；负向提示词仅在工作流支持时生成。
                   </p>
                 </div>
                 <Button
@@ -374,13 +378,15 @@ onMounted(load);
                     placeholder="直接描述你想生成的主体、场景、风格、情绪或镜头运动"
                   />
                   <small>
-                    系统会使用该工作流绑定的提示词总结和 AI 配置进行转换；尚未完成
-                    AI 提炼时，以工作流中的原始提示词作为参考格式。
+                    系统会使用该工作流绑定的提示词总结和 AI
+                    配置进行转换；尚未完成 AI
+                    提炼时，以工作流中的原始提示词作为参考格式。
                   </small>
                 </div>
               </div>
               <div v-else class="prompt-composer__empty">
-                该工作流没有绑定提示词总结，仍可手工填写下方正向、负向提示词。也可以前往“提示词总结”选择该工作流并完成 AI 提炼。
+                该工作流没有绑定提示词总结，仍可手工填写下方提示词。也可以前往“提示词总结”选择该工作流并完成
+                AI 提炼。
               </div>
               <p v-if="composeNotes" class="prompt-composer__notes">
                 {{ composeNotes }}

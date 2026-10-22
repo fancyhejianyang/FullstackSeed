@@ -44,7 +44,7 @@ watch(visible, async (open) => {
           <pre>{{ detail.modelRules || "尚未提炼" }}</pre>
         </section>
         <section>
-          <h4>正向提示词格式</h4>
+          <h4>主提示词格式</h4>
           <pre>{{ detail.positiveTemplate || detail.sourcePrompt }}</pre>
         </section>
         <section>

@@ -59,6 +59,44 @@ describe('ComfyUI 工作流提示词语义绑定', () => {
     ).not.toThrow();
   });
 
+  it('允许主提示词独立绑定且负向提示词可缺省', () => {
+    expect(() =>
+      validate([
+        {
+          key: 'mainPrompt',
+          label: '主提示词',
+          type: 'textarea',
+          nodeId: '1',
+          inputKey: 'text',
+          semanticRole: 'mainPrompt',
+        },
+      ]),
+    ).not.toThrow();
+  });
+
+  it('拒绝同时绑定主提示词与正向提示词', () => {
+    expect(() =>
+      validate([
+        {
+          key: 'mainPrompt',
+          label: '主提示词',
+          type: 'textarea',
+          nodeId: '1',
+          inputKey: 'text',
+          semanticRole: 'mainPrompt',
+        },
+        {
+          key: 'positivePrompt',
+          label: '正向提示词',
+          type: 'textarea',
+          nodeId: '2',
+          inputKey: 'text',
+          semanticRole: 'positivePrompt',
+        },
+      ]),
+    ).toThrow('主提示词与正向提示词只能选择一种');
+  });
+
   it('拒绝重复的正向提示词语义绑定', () => {
     expect(() =>
       validate([
@@ -388,8 +426,11 @@ describe('ComfyUI 工作流可用状态', () => {
   });
 
   it('启用的工作流会出现在创作选项中', async () => {
-    const workflows = {
-      find: jest.fn().mockResolvedValue([
+    const queryBuilder = {
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      getMany: jest.fn().mockResolvedValue([
         {
           id: 1,
           name: '本机工作流',
@@ -399,9 +440,19 @@ describe('ComfyUI 工作流可用状态', () => {
           description: null,
           version: 1,
           inputBindings: [],
+          apiWorkflow: JSON.stringify({
+            '1': { class_type: 'SaveImage', inputs: { images: ['2', 0] } },
+            '2': {
+              class_type: 'CustomPromptNode',
+              inputs: { prompt: 'ordinary prompt' },
+            },
+          }),
           isEnabled: true,
         },
       ]),
+    };
+    const workflows = {
+      createQueryBuilder: jest.fn().mockReturnValue(queryBuilder),
     };
     const service = new ComfyWorkflowsService(
       workflows as never,
@@ -415,15 +466,25 @@ describe('ComfyUI 工作流可用状态', () => {
     expect(options).toHaveLength(1);
     expect(options[0]?.id).toBe(1);
     expect(options[0]?.name).toBe('本机工作流');
-    expect(workflows.find).toHaveBeenCalledWith({
-      where: { isEnabled: true },
-      order: { id: 'DESC' },
-    });
+    expect(options[0]?.inputBindings).toEqual([
+      expect.objectContaining({ semanticRole: 'mainPrompt' }),
+    ]);
+    expect(queryBuilder.where).toHaveBeenCalledWith(
+      'workflow.isEnabled = :isEnabled',
+      { isEnabled: true },
+    );
   });
 
   it('任务执行只校验工作流是否启用', async () => {
     const versions = {
-      findOne: jest.fn().mockResolvedValue({ id: 3, workflowId: 1 }),
+      findOne: jest.fn().mockResolvedValue({
+        id: 3,
+        workflowId: 1,
+        apiWorkflow: JSON.stringify({
+          '1': { class_type: 'SaveImage', inputs: { images: ['2', 0] } },
+        }),
+        inputBindings: [],
+      }),
     };
     const service = new ComfyWorkflowsService(
       {} as never,
