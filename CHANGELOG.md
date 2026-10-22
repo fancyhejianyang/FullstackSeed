@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-10-22 合并展示同一任务的多个产出素材
+
+- 素材库列表分页单位由单个文件调整为素材组：上传素材仍独立成行，生成结果按 `sourceTaskId` 合并，同一任务只占一条数据；总数和翻页均按组计算，避免前端合并造成分页不准。
+- 一行最多直接展示 4 个缩略图及剩余数量，点击任一图片可继续预览该任务的全部图片；素材名称、大小、媒体类型、收藏状态和创建时间按组汇总展示。
+- 单删、批量删除和收藏均展开为组内全部素材，并在服务端校验用户归属；底层素材记录和受管文件仍各自独立，不执行数据库迁移或物理文件拼接。
+- 新增文件（2）：`server/src/comfyui/comfy-materials.service.spec.ts`、`web/src/views/comfy-material/materialGroup.test.mjs`。修改文件（7）：`server/src/comfyui/comfy-materials.service.ts`、`server/src/comfyui/comfy-materials.controller.ts`、`server/src/comfyui/dto/comfyui.dto.ts`、`web/src/api/comfyUi.ts`、`web/src/views/comfy-material/Index.vue`、`.design-spec.md`、本文件。删除文件：无。
+- 验证：后端 4 项分组/分页/归属测试、前端 2 项组展示与操作契约测试、后端定向 ESLint 与实体检查、前端类型检查、前后端生产构建、前端组件复用扫描及 `git diff --check` 通过；未启动或重启服务，未调用真实 ComfyUI。全量后端 `tsc --noEmit` 仍受既有无关测试类型错误影响，本次涉及文件未新增编译错误。
+
 ### 2026-10-22 支持已完成创作任务调整后再次创作
 
 - “创作任务”列表为已完成任务增加“再次创作”入口；点击后按需读取任务详情，将原工作流的参数快照带入统一的新建创作弹窗，用户可编辑提示词和其它开放参数后再明确提交。

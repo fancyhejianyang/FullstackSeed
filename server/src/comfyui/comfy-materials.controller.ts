@@ -24,6 +24,7 @@ import { ComfyMaterialsService } from './comfy-materials.service';
 import {
   BatchIdsDto,
   QueryComfyMaterialDto,
+  UpdateComfyMaterialGroupFavoriteDto,
   UpdateComfyMaterialDto,
 } from './dto/comfyui.dto';
 
@@ -61,6 +62,25 @@ export class ComfyMaterialsController {
   ) {
     if (!file) throw new BadRequestException('请上传素材文件');
     return this.service.upload(user.userId, file, name);
+  }
+
+  @Patch('group/favorite')
+  @RequirePermissions('ComfyMaterial.update')
+  updateGroupFavorite(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: UpdateComfyMaterialGroupFavoriteDto,
+  ) {
+    return this.service.updateGroupFavorite(
+      dto.ids,
+      user.userId,
+      dto.isFavorite,
+    );
+  }
+
+  @Delete('group')
+  @RequirePermissions('ComfyMaterial.delete')
+  removeGroup(@Body() dto: BatchIdsDto, @CurrentUser() user: AuthUser) {
+    return this.service.batchRemove(dto.ids, user.userId);
   }
 
   @Patch(':id')

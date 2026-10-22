@@ -152,6 +152,21 @@ export interface ComfyMaterial {
   updatedAt: string;
 }
 
+export interface ComfyMaterialListItem {
+  id: string;
+  materialIds: number[];
+  itemCount: number;
+  items: ComfyMaterial[];
+  name: string;
+  sourceType: "input" | "output";
+  mediaType: "image" | "video" | "file" | "mixed";
+  fileUrl: string | null;
+  size: number;
+  sourceTaskId: number | null;
+  isFavorite: boolean;
+  createdAt: string;
+}
+
 export type ComfyTaskStatus =
   | "pending"
   | "submitting"
@@ -292,9 +307,10 @@ export function batchDeleteComfyWorkflows(ids: number[]) {
 }
 
 export function getComfyMaterials(params: Record<string, unknown>) {
-  return request.get<unknown, PageResult<ComfyMaterial>>("/comfyui/materials", {
-    params,
-  });
+  return request.get<unknown, PageResult<ComfyMaterialListItem>>(
+    "/comfyui/materials",
+    { params },
+  );
 }
 export function getComfyMaterialOptions() {
   return request.get<unknown, ComfyMaterial[]>("/comfyui/materials/options");
@@ -316,6 +332,18 @@ export function updateComfyMaterial(
     `/comfyui/materials/${id}`,
     data,
   );
+}
+export function updateComfyMaterialGroupFavorite(
+  ids: number[],
+  isFavorite: boolean,
+) {
+  return request.patch("/comfyui/materials/group/favorite", {
+    ids,
+    isFavorite,
+  });
+}
+export function deleteComfyMaterialGroup(ids: number[]) {
+  return request.delete("/comfyui/materials/group", { data: { ids } });
 }
 export function deleteComfyMaterial(id: number) {
   return request.delete(`/comfyui/materials/${id}`);

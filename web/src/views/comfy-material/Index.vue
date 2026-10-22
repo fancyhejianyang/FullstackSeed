@@ -14,11 +14,11 @@ import {
 } from "@/api/storageConfig";
 import {
   batchDeleteComfyMaterials,
-  deleteComfyMaterial,
+  deleteComfyMaterialGroup,
   getComfyMaterials,
-  updateComfyMaterial,
+  updateComfyMaterialGroupFavorite,
   uploadComfyMaterial,
-  type ComfyMaterial,
+  type ComfyMaterialListItem,
 } from "@/api/comfyUi";
 
 const tableRef = ref<{
@@ -36,11 +36,11 @@ const columns: TableColumn[] = [
   {
     prop: "fileUrl",
     label: "预览",
-    width: 76,
+    minWidth: 230,
     slot: true,
     showOverflowTooltip: false,
   },
-  { prop: "name", label: "素材名称", minWidth: 220 },
+  { prop: "name", label: "素材名称", minWidth: 220, slot: true },
   { prop: "sourceType", label: "来源", width: 100, slot: true },
   { prop: "mediaType", label: "类型", width: 90, slot: true },
   { prop: "size", label: "大小", width: 110, slot: true },
@@ -97,9 +97,19 @@ async function submitUpload() {
     uploading.value = false;
   }
 }
-async function toggleFavorite(row: ComfyMaterial) {
-  await updateComfyMaterial(row.id, { isFavorite: !row.isFavorite });
+async function removeGroup(row: ComfyMaterialListItem) {
+  await deleteComfyMaterialGroup(row.materialIds);
+  ElMessage.success(`已删除 ${row.itemCount} 个素材`);
   await tableRef.value?.refresh();
+}
+async function toggleFavorite(row: ComfyMaterialListItem) {
+  await updateComfyMaterialGroupFavorite(row.materialIds, !row.isFavorite);
+  await tableRef.value?.refresh();
+}
+function imagePreviewUrls(row: ComfyMaterialListItem) {
+  return row.items
+    .filter((item) => item.mediaType === "image" && item.fileUrl)
+    .map((item) => item.fileUrl as string);
 }
 async function previewCleanup() {
   cleanupLoading.value = true;
@@ -139,9 +149,10 @@ function formatBytes(value: number) {
       :columns="columns"
       :search-fields="searchFields"
       :request="getComfyMaterials"
-      :delete-request="(row) => deleteComfyMaterial(row.id)"
+      :show-delete="false"
       :batch-delete-request="
-        ({ ids }) => batchDeleteComfyMaterials(ids as number[])
+        ({ rows }) =>
+          batchDeleteComfyMaterials(rows.flatMap((row) => row.materialIds))
       "
       :check-able="true"
       :show-view="false"
@@ -174,33 +185,51 @@ function formatBytes(value: number) {
         >
       </template>
       <template #column-fileUrl="{ row }">
-        <el-image
-          v-if="row.fileUrl && row.mediaType === 'image'"
-          class="preview-image"
-          :src="row.fileUrl"
-          :alt="row.name"
-          :preview-src-list="[row.fileUrl]"
-          :close-on-press-escape="true"
-          :infinite="false"
-          fit="cover"
-          hide-on-click-modal
-          preview-teleported
-        >
-          <template #error>
-            <span class="preview-image__empty">—</span>
+        <div class="preview-group">
+          <template v-for="item in row.items.slice(0, 4)" :key="item.id">
+            <el-image
+              v-if="item.fileUrl && item.mediaType === 'image'"
+              class="preview-image"
+              :src="item.fileUrl"
+              :alt="item.name"
+              :preview-src-list="imagePreviewUrls(row)"
+              :initial-index="
+                imagePreviewUrls(row).findIndex((url) => url === item.fileUrl)
+              "
+              :close-on-press-escape="true"
+              :infinite="false"
+              fit="cover"
+              hide-on-click-modal
+              preview-teleported
+            >
+              <template #error>
+                <span class="preview-image__empty">—</span>
+              </template>
+            </el-image>
+            <a
+              v-else-if="item.fileUrl"
+              :href="item.fileUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="preview-link"
+              :title="item.mediaType === 'video' ? '打开视频' : '打开文件'"
+            >
+              <span>{{ item.mediaType === "video" ? "视频" : "文件" }}</span>
+            </a>
+            <span v-else class="preview-image preview-image__empty">—</span>
           </template>
-        </el-image>
-        <a
-          v-else-if="row.fileUrl"
-          :href="row.fileUrl"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="preview-link"
-          :title="row.mediaType === 'video' ? '打开视频' : '打开文件'"
-        >
-          <span>{{ row.mediaType === "video" ? "视频" : "文件" }}</span>
-        </a>
-        <span v-else>—</span>
+          <span v-if="row.itemCount > 4" class="preview-more">
+            +{{ row.itemCount - 4 }}
+          </span>
+        </div>
+      </template>
+      <template #column-name="{ row }">
+        <div class="material-name">
+          <span>{{ row.name }}</span>
+          <el-tag v-if="row.itemCount > 1" type="info" size="small">
+            {{ row.itemCount }} 个
+          </el-tag>
+        </div>
       </template>
       <template #column-sourceType="{ row }">
         <el-tag :type="row.sourceType === 'output' ? 'success' : 'info'">{{
@@ -212,7 +241,9 @@ function formatBytes(value: number) {
           ? "图片"
           : row.mediaType === "video"
             ? "视频"
-            : "文件"
+            : row.mediaType === "mixed"
+              ? "混合"
+              : "文件"
       }}</template>
       <template #column-size="{ row }">{{ formatBytes(row.size) }}</template>
       <template #column-sourceTaskId="{ row }">{{
@@ -223,10 +254,19 @@ function formatBytes(value: number) {
       }}</template>
       <template #actions="{ row }">
         <Button
+          perm="ComfyMaterial.delete"
+          link
+          confirm
+          :confirm-text="`确认删除该组的 ${row.itemCount} 个素材？删除后文件将在保留期结束后清理。`"
+          @click="(_event, done) => done(removeGroup(row))"
+        >
+          删除
+        </Button>
+        <Button
           perm="ComfyMaterial.update"
           link
           :confirm="false"
-          @click="toggleFavorite(row)"
+          @click="(_event, done) => done(toggleFavorite(row))"
         >
           {{ row.isFavorite ? "取消收藏" : "收藏" }}
         </Button>
@@ -273,6 +313,38 @@ function formatBytes(value: number) {
   background: #f2f6fc;
   color: #606266;
   font-size: 12px;
+}
+
+.preview-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+}
+
+.preview-more {
+  display: inline-flex;
+  min-width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  background: var(--color-bg-page);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.material-name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.material-name > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .preview-image {

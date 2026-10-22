@@ -294,6 +294,17 @@ export class UpdateComfyMaterialDto {
   isFavorite?: boolean;
 }
 
+export class UpdateComfyMaterialGroupFavoriteDto {
+  @IsArray()
+  @Type(() => Number)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  ids: number[];
+
+  @IsBoolean()
+  isFavorite: boolean;
+}
+
 export class CreateComfyTaskDto {
   @Type(() => Number)
   @IsInt()
