@@ -34,7 +34,13 @@ function format(value: number | null) {
 }
 </script>
 <template>
-  <article class="widget-card" :class="{ 'widget-card--compact': compact }">
+  <article
+    class="widget-card"
+    :class="{
+      'widget-card--compact': compact,
+      'widget-card--core': widget.widgetKey === 'core.metrics',
+    }"
+  >
     <header>
       <h3>{{ widget.title }}</h3>
       <span v-if="preview" class="preview-badge">示意数据</span
@@ -46,7 +52,7 @@ function format(value: number | null) {
         >重试</Button
       >
     </div>
-    <template v-else-if="data">
+    <div v-else-if="data" class="widget-body">
       <div
         v-if="data.metrics?.length && !(compact && data.series)"
         class="metrics"
@@ -133,7 +139,7 @@ function format(value: number | null) {
         </div>
       </div>
       <p v-if="data.note && !compact" class="widget-note">{{ data.note }}</p>
-    </template>
+    </div>
   </article>
 </template>
 <style scoped>
@@ -145,13 +151,47 @@ function format(value: number | null) {
   min-width: 0;
   box-sizing: border-box;
   box-shadow: 0 3px 14px #26344505;
+  height: 380px;
+  display: flex;
+  flex-direction: column;
+}
+.widget-card--core {
+  height: auto;
+}
+.widget-card--compact {
+  height: auto;
 }
 header {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 18px;
+}
+.widget-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.widget-body::-webkit-scrollbar {
+  width: 6px;
+}
+.widget-body::-webkit-scrollbar-thumb {
+  background: #d4dbe6;
+  border-radius: 3px;
+}
+.widget-card:not(.widget-card--compact) .widget-body > :deep(.dashboard-chart) {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 160px;
+}
+.widget-card > .widget-empty {
+  flex: 1;
+  display: grid;
+  place-content: center;
 }
 h3 {
   font-size: 15px;
@@ -220,6 +260,9 @@ h3::before {
   font-size: 12px;
   color: #606b7b;
   margin: 7px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .widget-note {
   font-size: 12px;

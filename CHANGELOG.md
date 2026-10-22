@@ -1,5 +1,12 @@
 # CHANGELOG
 
+### 2026-10-22 首页卡片固定高度与指标提示单行
+- `web/src/views/home/components/DashboardWidgetCard.vue`：
+  - 卡片统一固定高度 380px（内容区 `.widget-body` 内部滚动、细滚动条），行内卡片完全对齐，不再随条目/图表内容撑高；「核心数据」通栏指标条与配置页预览卡片保持内容自适应。
+  - 指标辅助说明（如「文章 10 · 云端素材 15 · ComfyUI 7」）固定单行超出省略，指标项不再出现三行文案。
+  - 图表区在卡片剩余空间自适应（组件已有 ResizeObserver，最小 160px，不足时内容区滚动）。
+- 「数据暂不可用」空态在固定高度卡片内垂直居中。
+
 ### 2026-10-22 首页展示优化（不等高 / 列表上限 8 条 / 业务动态单行 / 配色）
 - `web/src/views/home/components/DashboardGrid.vue`：栅格增加 `align-items: start`，卡片按内容自然高度展示，不再同行等高拉伸出大片空白。
 - `web/src/views/home/components/DashboardWidgetCard.vue`：移除卡片 `height: 100%`；「最近业务动态」每条改为单行展示（标题 · 详情 · 时间 · 进入，超长省略）；配色优化——卡片标题增加品牌蓝装饰条、可点击指标值改为品牌蓝 `#409EFF`、时间戳用更浅中性灰 `#94a3b8` 拉开层级。
