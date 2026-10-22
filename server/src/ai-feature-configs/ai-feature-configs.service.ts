@@ -141,11 +141,11 @@ export class AiFeatureConfigsService {
   async findUsableVisualPromptConfig(id: number) {
     const config = await this.findOne(id);
     if (config.featureType !== 'visualPrompt')
-      throw new BadRequestException('请选择模型提示词规范类型的 AI 功能配置');
+      throw new BadRequestException('请选择提示词总结类型的 AI 功能配置');
     if (!config.isEnabled)
-      throw new BadRequestException('该模型提示词规范配置未启用');
+      throw new BadRequestException('该提示词总结配置未启用');
     if (!config.providerId || !config.model?.trim())
-      throw new BadRequestException('模型提示词规范配置缺少大模型账号或模型');
+      throw new BadRequestException('提示词总结配置缺少大模型账号或模型');
     return config;
   }
 

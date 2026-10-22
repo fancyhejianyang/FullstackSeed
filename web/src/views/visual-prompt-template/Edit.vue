@@ -43,7 +43,7 @@ const form = reactive<EditorForm>({
 const fields = computed<FormField[]>(() => [
   {
     prop: "name",
-    label: "规范名称",
+    label: "总结名称",
     type: "input",
     placeholder: "如：Flux 写实人像",
   },
@@ -77,7 +77,7 @@ const fields = computed<FormField[]>(() => [
       label: `${item.name}${item.model ? ` · ${item.model}` : ""}`,
       value: item.id,
     })),
-    hint: "只使用“模型提示词规范”类型的 AI 配置，不调用 Agent。",
+    hint: "只使用“提示词总结”类型的 AI 配置，不调用 Agent。",
   },
   {
     prop: "sourcePrompt",
@@ -141,12 +141,12 @@ const fields = computed<FormField[]>(() => [
   },
 ]);
 const rules: FormRules = {
-  name: [{ required: true, message: "请输入规范名称", trigger: "blur" }],
+  name: [{ required: true, message: "请输入总结名称", trigger: "blur" }],
   mediaType: [{ required: true, message: "请选择媒体类型", trigger: "change" }],
   aiConfigId: [
     {
       required: true,
-      message: "请选择模型提示词规范 AI 配置",
+      message: "请选择提示词总结 AI 配置",
       trigger: "change",
     },
   ],
@@ -214,7 +214,7 @@ async function submit() {
   try {
     if (props.row) await updateVisualPromptTemplate(props.row.id, payload);
     else await createVisualPromptTemplate(payload);
-    ElMessage.success("模型提示词规范已保存");
+    ElMessage.success("提示词总结已保存");
     visible.value = false;
     emit("success");
   } finally {
@@ -226,7 +226,7 @@ async function submit() {
 <template>
   <Dialog
     v-model="visible"
-    :title="row ? '编辑模型提示词规范' : '新增模型提示词规范'"
+    :title="row ? '编辑提示词总结' : '新增提示词总结'"
     width="960px"
     body-max-height="76vh"
     :confirm-loading="submitting"
@@ -235,7 +235,7 @@ async function submit() {
     <div v-loading="loading">
       <el-alert
         v-if="!configs.length && !loading"
-        title="请先在 AI 功能配置中新增并启用“模型提示词规范”配置"
+        title="请先在 AI 功能配置中新增并启用“提示词总结”配置"
         type="warning"
         :closable="false"
         show-icon

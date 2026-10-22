@@ -243,14 +243,14 @@ describe('MenusService Agent menu reconciliation', () => {
     ]);
     const root = tree.find((item) => item.path === '/comfyui');
     expect(rows.find((item) => item.id === 18)).toMatchObject({
-      name: '模型提示词规范',
+      name: '提示词总结',
       parentId: root?.id,
     });
     expect(root?.children.map(({ name, path }) => ({ name, path }))).toEqual([
       { name: '创作任务', path: '/comfyui/create' },
       { name: '素材库管理', path: '/comfyui/materials' },
       { name: '工作流管理', path: '/comfyui/workflows' },
-      { name: '模型提示词规范', path: '/visual-prompt-templates' },
+      { name: '提示词总结', path: '/visual-prompt-templates' },
     ]);
   });
 

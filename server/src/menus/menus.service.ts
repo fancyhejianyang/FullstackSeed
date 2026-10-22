@@ -130,7 +130,7 @@ const BASE_SEED_MENUS: SeedMenu[] = [
     preserveVisibility: true,
   },
   {
-    name: '模型提示词规范',
+    name: '提示词总结',
     path: '/visual-prompt-templates',
     icon: '',
     sort: 40,

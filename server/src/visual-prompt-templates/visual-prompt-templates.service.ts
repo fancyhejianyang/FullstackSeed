@@ -63,12 +63,12 @@ export class VisualPromptTemplatesService
   onModuleInit() {
     this.timer = setInterval(() => {
       void this.tick().catch(() =>
-        this.logger.warn('模型提示词规范任务调度暂不可用，将稍后检查'),
+        this.logger.warn('提示词总结任务调度暂不可用，将稍后检查'),
       );
     }, 2000);
     this.timer.unref();
     void this.tick().catch(() =>
-      this.logger.warn('模型提示词规范任务首次调度失败，将稍后重试'),
+      this.logger.warn('提示词总结任务首次调度失败，将稍后重试'),
     );
   }
 
@@ -113,7 +113,7 @@ export class VisualPromptTemplatesService
 
   async findOne(id: number, userId: number) {
     const row = await this.repository.findOne({ where: { id, userId } });
-    if (!row) throw new NotFoundException('模型提示词规范不存在');
+    if (!row) throw new NotFoundException('提示词总结不存在');
     return row;
   }
 
@@ -282,7 +282,7 @@ export class VisualPromptTemplatesService
     requestId?: string,
   ) {
     const row = await this.repository.findOne({ where: { id } });
-    if (!row) throw new NotFoundException('工作流绑定的模型提示词规范不存在');
+    if (!row) throw new NotFoundException('工作流绑定的提示词总结不存在');
     return this.submitTask({
       userId,
       taskType: 'compose',
@@ -305,7 +305,7 @@ export class VisualPromptTemplatesService
   ) {
     const task = await this.tasks.findOne({ where: { id, userId, taskType } });
     if (!task || (workflowId && task.workflowId !== workflowId)) {
-      throw new NotFoundException('模型提示词规范任务不存在');
+      throw new NotFoundException('提示词总结任务不存在');
     }
     return this.taskSummary(task);
   }
@@ -339,7 +339,7 @@ export class VisualPromptTemplatesService
     const parsed = parseExtractedVisualPrompt(response);
     if (!parsed)
       throw new BadGatewayException(
-        'AI 未返回有效的模型提示词规范结构，请调整配置后重试',
+        'AI 未返回有效的提示词总结结构，请调整配置后重试',
       );
     const extractedAt = new Date();
     const update = await this.repository.update(
@@ -365,9 +365,9 @@ export class VisualPromptTemplatesService
     signal: AbortSignal,
   ) {
     const row = await this.repository.findOne({ where: { id } });
-    if (!row) throw new NotFoundException('工作流绑定的模型提示词规范不存在');
+    if (!row) throw new NotFoundException('工作流绑定的提示词总结不存在');
     if (row.version !== expectedVersion) {
-      throw new ConflictException('模型提示词规范已更新，请重新发起转换');
+      throw new ConflictException('提示词总结已更新，请重新发起转换');
     }
     return this.composeRow(row, dto, signal);
   }
@@ -377,7 +377,7 @@ export class VisualPromptTemplatesService
     dto: ComposeVisualPromptDto,
     signal: AbortSignal,
   ) {
-    if (!row.isEnabled) throw new BadRequestException('该模型提示词规范已停用');
+    if (!row.isEnabled) throw new BadRequestException('该提示词总结已停用');
     const targetModel =
       dto.targetModel?.trim() || row.targetModel || '通用模型';
     if (
@@ -441,7 +441,7 @@ export class VisualPromptTemplatesService
     const active = await this.tasks.findOne({ where: { activeKey } });
     if (active) {
       if (this.isSameTask(active, input)) return this.taskSummary(active);
-      throw new ConflictException('已有模型提示词规范任务正在执行，请等待完成');
+      throw new ConflictException('已有提示词总结任务正在执行，请等待完成');
     }
     try {
       const saved = await this.tasks.save(
@@ -460,7 +460,7 @@ export class VisualPromptTemplatesService
         }),
       );
       void this.tick().catch(() =>
-        this.logger.warn('模型提示词规范任务提交后调度失败，将稍后重试'),
+        this.logger.warn('提示词总结任务提交后调度失败，将稍后重试'),
       );
       return this.taskSummary(saved);
     } catch (error) {
@@ -471,7 +471,7 @@ export class VisualPromptTemplatesService
       if (retried && this.isSameTask(retried, input)) {
         return this.taskSummary(retried);
       }
-      throw new ConflictException('已有模型提示词规范任务正在执行，请等待完成');
+      throw new ConflictException('已有提示词总结任务正在执行，请等待完成');
     }
   }
 
@@ -483,7 +483,7 @@ export class VisualPromptTemplatesService
     >,
   ) {
     if (!this.isSameTask(task, input)) {
-      throw new ConflictException('请求号已用于其它模型提示词规范任务');
+      throw new ConflictException('请求号已用于其它提示词总结任务');
     }
   }
 
@@ -594,7 +594,7 @@ export class VisualPromptTemplatesService
         stage:
           status === 'succeeded'
             ? task.taskType === 'extract'
-              ? '提示词规范提炼完成'
+              ? '提示词总结提炼完成'
               : '提示词转换完成'
             : status === 'interrupted'
               ? '执行中断'
@@ -650,7 +650,7 @@ export class VisualPromptTemplatesService
       (await this.repository.count({ where: { id: In(unique), userId } })) !==
       unique.length
     )
-      throw new NotFoundException('部分模型提示词规范不存在');
+      throw new NotFoundException('部分提示词总结不存在');
     await this.repository.softDelete({ id: In(unique), userId });
     return { ids: unique };
   }
@@ -698,7 +698,7 @@ export class VisualPromptTemplatesService
     );
     if (!response.isSuccess)
       throw new BadGatewayException(
-        '模型提示词规范 AI 调用失败，请检查模型账号、模型和网络后重试',
+        '提示词总结 AI 调用失败，请检查模型账号、模型和网络后重试',
       );
     return response.answer;
   }

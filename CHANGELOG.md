@@ -1,5 +1,35 @@
 # CHANGELOG
 
+### 2026-10-22 明确 ComfyUI 提示词总结链路与模块命名
+
+- 核对并明确完整链路：导入 API 工作流时先从正向/负向节点提取 Demo，再清空工作流及版本快照中的示例正文并绑定总结记录；用户明确执行“AI 提炼”后，系统异步生成提示词格式、风格摘要和模型规则；创作任务再将用户原始想法交给绑定的 `visualPrompt` 配置转换，回填正向/负向参数，用户确认后才提交 ComfyUI 队列并按白名单节点映射注入。
+- 保持导入工作流不自动调用可能计费的 AI：未执行提炼时，创作转换以导入 Demo 作为参考格式；提示词总结列表新增“总结状态”，明确区分“Demo 待提炼”和“已 AI 提炼”，并修正工作流导入、创作弹窗中的误导文案。
+- 将 ComfyUI 下的“模型提示词规范”统一更名为“提示词总结”，同步菜单种子、既有菜单启动校准、路由标题、AI 功能类型显示、列表、编辑/查看弹窗、后端错误提示及设计规范；内部路由、权限码、数据表和接口字段保持兼容，不做破坏性改名。
+- 验证：后端变更文件 ESLint 通过；菜单、工作流 Demo 清理与绑定、提示词异步提炼/转换协议共 5 suites / 22 tests 通过；前端 `vue-tsc` 与组件复用线索检查通过。按修复与文案调整范围未执行 build 或启动服务。
+
+新增文件（0）。
+
+修改文件（16）：
+
+- `.design-spec.md`
+- `CHANGELOG.md`
+- `server/src/ai-feature-configs/ai-feature-configs.service.ts`
+- `server/src/comfyui/comfy-workflows.service.ts`
+- `server/src/menus/menus.service.spec.ts`
+- `server/src/menus/menus.service.ts`
+- `server/src/visual-prompt-templates/visual-prompt-templates.service.ts`
+- `web/src/router/index.ts`
+- `web/src/views/ai-feature-config/Edit.vue`
+- `web/src/views/ai-feature-config/Index.vue`
+- `web/src/views/comfy-create/Index.vue`
+- `web/src/views/comfy-workflow/Edit.vue`
+- `web/src/views/comfy-workflow/Index.vue`
+- `web/src/views/visual-prompt-template/Edit.vue`
+- `web/src/views/visual-prompt-template/Index.vue`
+- `web/src/views/visual-prompt-template/View.vue`
+
+删除文件（0）。
+
 ### 2026-10-21 统一详情表格字段标签布局
 
 - 新增可复用的描述表格标签样式，为字段标签列设置统一宽度并禁止换行；“查看素材”和“查看模板”统一使用，修复“生成模式、生成配置、模板名称、写作要求”等标签被拆分的问题。

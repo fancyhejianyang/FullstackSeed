@@ -23,7 +23,7 @@ watch(visible, async (open) => {
 <template>
   <Dialog
     v-model="visible"
-    title="模型提示词规范"
+    title="提示词总结"
     width="860px"
     :show-footer="false"
   >

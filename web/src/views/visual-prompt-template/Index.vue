@@ -28,11 +28,12 @@ const viewingRow = ref<VisualPromptTemplateSummary | null>(null);
 const extractingId = ref<number | null>(null);
 const extractStage = ref("");
 const columns: TableColumn[] = [
-  { prop: "name", label: "规范名称", minWidth: 180 },
+  { prop: "name", label: "总结名称", minWidth: 180 },
   { prop: "mediaType", label: "媒体", width: 90, slot: true },
   { prop: "targetModel", label: "适用模型", minWidth: 170 },
   { prop: "styleSummary", label: "风格摘要", minWidth: 220 },
   { prop: "aiConfigName", label: "提炼配置", minWidth: 150 },
+  { prop: "extractedAt", label: "总结状态", width: 130, slot: true },
   { prop: "version", label: "版本", width: 80, slot: true },
   { prop: "isEnabled", label: "状态", width: 90, slot: true },
   { prop: "updatedAt", label: "更新时间", width: 180, slot: true },
@@ -70,8 +71,8 @@ function openView(row: VisualPromptTemplateSummary) {
 async function extract(row: VisualPromptTemplateSummary) {
   try {
     await ElMessageBox.confirm(
-      "AI 将根据正向 Demo、负向 Demo 和目标模型重新提炼提示词规范，成功后覆盖当前提炼结果。是否继续？",
-      "AI 提炼提示词规范",
+      "AI 将根据正向 Demo、负向 Demo 和目标模型生成提示词格式、风格摘要与模型规则，成功后覆盖当前总结结果。是否继续？",
+      "AI 提炼提示词总结",
       { type: "warning" },
     );
   } catch {
@@ -102,7 +103,7 @@ async function extract(row: VisualPromptTemplateSummary) {
 </script>
 
 <template>
-  <PageContainer title="模型提示词规范">
+  <PageContainer title="提示词总结">
     <Table
       ref="tableRef"
       perm-module="visualPromptTemplate"
@@ -121,7 +122,7 @@ async function extract(row: VisualPromptTemplateSummary) {
           perm="VisualPromptTemplate.create"
           icon="Plus"
           @click="openCreate"
-          >新增规范</Button
+          >新增总结</Button
         >
         <Button
           perm="VisualPromptTemplate.batchDelete"
@@ -150,6 +151,11 @@ async function extract(row: VisualPromptTemplateSummary) {
         }}</el-tag>
       </template>
       <template #column-version="{ row }">v{{ row.version }}</template>
+      <template #column-extractedAt="{ row }">
+        <el-tag :type="row.extractedAt ? 'success' : 'warning'">
+          {{ row.extractedAt ? "已 AI 提炼" : "Demo 待提炼" }}
+        </el-tag>
+      </template>
       <template #column-isEnabled="{ row }"
         ><el-tag :type="row.isEnabled ? 'success' : 'info'">{{
           row.isEnabled ? "启用" : "停用"

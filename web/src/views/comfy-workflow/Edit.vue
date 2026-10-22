@@ -129,7 +129,7 @@ const fields = computed<FormField[]>(() => {
       label: "目标模型",
       type: "input",
       placeholder: "如 flux1-dev、sdxl_base_1.0",
-      hint: "填写工作流实际加载的模型标识，用于匹配对应模型提示词规范和规则。",
+      hint: "填写工作流实际加载的模型标识，用于匹配对应提示词总结和模型规则。",
     },
     { prop: "description", label: "使用说明", type: "textarea", rows: 2 },
     {
@@ -459,14 +459,14 @@ async function submit() {
       : await createComfyWorkflow(payload);
     if (detectedSourcePrompt.value && !saved.visualPromptTemplateId) {
       ElMessage.warning(
-        "工作流已保存，但没有可用的“模型提示词规范”AI 配置，暂未建立规范",
+        "工作流已保存，但没有可用的“提示词总结”AI 配置，暂未建立总结记录",
       );
     } else {
       ElMessage.success(
         saved.visualPromptTemplateId
           ? props.row
-            ? "工作流与模型提示词规范已更新"
-            : "工作流已导入，并自动建立模型提示词规范"
+            ? "工作流与提示词总结记录已更新"
+            : "工作流已导入，并从 Demo 建立提示词总结记录"
           : props.row
             ? "工作流已保存并生成新版本"
             : "工作流已导入",
@@ -618,14 +618,14 @@ async function submit() {
             >
               <el-icon><MagicStick /></el-icon>
               <div>
-                <strong>模型提示词规范</strong>
+                <strong>提示词总结</strong>
                 <span v-if="detectedSourcePrompt">
                   已从工作流识别正向 Demo{{
                     detectedNegativePrompt ? "和负向 Demo" : ""
-                  }}，保存时会自动建立或更新绑定规范。
+                  }}，保存时会自动建立或更新总结记录；可随后执行 AI 提炼。
                 </span>
                 <span v-else-if="boundVisualTemplateId">
-                  当前工作流已绑定规范；重新导入包含 Demo 提示词的 JSON
+                  当前工作流已绑定提示词总结；重新导入包含 Demo 提示词的 JSON
                   后会自动更新。
                 </span>
                 <span v-else>

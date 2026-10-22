@@ -26,7 +26,7 @@ const columns: TableColumn[] = [
   { prop: "outputType", label: "输出类型", width: 100, slot: true },
   {
     prop: "visualPromptTemplateId",
-    label: "提示词规范",
+    label: "提示词总结",
     width: 120,
     slot: true,
   },
@@ -107,7 +107,7 @@ function openEdit(row: ComfyWorkflow) {
       >
       <template #column-visualPromptTemplateId="{ row }">
         <el-tag :type="row.visualPromptTemplateId ? 'success' : 'info'">
-          {{ row.visualPromptTemplateId ? "已自动绑定" : "未绑定" }}
+          {{ row.visualPromptTemplateId ? "已绑定" : "未绑定" }}
         </el-tag>
       </template>
       <template #column-version="{ row }">v{{ row.version }}</template>
