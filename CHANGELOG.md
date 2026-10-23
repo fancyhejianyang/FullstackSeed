@@ -1,5 +1,11 @@
 # CHANGELOG
 
+### 2026-10-23 核验抖音指定账号作品 JSON 解析
+- `server/src/hot-topics/hot-topic-parsers.spec.ts`：新增抖音 `aweme/post` 直出 JSON 的脱机回归用例，确认 `aweme_list[].desc` 可提取作品标题、秒级 `create_time` 可转换为 ISO 发布时间、`aweme_id` 可生成作品地址，并继续以 `author.sec_uid` 校验账号归属；原嵌入 JSON 用例同时补充发布时间断言。
+- 现场验证：用户浏览器会话中的接口能返回作品列表；同一完整 URL 从服务端携带普通浏览器请求头和 Referer 访问仍返回 HTTP 403，说明接口依赖浏览器 Cookie、设备会话或平台风控状态。项目不会硬编码或复用个人浏览器 Cookie，生产采集仍需稳定的官方授权接口或受控授权数据源。
+- 新增文件：无。修改文件：`server/src/hot-topics/hot-topic-parsers.spec.ts`、`.design-spec.md`、本文件。删除文件：无。
+- 验证：热点解析器定向测试 10/10 通过，测试文件定向 ESLint 通过。
+
 ### 2026-10-23 修复微博热搜回退与抖音指定账号判定
 - `server/src/hot-topics/hot-topic-fetch.service.ts`：第三方微博榜单页（如 TopHub）被服务端拒绝或无法解析时，自动回退到微博官方 `ajax/statuses/hot_band` 结构化热搜接口，记录中同时说明配置页失败与实际回退通道。
 - 抖音指定账号的 AI 搜索约束增加完整主页 URL；命中配置的精确 `/user/{sec_uid}` 主页时，只记录“已找到主页、未取得可核验作品”，不把主页本身当作热点。只命中抖音域名的其它资料改为“未命中精确账号”，不再显示“已跳过”，也不产生无账号归属的候选。只有公开结构化数据携带与配置一致的 UID/sec_uid 时才收录具体作品。

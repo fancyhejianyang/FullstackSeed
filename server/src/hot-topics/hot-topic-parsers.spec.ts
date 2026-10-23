@@ -68,6 +68,37 @@ describe('hot topic source parsers (offline fixtures)', () => {
       accountId: account.accountId,
       title: '作者真正的作品',
       url: 'https://www.douyin.com/video/123',
+      publishedAt: '2026-10-21T08:00:00.000Z',
+    });
+  });
+  it('parses a direct Douyin post-list JSON response with title and published time', () => {
+    const account = {
+      ...source,
+      kind: 'douyinAccount' as const,
+      accountName: '指定作者',
+      accountId: 'MS4wLjABAAAA-123',
+    };
+    const result = parseHotTopicPayload(
+      JSON.stringify({
+        status_code: 0,
+        aweme_list: [
+          {
+            aweme_id: '7699694920800080483',
+            desc: '军训拉练经过村庄，退伍老兵在路边驻足敬礼',
+            author: { sec_uid: account.accountId },
+            create_time: 1792569600,
+          },
+        ],
+      }),
+      account,
+      at,
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      accountMatched: true,
+      title: '军训拉练经过村庄，退伍老兵在路边驻足敬礼',
+      url: 'https://www.douyin.com/video/7699694920800080483',
+      publishedAt: '2026-10-21T08:00:00.000Z',
     });
   });
   it('rejects an account source with only a name, and pages without embedded JSON', () => {
@@ -182,7 +213,9 @@ describe('hot topic source parsers (offline fixtures)', () => {
       url: `https://s.weibo.com/weibo?q=${encodeURIComponent('#热点二#')}`,
     });
     expect(result[2]).toMatchObject({ title: '置顶议题', heat: 9 });
-    expect(parseHotTopicPayload('{"data":{"word_list":[]}}', weibo)).toEqual([]);
+    expect(parseHotTopicPayload('{"data":{"word_list":[]}}', weibo)).toEqual(
+      [],
+    );
   });
   it('reads server-rendered hot list tables (e.g. aggregator pages) without inventing links', () => {
     const weibo = {
