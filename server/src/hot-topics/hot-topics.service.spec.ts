@@ -1,4 +1,4 @@
-import { Repository, EntityManager } from 'typeorm';
+import { Repository, EntityManager, Not, Like } from 'typeorm';
 import { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-configs.service';
 import { AiFeatureConfig } from '../ai-feature-configs/entities/ai-feature-config.entity';
 import { ContentArticlesService } from '../content-articles/content-articles.service';
@@ -83,6 +83,56 @@ function setup() {
 }
 
 describe('热点选题核心', () => {
+  it('默认在数据库分页前排除当前用户已忽略的选题', async () => {
+    const { service, topics } = setup();
+    await service.findAll({ page: 2, pageSize: 10 }, 8);
+    expect(topics.findAndCount).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: 8, decision: Not('ignored') },
+        skip: 10,
+        take: 10,
+      }),
+    );
+  });
+  it('关键词和推荐程度查询仍默认排除已忽略', async () => {
+    const { service, topics } = setup();
+    await service.findAll({ keyword: '新闻', level: 'high' }, 8);
+    expect(topics.findAndCount).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: [
+          {
+            userId: 8,
+            decision: Not('ignored'),
+            recommendationLevel: 'high',
+            title: Like('%新闻%'),
+          },
+          {
+            userId: 8,
+            decision: Not('ignored'),
+            recommendationLevel: 'high',
+            summary: Like('%新闻%'),
+          },
+        ],
+      }),
+    );
+  });
+  it.each(['new', 'ignored', 'selected'] as const)(
+    '显式查询 %s 保留当前用户隔离',
+    async (decision) => {
+      const { service, topics } = setup();
+      await service.findAll({ decision }, 8);
+      expect(topics.findAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { userId: 8, decision } }),
+      );
+    },
+  );
+  it('显式全部包含已忽略但不移除用户范围', async () => {
+    const { service, topics } = setup();
+    await service.findAll({ decision: 'all' }, 8);
+    expect(topics.findAndCount).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: 8 } }),
+    );
+  });
   it('默认不启用定时，也不隐式选择收费 AI', async () => {
     const { service, preferences } = setup();
     const result = await service.getPreferences(8);
@@ -136,7 +186,7 @@ describe('热点选题核心', () => {
     await service.findAll({}, 9);
     expect(topics.findAndCount).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { userId: 9 },
+        where: { userId: 9, decision: Not('ignored') },
         select: {
           id: true,
           title: true,

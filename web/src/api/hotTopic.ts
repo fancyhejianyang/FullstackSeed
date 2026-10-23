@@ -173,7 +173,7 @@ type Query = {
   page?: number;
   pageSize?: number;
   keyword?: string;
-  decision?: string;
+  decision?: HotTopicDecision | 'all';
   level?: string;
 };
 export const getHotSources = (params: Query) =>

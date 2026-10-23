@@ -18,6 +18,7 @@ import {
   Like,
   MoreThan,
   MoreThanOrEqual,
+  Not,
   Repository,
 } from 'typeorm';
 import { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-configs.service';
@@ -118,7 +119,9 @@ export class HotTopicsService implements OnModuleInit, OnModuleDestroy {
   async findAll(query: HotTopicQueryDto, userId: number) {
     const base = {
       userId,
-      ...(query.decision ? { decision: query.decision } : {}),
+      ...(query.decision === 'all'
+        ? {}
+        : { decision: query.decision || Not<HotTopic['decision']>('ignored') }),
       ...(query.level ? { recommendationLevel: query.level } : {}),
     };
     const keyword = query.keyword?.trim();

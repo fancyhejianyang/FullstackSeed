@@ -63,8 +63,10 @@ const searchFields: FormField[] = [
     prop: 'decision',
     label: '我的状态',
     type: 'select',
+    placeholder: '默认隐藏已忽略',
     options: [
-      { value: '', label: '全部' },
+      { value: '', label: '未忽略（默认）' },
+      { value: 'all', label: '全部（含已忽略）' },
       ...Object.entries(decisionLabels).map(([value, label]) => ({
         value,
         label,

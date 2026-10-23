@@ -41,8 +41,8 @@ export class HotTopicQueryDto {
   pageSize?: number = 10;
   @IsOptional() @IsString() @MaxLength(200) keyword?: string;
   @IsOptional()
-  @IsIn(['new', 'ignored', 'selected'])
-  decision?: HotTopicDecision;
+  @IsIn(['new', 'ignored', 'selected', 'all'])
+  decision?: HotTopicDecision | 'all';
   @IsOptional()
   @IsIn(['unreviewed', 'high', 'medium', 'low'])
   level?: HotTopic['recommendationLevel'];

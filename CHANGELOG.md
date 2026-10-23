@@ -1,5 +1,11 @@
 # CHANGELOG
 
+### 2026-10-23 热点选题默认隐藏已忽略内容
+- 点击忽略仍保存 `decision=ignored`，不删除记录；列表默认在数据库分页前排除已忽略，关键词搜索、推荐程度筛选和总数沿用相同条件，保留当前用户隔离。现有操作成功后的 Table 刷新立即应用过滤；重新采集不会清除既有忽略标记。
+- “我的状态”默认提示隐藏已忽略，支持“已忽略”查看与恢复、“全部（含已忽略）”显式查看全部；清空或重置筛选后继续默认隐藏。前后端查询契约增加 `all`，不改变实体状态或忽略/恢复接口。
+- 新增文件：无。修改文件：`server/src/hot-topics/dto/hot-topic.dto.ts`、`server/src/hot-topics/hot-topics.service.ts`、`server/src/hot-topics/hot-topics.service.spec.ts`、`web/src/api/hotTopic.ts`、`web/src/views/hot-topic/Index.vue`、`.design-spec.md`、本文件。删除文件：无。
+- 验证：前后端业务代码类型检查、后端定向 ESLint 和 diff 检查通过；补充默认过滤、分页、组合查询、显式状态和全部查询的回归用例。后端全量含测试的类型检查仍有既存错误（agent-apps/ai-materials/comfyui/menus 及 hot-topic-sources.service.spec.ts），未越界改动。按修复类约定仅做静态检查，未执行测试、构建或启动/重启服务。
+
 ### 2026-10-23 接入网易国内新闻并移除 RSS / JSON Feed
 - 热点来源收敛为抖音热点、微博热点、网易国内新闻；移除 RSS/JSON Feed 配置、接口密钥字段、RSS/Atom 与通用 Feed 解析和 Bearer 请求逻辑。旧来源从列表和任务选项排除，保留历史记录与数据库兼容列，不执行删库或删列。
 - 网易来源使用用户指定的固定接口，前后端统一地址并设为只读。支持真实接口的 `application/x-javascript` 响应，仅将 `var data = JSON;` 的内容解析为数据，按 category 与新闻 c 字段筛出“国内”，提取标题、链接及北京时间，不执行远程脚本。
