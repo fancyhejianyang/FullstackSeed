@@ -18,8 +18,8 @@ import {
   Min,
 } from 'class-validator';
 import type {
+  ConfigurableHotSourceKind,
   HotSourceAccess,
-  HotSourceKind,
   HotTopicDecision,
   HotTopicMode,
 } from '../hot-topic.types';
@@ -54,14 +54,12 @@ import type { HotTopic } from '../entities/hot-topic.entity';
 
 export class SaveHotTopicSourceDto {
   @IsString() @IsNotEmpty() @MaxLength(120) name: string;
-  @IsIn(['douyinHot', 'douyinAccount', 'weiboHot', 'rss', 'jsonFeed'])
-  kind: HotSourceKind;
+  @IsIn(['douyinHot', 'weiboHot', 'rss', 'jsonFeed'])
+  kind: ConfigurableHotSourceKind;
   @IsIn(['page', 'search', 'feed']) accessMode: HotSourceAccess;
   @IsUrl({ protocols: ['https'], require_protocol: true })
   @MaxLength(2048)
   url: string;
-  @IsOptional() @IsString() @MaxLength(120) accountName?: string;
-  @IsOptional() @IsString() @MaxLength(160) accountId?: string;
   @IsOptional() @IsString() @MaxLength(4000) apiToken?: string;
   @IsOptional()
   @Transform(({ value }: { value: unknown }) => normalizeBoolean(value))

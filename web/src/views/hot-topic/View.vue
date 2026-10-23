@@ -74,7 +74,7 @@ onBeforeUnmount(() => ++epoch);
         >
         <h3>参考来源</h3>
         <p class="meta">
-          以下为获取到的来源线索，不代表已完成事实核验。搜索线索未匹配稳定账号标识时，不能视为该账号已发布。
+          以下为获取到的来源线索，不代表已完成事实核验；请结合原始页面确认发布时间和内容。
         </p>
         <article
           v-for="(source, index) in detail.candidates || []"
@@ -89,14 +89,6 @@ onBeforeUnmount(() => ++epoch);
             ><template v-if="source.heat != null">
               · 平台热度 {{ source.heat }}</template
             >
-          </p>
-          <p v-if="source.accountName">
-            指定账号：{{ source.accountName }} ·
-            {{
-              source.accountMatched
-                ? '稳定标识已匹配'
-                : '搜索线索 / 未确认账号归属'
-            }}
           </p>
           <p class="text">
             {{ source.summary || '仅取得标题，未取得正文摘要。' }}

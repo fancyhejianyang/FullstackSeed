@@ -105,33 +105,6 @@ onBeforeUnmount(stop);
     <p class="hint">
       关闭窗口只停止前端查询，不会取消后台执行；失败与部分完成可查看各来源的具体说明。
     </p>
-    <p v-if="listFailed" class="error">
-      记录读取失败。<Button @click="tableRef?.refresh()">重新读取</Button>
-    </p>
-    <Table
-      v-if="visible"
-      ref="tableRef"
-      :columns="columns"
-      :request="fetchRuns"
-      perm-module="hotTopic"
-      :show-edit="false"
-      :show-delete="false"
-      :action-width="80"
-      @view="view"
-    >
-      <template #column-action="{ row }">{{
-        row.action === 'recommend' ? '重新推荐' : '获取热点'
-      }}</template>
-      <template #column-trigger="{ row }">{{
-        row.trigger === 'schedule' ? '每日计划' : '手动'
-      }}</template>
-      <template #column-status="{ row }">{{
-        runStatusLabels[row.status as keyof typeof runStatusLabels]
-      }}</template>
-      <template #column-createdAt="{ row }">{{
-        formatDateTime(row.createdAt)
-      }}</template>
-    </Table>
     <section v-if="selected" class="run-detail">
       <h3>任务 #{{ selected }}</h3>
       <p v-if="detailFailed" class="error">
@@ -173,6 +146,33 @@ onBeforeUnmount(stop);
       </template>
       <p v-else>正在读取任务详情…</p>
     </section>
+    <p v-if="listFailed" class="error">
+      记录读取失败。<Button @click="tableRef?.refresh()">重新读取</Button>
+    </p>
+    <Table
+      v-if="visible"
+      ref="tableRef"
+      :columns="columns"
+      :request="fetchRuns"
+      perm-module="hotTopic"
+      :show-edit="false"
+      :show-delete="false"
+      :action-width="80"
+      @view="view"
+    >
+      <template #column-action="{ row }">{{
+        row.action === 'recommend' ? '重新推荐' : '获取热点'
+      }}</template>
+      <template #column-trigger="{ row }">{{
+        row.trigger === 'schedule' ? '每日计划' : '手动'
+      }}</template>
+      <template #column-status="{ row }">{{
+        runStatusLabels[row.status as keyof typeof runStatusLabels]
+      }}</template>
+      <template #column-createdAt="{ row }">{{
+        formatDateTime(row.createdAt)
+      }}</template>
+    </Table>
     <template #footer><Button @click="visible = false">关闭</Button></template>
   </Dialog>
 </template>
@@ -186,9 +186,9 @@ onBeforeUnmount(stop);
   color: var(--el-color-danger);
 }
 .run-detail {
-  border-top: 1px solid var(--el-border-color-lighter);
-  margin-top: 24px;
-  padding-top: 12px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  margin-bottom: 20px;
+  padding-bottom: 12px;
   overflow-wrap: anywhere;
   line-height: 1.8;
 }

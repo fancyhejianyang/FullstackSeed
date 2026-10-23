@@ -7,8 +7,6 @@ const source: HotSourceInput = {
   kind: 'douyinHot',
   accessMode: 'page',
   url: 'https://www.douyin.com/hot',
-  accountName: '',
-  accountId: '',
   isEnabled: true,
   description: '',
 };
@@ -33,20 +31,17 @@ describe('hot topic source parsers (offline fixtures)', () => {
       acquisition: 'page',
     });
   });
-  it('parses nested __NEXT_DATA__ but does not use account nicknames as identity', () => {
-    const account = {
-      ...source,
-      kind: 'douyinAccount' as const,
-      accountName: '指定作者',
-      accountId: 'MS4wLjABAAAA-123',
-    };
+  it('parses nested __NEXT_DATA__ without treating author metadata as a configured binding', () => {
     const data = {
       props: {
         aweme_list: [
           {
             aweme_id: '123',
             desc: '作者真正的作品',
-            author: { nickname: '指定作者', sec_uid: account.accountId },
+            author: {
+              nickname: '指定作者',
+              sec_uid: 'MS4wLjABAAAA-123',
+            },
             create_time: 1792569600,
           },
           {
@@ -59,25 +54,19 @@ describe('hot topic source parsers (offline fixtures)', () => {
     };
     const result = parseHotTopicPayload(
       `<script id="__NEXT_DATA__">${JSON.stringify(data)}</script>`,
-      account,
+      source,
       at,
     );
-    expect(result).toHaveLength(1);
+    expect(result).toHaveLength(2);
     expect(result[0]).toMatchObject({
-      accountMatched: true,
-      accountId: account.accountId,
+      accountMatched: false,
+      accountId: 'MS4wLjABAAAA-123',
       title: '作者真正的作品',
       url: 'https://www.douyin.com/video/123',
       publishedAt: '2026-10-21T08:00:00.000Z',
     });
   });
   it('parses a direct Douyin post-list JSON response with title and published time', () => {
-    const account = {
-      ...source,
-      kind: 'douyinAccount' as const,
-      accountName: '指定作者',
-      accountId: 'MS4wLjABAAAA-123',
-    };
     const result = parseHotTopicPayload(
       JSON.stringify({
         status_code: 0,
@@ -85,30 +74,23 @@ describe('hot topic source parsers (offline fixtures)', () => {
           {
             aweme_id: '7699694920800080483',
             desc: '军训拉练经过村庄，退伍老兵在路边驻足敬礼',
-            author: { sec_uid: account.accountId },
+            author: { sec_uid: 'MS4wLjABAAAA-123' },
             create_time: 1792569600,
           },
         ],
       }),
-      account,
+      source,
       at,
     );
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({
-      accountMatched: true,
+      accountMatched: false,
       title: '军训拉练经过村庄，退伍老兵在路边驻足敬礼',
       url: 'https://www.douyin.com/video/7699694920800080483',
       publishedAt: '2026-10-21T08:00:00.000Z',
     });
   });
-  it('rejects an account source with only a name, and pages without embedded JSON', () => {
-    expect(() =>
-      parseHotTopicPayload('{}', {
-        ...source,
-        kind: 'douyinAccount',
-        accountName: '作者',
-      }),
-    ).toThrow('精确 UID');
+  it('rejects pages without embedded hotspot JSON', () => {
     expect(() =>
       parseHotTopicPayload(
         '<html>验证码<script>window.run()</script></html>',

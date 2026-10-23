@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Like, Repository } from 'typeorm';
+import { In, Like, Not, Repository } from 'typeorm';
 import { HotTopicSource } from './entities/hot-topic.entity';
 import {
   HotTopicSourceQueryDto,
@@ -12,12 +12,23 @@ import {
   UpdateHotTopicSourceDto,
 } from './dto/hot-topic.dto';
 import { normalizeHotTopicLink } from './hot-topic-network';
-import { isHostOf, platformSource } from './hot-topic.types';
+import {
+  platformSource,
+  type ConfigurableHotSourceKind,
+} from './hot-topic.types';
 
 /** Credentials are never returned, including to administrators or task snapshots. */
 export function sourceView(row: HotTopicSource) {
-  const { apiToken, ...safe } = row;
-  return { ...safe, hasApiToken: Boolean(apiToken) };
+  const { apiToken, accountName, accountId, ...safe } = row;
+  void accountName;
+  void accountId;
+  const legacyAccount = row.kind === 'douyinAccount';
+  return {
+    ...safe,
+    kind: legacyAccount ? ('douyinHot' as const) : row.kind,
+    isEnabled: legacyAccount ? false : row.isEnabled,
+    hasApiToken: Boolean(apiToken),
+  };
 }
 
 export function validateSource(
@@ -58,24 +69,16 @@ export function validateSource(
     throw new BadRequestException(
       '请将访问密钥填入密钥字段，不要放在来源地址中',
     );
+  if (row.kind === 'douyinAccount')
+    throw new BadRequestException(
+      '指定账号来源已移除，请改用平台热点页面、RSS 或授权 JSON Feed',
+    );
   const platform = platformSource(row.kind);
   if (platform) {
-    // 热榜来源允许平台自有页面或第三方聚合页；账号来源必须是平台官方主页。
-    if (platform.host && !isHostOf(url.hostname, platform.host))
-      throw new BadRequestException(
-        `${platform.label}账号来源必须使用 ${platform.host} 官方主页地址`,
-      );
     if (!['page', 'search'].includes(row.accessMode))
       throw new BadRequestException(
         `${platform.label}来源请选择公开页面或 AI 搜索`,
       );
-    if (
-      row.kind === 'douyinAccount' &&
-      (!row.accountName.trim() || !row.accountId.trim())
-    )
-      throw new BadRequestException('锁定账号需要同时填写账号名称与账号标识');
-    if (row.kind === 'douyinAccount' && !url.pathname.startsWith('/user/'))
-      throw new BadRequestException('账号来源请填写完整的 /user/ 主页地址');
   } else if (row.accessMode !== 'feed')
     throw new BadRequestException('RSS / JSON 来源使用 Feed 接入方式');
   if (row.apiToken && (row.kind !== 'jsonFeed' || url.protocol !== 'https:'))
@@ -97,8 +100,6 @@ export class HotTopicSourcesService {
         kind: true,
         accessMode: true,
         url: true,
-        accountName: true,
-        accountId: true,
         apiToken: true,
         isEnabled: true,
         description: true,
@@ -120,8 +121,8 @@ export class HotTopicSourcesService {
     return { list: list.map(sourceView), total };
   }
   async options() {
-    return this.repository.find({
-      where: { isEnabled: true },
+    const rows = await this.repository.find({
+      where: { isEnabled: true, kind: Not('douyinAccount') },
       order: { id: 'DESC' },
       select: {
         id: true,
@@ -129,12 +130,11 @@ export class HotTopicSourcesService {
         kind: true,
         accessMode: true,
         url: true,
-        accountName: true,
-        accountId: true,
         isEnabled: true,
         description: true,
       },
     });
+    return rows.map(sourceView);
   }
   private async record(id: number) {
     const row = await this.repository
@@ -154,8 +154,8 @@ export class HotTopicSourcesService {
       kind: dto.kind,
       accessMode: dto.accessMode,
       url: dto.url.trim(),
-      accountName: dto.accountName?.trim() ?? '',
-      accountId: dto.accountId?.trim() ?? '',
+      accountName: '',
+      accountId: '',
       apiToken: dto.apiToken?.trim() || null,
       isEnabled: dto.isEnabled ?? false,
       description: dto.description?.trim() ?? '',
@@ -171,10 +171,11 @@ export class HotTopicSourcesService {
         '来源字段不能为 null，请使用空字符串或明确的启停状态',
       );
     Object.assign(row, fields);
+    if (row.kind === 'douyinAccount') row.kind = 'douyinHot';
     row.name = row.name.trim();
     row.url = row.url.trim();
-    row.accountName = row.accountName.trim();
-    row.accountId = row.accountId.trim();
+    row.accountName = '';
+    row.accountId = '';
     if (clearApiToken) row.apiToken = null;
     else if (apiToken?.trim()) row.apiToken = apiToken.trim();
     validateSource(row);
@@ -197,11 +198,15 @@ export class HotTopicSourcesService {
   }
   async selected(ids: number[]) {
     if (!ids.length) return [];
-    return this.repository
+    const rows = await this.repository
       .createQueryBuilder('source')
       .addSelect('source.apiToken')
       .where('source.id IN (:...ids)', { ids })
       .andWhere('source.isEnabled = :enabled', { enabled: true })
+      .andWhere('source.kind != :legacyKind', {
+        legacyKind: 'douyinAccount',
+      })
       .getMany();
+    return rows as Array<HotTopicSource & { kind: ConfigurableHotSourceKind }>;
   }
 }

@@ -27,7 +27,6 @@ const columns: TableColumn[] = [
   { prop: 'name', label: '来源名称', minWidth: 180 },
   { prop: 'kind', label: '来源类型', width: 140, slot: true },
   { prop: 'accessMode', label: '获取方式', width: 150, slot: true },
-  { prop: 'accountName', label: '指定账号', width: 160 },
   { prop: 'url', label: '页面 / 订阅地址', minWidth: 260 },
   { prop: 'isEnabled', label: '状态', width: 90, slot: true },
   { prop: 'updatedAt', label: '更新时间', width: 180, slot: true },
@@ -43,8 +42,8 @@ function edit(row: HotSource | null = null) {
 <template>
   <PageContainer title="热点来源配置">
     <p class="source-hint">
-      配置热点页面、指定账号或授权订阅接口。保存配置不会触发抓取或 AI
-      调用；搜索结果只作为线索，不代表已确认该账号发布。
+      配置平台热点页面、热搜聚合页或授权订阅接口。保存配置不会触发抓取或 AI
+      调用；页面受登录、验证码或访问限制时会如实报告失败。
     </p>
     <Table
       ref="tableRef"

@@ -109,17 +109,22 @@ test('手动发起、计划默认关闭、创建后是否生成须明确选择',
   );
 });
 
-test('指定账号预设不冒充已核验，密钥不从详情写回表单', () => {
+test('来源表单移除指定账号绑定，密钥不从详情写回表单', () => {
   const source = sources.get('../hot-topic-source/Edit.vue');
-  assert.match(source, /央视新闻.*央视网.*钧正平/);
-  assert.match(source, /不是身份校验/);
-  assert.match(source, /稳定账号 ID/);
+  assert.match(source, /value !== 'douyinAccount'/);
+  assert.doesNotMatch(source, /央视新闻|央视网|钧正平/);
+  assert.doesNotMatch(source, /field-accountName|稳定账号标识/);
   assert.doesNotMatch(
     source,
     /apiToken:\s*row\.apiToken|Object\.assign\(form,\s*row\)/,
   );
   assert.match(source, /delete data\.apiToken/);
   assert.match(source, /清除密钥/);
+});
+
+test('记录窗口先展示当前任务详情，再展示历史任务表格', () => {
+  const source = sources.get('Runs.vue');
+  assert.ok(source.indexOf('class="run-detail"') < source.indexOf('<Table'));
 });
 
 function deferred() {

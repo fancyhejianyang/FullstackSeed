@@ -5,7 +5,6 @@ import { ElMessage, ElMessageBox, type FormRules } from 'element-plus';
 import Dialog from '@/components/Dialog.vue';
 import Form, { type FormField } from '@/components/Form.vue';
 import Button from '@/components/Button.vue';
-import Input from '@/components/Input.vue';
 import {
   createHotSource,
   updateHotSource,
@@ -29,8 +28,6 @@ const initial = (): HotSourceForm => ({
   kind: 'douyinHot',
   accessMode: 'page',
   url: '',
-  accountName: '',
-  accountId: '',
   apiToken: '',
   clearApiToken: false,
   isEnabled: false,
@@ -44,10 +41,9 @@ const fields = computed<FormField[]>(() => [
     prop: 'kind',
     label: '来源类型',
     type: 'select',
-    options: Object.entries(sourceKindLabels).map(([value, label]) => ({
-      value,
-      label,
-    })),
+    options: Object.entries(sourceKindLabels)
+      .filter(([value]) => value !== 'douyinAccount')
+      .map(([value, label]) => ({ value, label })),
   },
   {
     prop: 'accessMode',
@@ -67,28 +63,10 @@ const fields = computed<FormField[]>(() => [
     type: 'input',
     placeholder: 'https://…',
     hint:
-      form.kind === 'douyinAccount'
-        ? '填写账号精确主页地址，不能只填写平台首页。'
-        : form.kind === 'jsonFeed'
-          ? '接口应返回 {"items":[{"title":"标题","url":"原文 HTTPS 链接","summary":"摘要","publishedAt":"ISO 日期"}]}；title、url 必填，其余可选。最多读取 100 条。'
-          : '仅支持公开 HTTPS 地址；不绕过登录、验证码或访问限制。',
+      form.kind === 'jsonFeed'
+        ? '接口应返回 {"items":[{"title":"标题","url":"原文 HTTPS 链接","summary":"摘要","publishedAt":"ISO 日期"}]}；title、url 必填，其余可选。最多读取 100 条。'
+        : '可填写平台官方热榜或合规聚合页面的公开 HTTPS 地址；不绕过登录、验证码或访问限制。',
   },
-  ...(form.kind === 'douyinAccount'
-    ? [
-        {
-          prop: 'accountName',
-          label: '账号名称',
-          slot: true,
-          hint: '可选重点账号或自由填写；预设名称仅帮助录入，不是身份校验，仍须填写真实主页与稳定账号 ID。',
-        },
-        {
-          prop: 'accountId',
-          label: '稳定账号标识',
-          type: 'input' as const,
-          hint: '例如主页中的稳定账号 ID；用于与同名账号区分。搜索命中不等于已确认发布。',
-        },
-      ]
-    : []),
   ...(form.kind === 'jsonFeed'
     ? [
         {
@@ -130,12 +108,6 @@ const rules: FormRules = {
       trigger: 'blur',
     },
   ],
-  accountName: [
-    { required: true, message: '请输入指定账号名称', trigger: 'blur' },
-  ],
-  accountId: [
-    { required: true, message: '请输入稳定账号标识', trigger: 'blur' },
-  ],
   kind: [{ required: true, message: '请选择来源类型' }],
   accessMode: [{ required: true, message: '请选择获取方式' }],
 };
@@ -162,8 +134,6 @@ async function load() {
       name: row.name,
       kind: row.kind,
       url: row.url,
-      accountName: row.accountName,
-      accountId: row.accountId,
       isEnabled: Boolean(row.isEnabled),
       description: row.description,
       apiToken: '',
@@ -210,10 +180,6 @@ async function submit() {
       ...(form.apiToken?.trim() ? { apiToken: form.apiToken.trim() } : {}),
     };
     if (!form.apiToken?.trim()) delete data.apiToken;
-    if (form.kind !== 'douyinAccount') {
-      data.accountName = '';
-      data.accountId = '';
-    }
     if (form.kind !== 'jsonFeed') delete data.apiToken;
     if (props.row) await updateHotSource(props.row.id, data);
     else await createHotSource(data);
@@ -250,23 +216,6 @@ async function submit() {
       :rules="rules"
       label-position="top"
     >
-      <template #field-accountName>
-        <Input
-          v-model="form.accountName"
-          placeholder="输入指定账号的完整名称"
-          :disabled="loading || submitting"
-        />
-        <div class="account-presets">
-          <Button
-            v-for="name in ['央视新闻', '央视网', '钧正平']"
-            :key="name"
-            size="small"
-            :disabled="loading || submitting"
-            @click="form.accountName = name"
-            >{{ name }}</Button
-          >
-        </div>
-      </template>
     </Form>
     <template #footer
       ><Button :disabled="submitting" @click="close">取消</Button
@@ -280,14 +229,3 @@ async function submit() {
     >
   </Dialog>
 </template>
-<style scoped>
-.account-presets {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
-}
-.account-presets :deep(.el-button + .el-button) {
-  margin-left: 0;
-}
-</style>

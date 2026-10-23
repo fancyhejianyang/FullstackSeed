@@ -72,12 +72,6 @@ onBeforeUnmount(() => ++epoch);
             >{{ detail.url }}</a
           ><span v-else>{{ detail.url }}</span></el-descriptions-item
         >
-        <el-descriptions-item label="指定账号"
-          >{{ detail.accountName || '—' }}
-          {{
-            detail.accountId ? `（${detail.accountId}）` : ''
-          }}</el-descriptions-item
-        >
         <el-descriptions-item label="密钥状态">{{
           detail.hasApiToken ? '已配置（不回显）' : '未配置'
         }}</el-descriptions-item>

@@ -135,7 +135,6 @@ function parseJsonData(
     for (const raw of feed.slice(0, 100)) {
       const item = hotRecord(raw);
       const accountId = identifier(item.accountId);
-      if (source.accountId && source.accountId !== accountId) continue;
       add({
         ...base(source, fetchedAt),
         title: hotPlainText(item.title, 300),
@@ -144,9 +143,7 @@ function parseJsonData(
         publishedAt: hotPublishedAt(item.publishedAt),
         accountId: accountId || null,
         accountName: hotPlainText(item.accountName, 120) || null,
-        accountMatched: Boolean(
-          source.accountId && source.accountId === accountId,
-        ),
+        accountMatched: false,
         rank: rank(item.rank),
         heat: number(item.heat),
       });
@@ -162,14 +159,16 @@ function parseJsonData(
     }
     const object = hotRecord(value);
     if (source.kind === 'weiboHot') {
-      const hotgov = Array.isArray(object.hotgov)
-        ? object.hotgov
+      const hotgov: unknown[] = Array.isArray(object.hotgov)
+        ? (object.hotgov as unknown[])
         : hotRecord(object.hotgov).word
           ? [object.hotgov]
           : [];
-      const rows = [
-        ...(Array.isArray(object.band_list) ? object.band_list : []),
-        ...(Array.isArray(object.Events) ? object.Events : []),
+      const rows: unknown[] = [
+        ...(Array.isArray(object.band_list)
+          ? (object.band_list as unknown[])
+          : []),
+        ...(Array.isArray(object.Events) ? (object.Events as unknown[]) : []),
         ...hotgov,
       ].slice(0, 100);
       for (const raw of rows) {
@@ -191,7 +190,7 @@ function parseJsonData(
         });
       }
     }
-    if (Array.isArray(object.word_list) && source.kind !== 'douyinAccount') {
+    if (Array.isArray(object.word_list)) {
       for (const raw of object.word_list.slice(0, 100)) {
         const word = hotRecord(raw);
         add({
@@ -215,11 +214,6 @@ function parseJsonData(
         const ids = [identifier(author.sec_uid), identifier(author.uid)].filter(
           Boolean,
         );
-        const matched = Boolean(
-          source.accountId && ids.includes(source.accountId),
-        );
-        // Nicknames do not identify an account; never substitute a model-inferred owner.
-        if (source.kind === 'douyinAccount' && !matched) continue;
         const id = identifier(item.aweme_id);
         const link =
           normalizeHotTopicLink(item.share_url) ??
@@ -229,9 +223,9 @@ function parseJsonData(
           title: hotPlainText(item.desc, 300),
           summary: hotPlainText(item.desc),
           url: link ?? '',
-          accountId: matched ? source.accountId : ids[0] || null,
+          accountId: ids[0] || null,
           accountName: hotPlainText(author.nickname, 120) || null,
-          accountMatched: matched,
+          accountMatched: false,
           publishedAt: hotPublishedAt(item.create_time),
         });
       }
@@ -385,16 +379,20 @@ function parseHotTable(
     cursor = end + 5;
     rows += 1;
     const row = body.slice(openEnd + 1, end);
-    const anchor = /<a\b[^>]*\bhref\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a\s*>/i.exec(
-      row,
-    );
+    const anchor =
+      /<a\b[^>]*\bhref\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a\s*>/i.exec(
+        row,
+      );
     if (!anchor) continue;
     const title = hotPlainText(anchor[2], 300);
     const url = title.length >= 2 ? hotLink(anchor[1], source.url) : null;
     if (!title || !url || seen.has(`${url}\n${title}`)) continue;
     seen.add(`${url}\n${title}`);
     const cells = cellTexts(row);
-    const position = Number.parseInt((cells[0] ?? '').replace(/[^\d]/g, ''), 10);
+    const position = Number.parseInt(
+      (cells[0] ?? '').replace(/[^\d]/g, ''),
+      10,
+    );
     const heat = cells.map(hotCount).find((value) => value !== null) ?? null;
     output.push({
       ...base(source, fetchedAt),
@@ -415,11 +413,6 @@ export function parseHotTopicPayload(
 ): HotTopicCandidate[] {
   if (Buffer.byteLength(body, 'utf8') > HOT_SOURCE_BYTE_LIMIT)
     throw new HotTopicFetchError('too_large', '来源响应超过 3 MB 限制');
-  if (source.kind === 'douyinAccount' && !source.accountId.trim())
-    throw new HotTopicFetchError(
-      'missing_account',
-      '抖音账号采集需要精确 UID 或 sec_uid，不能仅凭昵称确认作者',
-    );
   if (source.kind === 'rss') return parseRss(body, source, fetchedAt);
   if (body.trimStart().startsWith('{') || body.trimStart().startsWith('[')) {
     try {
@@ -459,9 +452,7 @@ export function parseHotTopicPayload(
   if (!candidates.length)
     throw new HotTopicFetchError(
       'dynamic_page',
-      source.kind === 'douyinAccount'
-        ? '页面中没有可解析且 UID 匹配的账号作品；可能需要登录、验证码或动态加载，请使用授权 JSON Feed 或 AI 联网补充'
-        : '页面中没有可解析的热点 JSON；可能需要验证码或动态加载，请使用授权 Feed 或 AI 联网补充',
+      '页面中没有可解析的热点 JSON；可能需要验证码或动态加载，请使用授权 Feed 或 AI 联网补充',
     );
   return candidates.slice(0, 100);
 }

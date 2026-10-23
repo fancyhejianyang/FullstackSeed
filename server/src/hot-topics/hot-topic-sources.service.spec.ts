@@ -34,7 +34,7 @@ describe('热点来源配置', () => {
     ])
       expect(() => validateSource({ ...source(), url })).toThrow();
   });
-  it('热榜来源允许第三方聚合页，账号来源必须使用官方主页', () => {
+  it('热点页面来源允许平台自有页与第三方聚合页', () => {
     // 热榜既可以是平台自有页面，也可以是合规聚合页（如 tophub.today 的微博热搜榜）。
     for (const url of [
       'https://www.douyin.com/hot',
@@ -59,35 +59,28 @@ describe('热点来源配置', () => {
         url: 'https://tophub.today/n/KqndgxeLl9',
       }),
     ).toThrow('公开页面或 AI 搜索');
-    expect(() =>
-      validateSource({
-        ...source(),
-        apiToken: null,
-        kind: 'douyinAccount',
-        accessMode: 'search',
-        url: 'https://tophub.today/n/KqndgxeLl9',
-        accountName: '央视新闻',
-        accountId: 'MS4w-test',
-      }),
-    ).toThrow('抖音账号来源必须使用 douyin.com');
   });
-  it('锁定账号必须提供真实主页和标识，不能只填名称', () => {
+  it('拒绝新增历史账号类型并以停用的普通页面兼容旧记录', () => {
     const account = {
       ...source(),
       apiToken: null,
       kind: 'douyinAccount' as const,
-      accessMode: 'search' as const,
+      accessMode: 'page' as const,
       url: 'https://www.douyin.com/user/MS4w-test',
       accountName: '央视新闻',
       accountId: 'MS4w-test',
     };
-    expect(() => validateSource(account)).not.toThrow();
-    expect(() => validateSource({ ...account, accountId: '' })).toThrow(
-      '账号标识',
+    expect(() => validateSource(account)).toThrow('指定账号来源已移除');
+    expect(sourceView(account as HotTopicSource)).toMatchObject({
+      kind: 'douyinHot',
+      isEnabled: false,
+    });
+    expect(sourceView(account as HotTopicSource)).not.toHaveProperty(
+      'accountName',
     );
-    expect(() =>
-      validateSource({ ...account, url: 'https://www.douyin.com/hot' }),
-    ).toThrow('主页');
+    expect(sourceView(account as HotTopicSource)).not.toHaveProperty(
+      'accountId',
+    );
   });
   it('敏感 URL 参数大小写与变体均拒绝，不通过概要泄漏密钥', () => {
     for (const key of [

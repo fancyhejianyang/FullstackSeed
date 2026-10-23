@@ -1,22 +1,23 @@
 /** 热点获取、推荐与前端 API 的公共契约；来源正文是资料，不是可执行指令。 */
 export type HotSourceKind =
   | 'douyinHot'
+  /** @deprecated 仅用于识别历史数据，新配置与任务不再接受账号绑定来源。 */
   | 'douyinAccount'
   | 'weiboHot'
   | 'rss'
   | 'jsonFeed';
+export type ConfigurableHotSourceKind = Exclude<HotSourceKind, 'douyinAccount'>;
 /**
  * 平台类来源（公开页面 / AI 搜索）的展示名称与域名归属：
  * - 热榜来源不限域名——既可以是平台自有页面，也可以是合规的第三方聚合页
  *   （如 tophub.today 的微博热搜榜），真实可用地址由使用者自行负责；
- * - 账号来源必须限定平台自身域名，否则无法证明该账号归属哪个平台。
+ * 历史账号来源不再参与配置或任务执行。
  */
 export const PLATFORM_SOURCES: Record<
   string,
   { host?: string; label: string }
 > = {
   douyinHot: { label: '抖音' },
-  douyinAccount: { host: 'douyin.com', label: '抖音' },
   weiboHot: { label: '微博' },
 };
 export function platformSource(kind: string) {
@@ -30,7 +31,7 @@ export function platformLabelForHost(host: string): string | null {
 export function isHostOf(host: string, base: string) {
   return host === base || host.endsWith(`.${base}`);
 }
-/** 热榜类来源允许任意公网 HTTPS 页面（含聚合站），账号类来源才绑定平台域名。 */
+/** 热榜类来源允许任意公网 HTTPS 页面（含聚合站）。 */
 export const HOT_LIST_KINDS = ['douyinHot', 'weiboHot'];
 export type HotSourceAccess = 'page' | 'search' | 'feed';
 export type HotTopicMode = 'aiSearch' | 'platform' | 'hybrid';
@@ -45,11 +46,9 @@ export type HotTopicDecision = 'new' | 'ignored' | 'selected';
 export interface HotSourceInput {
   id: number;
   name: string;
-  kind: HotSourceKind;
+  kind: ConfigurableHotSourceKind;
   accessMode: HotSourceAccess;
   url: string;
-  accountName: string;
-  accountId: string;
   isEnabled: boolean;
   description: string;
   /** 仅用于授权 JSON Feed 的 Bearer Token，不得进入任务/日志快照。 */

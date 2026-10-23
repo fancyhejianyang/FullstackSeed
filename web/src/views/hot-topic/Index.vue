@@ -133,7 +133,7 @@ onBeforeUnmount(() => {
 <template>
   <PageContainer title="热点选题">
     <p class="topic-intro">
-      按你的兴趣获取热点与账号动态，由 AI
+      按你的兴趣获取各平台热点与热搜线索，由 AI
       提供创作建议。先设置偏好，再手动获取或启用每日计划；选题仍由你决定，不会自动生成或发布文章。
     </p>
     <Table

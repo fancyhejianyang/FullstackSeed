@@ -9,7 +9,6 @@ import {
 } from './hot-topic-network';
 import { parseHotTopicPayload } from './hot-topic-parsers';
 import {
-  isHostOf,
   platformLabelForHost,
   platformSource,
   type HotPreferenceInput,
@@ -31,22 +30,6 @@ function matchesSource(url: string, source: HotSourceInput) {
   const host = sourceHost(source);
   const actual = new URL(url).hostname;
   return Boolean(host && (actual === host || actual.endsWith(`.${host}`)));
-}
-function matchesAccountProfile(url: string, source: HotSourceInput) {
-  if (source.kind !== 'douyinAccount' || !source.accountId.trim()) return false;
-  try {
-    const actual = new URL(url);
-    const configured = new URL(source.url);
-    const normalizePath = (value: string) =>
-      decodeURIComponent(value).replace(/\/+$/, '');
-    return (
-      isHostOf(actual.hostname, 'douyin.com') &&
-      normalizePath(actual.pathname) === normalizePath(configured.pathname) &&
-      normalizePath(actual.pathname) === `/user/${source.accountId.trim()}`
-    );
-  } catch {
-    return false;
-  }
 }
 function mergeSourceOutcome(
   outcomes: HotTopicFetchResult['sources'],
@@ -76,8 +59,6 @@ export const DEFAULT_HOT_SOURCE: HotSourceInput = {
   kind: 'douyinHot',
   accessMode: 'page',
   url: 'https://www.douyin.com/hot',
-  accountName: '',
-  accountId: '',
   isEnabled: true,
   description: '公开热点页；动态内容不可读时明确失败，可选择 AI 联网补充。',
 };
@@ -224,8 +205,6 @@ export class HotTopicFetchService {
           name: source.name,
           site: sourceHost(source),
           url: source.url,
-          accountName: source.accountName || undefined,
-          accountId: source.accountId || undefined,
         }));
         const search = await this.webSearch.search(
           input.config,
@@ -237,34 +216,19 @@ export class HotTopicFetchService {
         );
         result.searchExecuted = search.searchExecuted;
         result.totalTokens = search.totalTokens;
-        const verifiedAccountUrls = new Set<string>();
-        for (const source of sources.filter(
-          (item) => item.kind === 'douyinAccount',
-        )) {
-          const profiles = search.sources.filter((item) =>
-            matchesAccountProfile(item.url, source),
-          );
-          for (const item of profiles) {
-            verifiedAccountUrls.add(item.url);
-          }
-        }
-        // One unscoped search result is one candidate. Account profile pages are
-        // identity evidence, not hot topics, and must not be saved as content.
+        // One verified search source is one candidate. Configuration scopes
+        // results by the source domain; it no longer claims account ownership.
         for (const item of search.sources) {
-          if (verifiedAccountUrls.has(item.url)) continue;
           const matchedSources = sources.filter((source) =>
             matchesSource(item.url, source),
           );
           if (!matchedSources.length) continue;
-          const unscoped = matchedSources.filter(
-            (source) => source.kind !== 'douyinAccount' && !source.accountId,
-          );
-          if (!unscoped.length) continue;
           const host = new URL(item.url).hostname;
           const candidate: HotTopicCandidate = {
             ...item,
             sourceName: host.slice(0, 120),
-            sourceId: unscoped.length === 1 ? unscoped[0].id || null : null,
+            sourceId:
+              matchedSources.length === 1 ? matchedSources[0].id || null : null,
             platform: platformLabelForHost(host) ?? host.slice(0, 40),
             accountName: null,
             accountId: null,
@@ -280,28 +244,16 @@ export class HotTopicFetchService {
           const matches = search.sources.filter((item) =>
             matchesSource(item.url, source),
           );
-          const accountRestricted =
-            source.kind === 'douyinAccount' || Boolean(source.accountId);
-          const accountProfiles = accountRestricted
-            ? search.sources.filter((item) =>
-                matchesAccountProfile(item.url, source),
-              )
-            : [];
-          const verified = accountRestricted ? [] : matches;
           mergeSourceOutcome(
             result.sources,
             {
               sourceId: source.id || null,
               sourceName: source.name,
-              status: verified.length ? 'succeeded' : 'failed',
-              count: verified.length,
-              message: verified.length
+              status: matches.length ? 'succeeded' : 'failed',
+              count: matches.length,
+              message: matches.length
                 ? '仅收录供应商返回的真实搜索来源，时间和热度缺失时保持未知'
-                : accountRestricted && accountProfiles.length
-                  ? '已命中配置的精确账号主页，但搜索结果没有携带可核验作者标识的具体作品；未将主页或同域名资料当作热点'
-                  : accountRestricted && matches.length
-                    ? '搜索返回了同平台资料，但未命中配置的精确账号主页或稳定账号标识'
-                    : `没有返回该来源的可核验结果；未用其它网站代替${input.mode === 'aiSearch' && source.accessMode !== 'search' ? '。当前为仅 AI 联网模式，未直接读取配置页面' : ''}`,
+                : `没有返回该来源的可核验结果；未用其它网站代替${input.mode === 'aiSearch' && source.accessMode !== 'search' ? '。当前为仅 AI 联网模式，未直接读取配置页面' : ''}`,
             },
             'AI 联网',
           );

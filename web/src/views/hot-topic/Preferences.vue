@@ -94,11 +94,11 @@ const fields = computed<FormField[]>(() => [
   },
   {
     prop: 'sourceIds',
-    label: '热点来源 / 指定账号',
+    label: '热点来源',
     type: 'selectMultiple',
     options: sourceOptions,
     span: 2,
-    hint: '最多选择 5 个；选项后的标记表示其配置的获取方式。指定账号只有命中精确主页与稳定账号标识时才认定为该账号。',
+    hint: '最多选择 5 个；可选择平台热点页面、热搜聚合页、RSS 或授权 JSON Feed，选项后的标记表示其获取方式。',
   },
   {
     prop: 'interests',

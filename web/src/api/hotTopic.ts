@@ -14,11 +14,9 @@ export type HotRunStatus =
 export type HotTopicDecision = 'new' | 'ignored' | 'selected';
 export interface HotSourceForm {
   name: string;
-  kind: HotSourceKind;
+  kind: Exclude<HotSourceKind, 'douyinAccount'>;
   accessMode: HotSourceAccess;
   url: string;
-  accountName: string;
-  accountId: string;
   isEnabled: boolean;
   description: string;
   apiToken?: string;
@@ -120,8 +118,6 @@ export interface HotOptions {
     | 'kind'
     | 'accessMode'
     | 'url'
-    | 'accountName'
-    | 'accountId'
     | 'isEnabled'
     | 'description'
   >[];
