@@ -1,4 +1,4 @@
-import { isHostOf } from './hot-topic.types';
+import { HOT_LIST_KINDS } from './hot-topic.types';
 import type { HotSourceInput, HotTopicCandidate } from './hot-topic.types';
 import {
   HOT_SOURCE_BYTE_LIMIT,
@@ -327,6 +327,87 @@ function parseRss(
   return result;
 }
 
+/** 榜单数值常见于第三方聚合页的「253 万」写法，转换是还原而非推测；无法识别时保持未知。 */
+function hotCount(value: string): number | null {
+  const match = /^(\d+(?:\.\d+)?)\s*([万亿]?)$/.exec(value.trim());
+  if (!match) return null;
+  const factor = match[2] === '亿' ? 1e8 : match[2] === '万' ? 1e4 : 1;
+  const parsed = Number(match[1]) * factor;
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+/** 相对地址按来源页解析，避免臆造域名；javascript: 等非链接协议直接丢弃。 */
+function hotLink(href: string, sourceUrl: string): string | null {
+  const candidate = entities(href).trim();
+  if (!candidate || /^(?:javascript|mailto|tel|data):/i.test(candidate))
+    return null;
+  try {
+    return normalizeHotTopicLink(new URL(candidate, sourceUrl).toString());
+  } catch {
+    return null;
+  }
+}
+/** Linear scanning keeps cost proportional to the page size on untrusted markup. */
+function cellTexts(row: string, limit = 12): string[] {
+  const lower = row.toLowerCase();
+  const result: string[] = [];
+  let cursor = 0;
+  while (result.length < limit) {
+    const start = lower.indexOf('<td', cursor);
+    if (start < 0) break;
+    const openEnd = row.indexOf('>', start);
+    const end = lower.indexOf('</td>', openEnd);
+    if (openEnd < 0 || end < 0) break;
+    cursor = end + 5;
+    result.push(hotPlainText(row.slice(openEnd + 1, end), 60));
+  }
+  return result;
+}
+/**
+ * 服务端渲染的榜单表格（如第三方聚合页）：只读「序号 + 标题链接 + 热度」，
+ * 不解析页面上的其它文案，也不因为站点结构变化而臆造条目。
+ */
+function parseHotTable(
+  body: string,
+  source: HotSourceInput,
+  fetchedAt: string,
+): HotTopicCandidate[] {
+  const output: HotTopicCandidate[] = [];
+  const seen = new Set<string>();
+  const lower = body.toLowerCase();
+  let cursor = 0;
+  let rows = 0;
+  while (output.length < 100 && rows < 200) {
+    const start = lower.indexOf('<tr', cursor);
+    if (start < 0) break;
+    const openEnd = body.indexOf('>', start);
+    const end = lower.indexOf('</tr>', openEnd);
+    if (openEnd < 0 || end < 0) break;
+    cursor = end + 5;
+    rows += 1;
+    const row = body.slice(openEnd + 1, end);
+    const anchor = /<a\b[^>]*\bhref\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a\s*>/i.exec(
+      row,
+    );
+    if (!anchor) continue;
+    const title = hotPlainText(anchor[2], 300);
+    const url = title.length >= 2 ? hotLink(anchor[1], source.url) : null;
+    if (!title || !url || seen.has(`${url}\n${title}`)) continue;
+    seen.add(`${url}\n${title}`);
+    const cells = cellTexts(row);
+    const position = Number.parseInt((cells[0] ?? '').replace(/[^\d]/g, ''), 10);
+    const heat = cells.map(hotCount).find((value) => value !== null) ?? null;
+    output.push({
+      ...base(source, fetchedAt),
+      title,
+      summary: '',
+      url,
+      rank: Number.isInteger(position) && position > 0 ? position : null,
+      heat,
+    });
+  }
+  return output;
+}
+
 export function parseHotTopicPayload(
   body: string,
   source: HotSourceInput,
@@ -340,14 +421,6 @@ export function parseHotTopicPayload(
       '抖音账号采集需要精确 UID 或 sec_uid，不能仅凭昵称确认作者',
     );
   if (source.kind === 'rss') return parseRss(body, source, fetchedAt);
-  if (source.kind === 'weiboHot') {
-    const link = normalizeHotTopicLink(source.url);
-    if (!link || !isHostOf(new URL(link).hostname, 'weibo.com'))
-      throw new HotTopicFetchError(
-        'invalid_platform',
-        '微博来源仅支持 weibo.com 域名',
-      );
-  }
   if (body.trimStart().startsWith('{') || body.trimStart().startsWith('[')) {
     try {
       return parseJsonData(JSON.parse(body) as unknown, source, fetchedAt);
@@ -381,6 +454,8 @@ export function parseHotTopicPayload(
       /* An unsupported script is not executable. */
     }
   }
+  if (!candidates.length && HOT_LIST_KINDS.includes(source.kind))
+    candidates.push(...parseHotTable(body, source, fetchedAt));
   if (!candidates.length)
     throw new HotTopicFetchError(
       'dynamic_page',

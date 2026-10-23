@@ -25,7 +25,7 @@ describe('热点来源配置', () => {
     expect(sourceView(source())).toMatchObject({ hasApiToken: true });
     expect(sourceView(source())).not.toHaveProperty('apiToken');
   });
-  it('阻止本地、明文、凭据 URL 和伪装抖音来源', () => {
+  it('阻止本地、明文、凭据 URL', () => {
     for (const url of [
       'http://feed.example.com',
       'https://127.0.0.1',
@@ -33,32 +33,43 @@ describe('热点来源配置', () => {
       'https://feed.example.com?token=abc',
     ])
       expect(() => validateSource({ ...source(), url })).toThrow();
-    expect(() =>
-      validateSource({ ...source(), kind: 'douyinHot', accessMode: 'page' }),
-    ).toThrow('抖音来源');
   });
-  it('微博来源同样限定官方域名与获取方式', () => {
-    expect(() =>
-      validateSource({ ...source(), kind: 'weiboHot', accessMode: 'page' }),
-    ).toThrow('微博来源');
+  it('热榜来源允许第三方聚合页，账号来源必须使用官方主页', () => {
+    // 热榜既可以是平台自有页面，也可以是合规聚合页（如 tophub.today 的微博热搜榜）。
+    for (const url of [
+      'https://www.douyin.com/hot',
+      'https://s.weibo.com/top/summary',
+      'https://tophub.today/n/KqndgxeLl9',
+    ])
+      expect(() =>
+        validateSource({
+          ...source(),
+          apiToken: null,
+          kind: (url.includes('douyin') ? 'douyinHot' : 'weiboHot') as const,
+          accessMode: 'page',
+          url,
+        }),
+      ).not.toThrow();
     expect(() =>
       validateSource({
         ...source(),
         apiToken: null,
         kind: 'weiboHot',
         accessMode: 'feed',
-        url: 'https://weibo.com/ajax/statuses/hot_band',
+        url: 'https://tophub.today/n/KqndgxeLl9',
       }),
     ).toThrow('公开页面或 AI 搜索');
     expect(() =>
       validateSource({
         ...source(),
         apiToken: null,
-        kind: 'weiboHot',
-        accessMode: 'page',
-        url: 'https://s.weibo.com/top/summary',
+        kind: 'douyinAccount',
+        accessMode: 'search',
+        url: 'https://tophub.today/n/KqndgxeLl9',
+        accountName: '央视新闻',
+        accountId: 'MS4w-test',
       }),
-    ).not.toThrow();
+    ).toThrow('抖音账号来源必须使用 douyin.com');
   });
   it('锁定账号必须提供真实主页和标识，不能只填名称', () => {
     const account = {

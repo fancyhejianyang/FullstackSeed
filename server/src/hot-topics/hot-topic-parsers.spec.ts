@@ -182,10 +182,39 @@ describe('hot topic source parsers (offline fixtures)', () => {
       url: `https://s.weibo.com/weibo?q=${encodeURIComponent('#热点二#')}`,
     });
     expect(result[2]).toMatchObject({ title: '置顶议题', heat: 9 });
-    expect(() =>
-      parseHotTopicPayload('{}', { ...source, kind: 'weiboHot' }),
-    ).toThrow('微博来源仅支持');
     expect(parseHotTopicPayload('{"data":{"word_list":[]}}', weibo)).toEqual([]);
+  });
+  it('reads server-rendered hot list tables (e.g. aggregator pages) without inventing links', () => {
+    const weibo = {
+      ...source,
+      kind: 'weiboHot' as const,
+      url: 'https://tophub.today/n/KqndgxeLl9',
+    };
+    const html = `<div class="jc"><table><tbody>
+      <tr><td align="center">1.</td><td><a href="https://s.weibo.com/weibo?q=%E8%A5%BF%E8%97%8F%E5%9C%B0%E9%9C%87" target="_blank">西藏地震已致16死46伤</a></td><td class="ws">253万</td></tr>
+      <tr><td align="center">2.</td><td><a href="/n/detail">相对地址条目</a></td><td class="ws">1.2万</td></tr>
+      <tr><td align="center">3.</td><td><a href="javascript:;">跳过脚本链接</a></td><td class="ws">9万</td></tr>
+      <tr><td align="center">4.</td><td><a href="https://s.weibo.com/weibo?q=%E8%A5%BF%E8%97%8F%E5%9C%B0%E9%9C%87">西藏地震已致16死46伤</a></td><td class="ws">253万</td></tr>
+    </tbody></table></div>`;
+    const result = parseHotTopicPayload(html, weibo, at);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({
+      title: '西藏地震已致16死46伤',
+      platform: '微博',
+      rank: 1,
+      heat: 2530000,
+      url: 'https://s.weibo.com/weibo?q=%E8%A5%BF%E8%97%8F%E5%9C%B0%E9%9C%87',
+    });
+    expect(result[1]).toMatchObject({
+      title: '相对地址条目',
+      rank: 2,
+      heat: 12000,
+      url: 'https://tophub.today/n/detail',
+    });
+    // 非热榜来源不套用表格兜底，行为保持原来的「无可解析 JSON」失败。
+    expect(() =>
+      parseHotTopicPayload(html, { ...source, kind: 'jsonFeed' as const }),
+    ).toThrow('页面中没有可解析的热点 JSON');
   });
   it('returns no fabricated items for empty structured data or unknown JSON schemas', () => {
     expect(parseHotTopicPayload('{"data":{"word_list":[]}}', source)).toEqual(

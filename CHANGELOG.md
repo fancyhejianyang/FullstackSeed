@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-10-23 热榜来源不再限制平台域名（支持第三方聚合页）
+- `server/src/hot-topics/hot-topic.types.ts`：`PLATFORM_SOURCES` 的 `host` 改为可选——热榜来源（`douyinHot` / `weiboHot`）不再绑定域名，既可以是平台自有页面，也可以是合规的第三方聚合页（如 `https://tophub.today/n/KqndgxeLl9` 微博热搜榜）；仅账号来源（`douyinAccount`）保留 `douyin.com` 限制，因为账号归属必须可证明。新增 `HOT_LIST_KINDS` 标记热榜类来源。
+- `server/src/hot-topics/hot-topic-sources.service.ts`：保存校验仅在来源声明了归属域名时校验域名（账号场景），报错文案改为「…账号来源必须使用 … 官方主页地址」；热榜来源仍限制为公开页面或 AI 搜索接入。
+- `server/src/hot-topics/hot-topic-fetch.service.ts`：`sourceHost` 对无域名归属的热榜来源改由来源自身 URL 推导（去掉 `www.`），AI 搜索结果归属与来源匹配逻辑随之沿用；页面采集的域名校验只对账号来源生效。
+- `server/src/hot-topics/hot-topic-parsers.ts`：移除采集入口「微博来源仅支持 weibo.com 域名」的限制；脚本 JSON 解析为空时，对热榜来源新增服务端渲染榜单表格兜底解析（`<tr>` 内「序号 + 标题链接 + 热度」，支持「253 万 / 1.2 亿」写法还原为数值，相对地址按来源页解析，`javascript:` 等非链接协议丢弃，其它来源不套用该兜底）。
+- 测试：`hot-topic-sources.service.spec.ts` 更新为「热榜允许聚合页、账号限定官方域名」；`hot-topic-parsers.spec.ts` 新增聚合榜单表格解析用例。`npx jest hot-topics` 58 项通过，`tsc` 类型校验通过。
+- 已用真实页面验证：`https://tophub.today/n/KqndgxeLl9` 直采可解析出带序号、标题、`https://s.weibo.com/weibo?q=…` 链接与热度的榜单条目（`platform` 为「微博」）。
+
 ### 2026-10-23 热点来源新增微博（weiboHot）后端接入
 - `server/src/hot-topics/hot-topic.types.ts`：`HotSourceKind` 增加 `weiboHot`；新增共享常量 `PLATFORM_SOURCES`（来源类型 → 官方域名 + 展示名）与 `platformSource` / `platformLabelForHost` / `isHostOf`，避免各服务各自维护域名白名单。
 - `server/src/hot-topics/dto/hot-topic.dto.ts`：保存来源 DTO 的 `kind` 校验放行 `weiboHot`（实体 `kind` 为 `varchar(30)`，无需改表）。

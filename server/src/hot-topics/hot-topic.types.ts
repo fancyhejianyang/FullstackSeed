@@ -6,26 +6,32 @@ export type HotSourceKind =
   | 'rss'
   | 'jsonFeed';
 /**
- * 平台类来源（公开页面 / AI 搜索）的归属域名与展示名称；其它来源按自身 URL 匹配。
- * 域名是白名单而非提示：非官方域名不得冒充平台来源。
+ * 平台类来源（公开页面 / AI 搜索）的展示名称与域名归属：
+ * - 热榜来源不限域名——既可以是平台自有页面，也可以是合规的第三方聚合页
+ *   （如 tophub.today 的微博热搜榜），真实可用地址由使用者自行负责；
+ * - 账号来源必须限定平台自身域名，否则无法证明该账号归属哪个平台。
  */
-export const PLATFORM_SOURCES: Record<string, { host: string; label: string }> =
-  {
-    douyinHot: { host: 'douyin.com', label: '抖音' },
-    douyinAccount: { host: 'douyin.com', label: '抖音' },
-    weiboHot: { host: 'weibo.com', label: '微博' },
-  };
+export const PLATFORM_SOURCES: Record<
+  string,
+  { host?: string; label: string }
+> = {
+  douyinHot: { label: '抖音' },
+  douyinAccount: { host: 'douyin.com', label: '抖音' },
+  weiboHot: { label: '微博' },
+};
 export function platformSource(kind: string) {
   return PLATFORM_SOURCES[kind];
 }
 export function platformLabelForHost(host: string): string | null {
   for (const { host: base, label } of Object.values(PLATFORM_SOURCES))
-    if (host === base || host.endsWith(`.${base}`)) return label;
+    if (base && (host === base || host.endsWith(`.${base}`))) return label;
   return null;
 }
 export function isHostOf(host: string, base: string) {
   return host === base || host.endsWith(`.${base}`);
 }
+/** 热榜类来源允许任意公网 HTTPS 页面（含聚合站），账号类来源才绑定平台域名。 */
+export const HOT_LIST_KINDS = ['douyinHot', 'weiboHot'];
 export type HotSourceAccess = 'page' | 'search' | 'feed';
 export type HotTopicMode = 'aiSearch' | 'platform' | 'hybrid';
 export type HotRunStatus =

@@ -19,8 +19,8 @@ import {
 } from './hot-topic.types';
 
 function sourceHost(source: HotSourceInput): string | null {
-  const platform = platformSource(source.kind);
-  if (platform) return platform.host;
+  const platformHost = platformSource(source.kind)?.host;
+  if (platformHost) return platformHost;
   const url = normalizeHotTopicLink(source.url);
   return url ? new URL(url).hostname.replace(/^www\./, '') : null;
 }
@@ -84,13 +84,13 @@ export class HotTopicFetchService {
         try {
           const platform = platformSource(source.kind);
           if (
-            platform &&
+            platform?.host &&
             source.accessMode === 'page' &&
             !matchesSource(source.url, source)
           )
             throw new HotTopicFetchError(
               'invalid_platform',
-              `${platform.label}页面采集仅支持 ${platform.host} 官方域名`,
+              `${platform.label}账号来源页面采集仅支持 ${platform.host} 官方域名`,
             );
           const body = await fetchHotSourceText(source.url, {
             signal: input.signal,

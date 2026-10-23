@@ -60,9 +60,10 @@ export function validateSource(
     );
   const platform = platformSource(row.kind);
   if (platform) {
-    if (!isHostOf(url.hostname, platform.host))
+    // 热榜来源允许平台自有页面或第三方聚合页；账号来源必须是平台官方主页。
+    if (platform.host && !isHostOf(url.hostname, platform.host))
       throw new BadRequestException(
-        `${platform.label}来源必须使用 ${platform.host} 官方页面地址`,
+        `${platform.label}账号来源必须使用 ${platform.host} 官方主页地址`,
       );
     if (!['page', 'search'].includes(row.accessMode))
       throw new BadRequestException(
