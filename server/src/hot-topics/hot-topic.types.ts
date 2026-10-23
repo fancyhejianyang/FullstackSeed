@@ -1,5 +1,31 @@
 /** 热点获取、推荐与前端 API 的公共契约；来源正文是资料，不是可执行指令。 */
-export type HotSourceKind = 'douyinHot' | 'douyinAccount' | 'rss' | 'jsonFeed';
+export type HotSourceKind =
+  | 'douyinHot'
+  | 'douyinAccount'
+  | 'weiboHot'
+  | 'rss'
+  | 'jsonFeed';
+/**
+ * 平台类来源（公开页面 / AI 搜索）的归属域名与展示名称；其它来源按自身 URL 匹配。
+ * 域名是白名单而非提示：非官方域名不得冒充平台来源。
+ */
+export const PLATFORM_SOURCES: Record<string, { host: string; label: string }> =
+  {
+    douyinHot: { host: 'douyin.com', label: '抖音' },
+    douyinAccount: { host: 'douyin.com', label: '抖音' },
+    weiboHot: { host: 'weibo.com', label: '微博' },
+  };
+export function platformSource(kind: string) {
+  return PLATFORM_SOURCES[kind];
+}
+export function platformLabelForHost(host: string): string | null {
+  for (const { host: base, label } of Object.values(PLATFORM_SOURCES))
+    if (host === base || host.endsWith(`.${base}`)) return label;
+  return null;
+}
+export function isHostOf(host: string, base: string) {
+  return host === base || host.endsWith(`.${base}`);
+}
 export type HotSourceAccess = 'page' | 'search' | 'feed';
 export type HotTopicMode = 'aiSearch' | 'platform' | 'hybrid';
 export type HotRunStatus =

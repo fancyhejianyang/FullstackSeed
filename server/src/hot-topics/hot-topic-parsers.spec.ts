@@ -149,6 +149,44 @@ describe('hot topic source parsers (offline fixtures)', () => {
       ),
     ).toThrow('DTD');
   });
+  it('reads Weibo hot band JSON, builds only safe search links and keeps missing heat/rank unknown', () => {
+    const weibo = {
+      ...source,
+      kind: 'weiboHot' as const,
+      url: 'https://weibo.com/ajax/statuses/hot_band',
+    };
+    const result = parseHotTopicPayload(
+      JSON.stringify({
+        band_list: [
+          { word: '微博热点一', raw_hot: 1234567, realpos: 1, note: '热' },
+          { word: '微博热点二', raw_hot: 2, word_scheme: '#热点二#' },
+        ],
+        hotgov: { word: '置顶议题', raw_hot: 9 },
+      }),
+      weibo,
+      at,
+    );
+    expect(result).toHaveLength(3);
+    expect(result[0]).toMatchObject({
+      title: '微博热点一',
+      platform: '微博',
+      heat: 1234567,
+      rank: 1,
+      url: `https://s.weibo.com/weibo?q=${encodeURIComponent('#微博热点一#')}`,
+      acquisition: 'page',
+      publishedAt: null,
+    });
+    expect(result[1]).toMatchObject({
+      title: '微博热点二',
+      rank: null,
+      url: `https://s.weibo.com/weibo?q=${encodeURIComponent('#热点二#')}`,
+    });
+    expect(result[2]).toMatchObject({ title: '置顶议题', heat: 9 });
+    expect(() =>
+      parseHotTopicPayload('{}', { ...source, kind: 'weiboHot' }),
+    ).toThrow('微博来源仅支持');
+    expect(parseHotTopicPayload('{"data":{"word_list":[]}}', weibo)).toEqual([]);
+  });
   it('returns no fabricated items for empty structured data or unknown JSON schemas', () => {
     expect(parseHotTopicPayload('{"data":{"word_list":[]}}', source)).toEqual(
       [],

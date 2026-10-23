@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { createHash } from 'node:crypto';
-import type { HotTopicAnalysis } from './hot-topic.types';
+import { isHostOf, type HotTopicAnalysis } from './hot-topic.types';
 
 export const HOT_TOPIC_DEADLINE_MS = 5 * 60 * 1000;
 export const HOT_TOPIC_LEASE_MS = 30 * 1000;
@@ -31,13 +31,19 @@ export function topicUrlHash(raw: string, title?: string): string {
   }
   url.searchParams.sort();
   const isDouyinLanding =
-    (url.hostname === 'douyin.com' || url.hostname.endsWith('.douyin.com')) &&
+    isHostOf(url.hostname, 'douyin.com') &&
     /^(?:\/hot(?:\/.*)?|\/search(?:\/.*)?|\/user\/[^/]+\/?|\/)$/.test(
+      url.pathname,
+    );
+  // 微博热搜榜、汇总页与登录落地页同样是容器地址：不同词条不得以同一链接去重。
+  const isWeiboLanding =
+    isHostOf(url.hostname, 'weibo.com') &&
+    /^(?:\/(?:hot\/search|top\/summary|newlogin|ajax\/statuses\/hot_band)(?:\/.*)?|\/)$/.test(
       url.pathname,
     );
   // A leaderboard/profile URL identifies a container, not the individual event.
   const identity =
-    isDouyinLanding && title?.trim()
+    (isDouyinLanding || isWeiboLanding) && title?.trim()
       ? `${url.toString()}\n${title.normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase()}`
       : url.toString();
   return createHash('sha256').update(identity).digest('hex');

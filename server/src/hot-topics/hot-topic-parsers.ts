@@ -1,3 +1,4 @@
+import { isHostOf } from './hot-topic.types';
 import type { HotSourceInput, HotTopicCandidate } from './hot-topic.types';
 import {
   HOT_SOURCE_BYTE_LIMIT,
@@ -96,11 +97,14 @@ function base(source: HotSourceInput, fetchedAt: string): HotTopicCandidate {
     url: '',
     sourceName: source.name,
     sourceId: source.id || null,
-    platform: source.kind.startsWith('douyin')
-      ? '抖音'
-      : source.kind === 'rss'
-        ? 'RSS'
-        : 'JSON Feed',
+    platform:
+      source.kind === 'weiboHot'
+        ? '微博'
+        : source.kind.startsWith('douyin')
+          ? '抖音'
+          : source.kind === 'rss'
+            ? 'RSS'
+            : 'JSON Feed',
     accountName: null,
     accountId: null,
     accountMatched: false,
@@ -157,6 +161,36 @@ function parseJsonData(
       return;
     }
     const object = hotRecord(value);
+    if (source.kind === 'weiboHot') {
+      const hotgov = Array.isArray(object.hotgov)
+        ? object.hotgov
+        : hotRecord(object.hotgov).word
+          ? [object.hotgov]
+          : [];
+      const rows = [
+        ...(Array.isArray(object.band_list) ? object.band_list : []),
+        ...(Array.isArray(object.Events) ? object.Events : []),
+        ...hotgov,
+      ].slice(0, 100);
+      for (const raw of rows) {
+        const row = hotRecord(raw);
+        const word = hotPlainText(row.word, 300);
+        if (!word) continue;
+        // 微博词条没有自带原文链接时只生成搜索地址，不臆造原文；名次与热度缺失保持未知。
+        const scheme = string(row.word_scheme).trim() || `#${word}#`;
+        add({
+          ...base(source, fetchedAt),
+          title: word,
+          summary: hotPlainText(row.note),
+          url:
+            normalizeHotTopicLink(row.url ?? row.share_url) ??
+            `https://s.weibo.com/weibo?q=${encodeURIComponent(scheme)}`,
+          rank: rank(row.realpos ?? row.rank ?? row.position),
+          heat: number(row.raw_hot ?? row.num ?? row.hot_value),
+          publishedAt: hotPublishedAt(row.event_time),
+        });
+      }
+    }
     if (Array.isArray(object.word_list) && source.kind !== 'douyinAccount') {
       for (const raw of object.word_list.slice(0, 100)) {
         const word = hotRecord(raw);
@@ -203,7 +237,12 @@ function parseJsonData(
       }
     }
     for (const [key, child] of Object.entries(object))
-      if (!['word_list', 'aweme_list'].includes(key)) visit(child, depth + 1);
+      if (
+        !['word_list', 'aweme_list', 'band_list', 'hotgov', 'Events'].includes(
+          key,
+        )
+      )
+        visit(child, depth + 1);
   }
   visit(data, 0);
   return output;
@@ -301,6 +340,14 @@ export function parseHotTopicPayload(
       '抖音账号采集需要精确 UID 或 sec_uid，不能仅凭昵称确认作者',
     );
   if (source.kind === 'rss') return parseRss(body, source, fetchedAt);
+  if (source.kind === 'weiboHot') {
+    const link = normalizeHotTopicLink(source.url);
+    if (!link || !isHostOf(new URL(link).hostname, 'weibo.com'))
+      throw new HotTopicFetchError(
+        'invalid_platform',
+        '微博来源仅支持 weibo.com 域名',
+      );
+  }
   if (body.trimStart().startsWith('{') || body.trimStart().startsWith('[')) {
     try {
       return parseJsonData(JSON.parse(body) as unknown, source, fetchedAt);

@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-10-23 热点来源新增微博（weiboHot）后端接入
+- `server/src/hot-topics/hot-topic.types.ts`：`HotSourceKind` 增加 `weiboHot`；新增共享常量 `PLATFORM_SOURCES`（来源类型 → 官方域名 + 展示名）与 `platformSource` / `platformLabelForHost` / `isHostOf`，避免各服务各自维护域名白名单。
+- `server/src/hot-topics/dto/hot-topic.dto.ts`：保存来源 DTO 的 `kind` 校验放行 `weiboHot`（实体 `kind` 为 `varchar(30)`，无需改表）。
+- `server/src/hot-topics/hot-topic-sources.service.ts`：`validateSource` 原「抖音专属分支」改为平台通用校验——微博来源必须使用 `weibo.com` 官方域名、且只能用公开页面或 AI 搜索；抖音校验文案与行为保持不变。
+- `server/src/hot-topics/hot-topic-fetch.service.ts`：`sourceHost` 按平台白名单返回 `weibo.com`（`s.weibo.com` 等子域同样命中）；页面采集域名校验与 AI 搜索候选的 `platform` 展示名同步支持微博。
+- `server/src/hot-topics/hot-topic-parsers.ts`：新增微博热搜结构化解析（`band_list` / `hotgov` / `Events`，字段 `word`、`realpos`、`raw_hot`、`word_scheme`、`note`）；词条无自带原文链接时只生成 `https://s.weibo.com/weibo?q=…` 搜索地址，不臆造原文；名次与热度缺失保持未知；采集入口兜底拒绝非 `weibo.com` 的微博来源。
+- `server/src/hot-topics/hot-topic-utils.ts`：`topicUrlHash` 将微博热搜榜 / 汇总页 / 登录页等容器型落地页纳入「URL + 标题」去重。
+- 测试：`hot-topic-sources.service.spec.ts` 新增微博来源域名与获取方式校验；`hot-topic-parsers.spec.ts` 新增微博热搜解析与 Domain 兜底用例。`npx jest hot-topics` 57 项全部通过，`tsc` 类型校验通过。
+- 配置建议：微博来源建议填写 `https://weibo.com/ajax/statuses/hot_band`（返回未压缩 JSON）；需要登录的动态页面仍会明确失败并提示改用授权 Feed 或 AI 联网。
+
 ### 2026-10-22 首页板块隐藏滚动条
 - `web/src/views/home/components/DashboardWidgetCard.vue`：卡片内容区滚动条隐藏（`scrollbar-width: none` + `::-webkit-scrollbar` 隐藏 + `-ms-overflow-style`），保留滚轮与触屏滚动能力，列表超出 8 条仍可在卡片内滚动。
 

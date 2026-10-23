@@ -8,16 +8,19 @@ import {
   safeHotTopicError,
 } from './hot-topic-network';
 import { parseHotTopicPayload } from './hot-topic-parsers';
-import type {
-  HotPreferenceInput,
-  HotSourceInput,
-  HotTopicCandidate,
-  HotTopicFetchResult,
-  HotTopicMode,
+import {
+  platformLabelForHost,
+  platformSource,
+  type HotPreferenceInput,
+  type HotSourceInput,
+  type HotTopicCandidate,
+  type HotTopicFetchResult,
+  type HotTopicMode,
 } from './hot-topic.types';
 
 function sourceHost(source: HotSourceInput): string | null {
-  if (source.kind.startsWith('douyin')) return 'douyin.com';
+  const platform = platformSource(source.kind);
+  if (platform) return platform.host;
   const url = normalizeHotTopicLink(source.url);
   return url ? new URL(url).hostname.replace(/^www\./, '') : null;
 }
@@ -79,14 +82,15 @@ export class HotTopicFetchService {
           continue;
         }
         try {
+          const platform = platformSource(source.kind);
           if (
-            source.kind.startsWith('douyin') &&
+            platform &&
             source.accessMode === 'page' &&
             !matchesSource(source.url, source)
           )
             throw new HotTopicFetchError(
               'invalid_platform',
-              '抖音页面采集仅支持 douyin.com 官方域名',
+              `${platform.label}页面采集仅支持 ${platform.host} 官方域名`,
             );
           const body = await fetchHotSourceText(source.url, {
             signal: input.signal,
@@ -157,10 +161,7 @@ export class HotTopicFetchService {
             ...item,
             sourceName: host.slice(0, 120),
             sourceId: unscoped.length === 1 ? unscoped[0].id || null : null,
-            platform:
-              host === 'douyin.com' || host.endsWith('.douyin.com')
-                ? '抖音'
-                : host.slice(0, 40),
+            platform: platformLabelForHost(host) ?? host.slice(0, 40),
             accountName: null,
             accountId: null,
             accountMatched: false,

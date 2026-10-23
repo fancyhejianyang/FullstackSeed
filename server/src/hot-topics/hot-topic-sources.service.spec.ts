@@ -37,6 +37,29 @@ describe('热点来源配置', () => {
       validateSource({ ...source(), kind: 'douyinHot', accessMode: 'page' }),
     ).toThrow('抖音来源');
   });
+  it('微博来源同样限定官方域名与获取方式', () => {
+    expect(() =>
+      validateSource({ ...source(), kind: 'weiboHot', accessMode: 'page' }),
+    ).toThrow('微博来源');
+    expect(() =>
+      validateSource({
+        ...source(),
+        apiToken: null,
+        kind: 'weiboHot',
+        accessMode: 'feed',
+        url: 'https://weibo.com/ajax/statuses/hot_band',
+      }),
+    ).toThrow('公开页面或 AI 搜索');
+    expect(() =>
+      validateSource({
+        ...source(),
+        apiToken: null,
+        kind: 'weiboHot',
+        accessMode: 'page',
+        url: 'https://s.weibo.com/top/summary',
+      }),
+    ).not.toThrow();
+  });
   it('锁定账号必须提供真实主页和标识，不能只填名称', () => {
     const account = {
       ...source(),

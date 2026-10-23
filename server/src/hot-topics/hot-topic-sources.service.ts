@@ -12,6 +12,7 @@ import {
   UpdateHotTopicSourceDto,
 } from './dto/hot-topic.dto';
 import { normalizeHotTopicLink } from './hot-topic-network';
+import { isHostOf, platformSource } from './hot-topic.types';
 
 /** Credentials are never returned, including to administrators or task snapshots. */
 export function sourceView(row: HotTopicSource) {
@@ -57,13 +58,16 @@ export function validateSource(
     throw new BadRequestException(
       '请将访问密钥填入密钥字段，不要放在来源地址中',
     );
-  if (row.kind.startsWith('douyin')) {
-    if (
-      !(url.hostname === 'douyin.com' || url.hostname.endsWith('.douyin.com'))
-    )
-      throw new BadRequestException('抖音来源必须使用 douyin.com 官方页面地址');
+  const platform = platformSource(row.kind);
+  if (platform) {
+    if (!isHostOf(url.hostname, platform.host))
+      throw new BadRequestException(
+        `${platform.label}来源必须使用 ${platform.host} 官方页面地址`,
+      );
     if (!['page', 'search'].includes(row.accessMode))
-      throw new BadRequestException('抖音来源请选择公开页面或 AI 搜索');
+      throw new BadRequestException(
+        `${platform.label}来源请选择公开页面或 AI 搜索`,
+      );
     if (
       row.kind === 'douyinAccount' &&
       (!row.accountName.trim() || !row.accountId.trim())
