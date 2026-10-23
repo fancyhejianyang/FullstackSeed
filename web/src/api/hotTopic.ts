@@ -1,8 +1,10 @@
 import request from '@/utils/request';
 import type { AiWebSearchMode } from '@/api/aiFeatureConfig';
 
-export type HotSourceKind = 'douyinHot' | 'douyinAccount' | 'rss' | 'jsonFeed';
-export type HotSourceAccess = 'page' | 'search' | 'feed';
+export type HotSourceKind = 'douyinHot' | 'neteaseNews';
+export type HotSourceAccess = 'page' | 'search';
+export const NETEASE_NEWS_API_URL =
+  'https://news.163.com/special/0001220O/new_json2021.js?0.20812515014162658';
 export type HotTopicMode = 'aiSearch' | 'platform' | 'hybrid';
 export type HotRunStatus =
   | 'pending'
@@ -14,20 +16,14 @@ export type HotRunStatus =
 export type HotTopicDecision = 'new' | 'ignored' | 'selected';
 export interface HotSourceForm {
   name: string;
-  kind: Exclude<HotSourceKind, 'douyinAccount'>;
+  kind: HotSourceKind;
   accessMode: HotSourceAccess;
   url: string;
   isEnabled: boolean;
   description: string;
-  apiToken?: string;
-  clearApiToken?: boolean;
 }
-export interface HotSource extends Omit<
-  HotSourceForm,
-  'apiToken' | 'clearApiToken'
-> {
+export interface HotSource extends HotSourceForm {
   id: number;
-  hasApiToken?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -130,14 +126,11 @@ export interface HotOptions {
 }
 export const sourceKindLabels: Record<HotSourceKind, string> = {
   douyinHot: '抖音热点',
-  douyinAccount: '抖音指定账号',
-  rss: 'RSS 订阅',
-  jsonFeed: '授权 JSON Feed',
+  neteaseNews: '网易国内新闻',
 };
 export const sourceAccessLabels: Record<HotSourceAccess, string> = {
   page: '公开页面',
   search: '联网搜索线索',
-  feed: '订阅接口',
 };
 export const modeLabels: Record<HotTopicMode, string> = {
   aiSearch: 'AI 联网搜索',

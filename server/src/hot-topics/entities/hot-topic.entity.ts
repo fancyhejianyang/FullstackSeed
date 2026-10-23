@@ -19,6 +19,7 @@ export class HotTopicSource extends BaseEntity {
   @Column({ length: 2048 }) url: string;
   @Column({ length: 120, default: '' }) accountName: string;
   @Column({ length: 160, default: '' }) accountId: string;
+  /** 历史列保留以避免自动同步删列；已无读写或授权采集入口。 */
   @Column({ type: 'text', nullable: true, select: false }) apiToken:
     | string
     | null;

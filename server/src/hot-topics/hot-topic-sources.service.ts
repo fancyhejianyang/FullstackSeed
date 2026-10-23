@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Like, Not, Repository } from 'typeorm';
+import { In, Like, Repository } from 'typeorm';
 import { HotTopicSource } from './entities/hot-topic.entity';
 import {
   HotTopicSourceQueryDto,
@@ -13,30 +13,38 @@ import {
 } from './dto/hot-topic.dto';
 import { normalizeHotTopicLink } from './hot-topic-network';
 import {
+  CONFIGURABLE_HOT_SOURCE_KINDS,
+  isConfigurableHotSourceKind,
+  NETEASE_NEWS_URL,
   platformSource,
   type ConfigurableHotSourceKind,
 } from './hot-topic.types';
 
-/** Credentials are never returned, including to administrators or task snapshots. */
 export function sourceView(row: HotTopicSource) {
   const { apiToken, accountName, accountId, ...safe } = row;
+  void apiToken;
   void accountName;
   void accountId;
-  const legacyAccount = row.kind === 'douyinAccount';
+  const supported = isConfigurableHotSourceKind(row.kind);
   return {
     ...safe,
-    kind: legacyAccount ? ('douyinHot' as const) : row.kind,
-    isEnabled: legacyAccount ? false : row.isEnabled,
-    hasApiToken: Boolean(apiToken),
+    // Legacy account, RSS and JSON Feed records are kept only in the database
+    // audit trail. They cannot be returned as executable source configurations.
+    kind: supported ? row.kind : ('douyinHot' as const),
+    isEnabled: supported ? row.isEnabled : false,
   };
 }
 
 export function validateSource(
   row: Pick<
     HotTopicSource,
-    'kind' | 'accessMode' | 'url' | 'accountName' | 'accountId' | 'apiToken'
+    'kind' | 'accessMode' | 'url' | 'accountName' | 'accountId'
   >,
 ) {
+  if (!isConfigurableHotSourceKind(row.kind))
+    throw new BadRequestException(
+      '该热点来源类型已移除，请选择当前支持的来源类型',
+    );
   let url: URL;
   try {
     url = new URL(row.url);
@@ -66,23 +74,26 @@ export function validateSource(
       ].includes(key.toLowerCase().replace(/[_-]/g, '')),
     )
   )
-    throw new BadRequestException(
-      '请将访问密钥填入密钥字段，不要放在来源地址中',
-    );
-  if (row.kind === 'douyinAccount')
-    throw new BadRequestException(
-      '指定账号来源已移除，请改用平台热点页面、RSS 或授权 JSON Feed',
-    );
+    throw new BadRequestException('来源只支持公开访问，请移除地址中的访问密钥');
+  if (row.kind === 'neteaseNews') {
+    if (row.accessMode !== 'page')
+      throw new BadRequestException('网易国内新闻仅支持固定新闻接口读取');
+    if (url.href !== NETEASE_NEWS_URL)
+      throw new BadRequestException('网易国内新闻使用系统固定新闻接口地址');
+    return;
+  }
   const platform = platformSource(row.kind);
-  if (platform) {
-    if (!['page', 'search'].includes(row.accessMode))
-      throw new BadRequestException(
-        `${platform.label}来源请选择公开页面或 AI 搜索`,
-      );
-  } else if (row.accessMode !== 'feed')
-    throw new BadRequestException('RSS / JSON 来源使用 Feed 接入方式');
-  if (row.apiToken && (row.kind !== 'jsonFeed' || url.protocol !== 'https:'))
-    throw new BadRequestException('访问密钥仅可用于 HTTPS 授权 JSON Feed');
+  if (!platform || !['page', 'search'].includes(row.accessMode))
+    throw new BadRequestException('热点来源请选择公开页面或 AI 搜索');
+}
+
+function applyFixedSourceDefaults(
+  row: Pick<HotTopicSource, 'kind' | 'accessMode' | 'url'>,
+) {
+  if (row.kind === 'neteaseNews') {
+    row.accessMode = 'page';
+    row.url = NETEASE_NEWS_URL;
+  }
 }
 
 @Injectable()
@@ -100,13 +111,13 @@ export class HotTopicSourcesService {
         kind: true,
         accessMode: true,
         url: true,
-        apiToken: true,
         isEnabled: true,
         description: true,
         createdAt: true,
         updatedAt: true,
       },
       where: {
+        kind: In(CONFIGURABLE_HOT_SOURCE_KINDS),
         ...(query.keyword?.trim()
           ? { name: Like(`%${query.keyword.trim()}%`) }
           : {}),
@@ -122,7 +133,10 @@ export class HotTopicSourcesService {
   }
   async options() {
     const rows = await this.repository.find({
-      where: { isEnabled: true, kind: Not('douyinAccount') },
+      where: {
+        isEnabled: true,
+        kind: In(CONFIGURABLE_HOT_SOURCE_KINDS),
+      },
       order: { id: 'DESC' },
       select: {
         id: true,
@@ -137,11 +151,7 @@ export class HotTopicSourcesService {
     return rows.map(sourceView);
   }
   private async record(id: number) {
-    const row = await this.repository
-      .createQueryBuilder('source')
-      .addSelect('source.apiToken')
-      .where('source.id = :id', { id })
-      .getOne();
+    const row = await this.repository.findOne({ where: { id } });
     if (!row) throw new NotFoundException('热点来源不存在');
     return row;
   }
@@ -156,28 +166,26 @@ export class HotTopicSourcesService {
       url: dto.url.trim(),
       accountName: '',
       accountId: '',
-      apiToken: dto.apiToken?.trim() || null,
       isEnabled: dto.isEnabled ?? false,
       description: dto.description?.trim() ?? '',
     });
+    applyFixedSourceDefaults(row);
     validateSource(row);
     return sourceView(await this.repository.save(row));
   }
   async update(id: number, dto: UpdateHotTopicSourceDto) {
     const row = await this.record(id);
-    const { apiToken, clearApiToken, ...fields } = dto;
-    if (Object.values(fields).some((value) => value === null))
+    if (Object.values(dto).some((value) => value === null))
       throw new BadRequestException(
         '来源字段不能为 null，请使用空字符串或明确的启停状态',
       );
-    Object.assign(row, fields);
-    if (row.kind === 'douyinAccount') row.kind = 'douyinHot';
+    Object.assign(row, dto);
+    if (!isConfigurableHotSourceKind(row.kind)) row.kind = 'douyinHot';
     row.name = row.name.trim();
     row.url = row.url.trim();
     row.accountName = '';
     row.accountId = '';
-    if (clearApiToken) row.apiToken = null;
-    else if (apiToken?.trim()) row.apiToken = apiToken.trim();
+    applyFixedSourceDefaults(row);
     validateSource(row);
     return sourceView(await this.repository.save(row));
   }
@@ -200,11 +208,10 @@ export class HotTopicSourcesService {
     if (!ids.length) return [];
     const rows = await this.repository
       .createQueryBuilder('source')
-      .addSelect('source.apiToken')
       .where('source.id IN (:...ids)', { ids })
       .andWhere('source.isEnabled = :enabled', { enabled: true })
-      .andWhere('source.kind != :legacyKind', {
-        legacyKind: 'douyinAccount',
+      .andWhere('source.kind IN (:...kinds)', {
+        kinds: CONFIGURABLE_HOT_SOURCE_KINDS,
       })
       .getMany();
     return rows as Array<HotTopicSource & { kind: ConfigurableHotSourceKind }>;

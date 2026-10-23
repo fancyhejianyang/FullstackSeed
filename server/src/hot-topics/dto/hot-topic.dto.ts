@@ -54,17 +54,12 @@ import type { HotTopic } from '../entities/hot-topic.entity';
 
 export class SaveHotTopicSourceDto {
   @IsString() @IsNotEmpty() @MaxLength(120) name: string;
-  @IsIn(['douyinHot', 'weiboHot', 'rss', 'jsonFeed'])
+  @IsIn(['douyinHot', 'weiboHot', 'neteaseNews'])
   kind: ConfigurableHotSourceKind;
-  @IsIn(['page', 'search', 'feed']) accessMode: HotSourceAccess;
+  @IsIn(['page', 'search']) accessMode: HotSourceAccess;
   @IsUrl({ protocols: ['https'], require_protocol: true })
   @MaxLength(2048)
   url: string;
-  @IsOptional() @IsString() @MaxLength(4000) apiToken?: string;
-  @IsOptional()
-  @Transform(({ value }: { value: unknown }) => normalizeBoolean(value))
-  @IsBoolean()
-  clearApiToken?: boolean;
   @IsOptional()
   @Transform(({ value }: { value: unknown }) => normalizeBoolean(value))
   @IsBoolean()

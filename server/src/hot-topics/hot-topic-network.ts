@@ -105,7 +105,6 @@ export async function fetchHotSourceText(
   value: string,
   options: {
     signal: AbortSignal;
-    bearerToken?: string | null;
     /** 仅供已知平台公开接口使用；不得传入含凭据的地址。 */
     referer?: string;
   },
@@ -115,8 +114,6 @@ export async function fetchHotSourceText(
     AbortSignal.timeout(HOT_SOURCE_TIMEOUT_MS),
   ]);
   const target = await resolveHotSourceTarget(value, signal);
-  if (options.bearerToken && /[\r\n]/.test(options.bearerToken))
-    throw new HotTopicFetchError('invalid_token', '来源访问令牌格式无效');
   const referer = options.referer
     ? normalizeHotTopicLink(options.referer)
     : null;
@@ -129,13 +126,10 @@ export async function fetchHotSourceText(
         signal,
         headers: {
           Accept:
-            'application/json, application/rss+xml, application/atom+xml, text/html, application/xml, text/xml',
+            'application/json, text/javascript, application/javascript, text/plain, text/html',
           'Accept-Encoding': 'identity',
           'User-Agent': 'FullstackSeed-HotTopics/1.0',
           ...(referer ? { Referer: referer } : {}),
-          ...(options.bearerToken
-            ? { Authorization: `Bearer ${options.bearerToken}` }
-            : {}),
         },
         lookup: (_host, options, callback) => {
           if (options.all)
@@ -159,12 +153,12 @@ export async function fetchHotSourceText(
           return;
         }
         const mime = (response.headers['content-type'] ?? '').toLowerCase();
-        if (mime && !/(json|xml|html|text\/plain)/.test(mime)) {
+        if (mime && !/(json|javascript|html|text\/plain)/.test(mime)) {
           response.destroy();
           reject(
             new HotTopicFetchError(
               'content_type',
-              '来源未返回可解析的文本、JSON 或 RSS',
+              '来源未返回可解析的文本、JSON 或新闻数据',
             ),
           );
           return;

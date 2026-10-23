@@ -98,69 +98,50 @@ describe('hot topic source parsers (offline fixtures)', () => {
       ),
     ).toThrow('没有可解析');
   });
-  it('reads explicit JSON feeds, sanitizes text, and rejects unsafe article links', () => {
-    const feed = {
+  it('reads only domestic news from the fixed NetEase payload without executing JavaScript', () => {
+    const netease = {
       ...source,
-      kind: 'jsonFeed' as const,
-      accessMode: 'feed' as const,
+      name: '网易国内新闻',
+      kind: 'neteaseNews' as const,
+      url: 'https://news.163.com/special/0001220O/new_json2021.js',
     };
     const result = parseHotTopicPayload(
-      JSON.stringify({
-        items: [
-          {
-            title: '<b>今日科技</b>',
-            url: 'https://news.example.com/1',
-            summary: '正常<script>bad()</script>摘要',
-            rank: 2,
-            publishedAt: '2026-10-21T08:00:00Z',
-          },
-          { title: '内网内容', url: 'http://127.0.0.1/secret' },
-          { title: '不安全链接', url: 'javascript:alert(1)' },
+      `var data = ${JSON.stringify({
+        category: [{ n: '国内' }, { n: '国际' }],
+        news: [
+          [
+            {
+              c: 0,
+              t: '<b>国内要闻</b>',
+              l: 'https://www.163.com/dy/article/DOMESTIC.html',
+              p: '2026-10-23 14:38:12',
+            },
+            {
+              c: 1,
+              t: '不应收录的国际新闻',
+              l: 'https://www.163.com/dy/article/WORLD.html',
+              p: '2026-10-23 14:39:12',
+            },
+          ],
         ],
-      }),
-      feed,
+      })};`,
+      netease,
       at,
     );
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({
-      title: '今日科技',
-      summary: '正常摘要',
-      rank: 2,
-      acquisition: 'feed',
-      publishedAt: at,
+      title: '国内要闻',
+      url: 'https://www.163.com/dy/article/DOMESTIC.html',
+      platform: '网易新闻',
+      acquisition: 'page',
+      publishedAt: '2026-10-23T06:38:12.000Z',
     });
-  });
-  it('supports RSS CDATA and Atom alternate links without evaluating entities', () => {
-    const rss = {
-      ...source,
-      kind: 'rss' as const,
-      accessMode: 'feed' as const,
-    };
-    expect(
-      parseHotTopicPayload(
-        '<rss><channel><item><title><![CDATA[新闻 &amp; 科技]]></title><link>https://news.example.com/?a=1&amp;b=2</link><description><![CDATA[<p>摘要</p>]]></description><pubDate>Wed, 21 Oct 2026 08:00:00 GMT</pubDate></item></channel></rss>',
-        rss,
-        at,
-      )[0],
-    ).toMatchObject({
-      title: '新闻 & 科技',
-      url: 'https://news.example.com/?a=1&b=2',
-      summary: '摘要',
-      publishedAt: at,
-    });
-    expect(
-      parseHotTopicPayload(
-        '<feed><entry><title>Atom 新闻</title><link rel="self" href="https://news.example.com/api"/><link rel="alternate" href="https://news.example.com/post"/><updated>2026-10-21T08:00:00Z</updated></entry></feed>',
-        rss,
-        at,
-      )[0].url,
-    ).toBe('https://news.example.com/post');
     expect(() =>
-      parseHotTopicPayload(
-        '<!DOCTYPE rss [<!ENTITY a SYSTEM "file:///etc/passwd">]><rss></rss>',
-        rss,
-      ),
-    ).toThrow('DTD');
+      parseHotTopicPayload('var data = (() => {})();', netease),
+    ).toThrow('有效 JSON');
+    expect(() =>
+      parseHotTopicPayload('var data = {"category":[],"news":[]};', netease),
+    ).toThrow('国内分类');
   });
   it('reads Weibo hot band JSON, builds only safe search links and keeps missing heat/rank unknown', () => {
     const weibo = {
@@ -226,10 +207,6 @@ describe('hot topic source parsers (offline fixtures)', () => {
       heat: 12000,
       url: 'https://tophub.today/n/detail',
     });
-    // 非热榜来源不套用表格兜底，行为保持原来的「无可解析 JSON」失败。
-    expect(() =>
-      parseHotTopicPayload(html, { ...source, kind: 'jsonFeed' as const }),
-    ).toThrow('页面中没有可解析的热点 JSON');
   });
   it('returns no fabricated items for empty structured data or unknown JSON schemas', () => {
     expect(parseHotTopicPayload('{"data":{"word_list":[]}}', source)).toEqual(
@@ -237,22 +214,7 @@ describe('hot topic source parsers (offline fixtures)', () => {
     );
     expect(parseHotTopicPayload('{"text":"一条热点"}', source)).toEqual([]);
   });
-  it('bounds external ranks and safely ignores unclosed markup', () => {
-    const feed = {
-      ...source,
-      kind: 'jsonFeed' as const,
-      accessMode: 'feed' as const,
-    };
-    const rows = parseHotTopicPayload(
-      JSON.stringify({
-        items: [
-          { title: '超大排名', url: 'https://news.example.com/1', rank: 1e30 },
-          { title: '非整数排名', url: 'https://news.example.com/2', rank: 1.2 },
-        ],
-      }),
-      feed,
-    );
-    expect(rows.map((row) => row.rank)).toEqual([null, null]);
+  it('safely ignores unclosed markup', () => {
     expect(() =>
       parseHotTopicPayload('<script id="RENDER_DATA">'.repeat(2000), source),
     ).toThrow('没有可解析');

@@ -11,6 +11,7 @@ import { parseHotTopicPayload } from './hot-topic-parsers';
 import {
   platformLabelForHost,
   platformSource,
+  NETEASE_NEWS_URL,
   type HotPreferenceInput,
   type HotSourceInput,
   type HotTopicCandidate,
@@ -72,20 +73,18 @@ export class HotTopicFetchService {
     fetchedAt: string,
     signal: AbortSignal,
   ) {
+    const fixedSource =
+      source.kind === 'neteaseNews'
+        ? { ...source, accessMode: 'page' as const, url: NETEASE_NEWS_URL }
+        : source;
     try {
-      const body = await fetchHotSourceText(source.url, {
-        signal,
-        bearerToken:
-          source.accessMode === 'feed' && source.kind === 'jsonFeed'
-            ? source.apiToken
-            : undefined,
-      });
+      const body = await fetchHotSourceText(fixedSource.url, { signal });
       return {
-        candidates: parseHotTopicPayload(body, source, fetchedAt),
+        candidates: parseHotTopicPayload(body, fixedSource, fetchedAt),
         message: '已读取配置来源的公开结构化数据',
       };
     } catch (primaryError) {
-      const configured = normalizeHotTopicLink(source.url);
+      const configured = normalizeHotTopicLink(fixedSource.url);
       if (source.kind !== 'weiboHot' || configured === WEIBO_HOT_FALLBACK_URL)
         throw primaryError;
       try {
@@ -96,7 +95,7 @@ export class HotTopicFetchService {
         return {
           candidates: parseHotTopicPayload(
             body,
-            { ...source, url: WEIBO_HOT_FALLBACK_URL },
+            { ...fixedSource, url: WEIBO_HOT_FALLBACK_URL },
             fetchedAt,
           ),
           message: `配置页面未能直读（${safeHotTopicError(primaryError)}），已改用微博官方热搜接口`,
@@ -122,9 +121,18 @@ export class HotTopicFetchService {
         'too_many_sources',
         '每次最多选择 5 个热点来源',
       );
-    const sources = input.sources.length
-      ? input.sources.filter((source) => source.isEnabled)
-      : [DEFAULT_HOT_SOURCE];
+    const sources = (
+      input.sources.length
+        ? input.sources.filter((source) => source.isEnabled)
+        : [DEFAULT_HOT_SOURCE]
+    ).map((source) =>
+      source.kind === 'neteaseNews'
+        ? { ...source, url: NETEASE_NEWS_URL, accessMode: 'page' as const }
+        : source,
+    );
+    const searchSources = sources.filter(
+      (source) => source.kind !== 'neteaseNews',
+    );
     const result: HotTopicFetchResult = {
       candidates: [],
       sources: [],
@@ -132,8 +140,10 @@ export class HotTopicFetchService {
       totalTokens: null,
     };
     const fetchedAt = new Date().toISOString();
-    if (input.mode !== 'aiSearch') {
+    {
       for (const source of sources) {
+        if (input.mode === 'aiSearch' && source.kind !== 'neteaseNews')
+          continue;
         input.signal.throwIfAborted();
         if (source.accessMode === 'search') {
           if (input.mode === 'platform')
@@ -155,7 +165,7 @@ export class HotTopicFetchService {
           )
             throw new HotTopicFetchError(
               'invalid_platform',
-              `${platform.label}账号来源页面采集仅支持 ${platform.host} 官方域名`,
+              `${platform.label}来源页面采集仅支持 ${platform.host} 官方域名`,
             );
           const direct = await this.readPageSource(
             source,
@@ -173,7 +183,7 @@ export class HotTopicFetchService {
               count: candidates.length,
               message: candidates.length
                 ? direct.message
-                : '来源没有返回可用且符合账号约束的数据',
+                : '来源没有返回符合分类要求的可用数据',
             },
             '平台读取',
           );
@@ -193,7 +203,7 @@ export class HotTopicFetchService {
         }
       }
     }
-    if (input.mode !== 'platform' && sources.length) {
+    if (input.mode !== 'platform' && searchSources.length) {
       input.signal.throwIfAborted();
       try {
         if (!input.config)
@@ -201,7 +211,7 @@ export class HotTopicFetchService {
             'missing_ai',
             'AI 联网模式需要选择热点发现 AI 配置',
           );
-        const constraints = sources.map((source) => ({
+        const constraints = searchSources.map((source) => ({
           name: source.name,
           site: sourceHost(source),
           url: source.url,
@@ -211,7 +221,7 @@ export class HotTopicFetchService {
           `当前采集时间：${fetchedAt}。检索最近 ${input.preferences.lookbackHours} 小时的热点事件。\n` +
             `限定来源（只返回这些站点的原始网页）：${JSON.stringify(constraints)}\n` +
             `关注领域：${input.preferences.interests}；排除方向：${input.preferences.exclusions}。\n` +
-            `最多 ${input.preferences.maxResults} 条。账号名称仅作为查询条件，不能声称验证了作者身份。不得把搜索索引序号当热点排名。`,
+            `最多 ${input.preferences.maxResults} 条。不得把搜索索引序号当热点排名。`,
           input.signal,
         );
         result.searchExecuted = search.searchExecuted;
@@ -219,7 +229,7 @@ export class HotTopicFetchService {
         // One verified search source is one candidate. Configuration scopes
         // results by the source domain; it no longer claims account ownership.
         for (const item of search.sources) {
-          const matchedSources = sources.filter((source) =>
+          const matchedSources = searchSources.filter((source) =>
             matchesSource(item.url, source),
           );
           if (!matchedSources.length) continue;
@@ -240,7 +250,7 @@ export class HotTopicFetchService {
           };
           result.candidates.push(candidate);
         }
-        for (const source of sources) {
+        for (const source of searchSources) {
           const matches = search.sources.filter((item) =>
             matchesSource(item.url, source),
           );
@@ -260,7 +270,7 @@ export class HotTopicFetchService {
         }
       } catch (error) {
         input.signal.throwIfAborted();
-        for (const source of sources)
+        for (const source of searchSources)
           mergeSourceOutcome(
             result.sources,
             {

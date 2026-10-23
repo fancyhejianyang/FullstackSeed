@@ -1,36 +1,27 @@
-import { Repository } from 'typeorm';
 import { HotTopicSource } from './entities/hot-topic.entity';
-import {
-  HotTopicSourcesService,
-  sourceView,
-  validateSource,
-} from './hot-topic-sources.service';
+import { sourceView, validateSource } from './hot-topic-sources.service';
+import { NETEASE_NEWS_URL } from './hot-topic.types';
 
 const source = () =>
   ({
     id: 1,
-    name: '授权 Feed',
-    kind: 'jsonFeed',
-    accessMode: 'feed',
-    url: 'https://feed.example.com/news.json',
+    name: '网易国内新闻',
+    kind: 'neteaseNews',
+    accessMode: 'page',
+    url: NETEASE_NEWS_URL,
     accountName: '',
     accountId: '',
-    apiToken: 'private-token',
     isEnabled: false,
     description: '',
   }) as HotTopicSource;
 
 describe('热点来源配置', () => {
-  it('详情安全视图只返回是否存在密钥', () => {
-    expect(sourceView(source())).toMatchObject({ hasApiToken: true });
-    expect(sourceView(source())).not.toHaveProperty('apiToken');
-  });
   it('阻止本地、明文、凭据 URL', () => {
     for (const url of [
-      'http://feed.example.com',
+      'http://news.163.com',
       'https://127.0.0.1',
       'https://user:password@example.com',
-      'https://feed.example.com?token=abc',
+      'https://news.163.com?token=abc',
     ])
       expect(() => validateSource({ ...source(), url })).toThrow();
   });
@@ -44,7 +35,6 @@ describe('热点来源配置', () => {
       expect(() =>
         validateSource({
           ...source(),
-          apiToken: null,
           kind: (url.includes('douyin') ? 'douyinHot' : 'weiboHot') as const,
           accessMode: 'page',
           url,
@@ -53,24 +43,30 @@ describe('热点来源配置', () => {
     expect(() =>
       validateSource({
         ...source(),
-        apiToken: null,
         kind: 'weiboHot',
-        accessMode: 'feed',
+        accessMode: 'search',
         url: 'https://tophub.today/n/KqndgxeLl9',
       }),
-    ).toThrow('公开页面或 AI 搜索');
+    ).not.toThrow();
+  });
+  it('网易国内新闻仅接受系统固定接口与页面读取方式', () => {
+    expect(() =>
+      validateSource({ ...source(), url: 'https://news.163.com/domestic/' }),
+    ).toThrow('固定新闻接口地址');
+    expect(() => validateSource({ ...source(), accessMode: 'search' })).toThrow(
+      '仅支持固定新闻接口读取',
+    );
   });
   it('拒绝新增历史账号类型并以停用的普通页面兼容旧记录', () => {
     const account = {
       ...source(),
-      apiToken: null,
       kind: 'douyinAccount' as const,
       accessMode: 'page' as const,
       url: 'https://www.douyin.com/user/MS4w-test',
       accountName: '央视新闻',
       accountId: 'MS4w-test',
     };
-    expect(() => validateSource(account)).toThrow('指定账号来源已移除');
+    expect(() => validateSource(account)).toThrow('热点来源类型已移除');
     expect(sourceView(account as HotTopicSource)).toMatchObject({
       kind: 'douyinHot',
       isEnabled: false,
@@ -95,31 +91,8 @@ describe('热点来源配置', () => {
       expect(() =>
         validateSource({
           ...source(),
-          url: `https://feed.example.com/?${key}=private`,
+          url: `https://news.163.com/?${key}=private`,
         }),
-      ).toThrow('密钥字段');
-  });
-  it('编辑空密钥保留旧值，显式清除才删除', async () => {
-    const row = source();
-    const builder = {
-      addSelect: jest.fn().mockReturnThis(),
-      where: jest.fn().mockReturnThis(),
-      getOne: jest.fn().mockResolvedValue(row),
-    };
-    const repository = {
-      createQueryBuilder: jest.fn().mockReturnValue(builder),
-      save: jest
-        .fn()
-        .mockImplementation((value: HotTopicSource) => Promise.resolve(value)),
-    };
-    const service = new HotTopicSourcesService(
-      repository as unknown as Repository<HotTopicSource>,
-    );
-    const preserved = await service.update(1, { apiToken: '' });
-    expect(row.apiToken).toBe('private-token');
-    expect(preserved.hasApiToken).toBe(true);
-    expect(preserved).not.toHaveProperty('apiToken');
-    await service.update(1, { clearApiToken: true });
-    expect(row.apiToken).toBeNull();
+      ).toThrow('访问密钥');
   });
 });

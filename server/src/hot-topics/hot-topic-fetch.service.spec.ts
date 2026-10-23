@@ -1,6 +1,10 @@
 import { HotTopicFetchService } from './hot-topic-fetch.service';
 import { fetchHotSourceText, HotTopicFetchError } from './hot-topic-network';
-import type { HotPreferenceInput, HotSourceInput } from './hot-topic.types';
+import {
+  NETEASE_NEWS_URL,
+  type HotPreferenceInput,
+  type HotSourceInput,
+} from './hot-topic.types';
 import type { KnowledgeWebSearchService } from '../knowledge-ai-providers/knowledge-web-search.service';
 import type { AiFeatureConfig } from '../ai-feature-configs/entities/ai-feature-config.entity';
 
@@ -127,46 +131,48 @@ describe('HotTopicFetchService orchestration', () => {
       expect.objectContaining({ referer: 'https://weibo.com/' }),
     ]);
   });
-  it('isolates per-source failures, strips secrets from error messages, and returns acquired data', async () => {
-    fetchText
-      .mockRejectedValueOnce(
-        new Error('https://private.example.com?token=secret'),
-      )
-      .mockResolvedValueOnce(
-        JSON.stringify({
-          items: [{ title: '正常新闻', url: 'https://news.example.com/1' }],
-        }),
+  it.each(['platform', 'hybrid', 'aiSearch'] as const)(
+    'uses the fixed NetEase endpoint in %s mode without AI search',
+    async (mode) => {
+      fetchText.mockResolvedValue(
+        `var data = ${JSON.stringify({
+          category: [{ n: '国内' }],
+          news: [
+            [
+              {
+                c: 0,
+                t: '国内新闻',
+                l: 'https://www.163.com/dy/article/DOMESTIC.html',
+                p: new Date().toISOString(),
+              },
+            ],
+          ],
+        })};`,
       );
-    const search = jest.fn();
-    const service = new HotTopicFetchService({
-      search,
-    } as unknown as KnowledgeWebSearchService);
-    const feed = {
-      ...source,
-      id: 2,
-      name: '授权 Feed',
-      kind: 'jsonFeed' as const,
-      accessMode: 'feed' as const,
-      url: 'https://feeds.example.com/json',
-      apiToken: 'secret',
-    };
-    const result = await service.collect({
-      sources: [source, feed],
-      mode: 'platform',
-      config: null,
-      preferences,
-      signal: new AbortController().signal,
-    });
-    expect(result.candidates).toHaveLength(1);
-    expect(result.sources[0].message).not.toContain('secret');
-    expect(result.sources[1].status).toBe('succeeded');
-    expect(search).not.toHaveBeenCalled();
-    const secondCall = fetchText.mock.calls[1] as [
-      string,
-      { bearerToken?: string },
-    ];
-    expect(secondCall[1]).toMatchObject({ bearerToken: 'secret' });
-  });
+      const netease = {
+        ...source,
+        name: '网易国内新闻',
+        kind: 'neteaseNews' as const,
+        url: 'https://invalid.example.com/not-used',
+      };
+      const search = jest.fn();
+      const signal = new AbortController().signal;
+      const result = await new HotTopicFetchService({
+        search,
+      } as unknown as KnowledgeWebSearchService).collect({
+        sources: [netease],
+        mode,
+        config: null,
+        preferences,
+        signal,
+      });
+      expect(result.candidates).toHaveLength(1);
+      expect(result.sources[0].status).toBe('succeeded');
+      expect(search).not.toHaveBeenCalled();
+      expect(result.searchExecuted).toBe(false);
+      expect(fetchText).toHaveBeenCalledWith(NETEASE_NEWS_URL, { signal });
+    },
+  );
   it('reports absent verified web results without falling back to AI memory', async () => {
     const search = jest
       .fn()

@@ -100,11 +100,11 @@ function base(source: HotSourceInput, fetchedAt: string): HotTopicCandidate {
     platform:
       source.kind === 'weiboHot'
         ? '微博'
-        : source.kind.startsWith('douyin')
-          ? '抖音'
-          : source.kind === 'rss'
-            ? 'RSS'
-            : 'JSON Feed',
+        : source.kind === 'neteaseNews'
+          ? '网易新闻'
+          : source.kind.startsWith('douyin')
+            ? '抖音'
+            : '热点来源',
     accountName: null,
     accountId: null,
     accountMatched: false,
@@ -112,7 +112,7 @@ function base(source: HotSourceInput, fetchedAt: string): HotTopicCandidate {
     heat: null,
     publishedAt: null,
     fetchedAt,
-    acquisition: source.accessMode === 'page' ? 'page' : 'feed',
+    acquisition: 'page',
   };
 }
 
@@ -128,27 +128,6 @@ function parseJsonData(
       return;
     seen.add(`${item.url}\n${item.title}`);
     output.push(item);
-  }
-  // Explicit feed schema; no heuristics that treat arbitrary JSON text as a news item.
-  const feed = hotRecord(data).items;
-  if (Array.isArray(feed) && source.kind === 'jsonFeed') {
-    for (const raw of feed.slice(0, 100)) {
-      const item = hotRecord(raw);
-      const accountId = identifier(item.accountId);
-      add({
-        ...base(source, fetchedAt),
-        title: hotPlainText(item.title, 300),
-        summary: hotPlainText(item.summary),
-        url: normalizeHotTopicLink(item.url) ?? '',
-        publishedAt: hotPublishedAt(item.publishedAt),
-        accountId: accountId || null,
-        accountName: hotPlainText(item.accountName, 120) || null,
-        accountMatched: false,
-        rank: rank(item.rank),
-        heat: number(item.heat),
-      });
-    }
-    return output;
   }
   let visited = 0;
   function visit(value: unknown, depth: number) {
@@ -243,8 +222,8 @@ function parseJsonData(
 }
 
 /** Linear outer scanning avoids quadratic regex backtracking on unclosed untrusted tags. */
-function blocks(body: string, kind: 'script' | 'rss') {
-  const opening = kind === 'script' ? /<(script)\b/gi : /<(item|entry)\b/gi;
+function blocks(body: string) {
+  const opening = /<(script)\b/gi;
   const lower = body.toLowerCase();
   const result: Array<{ attributes: string; content: string }> = [];
   let match: RegExpExecArray | null;
@@ -267,58 +246,67 @@ function blocks(body: string, kind: 'script' | 'rss') {
   return result;
 }
 
-function parseRss(
+function neteasePublishedAt(value: unknown) {
+  const raw = string(value).trim();
+  // 网易接口的无时区时间按其国内新闻发布时间（Asia/Shanghai）还原。
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw))
+    return hotPublishedAt(`${raw.replace(' ', 'T')}+08:00`);
+  return hotPublishedAt(value);
+}
+
+function parseNeteaseDomesticNews(
   body: string,
   source: HotSourceInput,
   fetchedAt: string,
 ): HotTopicCandidate[] {
-  // A deliberately limited RSS/Atom reader: no DTD, entities, network access, or executable HTML.
-  if (/<!\s*(DOCTYPE|ENTITY)\b/i.test(body))
+  // 固定接口是 var data = JSON;，只去除已知包裹并解析 JSON，绝不执行 JS。
+  const payload = /^\s*var\s+data\s*=\s*([\s\S]*?)\s*;?\s*$/.exec(body)?.[1];
+  let data: Record<string, unknown>;
+  try {
+    if (!payload) throw new Error('missing data');
+    data = hotRecord(JSON.parse(payload) as unknown);
+  } catch {
     throw new HotTopicFetchError(
-      'xml_entity',
-      'RSS 不允许 DTD 或自定义实体声明',
+      'invalid_netease',
+      '网易新闻接口 data 不是有效 JSON',
     );
-  if (!/<(?:rss|feed)\b/i.test(body))
+  }
+  if (!Array.isArray(data.category) || !Array.isArray(data.news))
     throw new HotTopicFetchError(
-      'invalid_rss',
-      '来源不是受支持的 RSS 或 Atom 文档',
+      'invalid_netease',
+      '网易新闻接口缺少分类或新闻列表',
     );
-  const result: HotTopicCandidate[] = [];
-  for (const block of blocks(body, 'rss')) {
-    if (result.length >= 100) break;
-    const inner = block.content.slice(0, 64000);
-    const field = (name: string) =>
-      new RegExp(`<${name}\\b[^>]*>([\\s\\S]*?)<\\/${name}\\s*>`, 'i').exec(
-        inner,
-      )?.[1] ?? '';
-    const links = [...inner.matchAll(/<link\b([^>]*)\/?\s*>/gi)];
-    const alternate = links.find(
-      (m) =>
-        !/\brel\s*=/.test(m[1]) || /\brel\s*=\s*["']alternate["']/i.test(m[1]),
+  const categories = data.category.map((category) =>
+    hotPlainText(hotRecord(category).n, 40),
+  );
+  if (!categories.includes('国内'))
+    throw new HotTopicFetchError(
+      'invalid_netease',
+      '网易新闻接口未包含国内分类',
     );
-    const href = alternate
-      ? /\bhref\s*=\s*["']([^"']+)["']/i.exec(alternate[1])?.[1]
-      : '';
-    const url = normalizeHotTopicLink(
-      entities(href || hotPlainText(field('link'))),
-    );
-    const title = hotPlainText(field('title'), 300);
-    if (!url || !title) continue;
-    result.push({
+  const output: HotTopicCandidate[] = [];
+  const seen = new Set<string>();
+  for (const item of data.news.flat()) {
+    const row = hotRecord(item);
+    const categoryIndex = rank(row.c);
+    // The supplied endpoint labels index 0 as “国内”. If that mapping changes,
+    // no record is emitted rather than mislabeling another category as domestic.
+    if (categoryIndex === null || categories[categoryIndex] !== '国内')
+      continue;
+    const title = hotPlainText(row.t, 300);
+    const url = normalizeHotTopicLink(row.l);
+    if (!title || !url || seen.has(`${url}\n${title}`)) continue;
+    seen.add(`${url}\n${title}`);
+    output.push({
       ...base(source, fetchedAt),
       title,
+      summary: hotPlainText(row.digest ?? row.summary ?? row.d),
       url,
-      summary: hotPlainText(
-        field('description') || field('summary') || field('content'),
-      ),
-      publishedAt: hotPublishedAt(
-        hotPlainText(
-          field('pubDate') || field('published') || field('updated'),
-        ),
-      ),
+      publishedAt: neteasePublishedAt(row.p),
     });
+    if (output.length >= 100) break;
   }
-  return result;
+  return output;
 }
 
 /** 榜单数值常见于第三方聚合页的「253 万」写法，转换是还原而非推测；无法识别时保持未知。 */
@@ -413,7 +401,8 @@ export function parseHotTopicPayload(
 ): HotTopicCandidate[] {
   if (Buffer.byteLength(body, 'utf8') > HOT_SOURCE_BYTE_LIMIT)
     throw new HotTopicFetchError('too_large', '来源响应超过 3 MB 限制');
-  if (source.kind === 'rss') return parseRss(body, source, fetchedAt);
+  if (source.kind === 'neteaseNews')
+    return parseNeteaseDomesticNews(body, source, fetchedAt);
   if (body.trimStart().startsWith('{') || body.trimStart().startsWith('[')) {
     try {
       return parseJsonData(JSON.parse(body) as unknown, source, fetchedAt);
@@ -423,7 +412,7 @@ export function parseHotTopicPayload(
     }
   }
   const candidates: HotTopicCandidate[] = [];
-  for (const block of blocks(body, 'script')) {
+  for (const block of blocks(body)) {
     if (
       !/\bid\s*=\s*["'](?:RENDER_DATA|__NEXT_DATA__|SIGI_STATE|__INITIAL_STATE__)["']/i.test(
         block.attributes,
@@ -452,7 +441,7 @@ export function parseHotTopicPayload(
   if (!candidates.length)
     throw new HotTopicFetchError(
       'dynamic_page',
-      '页面中没有可解析的热点 JSON；可能需要验证码或动态加载，请使用授权 Feed 或 AI 联网补充',
+      '页面中没有可解析的热点 JSON；可能需要验证码或动态加载，请使用 AI 联网补充',
     );
   return candidates.slice(0, 100);
 }

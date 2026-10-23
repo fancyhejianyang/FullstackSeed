@@ -4,9 +4,20 @@ export type HotSourceKind =
   /** @deprecated 仅用于识别历史数据，新配置与任务不再接受账号绑定来源。 */
   | 'douyinAccount'
   | 'weiboHot'
-  | 'rss'
-  | 'jsonFeed';
+  | 'neteaseNews';
 export type ConfigurableHotSourceKind = Exclude<HotSourceKind, 'douyinAccount'>;
+export const NETEASE_NEWS_URL =
+  'https://news.163.com/special/0001220O/new_json2021.js?0.20812515014162658';
+export const CONFIGURABLE_HOT_SOURCE_KINDS = [
+  'douyinHot',
+  'weiboHot',
+  'neteaseNews',
+] as const;
+export function isConfigurableHotSourceKind(
+  value: string,
+): value is ConfigurableHotSourceKind {
+  return (CONFIGURABLE_HOT_SOURCE_KINDS as readonly string[]).includes(value);
+}
 /**
  * 平台类来源（公开页面 / AI 搜索）的展示名称与域名归属：
  * - 热榜来源不限域名——既可以是平台自有页面，也可以是合规的第三方聚合页
@@ -19,6 +30,7 @@ export const PLATFORM_SOURCES: Record<
 > = {
   douyinHot: { label: '抖音' },
   weiboHot: { label: '微博' },
+  neteaseNews: { label: '网易新闻', host: '163.com' },
 };
 export function platformSource(kind: string) {
   return PLATFORM_SOURCES[kind];
@@ -33,7 +45,7 @@ export function isHostOf(host: string, base: string) {
 }
 /** 热榜类来源允许任意公网 HTTPS 页面（含聚合站）。 */
 export const HOT_LIST_KINDS = ['douyinHot', 'weiboHot'];
-export type HotSourceAccess = 'page' | 'search' | 'feed';
+export type HotSourceAccess = 'page' | 'search';
 export type HotTopicMode = 'aiSearch' | 'platform' | 'hybrid';
 export type HotRunStatus =
   | 'pending'
@@ -51,8 +63,6 @@ export interface HotSourceInput {
   url: string;
   isEnabled: boolean;
   description: string;
-  /** 仅用于授权 JSON Feed 的 Bearer Token，不得进入任务/日志快照。 */
-  apiToken?: string | null;
 }
 export interface HotPreferenceInput {
   mode: HotTopicMode;

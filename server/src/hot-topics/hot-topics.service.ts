@@ -413,8 +413,9 @@ export class HotTopicsService implements OnModuleInit, OnModuleDestroy {
           '所选来源采用 AI 搜索，请切换为 AI 联网或混合模式',
         );
       if (
-        (pref.mode !== 'platform' ||
-          selected.some((source) => source.accessMode === 'search')) &&
+        pref.mode !== 'platform' &&
+        (!selected.length ||
+          selected.some((source) => source.kind !== 'neteaseNews')) &&
         (!config || config.webSearchMode !== 'bailianResponses')
       )
         throw new BadRequestException(
