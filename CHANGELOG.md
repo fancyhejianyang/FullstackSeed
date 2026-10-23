@@ -1,12 +1,22 @@
 # CHANGELOG
 
+### 2026-10-23 修复微博热搜回退与抖音指定账号判定
+- `server/src/hot-topics/hot-topic-fetch.service.ts`：第三方微博榜单页（如 TopHub）被服务端拒绝或无法解析时，自动回退到微博官方 `ajax/statuses/hot_band` 结构化热搜接口，记录中同时说明配置页失败与实际回退通道。
+- 抖音指定账号的 AI 搜索约束增加完整主页 URL；命中配置的精确 `/user/{sec_uid}` 主页时，只记录“已找到主页、未取得可核验作品”，不把主页本身当作热点。只命中抖音域名的其它资料改为“未命中精确账号”，不再显示“已跳过”，也不产生无账号归属的候选。只有公开结构化数据携带与配置一致的 UID/sec_uid 时才收录具体作品。
+- 混合模式下同一来源的平台读取与 AI 联网结果合并为一条；任一通道成功时整体保持成功，不再被另一通道失败误标为部分失败。
+- `server/src/hot-topics/hot-topic-network.ts`：公开来源请求支持受控 Referer，仅用于微博官方公开接口；仍禁止凭据、换行与不安全地址。
+- `web/src/views/hot-topic/Preferences.vue`：获取模式明确标注“仅 AI 联网搜索”不直读来源页；已选公开页 / Feed 时显示警示并引导选择混合模式，来源选项同时展示其获取方式。
+- 现场验证：TopHub 页面在当前服务端网络返回 HTTP 403；微博官方热搜接口在受控 Referer 下返回 HTTP 200 及真实 `band_list`；抖音指定账号公开主页返回动态校验页，不能在无登录/无授权条件下诚信解析作品列表。
+- 新增文件：无。修改文件：`server/src/hot-topics/hot-topic-fetch.service.ts`、`server/src/hot-topics/hot-topic-fetch.service.spec.ts`、`server/src/hot-topics/hot-topic-network.ts`、`web/src/views/hot-topic/Preferences.vue`、`.design-spec.md`、本文件。删除文件：无。
+- 验证：后端热点模块 7 个测试套件 60/60 通过，定向 ESLint、TypeORM 实体列检查与生产构建通过；前端类型检查、生产构建、页面组件复用扫描通过（仅保留既有 Rollup 大分块提示）。后端全量 lint 仍被多个既有非热点模块规则错误阻断，本次文件定向检查无新增问题。
+
 ### 2026-10-23 热榜来源不再限制平台域名（支持第三方聚合页）
 - `server/src/hot-topics/hot-topic.types.ts`：`PLATFORM_SOURCES` 的 `host` 改为可选——热榜来源（`douyinHot` / `weiboHot`）不再绑定域名，既可以是平台自有页面，也可以是合规的第三方聚合页（如 `https://tophub.today/n/KqndgxeLl9` 微博热搜榜）；仅账号来源（`douyinAccount`）保留 `douyin.com` 限制，因为账号归属必须可证明。新增 `HOT_LIST_KINDS` 标记热榜类来源。
 - `server/src/hot-topics/hot-topic-sources.service.ts`：保存校验仅在来源声明了归属域名时校验域名（账号场景），报错文案改为「…账号来源必须使用 … 官方主页地址」；热榜来源仍限制为公开页面或 AI 搜索接入。
 - `server/src/hot-topics/hot-topic-fetch.service.ts`：`sourceHost` 对无域名归属的热榜来源改由来源自身 URL 推导（去掉 `www.`），AI 搜索结果归属与来源匹配逻辑随之沿用；页面采集的域名校验只对账号来源生效。
 - `server/src/hot-topics/hot-topic-parsers.ts`：移除采集入口「微博来源仅支持 weibo.com 域名」的限制；脚本 JSON 解析为空时，对热榜来源新增服务端渲染榜单表格兜底解析（`<tr>` 内「序号 + 标题链接 + 热度」，支持「253 万 / 1.2 亿」写法还原为数值，相对地址按来源页解析，`javascript:` 等非链接协议丢弃，其它来源不套用该兜底）。
 - 测试：`hot-topic-sources.service.spec.ts` 更新为「热榜允许聚合页、账号限定官方域名」；`hot-topic-parsers.spec.ts` 新增聚合榜单表格解析用例。`npx jest hot-topics` 58 项通过，`tsc` 类型校验通过。
-- 已用真实页面验证：`https://tophub.today/n/KqndgxeLl9` 直采可解析出带序号、标题、`https://s.weibo.com/weibo?q=…` 链接与热度的榜单条目（`platform` 为「微博」）。
+- 解析器已使用该 TopHub 页面结构的脱机 HTML 验证，可还原序号、标题、`https://s.weibo.com/weibo?q=…` 链接与热度；实时页能否直采仍取决于来源站访问策略，服务端 HTTP 403 时由后续微博官方回退机制处理。
 
 ### 2026-10-23 热点来源新增微博（weiboHot）后端接入
 - `server/src/hot-topics/hot-topic.types.ts`：`HotSourceKind` 增加 `weiboHot`；新增共享常量 `PLATFORM_SOURCES`（来源类型 → 官方域名 + 展示名）与 `platformSource` / `platformLabelForHost` / `isHostOf`，避免各服务各自维护域名白名单。

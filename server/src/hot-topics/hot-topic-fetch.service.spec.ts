@@ -38,7 +38,7 @@ const source: HotSourceInput = {
 const config = {} as AiFeatureConfig;
 describe('HotTopicFetchService orchestration', () => {
   beforeEach(() => fetchText.mockReset());
-  it('keeps a failed page outcome when hybrid search supplies valid sources', async () => {
+  it('merges page and AI outcomes and keeps the successful acquisition', async () => {
     fetchText.mockResolvedValue('<html>动态页面</html>');
     const search = jest.fn().mockResolvedValue({
       searchExecuted: true,
@@ -69,10 +69,14 @@ describe('HotTopicFetchService orchestration', () => {
       signal: new AbortController().signal,
     });
     expect(result.candidates).toHaveLength(1);
-    expect(result.sources.map((item) => item.status)).toEqual([
-      'failed',
-      'succeeded',
-    ]);
+    expect(result.sources).toHaveLength(1);
+    expect(result.sources[0]).toMatchObject({
+      sourceName: '抖音热点',
+      status: 'succeeded',
+      count: 1,
+    });
+    expect(result.sources[0].message).toContain('平台读取');
+    expect(result.sources[0].message).toContain('AI 联网');
     expect(result.candidates[0]).toMatchObject({
       rank: null,
       heat: null,
@@ -114,14 +118,9 @@ describe('HotTopicFetchService orchestration', () => {
       preferences,
       signal: new AbortController().signal,
     });
-    expect(result.candidates[0]).toMatchObject({
-      sourceId: null,
-      sourceName: 'www.douyin.com',
-      accountId: null,
-      accountName: null,
-      accountMatched: false,
-    });
-    expect(result.sources[0].message).toContain('不代表');
+    expect(result.candidates).toEqual([]);
+    expect(result.sources[0]).toMatchObject({ status: 'failed', count: 0 });
+    expect(result.sources[0].message).toContain('未命中配置的精确账号主页');
     search.mockClear();
     const skipped = await service.collect({
       sources: [account],
@@ -164,22 +163,102 @@ describe('HotTopicFetchService orchestration', () => {
       preferences,
       signal: new AbortController().signal,
     });
-    expect(result.candidates).toHaveLength(1);
-    expect(result.candidates[0]).toMatchObject({
-      sourceId: null,
-      sourceName: 'www.douyin.com',
-      accountId: null,
-      accountName: null,
-      accountMatched: false,
-    });
+    expect(result.candidates).toEqual([]);
     expect(
       result.sources.map((item) => ({
         status: item.status,
         count: item.count,
       })),
     ).toEqual([
-      { status: 'skipped', count: 0 },
-      { status: 'skipped', count: 0 },
+      { status: 'failed', count: 0 },
+      { status: 'failed', count: 0 },
+    ]);
+  });
+  it('uses the exact Douyin profile only as identity evidence, not as a hot topic', async () => {
+    const accountId = 'MS4wLjABAAAA8U_l6rBzmy7bcy6xOJel4v0RzoR_wfAubGPeJimN__4';
+    const profileUrl = `https://www.douyin.com/user/${accountId}`;
+    const search = jest.fn().mockResolvedValue({
+      searchExecuted: true,
+      totalTokens: 18,
+      sources: [
+        {
+          url: `${profileUrl}?from_tab_name=main`,
+          title: '央视网的抖音主页',
+          summary: '',
+          publishedAt: null,
+        },
+        {
+          url: 'https://www.douyin.com/user/another-account',
+          title: '同平台其它账号',
+          summary: '',
+          publishedAt: null,
+        },
+      ],
+    });
+    const result = await new HotTopicFetchService({
+      search,
+    } as unknown as KnowledgeWebSearchService).collect({
+      sources: [
+        {
+          ...source,
+          name: '指定官媒',
+          kind: 'douyinAccount',
+          accessMode: 'search',
+          url: profileUrl,
+          accountName: '央视网',
+          accountId,
+        },
+      ],
+      mode: 'aiSearch',
+      config,
+      preferences,
+      signal: new AbortController().signal,
+    });
+    expect(result.sources[0]).toMatchObject({ status: 'failed', count: 0 });
+    expect(result.sources[0].message).toContain(
+      '已命中配置的精确账号主页，但搜索结果没有携带可核验作者标识的具体作品',
+    );
+    expect(result.candidates).toEqual([]);
+  });
+  it('falls back from an unreadable aggregator page to the official Weibo hot list', async () => {
+    fetchText
+      .mockRejectedValueOnce(new HotTopicFetchError('http', '来源拒绝访问'))
+      .mockResolvedValueOnce(
+        JSON.stringify({
+          data: {
+            band_list: [{ word: '微博热点一', realpos: 1, raw_hot: 9527 }],
+          },
+        }),
+      );
+    const weibo = {
+      ...source,
+      name: '微博热搜总榜',
+      kind: 'weiboHot' as const,
+      url: 'https://tophub.today/n/KqndgxeLl9',
+    };
+    const result = await new HotTopicFetchService({
+      search: jest.fn(),
+    } as unknown as KnowledgeWebSearchService).collect({
+      sources: [weibo],
+      mode: 'platform',
+      config: null,
+      preferences,
+      signal: new AbortController().signal,
+    });
+    expect(result.candidates[0]).toMatchObject({
+      title: '微博热点一',
+      rank: 1,
+      heat: 9527,
+      sourceName: '微博热搜总榜',
+    });
+    expect(result.sources[0]).toMatchObject({
+      status: 'succeeded',
+      count: 1,
+    });
+    expect(result.sources[0].message).toContain('微博官方热搜接口');
+    expect(fetchText.mock.calls[1]).toEqual([
+      'https://weibo.com/ajax/statuses/hot_band',
+      expect.objectContaining({ referer: 'https://weibo.com/' }),
     ]);
   });
   it('isolates per-source failures, strips secrets from error messages, and returns acquired data', async () => {
@@ -242,8 +321,8 @@ describe('HotTopicFetchService orchestration', () => {
     expect(result.sources[0]).toMatchObject({
       sourceName: '抖音热点',
       status: 'failed',
-      message: '未返回真实搜索来源',
     });
+    expect(result.sources[0].message).toContain('未返回真实搜索来源');
     expect(fetchText).not.toHaveBeenCalled();
   });
 });

@@ -12,6 +12,7 @@ import {
   saveHotPreference,
   getHotOptions,
   modeLabels,
+  sourceAccessLabels,
   type HotPreference,
   type HotOptions,
 } from '@/api/hotTopic';
@@ -43,13 +44,22 @@ let wasScheduled = false;
 const sourceOptions = computed(() => {
   const rows = options.value.sources.map((source) => ({
     value: String(source.id),
-    label: source.name,
+    label: `${source.name} · ${sourceAccessLabels[source.accessMode]}`,
   }));
   for (const id of form.sourceIds)
     if (!rows.some((item) => item.value === id))
       rows.push({ value: id, label: `来源 #${id}（已失效，请移除）` });
   return rows;
 });
+const directSourcesIgnored = computed(
+  () =>
+    form.mode === 'aiSearch' &&
+    options.value.sources.some(
+      (source) =>
+        form.sourceIds.includes(String(source.id)) &&
+        source.accessMode !== 'search',
+    ),
+);
 const configOptions = computed(() => {
   const rows = options.value.aiConfigs.map((item) => ({
     value: item.id,
@@ -69,10 +79,10 @@ const fields = computed<FormField[]>(() => [
     type: 'select',
     options: Object.entries(modeLabels).map(([value, label]) => ({
       value,
-      label,
+      label: value === 'aiSearch' ? `${label}（仅搜索，不读取来源页）` : label,
     })),
     span: 2,
-    hint: 'AI 搜索必须由已接通联网能力的模型执行。平台模式按配置来源读取；混合模式合并两者。',
+    hint: 'AI 联网模式只用搜索供应商，不请求配置的页面或 Feed；平台模式直读来源；混合模式合并两者。',
   },
   {
     prop: 'aiConfigId',
@@ -88,7 +98,7 @@ const fields = computed<FormField[]>(() => [
     type: 'selectMultiple',
     options: sourceOptions,
     span: 2,
-    hint: '最多选择 5 个；执行平台和混合获取前至少选择一个。账号搜索仅提供线索，不能视为已确认账号发布。',
+    hint: '最多选择 5 个；选项后的标记表示其配置的获取方式。指定账号只有命中精确主页与稳定账号标识时才认定为该账号。',
   },
   {
     prop: 'interests',
@@ -253,17 +263,23 @@ async function submit() {
     <el-empty v-if="failed" description="偏好或可选配置读取失败，未允许覆盖保存"
       ><Button @click="load">重新读取</Button></el-empty
     >
-    <Form
-      v-else
-      ref="formRef"
-      v-model="form"
-      v-loading="loading"
-      :disabled="loading || submitting"
-      :fields="fields"
-      :rules="rules"
-      :columns="2"
-      label-position="top"
-    />
+    <template v-else>
+      <p v-if="directSourcesIgnored" class="mode-warning">
+        当前为“仅 AI 联网搜索”，所选公开页面 / Feed
+        不会被直接读取。如需按来源地址采集并用 AI 补充，请选择“平台 + AI
+        联网搜索”。
+      </p>
+      <Form
+        ref="formRef"
+        v-model="form"
+        v-loading="loading"
+        :disabled="loading || submitting"
+        :fields="fields"
+        :rules="rules"
+        :columns="2"
+        label-position="top"
+      />
+    </template>
     <template #footer
       ><Button :disabled="submitting" @click="close">取消</Button
       ><Button
@@ -276,3 +292,15 @@ async function submit() {
     >
   </Dialog>
 </template>
+<style scoped>
+.mode-warning {
+  padding: 10px 12px;
+  margin: 0 0 16px;
+  border: 1px solid var(--el-color-warning-light-5);
+  border-radius: var(--el-border-radius-base);
+  color: var(--el-color-warning-dark-2);
+  background: var(--el-color-warning-light-9);
+  font-size: 13px;
+  line-height: 1.6;
+}
+</style>

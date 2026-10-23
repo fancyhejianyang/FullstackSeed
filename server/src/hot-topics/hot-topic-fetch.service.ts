@@ -9,6 +9,7 @@ import {
 } from './hot-topic-network';
 import { parseHotTopicPayload } from './hot-topic-parsers';
 import {
+  isHostOf,
   platformLabelForHost,
   platformSource,
   type HotPreferenceInput,
@@ -17,6 +18,8 @@ import {
   type HotTopicFetchResult,
   type HotTopicMode,
 } from './hot-topic.types';
+
+const WEIBO_HOT_FALLBACK_URL = 'https://weibo.com/ajax/statuses/hot_band';
 
 function sourceHost(source: HotSourceInput): string | null {
   const platformHost = platformSource(source.kind)?.host;
@@ -28,6 +31,44 @@ function matchesSource(url: string, source: HotSourceInput) {
   const host = sourceHost(source);
   const actual = new URL(url).hostname;
   return Boolean(host && (actual === host || actual.endsWith(`.${host}`)));
+}
+function matchesAccountProfile(url: string, source: HotSourceInput) {
+  if (source.kind !== 'douyinAccount' || !source.accountId.trim()) return false;
+  try {
+    const actual = new URL(url);
+    const configured = new URL(source.url);
+    const normalizePath = (value: string) =>
+      decodeURIComponent(value).replace(/\/+$/, '');
+    return (
+      isHostOf(actual.hostname, 'douyin.com') &&
+      normalizePath(actual.pathname) === normalizePath(configured.pathname) &&
+      normalizePath(actual.pathname) === `/user/${source.accountId.trim()}`
+    );
+  } catch {
+    return false;
+  }
+}
+function mergeSourceOutcome(
+  outcomes: HotTopicFetchResult['sources'],
+  outcome: HotTopicFetchResult['sources'][number],
+  channel: '平台读取' | 'AI 联网',
+) {
+  const current = outcomes.find(
+    (item) =>
+      item.sourceId === outcome.sourceId &&
+      item.sourceName === outcome.sourceName,
+  );
+  const message = `${channel}：${outcome.message}`;
+  if (!current) {
+    outcomes.push({ ...outcome, message });
+    return;
+  }
+  current.count += outcome.count;
+  if (current.status !== 'succeeded' && outcome.status === 'succeeded')
+    current.status = 'succeeded';
+  else if (current.status === 'skipped' && outcome.status === 'failed')
+    current.status = 'failed';
+  current.message = `${current.message}；${message}`.slice(0, 1000);
 }
 export const DEFAULT_HOT_SOURCE: HotSourceInput = {
   id: 0,
@@ -44,6 +85,49 @@ export const DEFAULT_HOT_SOURCE: HotSourceInput = {
 @Injectable()
 export class HotTopicFetchService {
   constructor(private readonly webSearch: KnowledgeWebSearchService) {}
+
+  private async readPageSource(
+    source: HotSourceInput,
+    fetchedAt: string,
+    signal: AbortSignal,
+  ) {
+    try {
+      const body = await fetchHotSourceText(source.url, {
+        signal,
+        bearerToken:
+          source.accessMode === 'feed' && source.kind === 'jsonFeed'
+            ? source.apiToken
+            : undefined,
+      });
+      return {
+        candidates: parseHotTopicPayload(body, source, fetchedAt),
+        message: '已读取配置来源的公开结构化数据',
+      };
+    } catch (primaryError) {
+      const configured = normalizeHotTopicLink(source.url);
+      if (source.kind !== 'weiboHot' || configured === WEIBO_HOT_FALLBACK_URL)
+        throw primaryError;
+      try {
+        const body = await fetchHotSourceText(WEIBO_HOT_FALLBACK_URL, {
+          signal,
+          referer: 'https://weibo.com/',
+        });
+        return {
+          candidates: parseHotTopicPayload(
+            body,
+            { ...source, url: WEIBO_HOT_FALLBACK_URL },
+            fetchedAt,
+          ),
+          message: `配置页面未能直读（${safeHotTopicError(primaryError)}），已改用微博官方热搜接口`,
+        };
+      } catch (fallbackError) {
+        throw new HotTopicFetchError(
+          'weibo_unavailable',
+          `配置页面未能直读（${safeHotTopicError(primaryError)}），微博官方热搜回退也失败（${safeHotTopicError(fallbackError)}）`,
+        );
+      }
+    }
+  }
 
   async collect(input: {
     sources: HotSourceInput[];
@@ -92,33 +176,39 @@ export class HotTopicFetchService {
               'invalid_platform',
               `${platform.label}账号来源页面采集仅支持 ${platform.host} 官方域名`,
             );
-          const body = await fetchHotSourceText(source.url, {
-            signal: input.signal,
-            bearerToken:
-              source.accessMode === 'feed' && source.kind === 'jsonFeed'
-                ? source.apiToken
-                : undefined,
-          });
-          const candidates = parseHotTopicPayload(body, source, fetchedAt);
+          const direct = await this.readPageSource(
+            source,
+            fetchedAt,
+            input.signal,
+          );
+          const candidates = direct.candidates;
           result.candidates.push(...candidates);
-          result.sources.push({
-            sourceId: source.id || null,
-            sourceName: source.name,
-            status: candidates.length ? 'succeeded' : 'failed',
-            count: candidates.length,
-            message: candidates.length
-              ? '已读取来源公开结构化数据'
-              : '来源没有返回可用且符合账号约束的数据',
-          });
+          mergeSourceOutcome(
+            result.sources,
+            {
+              sourceId: source.id || null,
+              sourceName: source.name,
+              status: candidates.length ? 'succeeded' : 'failed',
+              count: candidates.length,
+              message: candidates.length
+                ? direct.message
+                : '来源没有返回可用且符合账号约束的数据',
+            },
+            '平台读取',
+          );
         } catch (error) {
           input.signal.throwIfAborted();
-          result.sources.push({
-            sourceId: source.id || null,
-            sourceName: source.name,
-            status: 'failed',
-            count: 0,
-            message: safeHotTopicError(error),
-          });
+          mergeSourceOutcome(
+            result.sources,
+            {
+              sourceId: source.id || null,
+              sourceName: source.name,
+              status: 'failed',
+              count: 0,
+              message: safeHotTopicError(error),
+            },
+            '平台读取',
+          );
         }
       }
     }
@@ -133,6 +223,7 @@ export class HotTopicFetchService {
         const constraints = sources.map((source) => ({
           name: source.name,
           site: sourceHost(source),
+          url: source.url,
           accountName: source.accountName || undefined,
           accountId: source.accountId || undefined,
         }));
@@ -146,9 +237,21 @@ export class HotTopicFetchService {
         );
         result.searchExecuted = search.searchExecuted;
         result.totalTokens = search.totalTokens;
-        // One search result is one candidate, not one candidate per account query.
-        // A domain match never proves which account authored a result.
+        const verifiedAccountUrls = new Set<string>();
+        for (const source of sources.filter(
+          (item) => item.kind === 'douyinAccount',
+        )) {
+          const profiles = search.sources.filter((item) =>
+            matchesAccountProfile(item.url, source),
+          );
+          for (const item of profiles) {
+            verifiedAccountUrls.add(item.url);
+          }
+        }
+        // One unscoped search result is one candidate. Account profile pages are
+        // identity evidence, not hot topics, and must not be saved as content.
         for (const item of search.sources) {
+          if (verifiedAccountUrls.has(item.url)) continue;
           const matchedSources = sources.filter((source) =>
             matchesSource(item.url, source),
           );
@@ -156,6 +259,7 @@ export class HotTopicFetchService {
           const unscoped = matchedSources.filter(
             (source) => source.kind !== 'douyinAccount' && !source.accountId,
           );
+          if (!unscoped.length) continue;
           const host = new URL(item.url).hostname;
           const candidate: HotTopicCandidate = {
             ...item,
@@ -178,32 +282,44 @@ export class HotTopicFetchService {
           );
           const accountRestricted =
             source.kind === 'douyinAccount' || Boolean(source.accountId);
-          result.sources.push({
-            sourceId: source.id || null,
-            sourceName: source.name,
-            status: matches.length
-              ? accountRestricted
-                ? 'skipped'
-                : 'succeeded'
-              : 'failed',
-            count: accountRestricted ? 0 : matches.length,
-            message: matches.length
-              ? accountRestricted
-                ? 'AI 已联网找到本站相关资料，但未验证账号 UID；不代表已抓取指定作者作品，候选仅以实际来源域名展示且未关联该账号'
-                : 'AI 已联网；仅收录供应商真实搜索来源，时间和热度缺失时保持未知'
-              : 'AI 已执行搜索，但没有返回该站点的可核验来源；未用其它网站代替',
-          });
+          const accountProfiles = accountRestricted
+            ? search.sources.filter((item) =>
+                matchesAccountProfile(item.url, source),
+              )
+            : [];
+          const verified = accountRestricted ? [] : matches;
+          mergeSourceOutcome(
+            result.sources,
+            {
+              sourceId: source.id || null,
+              sourceName: source.name,
+              status: verified.length ? 'succeeded' : 'failed',
+              count: verified.length,
+              message: verified.length
+                ? '仅收录供应商返回的真实搜索来源，时间和热度缺失时保持未知'
+                : accountRestricted && accountProfiles.length
+                  ? '已命中配置的精确账号主页，但搜索结果没有携带可核验作者标识的具体作品；未将主页或同域名资料当作热点'
+                  : accountRestricted && matches.length
+                    ? '搜索返回了同平台资料，但未命中配置的精确账号主页或稳定账号标识'
+                    : `没有返回该来源的可核验结果；未用其它网站代替${input.mode === 'aiSearch' && source.accessMode !== 'search' ? '。当前为仅 AI 联网模式，未直接读取配置页面' : ''}`,
+            },
+            'AI 联网',
+          );
         }
       } catch (error) {
         input.signal.throwIfAborted();
         for (const source of sources)
-          result.sources.push({
-            sourceId: source.id || null,
-            sourceName: source.name,
-            status: 'failed',
-            count: 0,
-            message: safeHotTopicError(error),
-          });
+          mergeSourceOutcome(
+            result.sources,
+            {
+              sourceId: source.id || null,
+              sourceName: source.name,
+              status: 'failed',
+              count: 0,
+              message: safeHotTopicError(error),
+            },
+            'AI 联网',
+          );
       }
     }
     const seen = new Set<string>();

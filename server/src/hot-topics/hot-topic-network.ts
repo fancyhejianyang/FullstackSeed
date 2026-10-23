@@ -103,7 +103,12 @@ export async function resolveHotSourceTarget(
 /** No cookies/browser automation, scripts, redirects or cross-origin credentials. */
 export async function fetchHotSourceText(
   value: string,
-  options: { signal: AbortSignal; bearerToken?: string | null },
+  options: {
+    signal: AbortSignal;
+    bearerToken?: string | null;
+    /** 仅供已知平台公开接口使用；不得传入含凭据的地址。 */
+    referer?: string;
+  },
 ): Promise<string> {
   const signal = AbortSignal.any([
     options.signal,
@@ -112,6 +117,11 @@ export async function fetchHotSourceText(
   const target = await resolveHotSourceTarget(value, signal);
   if (options.bearerToken && /[\r\n]/.test(options.bearerToken))
     throw new HotTopicFetchError('invalid_token', '来源访问令牌格式无效');
+  const referer = options.referer
+    ? normalizeHotTopicLink(options.referer)
+    : null;
+  if (options.referer && (!referer || /[\r\n]/.test(options.referer)))
+    throw new HotTopicFetchError('invalid_referer', '来源 Referer 格式无效');
   return new Promise((resolve, reject) => {
     const req = get(
       target.url,
@@ -122,6 +132,7 @@ export async function fetchHotSourceText(
             'application/json, application/rss+xml, application/atom+xml, text/html, application/xml, text/xml',
           'Accept-Encoding': 'identity',
           'User-Agent': 'FullstackSeed-HotTopics/1.0',
+          ...(referer ? { Referer: referer } : {}),
           ...(options.bearerToken
             ? { Authorization: `Bearer ${options.bearerToken}` }
             : {}),
