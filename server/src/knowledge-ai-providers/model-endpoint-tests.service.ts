@@ -17,7 +17,6 @@ import { readMediaJson, imageMime } from '../common/ai/image-utils';
 import { generationResult } from '../common/ai/image-generation';
 import { videoTaskId, videoTaskResult } from '../common/ai/video-generation';
 import { mediaProtocol } from '../model-endpoints/model-endpoint.constants';
-import { modelCategory } from '../model-endpoints/model-endpoint.constants';
 import { extendedTokenhubResult } from '../common/ai/tokenhub-adapters';
 import {
   modelBillingErrorMessage,
@@ -97,9 +96,7 @@ export class ModelEndpointTestsService {
       .at(-1)?.[1];
     return {
       card,
-      accountCatalogRequired: !['threeD', 'audio'].includes(
-        modelCategory(card.functionType),
-      ),
+      accountCatalogRequired: card.source === 'builtin',
       accounts: await this.providers.endpointTestAccounts(endpointId),
       requestBody: endpointTestTemplate(
         card.source === 'builtin'

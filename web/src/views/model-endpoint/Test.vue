@@ -15,6 +15,7 @@ import {
 } from "@/api/modelEndpoint";
 import { getPermissionActionColor } from "@/utils/permission";
 import { removedModelMatchesSelection } from "@/utils/retiredModelOptions";
+import { modelPlatformLabels } from "@/utils/modelPlatform";
 
 const props = defineProps<{ row: ModelEndpoint | null }>();
 const visible = defineModel<boolean>("visible", { required: true });
@@ -59,11 +60,14 @@ const fields = computed<FormField[]>(() => [
       value: item.id,
     })),
     componentProps: { disabled: pending.value },
-    hint: isBuiltin.value
-      ? "只显示同平台、已启用且对应目录有可用模型的账号；已配置专用卡片的模型请到专用卡片测试。"
-      : options.value?.accountCatalogRequired === false
-        ? "此类新能力仅在卡片页调试，账号尚无专用模型目录；按同平台、启用与密钥选择账号，模型是否开通由明确测试核实。"
-        : "只显示同平台、已启用且已登记当前模型的账号；未显示时请先补充账号对应模型目录和密钥。",
+    hint:
+      options.value && !options.value.accounts.length
+        ? isBuiltin.value
+          ? "暂无对应目录含可用模型的同平台账号，请检查账号启用状态、密钥和模型目录；已配置专用卡片的模型请到专用卡片测试。"
+          : `暂无可用的${modelPlatformLabels[options.value.card.platformType]}账号，请在大模型账号中确认该平台账号已启用且已配置密钥。`
+        : isBuiltin.value
+          ? "只显示同平台、已启用且对应目录有可用模型的账号；已配置专用卡片的模型请到专用卡片测试。"
+          : "可选择同平台、已启用且已配置密钥的账号，无需先登记此模型；模型是否开通以实际测试结果为准。",
   },
   ...(isBuiltin.value
     ? [
@@ -180,14 +184,15 @@ function clearRemovedSelection(data: ModelEndpointTestResult) {
     )
   )
     return;
+  if (!isBuiltin.value) {
+    form.model = "";
+    form.providerId = "";
+    return;
+  }
   const account = options.value?.accounts.find(
     (item) => item.id === Number(form.providerId),
   );
-  if (
-    account &&
-    (!isBuiltin.value ||
-      account.models?.some((item) => item.code === data.model))
-  )
+  if (account && account.models?.some((item) => item.code === data.model))
     return;
   form.model = "";
   if (!account) form.providerId = "";
@@ -322,15 +327,14 @@ watch(
         ? (data.accounts.find((item) => item.id === previous.providerId)
             ?.name ?? `账号 ${previous.providerId}`)
         : "";
-      form.providerId =
-        previous &&
-        data.accounts.some((item) => item.id === previous.providerId)
+      form.providerId = restoringRemovedModel
+        ? ""
+        : previous &&
+            data.accounts.some((item) => item.id === previous.providerId)
           ? previous.providerId
-          : restoringRemovedModel
-            ? ""
-            : data.accounts.length === 1
-              ? data.accounts[0]!.id
-              : "";
+          : data.accounts.length === 1
+            ? data.accounts[0]!.id
+            : "";
       form.requestBody = JSON.stringify(data.requestBody, null, 2);
       form.model = previous?.result.model ?? "";
       if (

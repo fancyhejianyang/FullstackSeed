@@ -41,7 +41,7 @@ function harness() {
 }
 
 describe('账号按模型功能解析调用接口', () => {
-  it('卡片测试账号只返回同平台且已登记模型的账号标识，不返回凭据', async () => {
+  it('专用卡片测试使用同平台有效账号，无需先登记模型，业务目录校验仍保留', async () => {
     const { service, endpoints, provider } = harness();
     const route = {
       id: 9,
@@ -67,11 +67,39 @@ describe('账号按模型功能解析调用接口', () => {
       url: 'https://tokenhub.tencentmaas.com/v1/wand/si-image/generation',
     });
     provider.imageGenerationModels = '';
+    await expect(service.endpointTestAccounts(9)).resolves.toEqual([
+      { id: 1, name: '腾讯账号' },
+    ]);
+    await expect(
+      service.resolveEndpointTestTarget(9, 1),
+    ).resolves.toMatchObject({
+      model: 'seedream-image-v5.0-pro',
+      url: 'https://tokenhub.tencentmaas.com/v1/wand/si-image/generation',
+    });
+    await expect(
+      service.resolveMediaTarget(
+        1,
+        'seedream-image-v5.0-pro',
+        'imageGeneration',
+      ),
+    ).rejects.toThrow('对应媒体模型目录');
+    await expect(
+      service.resolveEndpointTestTarget(9, 1, 'other-model'),
+    ).rejects.toThrow('不能更换测试模型');
+    provider.isEnabled = false;
     await expect(service.endpointTestAccounts(9)).resolves.toEqual([]);
     await expect(service.resolveEndpointTestTarget(9, 1)).rejects.toThrow(
-      '能力目录',
+      '未启用或未配置密钥',
     );
+    provider.isEnabled = true;
+    provider.secretKey = '   ';
+    await expect(service.endpointTestAccounts(9)).resolves.toEqual([]);
+    await expect(service.resolveEndpointTestTarget(9, 1)).rejects.toThrow(
+      '未启用或未配置密钥',
+    );
+    provider.secretKey = 'test-key';
     provider.apiUrl = 'https://dashscope.aliyuncs.com';
+    await expect(service.endpointTestAccounts(9)).resolves.toEqual([]);
     await expect(service.resolveEndpointTestTarget(9, 1)).rejects.toThrow(
       '平台不一致',
     );

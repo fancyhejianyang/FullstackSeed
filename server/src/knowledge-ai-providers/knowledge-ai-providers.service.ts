@@ -437,12 +437,12 @@ export class KnowledgeAiProvidersService {
     return providers.flatMap((provider) => {
       if (
         !provider.isEnabled ||
-        !provider.secretKey ||
+        !this.normalizeSecretKey(provider.secretKey) ||
         detectModelPlatform(provider.apiUrl) !== endpoint.platformType
       )
         return [];
-      const models = this.endpointCatalog(provider, endpoint.functionType);
       if (builtin) {
+        const models = this.endpointCatalog(provider, endpoint.functionType);
         const available = models.filter((item) => !overrides.has(item.code));
         return available.length
           ? [
@@ -455,10 +455,8 @@ export class KnowledgeAiProvidersService {
             ]
           : [];
       }
-      return !this.endpointFeatureType(endpoint.functionType) ||
-        models.some((item) => item.code === endpoint.modelCode)
-        ? [{ id: provider.id, name: provider.name }]
-        : [];
+      // 专用卡片用于核实尚未登记的模型，开通情况由实际测试确认。
+      return [{ id: provider.id, name: provider.name }];
     });
   }
 
@@ -473,9 +471,8 @@ export class KnowledgeAiProvidersService {
     const provider = await this.findEntity(providerId);
     if (detectModelPlatform(provider.apiUrl) !== route.platformType)
       throw new BadRequestException('测试账号与接口卡片的平台不一致');
-    if (!provider.isEnabled || !provider.secretKey)
+    if (!provider.isEnabled || !this.normalizeSecretKey(provider.secretKey))
       throw new BadRequestException('测试账号未启用或未配置密钥');
-    const featureType = this.endpointFeatureType(route.functionType);
     const model =
       route.source === 'builtin' ? selectedModel?.trim() : route.modelCode;
     if (!model || /[\s*?]/.test(model))
@@ -487,7 +484,7 @@ export class KnowledgeAiProvidersService {
     )
       throw new BadRequestException('专用卡片不能更换测试模型');
     if (
-      featureType &&
+      route.source === 'builtin' &&
       !this.endpointCatalog(provider, route.functionType).some(
         (item) => item.code === model,
       )
