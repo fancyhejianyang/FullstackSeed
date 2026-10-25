@@ -26,6 +26,7 @@ const options = ref<ModelEndpointTestOptions | null>(null);
 const result = ref<ModelEndpointTestResult | null>(null);
 const requestId = ref("");
 const testedAccountName = ref("");
+let lastNotifiedResult = "";
 const form = reactive({ providerId: "" as number | "", requestBody: "" });
 let session = 0;
 let timer: ReturnType<typeof setTimeout> | undefined;
@@ -93,7 +94,22 @@ function stopPolling() {
   if (timer) clearTimeout(timer);
   timer = undefined;
 }
-function schedulePoll(current: number) {
+function notifyResult(data: ModelEndpointTestResult, explicit = false) {
+  const key = `${data.requestId}:${data.status}:${data.message}`;
+  if (
+    !explicit &&
+    (["running", "accepted"].includes(data.status) ||
+      key === lastNotifiedResult)
+  )
+    return;
+  lastNotifiedResult = key;
+  const text = `${options.value?.card.modelCode ?? props.row?.modelCode ?? "模型"}：${statusLabels[data.status]}。${data.message}`;
+  if (data.status === "succeeded") ElMessage.success(text);
+  else if (data.status === "failed") ElMessage.error(text);
+  else if (data.status === "unknown") ElMessage.warning(text);
+  else ElMessage.info(text);
+}
+function schedulePoll(current: number, notifyTimeout = true) {
   stopPolling();
   if (
     current !== session ||
@@ -108,6 +124,7 @@ function schedulePoll(current: number) {
       status: "unknown",
       message: "已停止自动查询，供应商可能仍在生成；可继续手动查询原任务。",
     };
+    if (notifyTimeout) notifyResult(result.value);
     return;
   }
   timer = setTimeout(() => {
@@ -148,8 +165,11 @@ watch(
             : "";
       form.requestBody = JSON.stringify(data.requestBody, null, 2);
       result.value = previous?.result ?? null;
+      lastNotifiedResult = previous
+        ? `${previous.result.requestId}:${previous.result.status}:${previous.result.message}`
+        : "";
       requestId.value = previous?.result.requestId ?? "";
-      schedulePoll(current);
+      schedulePoll(current, false);
     } catch (error) {
       if (current === session) errorMessage.value = message(error);
     } finally {
@@ -200,16 +220,19 @@ async function startTest() {
     });
     if (current !== session) return;
     result.value = data;
+    notifyResult(data, true);
     schedulePoll(current);
   } catch (error) {
     if (current === session) {
       errorMessage.value = `${message(error)} 若请求已被供应商受理，可能已计费；请先查询本次结果。`;
+      if (!(isAxiosError(error) && error.response?.status === 401))
+        ElMessage.warning(errorMessage.value);
     }
   } finally {
     if (current === session) submitting.value = false;
   }
 }
-async function refreshResult() {
+async function refreshResult(explicit = false) {
   if (!props.row || !requestId.value || querying.value || submitting.value)
     return;
   const current = session;
@@ -219,6 +242,7 @@ async function refreshResult() {
     const data = await queryModelEndpointTest(props.row.id, requestId.value);
     if (current !== session) return;
     result.value = data;
+    notifyResult(data, explicit);
     schedulePoll(current);
   } catch (error) {
     if (current === session) {
@@ -229,6 +253,8 @@ async function refreshResult() {
           status: "unknown",
           message: "本次查询未完成，可继续查询原任务；请先核实结果再重新测试。",
         };
+      if (!(isAxiosError(error) && error.response?.status === 401))
+        ElMessage.warning(errorMessage.value);
       stopPolling();
     }
   } finally {
@@ -295,7 +321,7 @@ async function refreshResult() {
         :confirm="false"
         :loading="querying"
         :disabled="loading || submitting"
-        @click="refreshResult"
+        @click="refreshResult(true)"
         >查询本次结果</Button
       >
       <Button

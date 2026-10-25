@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
+import { isAxiosError } from "axios";
 import { ElMessage, type FormRules } from "element-plus";
 import Dialog from "@/components/Dialog.vue";
 import Form, { type FormField } from "@/components/Form.vue";
@@ -230,21 +231,41 @@ async function checkMediaModel(kind: MediaKind) {
         clearingRejected = false;
       }
       ElMessage.warning(
-        `${mediaLabel(kind)} ${reference.model} 已从当前候选移除，账号目录未修改`,
+        `${mediaLabel(kind)} ${reference.model}：${result.message} 已从当前候选移除，账号目录未修改。`,
       );
+    } else {
+      const message = `${mediaLabel(kind)} ${reference.model}：${result.message}${result.cached ? "（60 秒内复用最近结果，未重复调用）" : ""}`;
+      if (result.status === "valid") ElMessage.success(message);
+      else ElMessage.warning(message);
     }
-  } catch {
-    if (version === probeVersion && visible.value) {
+  } catch (error) {
+    if (
+      version === probeVersion &&
+      visible.value &&
+      form[mediaProps[kind]] === selected &&
+      Number(form.providerId) === reference.providerId
+    ) {
+      const detail: unknown = isAxiosError(error)
+        ? error.response?.data?.message
+        : error instanceof Error
+          ? error.message
+          : null;
       mediaChecks[kind] = {
         ...reference,
         kind,
         status: "inconclusive",
         reason: "network",
         message:
-          "请求未完成，无法判断图片能力；候选保留。请检查网络后重试，供应商可能已计费。",
+          typeof detail === "string"
+            ? `测试请求未完成：${detail}。无法判断图片能力，候选保留；供应商可能已计费。`
+            : "请求未完成，无法判断图片能力；候选保留。请检查网络后重试，供应商可能已计费。",
         checkedAt: new Date().toISOString(),
         cached: false,
       };
+      if (!(isAxiosError(error) && error.response?.status === 401))
+        ElMessage.warning(
+          `${mediaLabel(kind)} ${reference.model}：${mediaChecks[kind]!.message}`,
+        );
     }
   } finally {
     if (version === probeVersion) probingKind.value = null;

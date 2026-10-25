@@ -27,7 +27,7 @@ export function probeAgentMediaModel(
   return request.post<unknown, AgentMediaProbeResult>(
     "/agent-apps/probe-media-model",
     data,
-    { timeout: 100000 },
+    { timeout: 100000, silentError: true },
   );
 }
 

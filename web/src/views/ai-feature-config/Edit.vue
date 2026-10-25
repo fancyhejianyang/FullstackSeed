@@ -545,7 +545,8 @@ watch(
     }
     // 先等功能切换引起的模型目录和表单归一化完成，再检查最终选择。
     void nextTick(() => {
-      if (sequence === modelValidationSequence) void validateSelectedModel();
+      if (sequence === modelValidationSequence)
+        void validateSelectedModel(true);
     });
   },
   { flush: "sync" },
@@ -713,7 +714,7 @@ function getModelText(
   return "";
 }
 
-async function validateSelectedModel() {
+async function validateSelectedModel(notify = false) {
   const providerId = Number(form.providerId);
   const model = form.model?.trim() ?? "";
   if (
@@ -743,6 +744,14 @@ async function validateSelectedModel() {
       ? `；联网搜索：${result.searchApiPath}`
       : "";
     modelValidationHint.value = `${source}（${result.functionLabel}）：${result.apiPath}${search}。仅检查配置，未调用模型。`;
+    if (notify) {
+      const message =
+        result.source === "configured"
+          ? `模型“${model}”：${result.functionLabel}接口配置匹配通过；仅检查配置，未调用模型。`
+          : `模型“${model}”：无专用${result.functionLabel}卡片，使用标准接口；仅检查配置，未调用模型。`;
+      if (result.source === "configured") ElMessage.success(message);
+      else ElMessage.info(message);
+    }
     return true;
   } catch (error) {
     if (requestSequence === modelValidationSequence) {
@@ -753,6 +762,10 @@ async function validateSelectedModel() {
           : null;
       modelValidationHint.value =
         typeof message === "string" ? message : "接口配置检查失败，请重试。";
+      if (notify && !(isAxiosError(error) && error.response?.status === 401))
+        ElMessage.error(
+          `模型“${model}”接口配置检查失败：${modelValidationHint.value}`,
+        );
     }
     return false;
   } finally {
