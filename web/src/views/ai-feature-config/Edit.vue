@@ -5,7 +5,6 @@ import { ElMessage, type FormRules } from "element-plus";
 import Dialog from "@/components/Dialog.vue";
 import Form, { type FormField } from "@/components/Form.vue";
 import Button from "@/components/Button.vue";
-import Switch from "@/components/Switch.vue";
 import {
   FeatureModelTestQueue,
   FeatureModelTestHistory,
@@ -49,7 +48,6 @@ const validatingModel = ref(false);
 const modelValidationHint = ref("");
 let modelValidationSequence = 0;
 let dialogSession = 0;
-const autoTestModel = ref(true);
 const modelTestHint = ref("");
 const modelTests = ref<AiFeatureModelTestResult[]>([]);
 const testSubmissionBusy = ref(false);
@@ -519,16 +517,10 @@ const fields = computed<FormField[]>(() => {
             (isTopicFeature.value
               ? "切换模型或联网协议时按当前设置真实测试；实际内容效果仍以业务任务为准。"
               : isMediaGenerationFeature.value
-                ? "开启自动测试时切换模型会生成测试内容，可能计费；不会保存为业务素材。"
+                ? "切换模型会直接生成测试内容，可能计费；不会保存为业务素材。"
                 : isRerankFeature.value
                   ? "请选择通用文本模型。系统会固定用温度 0 和内置 JSON 评分提示词调用它，不会生成最终回答。"
-                  : "切换模型后匹配厂商接口。开启下方自动测试时会真实调用，可能产生费用。"),
-      },
-      {
-        prop: "modelTestControls",
-        label: "真实测试",
-        slot: true,
-        hint: "开关仅用于当前窗口，不保存到配置。关闭自动测试后，仍可手动测试或只查询已提交任务。",
+                  : "切换模型后匹配厂商接口并直接测试，可能产生费用。"),
       },
     );
     if (usesTemperature.value) {
@@ -743,7 +735,6 @@ watch(
     loading.value = false;
     if (!value) return;
     modelTestQueue.open();
-    autoTestModel.value = true;
     modelTests.value = [];
     modelTestHistory.clear();
     const recentTestsPromise = loadRecentModelTests(session);
@@ -768,9 +759,8 @@ watch(
       if (session === dialogSession && visible.value) {
         loading.value = false;
         if (recentTestsError.value) {
-          autoTestModel.value = false;
           modelTestHint.value =
-            "最近测试记录读取失败，已暂停自动测试；请先读取记录核实原任务，或明确手动测试。";
+            "最近测试记录读取失败，可在下方重新读取；切换模型仍会直接发起真实测试。";
         }
         formReadyForModelValidation.value = initialized;
         if (initialized && form.providerId && form.model)
@@ -786,17 +776,6 @@ onBeforeUnmount(() => {
   modelValidationSequence += 1;
   modelTestQueue.close();
   stopModelTestPoll();
-});
-
-watch(autoTestModel, (enabled) => {
-  if (!enabled) {
-    modelTestQueue.cancelPending();
-    stopModelTestPoll();
-    modelTestHint.value = "已关闭自动测试；切换模型只检查配置，仍可手动测试。";
-  } else if (formReadyForModelValidation.value) {
-    modelTestHint.value =
-      "已开启自动测试，下次切换模型或账号时将真实调用，可能计费。";
-  }
 });
 
 watch(
@@ -887,9 +866,7 @@ watch(
     }
     // 先等功能切换引起的模型目录和表单归一化完成，再检查最终选择。
     void nextTick(() => {
-      if (sequence === modelValidationSequence)
-        if (autoTestModel.value) queueModelTest();
-        else void validateSelectedModel(true);
+      if (sequence === modelValidationSequence) queueModelTest();
     });
   },
   { flush: "sync" },
@@ -1060,7 +1037,7 @@ function getModelText(
   return "";
 }
 
-async function validateSelectedModel(notify = false) {
+async function validateSelectedModel() {
   const providerId = Number(form.providerId);
   const model = form.model?.trim() ?? "";
   if (
@@ -1091,11 +1068,6 @@ async function validateSelectedModel(notify = false) {
       ? `；联网搜索：${result.searchApiPath}`
       : "";
     modelValidationHint.value = `${source}（${result.functionLabel}）：${result.apiPath}${search}。仅检查配置，未调用模型。`;
-    if (notify) {
-      const message = `模型“${model}”：${source}；仅检查配置，未调用模型。`;
-      if (result.source !== "standard") ElMessage.success(message);
-      else ElMessage.info(message);
-    }
     return true;
   } catch (error) {
     if (requestSequence === modelValidationSequence) {
@@ -1106,10 +1078,6 @@ async function validateSelectedModel(notify = false) {
           : null;
       modelValidationHint.value =
         typeof message === "string" ? message : "接口配置检查失败，请重试。";
-      if (notify && !(isAxiosError(error) && error.response?.status === 401))
-        ElMessage.error(
-          `模型“${model}”接口配置检查失败：${modelValidationHint.value}`,
-        );
     }
     return false;
   } finally {
@@ -1173,7 +1141,7 @@ function joinModelTexts(...values: Array<string | null | undefined>) {
     <div v-loading="loading">
       <el-alert
         class="ai-feature-config-edit__test-notice"
-        title="开启自动测试后，切换账号、模型或功能会真实调用，可能计费；图片/视频会生成测试内容。打开、回显和保存不发起实际测试。关闭窗口不取消已提交的供应商任务。"
+        title="切换账号、模型或功能会直接真实调用，可能计费；图片/视频会生成测试内容。打开、回显和保存不发起实际测试。关闭窗口不取消已提交的供应商任务。"
         type="warning"
         :closable="false"
       />
@@ -1183,34 +1151,9 @@ function joinModelTexts(...values: Array<string | null | undefined>) {
         :fields="fields"
         :rules="rules"
         label-width="110px"
-      >
-        <template #field-modelTestControls>
-          <div class="ai-feature-config-edit__test-controls">
-            <Switch
-              v-model="autoTestModel"
-              active-text="切换时自动测试"
-              inactive-text="仅手动测试"
-            />
-            <Button
-              perm="Menu.read"
-              icon="Connection"
-              :confirm="false"
-              :loading="testSubmissionBusy"
-              :disabled="
-                loading ||
-                submitting ||
-                testSubmissionBusy ||
-                !form.providerId ||
-                !form.model
-              "
-              @click="queueModelTest(true)"
-              >立即测试（可能计费）</Button
-            >
-          </div>
-        </template>
-      </Form>
+      />
       <el-collapse
-        v-if="modelTests.length || recentTestsError"
+        v-if="modelTests.length || modelTestHint || recentTestsError"
         class="ai-feature-config-edit__tests"
       >
         <el-collapse-item
@@ -1223,13 +1166,31 @@ function joinModelTexts(...values: Array<string | null | undefined>) {
             type="warning"
             :closable="false"
           />
-          <Button
-            v-if="recentTestsError"
-            perm="Menu.read"
-            :confirm="false"
-            @click="loadRecentModelTests()"
-            >重新读取记录</Button
-          >
+          <div class="ai-feature-config-edit__test-controls">
+            <Button
+              perm="Menu.read"
+              icon="Connection"
+              :confirm="false"
+              :loading="testSubmissionBusy"
+              :disabled="
+                loading ||
+                submitting ||
+                testSubmissionBusy ||
+                !formReadyForModelValidation ||
+                !form.providerId ||
+                !form.model
+              "
+              @click="queueModelTest(true)"
+              >重新测试（可能计费）</Button
+            >
+            <Button
+              v-if="recentTestsError"
+              perm="Menu.read"
+              :confirm="false"
+              @click="loadRecentModelTests()"
+              >重新读取记录</Button
+            >
+          </div>
           <article
             v-for="record in modelTests"
             :key="record.requestId"
