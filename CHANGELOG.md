@@ -1,5 +1,18 @@
 # CHANGELOG
 
+### 2026-10-25 补通腾讯原生联网配置、测试与热点搜索
+
+- AI 功能配置的 `webSearchMode` 前后端增加 `tokenhubSearch`，腾讯账号可明确选择“腾讯 TokenHub 原生搜索”，不再因平台不是百炼而只提供不联网。保留旧配置值和关闭状态，不自动开启联网或改写用户模式；主动切平台只清除不兼容协议，历史回显保留说明。热点偏好、日程校验及执行均识别对应平台的已接入搜索方式，保留平台直读、混合模式和网易固定接口例外。
+- 新增共用 `resolveWebSearchTarget`，配置检查、保存启用配置、功能真实测试及热点获取按账号平台、完整模型编码和联网卡片解析；腾讯只使用同源官方 HTTPS/标准端口、有效密钥、普通文本目录中已登记模型及启用的精确联网卡片。协议必须为同步 Responses 或 ChatSearch，路径来自卡片；缺卡、停用、跨平台或不兼容时在请求前明确阻止，不使用普通 Chat 规则推断联网。关闭失效配置不因新增联网校验被拦。百炼维持原官方 Responses 地址规则，无新数据库列或迁移。
+- 腾讯沿用已有五个官方联网预设：`hy3` 走 Responses；`deepseek-v4-flash-0731`、`deepseek-v4-pro-0813`、`deepseek-v4-pro`、`deepseek-v4-flash` 走 Chat 搜索。完整编码精确匹配；不将原厂直供 `deepseek-v4-flash-202605` / `deepseek-v4-pro-202606`、带前缀版本或 GLM 自动转换为联网别名，不替换请求 model。相关型号在普通模型列表中存在，不等于腾讯联网矩阵已声明其能力。
+- 请求构造与来源解析抽到纯工具：腾讯 Chat 使用 `web_search_options`，只收录 `message.search_results` 的 URL/name/snippet；腾讯 Responses 使用 `tools`，须完成的搜索调用加 `output_text.annotations` 中真实引用，兼容官方示例缺少顶层 status。两者显式使用轻量搜索和相应思考参数，不串用百炼 `enable_thinking`。腾讯日期统一未知、Responses 缺原文摘要保持空，不把正文链接、用量、模型生成摘要日期或百炼字段冒充腾讯检索证据；缺失来源不能判成功。百炼来源解析保留原行为。
+- 模型功能测试与热点业务共用相同目标、请求构造和来源核验；测试联网场景跳过旧的宽松协议判断，不发送用户业务提示词，不修改幂等、并发与来源隔离。搜索业务保留取消/有界响应/禁止重定向与自动重投，计费错误使用已有中文原因，无密钥或供应商原始错误透出。
+- 新增文件：`server/src/knowledge-ai-providers/knowledge-web-search.utils.ts`、`server/src/knowledge-ai-providers/knowledge-web-search.tokenhub.spec.ts`、`server/src/knowledge-ai-providers/knowledge-web-search-target.spec.ts`。
+- 修改文件（后端）：`server/src/ai-feature-configs/ai-feature-config.constants.ts`、`server/src/ai-feature-configs/ai-feature-configs.service.ts`、`server/src/ai-feature-configs/ai-feature-configs.service.spec.ts`、`server/src/hot-topics/hot-topics.service.ts`、`server/src/hot-topics/hot-topics.service.spec.ts`、`server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`、`server/src/knowledge-ai-providers/model-endpoint-tests.service.ts`、`server/src/knowledge-ai-providers/feature-model-tests.service.spec.ts`、`server/src/knowledge-ai-providers/knowledge-web-search.service.ts`、`server/src/knowledge-ai-providers/knowledge-web-search.service.spec.ts`。
+- 修改文件（前端及文档）：`web/src/api/aiFeatureConfig.ts`、`web/src/views/ai-feature-config/Edit.vue`、`web/src/views/ai-feature-config/topicProvider.test.mjs`、`web/src/views/hot-topic/Preferences.vue`、`web/src/views/hot-topic/preferenceValidation.ts`、`web/src/views/hot-topic/hotTopic.test.mjs`、`.design-spec.md`、本文件。删除文件：无。用户已有 `web/auto-imports.d.ts`、`web/src/api/hotTopic.ts` 改动保留且不纳入提交。
+- 验证：后端相关 7 套件 117 项模拟测试、前端平台联动 9 项和热点偏好 15 项模拟测试通过，覆盖两种腾讯协议、来源真实/缺失/未完成、跨平台/无卡/停用/未核实型号、保存/关闭、取消、用量、费用错误和混合模式。前后端类型、定向 ESLint/格式、组件复用、实体列检查、生产构建及 diff 检查通过；前端保留既有 PURE 注释及大分块提示。未启动/重启服务、未改运行中数据库、未发起真实搜索或付费调用。更新后需在原 AI 配置中明确选择腾讯原生搜索并保存，再由热点偏好选择该配置；原不联网配置保持不变。
+- 官方依据：[腾讯联网搜索支持矩阵、请求与来源字段](https://cloud.tencent.com/document/product/1823/132358)、[腾讯模型列表及原厂直供编码](https://cloud.tencent.com/document/product/1823/130051)。不将普通模型列表中的编码映射当作原生联网能力的额外声明。
+
 ### 2026-10-25 修复热点混合模式被联网协议校验整体拦截
 
 - 原获取前校验把所有非平台模式都要求为百炼 Responses，混合模式即使已选择可直接采集的平台来源，也会在任务入队或实际采集前失败。现在仅在纯 AI 搜索涉及非网易/默认来源、或混合模式完全没有可直读来源时要求受支持的搜索协议；含公开页面或网易国内新闻的混合模式可继续采集与普通 AI 推荐，后台原有搜索异常处理保留平台结果并说明搜索不可用原因。

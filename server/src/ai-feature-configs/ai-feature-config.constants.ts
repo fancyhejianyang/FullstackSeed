@@ -25,6 +25,7 @@ export type AiResponseFormat = (typeof AI_RESPONSE_FORMATS)[number];
 export const AI_WEB_SEARCH_MODES = [
   'disabled',
   'bailianResponses',
+  'tokenhubSearch',
   'bailianChat',
 ] as const;
 export type AiWebSearchMode = (typeof AI_WEB_SEARCH_MODES)[number];

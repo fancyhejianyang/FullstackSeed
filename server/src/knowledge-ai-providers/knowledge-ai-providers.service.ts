@@ -9,7 +9,11 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { In, Like, Repository } from 'typeorm';
 import { KnowledgeAiProvider } from './entities/knowledge-ai-provider.entity';
 import { AiFeatureConfig } from '../ai-feature-configs/entities/ai-feature-config.entity';
-import type { AiModelFeatureType } from '../ai-feature-configs/ai-feature-config.constants';
+import type {
+  AiModelFeatureType,
+  AiWebSearchMode,
+} from '../ai-feature-configs/ai-feature-config.constants';
+import { bailianResponsesUrl } from './knowledge-web-search.utils';
 import { LogRecordsService } from '../log-records/log-records.service';
 import { ModelEndpointsService } from '../model-endpoints/model-endpoints.service';
 import {
@@ -114,6 +118,20 @@ export interface ModelEndpointTestAccount {
   name: string;
   models?: Array<{ code: string; name: string }>;
   apiPath?: string;
+}
+
+export interface KnowledgeAiWebSearchTarget {
+  model: string;
+  functionType: 'webSearch';
+  protocol: 'openaiResponses' | 'openaiChatSearch';
+  executionMode: 'sync';
+  taskMethod: 'GET';
+  url: string;
+  taskUrlTemplate: null;
+  secretKey: string;
+  functionLabel: string;
+  source: 'configured' | 'builtin' | 'standard';
+  ruleName: string;
 }
 
 export interface KnowledgeAiChatTarget {
@@ -411,6 +429,110 @@ export class KnowledgeAiProvidersService {
           : endpoint
             ? `模型专用 · ${model}（${FUNCTION_LABELS[functionType]}）`
             : '自定义平台标准接口',
+    };
+  }
+
+  /** 联网配置、真实测试与热点采集共用此解析，不从普通模型名称推断联网能力。 */
+  async resolveWebSearchTarget(payload: {
+    id: number;
+    model: string;
+    webSearchMode: AiWebSearchMode;
+  }): Promise<KnowledgeAiWebSearchTarget> {
+    const provider = await this.findEntity(payload.id);
+    const secretKey = this.normalizeSecretKey(provider.secretKey);
+    if (!provider.isEnabled || !secretKey)
+      throw new BadRequestException('联网搜索账号未启用或未配置密钥');
+    const model = payload.model.trim();
+    if (!model || /[\s*?]/.test(model))
+      throw new BadRequestException('联网搜索请选择具体模型');
+    const available = this.parseModels(
+      this.getFeatureModels(provider, 'topicDiscovery'),
+    );
+    if (!available.some((item) => item.code === model))
+      throw new BadRequestException(
+        '联网搜索模型未登记在账号普通文本模型目录中',
+      );
+    const platform = detectModelPlatform(provider.apiUrl);
+    if (payload.webSearchMode === 'bailianResponses') {
+      if (platform !== 'aliyunBailian')
+        throw new BadRequestException('百炼联网方式不适用于当前账号平台');
+      const target = await this.resolveFeatureTestTarget({
+        id: payload.id,
+        model,
+        featureType: 'topicDiscovery',
+      });
+      let url: string;
+      try {
+        url = bailianResponsesUrl(target.url);
+      } catch (error) {
+        throw new BadRequestException(
+          error instanceof Error ? error.message : '百炼联网搜索地址不可用',
+        );
+      }
+      return {
+        ...target,
+        functionType: 'webSearch',
+        protocol: 'openaiResponses',
+        executionMode: 'sync',
+        taskMethod: 'GET',
+        taskUrlTemplate: null,
+        url,
+        secretKey,
+        functionLabel: '联网搜索',
+        ruleName: `${target.ruleName} · 百炼 Responses 联网搜索`,
+      };
+    }
+    if (payload.webSearchMode !== 'tokenhubSearch')
+      throw new BadRequestException('请选择已接入的原生联网搜索方式');
+    if (platform !== 'tencentTokenhub')
+      throw new BadRequestException('腾讯原生联网方式不适用于当前账号平台');
+    const base = new URL(this.applyWorkspaceId(provider));
+    if (
+      base.protocol !== 'https:' ||
+      base.username ||
+      base.password ||
+      base.search ||
+      base.hash ||
+      (base.port && base.port !== '443')
+    )
+      throw new BadRequestException(
+        '腾讯联网搜索仅支持官方 HTTPS 标准端口地址',
+      );
+    const { endpoint, url } = await this.resolveFunctionEndpoint(
+      provider,
+      model,
+      'webSearch',
+    );
+    if (
+      !endpoint ||
+      endpoint.source !== 'configured' ||
+      !endpoint.isActive ||
+      endpoint.functionType !== 'webSearch' ||
+      endpoint.executionMode !== 'sync' ||
+      !['openaiResponses', 'openaiChatSearch'].includes(endpoint.protocol)
+    )
+      throw new BadRequestException('当前模型的联网接口协议配置不受支持');
+    const resolved = new URL(url);
+    if (
+      resolved.origin !== base.origin ||
+      resolved.protocol !== 'https:' ||
+      detectModelPlatform(url) !== 'tencentTokenhub'
+    )
+      throw new BadRequestException(
+        '联网搜索接口必须与当前腾讯账号官方地址同源',
+      );
+    return {
+      model,
+      functionType: 'webSearch',
+      protocol: endpoint.protocol as KnowledgeAiWebSearchTarget['protocol'],
+      executionMode: 'sync',
+      taskMethod: 'GET',
+      taskUrlTemplate: null,
+      url,
+      secretKey,
+      functionLabel: '联网搜索',
+      source: 'configured',
+      ruleName: `模型专用 · ${model}（联网搜索）`,
     };
   }
 

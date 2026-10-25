@@ -471,6 +471,16 @@ const isTopicFeature = computed(() => form.featureType === "topicDiscovery");
 const canUseBailianSearch = computed(
   () => selectedProvider.value?.platformType === "aliyunBailian",
 );
+const canUseTokenhubSearch = computed(
+  () => selectedProvider.value?.platformType === "tencentTokenhub",
+);
+const platformSearchMode = computed(() =>
+  canUseBailianSearch.value
+    ? "bailianResponses"
+    : canUseTokenhubSearch.value
+      ? "tokenhubSearch"
+      : "disabled",
+);
 const webSearchOptions = computed(() => {
   const options = [
     { label: "不联网（仅分析已采集资料）", value: "disabled", disabled: false },
@@ -488,6 +498,19 @@ const webSearchOptions = computed(() => {
       disabled: true,
     });
   }
+  if (canUseTokenhubSearch.value) {
+    options.push({
+      label: "腾讯 TokenHub 原生搜索（按模型接口卡片）",
+      value: "tokenhubSearch",
+      disabled: false,
+    });
+  } else if (form.webSearchMode === "tokenhubSearch") {
+    options.push({
+      label: "腾讯 TokenHub 原生搜索（当前账号不适用）",
+      value: "tokenhubSearch",
+      disabled: true,
+    });
+  }
   if (form.webSearchMode === "bailianChat") {
     options.push({
       label: "百炼 Chat 联网（旧协议不可用，请重新选择）",
@@ -499,9 +522,11 @@ const webSearchOptions = computed(() => {
 });
 const webSearchHint = computed(() => {
   if (!selectedProvider.value) return "请先选择大模型账号。";
-  if (!canUseBailianSearch.value)
-    return "本项目尚未接入当前平台的原生联网搜索；可选择“不联网”分析和推荐已采集资料。热点偏好请使用直接采集模式；需要 AI 联网获取时，请另选百炼配置。";
-  return "仅百炼官方兼容端点可使用当前联网适配器，所选模型仍需支持 web_search；平台识别不等于模型能力验证。不联网时仅分析已采集资料。";
+  if (canUseTokenhubSearch.value)
+    return "腾讯原生搜索按当前模型匹配已启用的“联网搜索”接口卡片，具体协议以卡片为准；普通调用可用不代表支持联网。没有已确认的联网卡片时不能搜索，配置检查会提示具体原因；选择“不联网”仍可分析已采集资料。";
+  if (canUseBailianSearch.value)
+    return "百炼官方端点使用 Responses 原生搜索，所选模型仍需支持 web_search；平台识别不等于模型能力验证。不联网时仅分析已采集资料。";
+  return "本项目尚未接入当前平台的原生联网搜索；可选择“不联网”分析和推荐已采集资料。AI 联网获取需选择已配置原生搜索的百炼或腾讯账号，并核对当前模型的联网能力。";
 });
 const isVisualPromptFeature = computed(
   () => form.featureType === "visualPrompt",
@@ -891,7 +916,11 @@ watch(
   () => {
     // 只归一化用户主动切换；历史配置回填不改值，也不触发真实测试。
     if (!formReadyForModelValidation.value) return;
-    if (!isTopicFeature.value || !canUseBailianSearch.value)
+    if (
+      !isTopicFeature.value ||
+      (form.webSearchMode !== "disabled" &&
+        form.webSearchMode !== platformSearchMode.value)
+    )
       form.webSearchMode = "disabled";
   },
   { flush: "sync" },
@@ -1172,11 +1201,11 @@ async function validateSelectedModel() {
     isTopicFeature.value &&
     form.webSearchMode &&
     form.webSearchMode !== "disabled" &&
-    (!canUseBailianSearch.value || form.webSearchMode !== "bailianResponses")
+    form.webSearchMode !== platformSearchMode.value
   ) {
     checkedEndpoint.value = null;
     modelValidationHint.value =
-      "当前账号与所选联网协议不匹配，请选择“不联网”用于热点分析推荐，或切换百炼账号并选择 Responses；未发起实际测试。";
+      "当前账号与所选联网方式不匹配，请选择当前平台的原生搜索或“不联网”；腾讯搜索还须匹配当前模型的已启用联网接口卡片。未发起实际测试。";
     return false;
   }
   const requestSequence = ++modelValidationSequence;

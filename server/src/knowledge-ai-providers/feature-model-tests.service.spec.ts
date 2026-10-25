@@ -60,6 +60,29 @@ function harness(
     resolveEndpointTestTarget: jest
       .fn()
       .mockImplementation(() => Promise.resolve({ ...target })),
+    resolveWebSearchTarget: jest
+      .fn()
+      .mockImplementation(
+        (selection: { model: string; webSearchMode: string }) => {
+          if (selection.webSearchMode === 'bailianChat')
+            throw new Error('请选择已接入的原生联网搜索方式');
+          if (selection.webSearchMode === 'tokenhubSearch')
+            return Promise.resolve({
+              ...target,
+              model: selection.model,
+              functionType: 'webSearch',
+              functionLabel: '联网搜索',
+            });
+          return Promise.resolve({
+            ...target,
+            model: selection.model,
+            functionType: 'webSearch',
+            protocol: 'openaiResponses',
+            functionLabel: '联网搜索',
+            url: target.url.replace('/chat/completions', '/responses'),
+          });
+        },
+      ),
     endpointTestAccounts: jest
       .fn()
       .mockResolvedValue([{ id: 2, name: '测试账号' }]),
@@ -340,9 +363,24 @@ describe('AI 功能配置真实模型接口测试', () => {
       .mockResolvedValueOnce(json({ output_text: '普通回答' }))
       .mockResolvedValueOnce(
         json({
+          status: 'completed',
           output: [
-            { type: 'web_search_call', status: 'completed' },
-            { type: 'message', content: [{ text: '检索答案' }] },
+            {
+              type: 'web_search_call',
+              status: 'completed',
+              action: {
+                sources: [
+                  {
+                    url: 'https://news.example.com/real',
+                    title: '真实检索结果',
+                  },
+                ],
+              },
+            },
+            {
+              type: 'message',
+              content: [{ type: 'output_text', text: '检索答案' }],
+            },
           ],
         }),
       );
@@ -368,9 +406,89 @@ describe('AI 功能配置真实模型接口测试', () => {
         dto({ featureType: 'topicDiscovery', webSearchMode: 'bailianChat' }),
         7,
       ),
-    ).rejects.toThrow('Responses');
+    ).rejects.toThrow('原生联网搜索方式');
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
+
+  it.each(['openaiResponses', 'openaiChatSearch'] as const)(
+    '腾讯联网测试使用实际 %s 卡片与结构化来源，不发送业务提示词',
+    async (protocol) => {
+      const { service, target, providers } = harness('webSearch', protocol);
+      target.url =
+        protocol === 'openaiResponses'
+          ? 'https://tokenhub.tencentmaas.com/v1/responses'
+          : 'https://tokenhub.tencentmaas.com/v1/chat/completions';
+      const source = {
+        url: 'https://news.example.com/result',
+        title: '真实搜索来源',
+      };
+      const body =
+        protocol === 'openaiResponses'
+          ? {
+              output: [
+                { type: 'web_search_call', status: 'completed' },
+                {
+                  type: 'message',
+                  content: [
+                    {
+                      type: 'output_text',
+                      text: '带引用的回答',
+                      annotations: [{ type: 'url_citation', ...source }],
+                    },
+                  ],
+                },
+              ],
+            }
+          : {
+              choices: [
+                {
+                  finish_reason: 'stop',
+                  message: {
+                    content: '带引用的回答',
+                    search_results: [
+                      {
+                        url: source.url,
+                        name: source.title,
+                        snippet: '真实摘要',
+                      },
+                    ],
+                  },
+                },
+              ],
+            };
+      const fetchSpy = jest
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(json(body));
+      const input = dto({
+        featureType: 'topicDiscovery',
+        webSearchMode: 'tokenhubSearch',
+        model: protocol === 'openaiResponses' ? 'hy3' : 'deepseek-v4-flash',
+      });
+      const result = await service.startFeature(input, 7);
+      expect(result.status).toBe('succeeded');
+      expect(providers.resolveWebSearchTarget).toHaveBeenCalledWith({
+        id: 2,
+        model: input.model,
+        webSearchMode: 'tokenhubSearch',
+      });
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(fetchSpy.mock.calls[0][0]).toBe(target.url);
+      const requestBody = JSON.parse(
+        fetchSpy.mock.calls[0][1]?.body as string,
+      ) as Record<string, unknown>;
+      expect(requestBody.model).toBe(input.model);
+      if (protocol === 'openaiResponses')
+        expect(requestBody.tools).toEqual([
+          { type: 'web_search', search_source: 'lite' },
+        ]);
+      else
+        expect(requestBody.web_search_options).toEqual({
+          enable: true,
+          search_source: 'lite',
+        });
+      expect(requestBody).not.toHaveProperty('enable_thinking');
+    },
+  );
 
   it('所有入口共享并发限制，最近列表最多十条且不暴露请求体和凭据', async () => {
     const { service } = harness();

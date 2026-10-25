@@ -429,11 +429,25 @@ export class HotTopicsService implements OnModuleInit, OnModuleDestroy {
         requiresSearch &&
         (!selected.length ||
           selected.some((source) => source.kind !== 'neteaseNews')) &&
-        (!config || config.webSearchMode !== 'bailianResponses')
+        (!config ||
+          !['bailianResponses', 'tokenhubSearch'].includes(
+            config.webSearchMode,
+          ))
       )
         throw new BadRequestException(
-          '当前获取方式需要 AI 联网搜索，请在“偏好与计划”中选择已启用百炼 Responses 的热点 AI 配置；如需直接采集并由普通模型推荐，请将获取模式改为“平台来源”。',
+          '当前获取方式需要 AI 联网搜索，请在“偏好与计划”中选择已启用原生联网搜索的热点 AI 配置；如需直接采集并由普通模型推荐，请将获取模式改为“平台来源”。',
         );
+      if (
+        requiresSearch &&
+        (!selected.length ||
+          selected.some((source) => source.kind !== 'neteaseNews')) &&
+        config
+      )
+        await this.providers.resolveWebSearchTarget({
+          id: config.providerId!,
+          model: config.model!,
+          webSearchMode: config.webSearchMode,
+        });
     }
     return config;
   }

@@ -15,7 +15,11 @@ export type AiFeatureType =
   | "ocr"
   | "rerank";
 export type AiResponseFormat = "text" | "json" | "markdown";
-export type AiWebSearchMode = "disabled" | "bailianResponses" | "bailianChat";
+export type AiWebSearchMode =
+  | "disabled"
+  | "bailianResponses"
+  | "tokenhubSearch"
+  | "bailianChat";
 
 export interface AiFeatureConfig {
   id: number;

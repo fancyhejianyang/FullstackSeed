@@ -113,7 +113,7 @@ test("来源表单仅保留热点页面与固定网易国内新闻接口", () =>
   const source = sources.get("../hot-topic-source/Edit.vue");
   assert.match(source, /NETEASE_NEWS_API_URL/);
   assert.match(source, /新闻接口（固定）/);
-  assert.match(source, /form\.kind === 'neteaseNews'/);
+  assert.match(source, /form\.kind === ["']neteaseNews["']/);
   assert.doesNotMatch(source, /央视新闻|央视网|钧正平/);
   assert.doesNotMatch(
     source,
@@ -347,16 +347,17 @@ test("每日计划启用前校验执行权限、可用来源与真正联网协�
       { ...choices, aiConfigs: [{ id: 9, webSearchMode: "bailianChat" }] },
       true,
     ),
-    /Responses 联网协议/,
+    /原生联网协议/,
   );
-  assert.equal(
-    validateSchedule(
-      preference,
-      { ...choices, aiConfigs: [{ id: 9, webSearchMode: "bailianResponses" }] },
-      true,
-    ),
-    null,
-  );
+  for (const webSearchMode of ["bailianResponses", "tokenhubSearch"])
+    assert.equal(
+      validateSchedule(
+        preference,
+        { ...choices, aiConfigs: [{ id: 9, webSearchMode }] },
+        true,
+      ),
+      null,
+    );
   assert.match(
     validateSchedule({ ...preference, mode: "platform" }, choices, true),
     /至少选择一个来源/,
@@ -402,7 +403,7 @@ test("网易始终直读，纯 AI 依赖搜索，混合有直读来源时允许�
       choices,
       true,
     ),
-    /Responses 联网协议/,
+    /原生联网协议/,
   );
   for (const aiConfigId of [null, 9]) {
     assert.equal(
@@ -421,7 +422,7 @@ test("网易始终直读，纯 AI 依赖搜索，混合有直读来源时允许�
   }
 });
 
-test("搜索来源为主的混合模式严格要求 Responses，直读来源允许普通 AI 推荐", () => {
+test("搜索来源为主的混合模式要求已接入的原生搜索，直读来源允许普通 AI 推荐", () => {
   const preference = {
     mode: "hybrid",
     aiConfigId: 9,
@@ -434,10 +435,7 @@ test("搜索来源为主的混合模式严格要求 Responses，直读来源允�
       aiConfigs: [{ id: 9, webSearchMode }],
       sources: [searchSource],
     };
-    assert.match(
-      validateSchedule(preference, choices, true),
-      /Responses 联网协议/,
-    );
+    assert.match(validateSchedule(preference, choices, true), /原生联网协议/);
     assert.equal(
       validateSchedule(
         preference,
@@ -455,17 +453,18 @@ test("搜索来源为主的混合模式严格要求 Responses，直读来源允�
       null,
     );
   }
-  assert.equal(
-    validateSchedule(
-      preference,
-      {
-        aiConfigs: [{ id: 9, webSearchMode: "bailianResponses" }],
-        sources: [searchSource],
-      },
-      true,
-    ),
-    null,
-  );
+  for (const webSearchMode of ["bailianResponses", "tokenhubSearch"])
+    assert.equal(
+      validateSchedule(
+        preference,
+        {
+          aiConfigs: [{ id: 9, webSearchMode }],
+          sources: [searchSource],
+        },
+        true,
+      ),
+      null,
+    );
 });
 
 test("创建并生成权限与模型选项读取权限一致，成功文案依据实际任务回执", () => {

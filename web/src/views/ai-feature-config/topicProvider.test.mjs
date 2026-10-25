@@ -22,13 +22,14 @@ const provider = (id, platformType) => ({
   name: id === 1 ? '腾讯名字的百炼账号' : '阿里名字的其他平台账号',
   platformType,
   isEnabled: true,
-  models: 'shared-text',
+  models: 'shared-text\nhy3\ndeepseek-v4-flash\ndeepseek-v4-flash-202605',
   textModels: 'shared-text',
 });
 
-async function harness(t, initial = {}) {
+async function harness(t, initial = {}, { checkEndpoint } = {}) {
   const exported = {};
   const scheduled = [];
+  const checked = [];
   const scope = vue.effectScope();
   t.after(() => scope.stop());
   class QueueStub {
@@ -77,7 +78,13 @@ async function harness(t, initial = {}) {
           return new Proxy(
             {},
             {
-              get: () => forbiddenRequest,
+              get: (_target, key) =>
+                key === 'checkAiFeatureModelEndpoint' && checkEndpoint
+                  ? async (payload) => {
+                      checked.push(payload);
+                      return checkEndpoint(payload);
+                    }
+                  : forbiddenRequest,
             },
           );
         if (name === '@/api/thirdPartyConfig')
@@ -98,6 +105,7 @@ async function harness(t, initial = {}) {
     provider(2, 'tencentTokenhub'),
     provider(3, 'custom'),
     provider(4, undefined),
+    provider(5, 'tencentTokenhub'),
   ];
   exported.fillForm({
     name: '热点测试',
@@ -111,6 +119,7 @@ async function harness(t, initial = {}) {
   return {
     ...exported,
     scheduled,
+    checked,
     searchField: () =>
       exported.fields.value.find((field) => field.prop === 'webSearchMode'),
   };
@@ -130,7 +139,7 @@ test('仅后端标记为百炼的平台可选 Responses，不根据账号名称�
   assert.equal(h.form.webSearchMode, 'disabled');
   assert.deepEqual(
     vue.unref(h.searchField().options).map((item) => item.value),
-    ['disabled'],
+    ['disabled', 'tokenhubSearch'],
   );
   await vue.nextTick();
   await vue.nextTick();
@@ -151,6 +160,95 @@ test('切回百炼不自动重新开启联网', async (t) => {
       .unref(h.searchField().options)
       .some((item) => item.value === 'bailianResponses' && !item.disabled),
   );
+});
+
+test('腾讯原生搜索按模型卡片校验，回填保持选择且不触发真实请求', async (t) => {
+  const h = await harness(
+    t,
+    { providerId: 2, model: 'hy3', webSearchMode: 'tokenhubSearch' },
+    {
+      checkEndpoint: async () => ({
+        functionType: 'chat',
+        functionLabel: '普通调用',
+        source: 'builtin',
+        ruleName: '腾讯普通调用',
+        apiPath: '/v1/chat/completions',
+        searchApiPath: '/v1/responses',
+      }),
+    },
+  );
+  assert.equal(h.form.webSearchMode, 'tokenhubSearch');
+  assert.equal(h.scheduled.length, 0);
+  assert.equal(h.checked.length, 0);
+  assert.match(vue.unref(h.searchField().hint), /按当前模型.*接口卡片/);
+  h.formReadyForModelValidation.value = true;
+  assert.equal(await h.validateSelectedModel(), true);
+  assert.equal(h.checked.length, 1);
+  assert.equal(h.checked[0].webSearchMode, 'tokenhubSearch');
+  assert.equal(h.checked[0].model, 'hy3');
+  assert.equal(h.scheduled.length, 0);
+});
+
+test('腾讯切换模型及同平台账号保留原生搜索，仅检查最终模型且不猜联网别名', async (t) => {
+  const h = await harness(
+    t,
+    { providerId: 2, model: 'hy3', webSearchMode: 'tokenhubSearch' },
+    {
+      checkEndpoint: async () => {
+        throw new Error('当前模型缺少已启用的联网搜索接口卡片');
+      },
+    },
+  );
+  h.formReadyForModelValidation.value = true;
+  h.form.model = 'deepseek-v4-flash';
+  h.form.model = 'deepseek-v4-flash-202605';
+  await vue.nextTick();
+  await vue.nextTick();
+  assert.equal(h.form.webSearchMode, 'tokenhubSearch');
+  assert.equal(h.scheduled.length, 1);
+  assert.equal(h.scheduled[0].selection.model, 'deepseek-v4-flash-202605');
+  assert.equal(h.scheduled[0].selection.webSearchMode, 'tokenhubSearch');
+  assert.equal(await h.validateSelectedModel(), false);
+  assert.equal(h.checked.at(-1).model, 'deepseek-v4-flash-202605');
+  assert.match(h.modelValidationHint.value, /缺少.*联网搜索接口卡片/);
+  assert.equal(h.form.model, 'deepseek-v4-flash-202605');
+  assert.equal(h.form.webSearchMode, 'tokenhubSearch');
+  h.form.providerId = 5;
+  await vue.nextTick();
+  assert.equal(h.form.webSearchMode, 'tokenhubSearch');
+});
+
+test('离开腾讯清除不兼容搜索，切回不自动开启；腾讯不联网配置也不自动升级', async (t) => {
+  const h = await harness(t, {
+    providerId: 2,
+    webSearchMode: 'tokenhubSearch',
+  });
+  h.formReadyForModelValidation.value = true;
+  h.form.providerId = 1;
+  await vue.nextTick();
+  assert.equal(h.form.webSearchMode, 'disabled');
+  h.form.providerId = 2;
+  await vue.nextTick();
+  assert.equal(h.form.webSearchMode, 'disabled');
+  h.form.model = 'hy3';
+  await vue.nextTick();
+  assert.equal(h.form.webSearchMode, 'disabled');
+  assert.equal(h.buildPayload().webSearchMode, 'disabled');
+});
+
+test('腾讯联网历史值遇到百炼账号时保留并提示不适用，不静默改成 Responses', async (t) => {
+  const h = await harness(t, { webSearchMode: 'tokenhubSearch' });
+  assert.equal(h.form.webSearchMode, 'tokenhubSearch');
+  assert.equal(h.scheduled.length, 0);
+  const invalid = vue
+    .unref(h.searchField().options)
+    .find((item) => item.value === 'tokenhubSearch');
+  assert.equal(invalid.disabled, true);
+  assert.match(invalid.label, /当前账号不适用/);
+  h.formReadyForModelValidation.value = true;
+  assert.equal(await h.validateSelectedModel(), false);
+  assert.equal(h.form.webSearchMode, 'tokenhubSearch');
+  assert.match(h.modelValidationHint.value, /未发起实际测试/);
 });
 
 test('历史不兼容组合保留原值并提示重新选择，回填及本地检查不发请求', async (t) => {

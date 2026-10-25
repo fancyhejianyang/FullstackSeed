@@ -1,5 +1,11 @@
 import type { HotOptions, HotPreference } from "@/api/hotTopic";
 
+export function supportsHotSearchMode(
+  mode: HotOptions["aiConfigs"][number]["webSearchMode"] | undefined,
+): boolean {
+  return mode === "bailianResponses" || mode === "tokenhubSearch";
+}
+
 /** 混合模式只在没有可直读来源时才必须依赖 AI 搜索。 */
 export function preferenceRequiresSearch(
   mode: HotPreference["mode"],
@@ -46,8 +52,8 @@ export function scheduleValidationError(
     return "所选来源需要 AI 搜索，请切换到 AI 联网或混合模式";
   if (
     preferenceRequiresSearch(preference.mode, sources) &&
-    config?.webSearchMode !== "bailianResponses"
+    !supportsHotSearchMode(config?.webSearchMode)
   )
-    return "当前获取方式需要已启用 Responses 联网协议的热点 AI 配置；仅需平台采集和普通 AI 推荐时，请改选“平台来源”";
+    return "当前获取方式需要已启用原生联网协议的热点 AI 配置（百炼 Responses 或腾讯 TokenHub）；仅需平台采集和普通 AI 推荐时，请改选“平台来源”";
   return null;
 }

@@ -24,7 +24,11 @@ import {
 } from '../common/ai/model-provider-error';
 import type { TestAiFeatureModelDto } from '../ai-feature-configs/dto/ai-feature-config.dto';
 import { createVisionChallenge } from '../agent-apps/agent-media-probe';
-import { bailianResponsesUrl } from './knowledge-web-search.service';
+import {
+  buildVerifiedSearchRequest,
+  parseVerifiedSearchResponse,
+  parseTokenhubSearchResponse,
+} from './knowledge-web-search.utils';
 import { HotTopicFetchError } from '../hot-topics/hot-topic-network';
 import { isRetiredModelError } from '../common/ai/model-retirement';
 import { detectModelPlatform } from '../model-endpoints/model-endpoint.constants';
@@ -163,6 +167,14 @@ export class ModelEndpointTestsService {
       userId,
       () => this.resolveFeatureTarget(selection),
       (target, entry) => {
+        if (target.functionType === 'webSearch')
+          return buildVerifiedSearchRequest({
+            webSearchMode: selection.webSearchMode ?? 'disabled',
+            protocol: target.protocol,
+            model: target.model,
+            query: '请搜索今天的公开科技新闻，返回真实搜索来源。',
+            enableThinking: false,
+          });
         if (target.functionType === 'vision') {
           const challenge = createVisionChallenge();
           entry.visionMatches = (answer) => challenge.matches(answer);
@@ -211,7 +223,17 @@ export class ModelEndpointTestsService {
   private async resolveFeatureTarget(
     selection: FeatureSelection,
   ): Promise<TestTarget> {
-    const target: TestTarget = await this.providers.resolveFeatureTestTarget({
+    if (
+      selection.featureType === 'topicDiscovery' &&
+      selection.webSearchMode &&
+      selection.webSearchMode !== 'disabled'
+    )
+      return this.providers.resolveWebSearchTarget({
+        id: selection.providerId,
+        model: selection.model,
+        webSearchMode: selection.webSearchMode,
+      });
+    return this.providers.resolveFeatureTestTarget({
       id: selection.providerId,
       model: selection.model,
       featureType:
@@ -219,26 +241,6 @@ export class ModelEndpointTestsService {
           ? 'documentParse'
           : selection.featureType,
     });
-    if (
-      selection.featureType === 'topicDiscovery' &&
-      selection.webSearchMode &&
-      selection.webSearchMode !== 'disabled'
-    ) {
-      if (selection.webSearchMode !== 'bailianResponses')
-        throw new BadRequestException('联网搜索请使用百炼 Responses 协议');
-      try {
-        target.url = bailianResponsesUrl(target.url);
-      } catch (error) {
-        if (error instanceof HotTopicFetchError)
-          throw new BadRequestException(error.message);
-        throw error;
-      }
-      target.protocol = 'openaiResponses';
-      target.functionType = 'webSearch';
-      target.functionLabel = '联网搜索';
-      target.ruleName = `${target.ruleName ?? '百炼'} · Responses 联网搜索`;
-    }
-    return target;
   }
 
   private async execute(
@@ -491,9 +493,10 @@ export class ModelEndpointTestsService {
       );
       return;
     }
-    const extended = response.ok
-      ? extendedTokenhubResult(value, target.protocol, !querying)
-      : null;
+    const extended =
+      response.ok && target.functionType !== 'webSearch'
+        ? extendedTokenhubResult(value, target.protocol, !querying)
+        : null;
     if (extended) {
       if (extended.taskId) entry.result.taskId = extended.taskId;
       if (extended.status === 'pending') {
@@ -537,6 +540,23 @@ export class ModelEndpointTestsService {
       return;
     }
     const scene = target.functionType;
+    if (scene === 'webSearch') {
+      try {
+        if (detectModelPlatform(target.url) === 'tencentTokenhub')
+          parseTokenhubSearchResponse(value, target.protocol);
+        else parseVerifiedSearchResponse(value);
+        this.finish(entry, 'succeeded', '接口已完成联网搜索并返回可核验来源。');
+      } catch (error) {
+        this.finish(
+          entry,
+          'unknown',
+          error instanceof HotTopicFetchError
+            ? error.message
+            : '联网结果无法核验，未将回答或链接文本当作搜索证据。',
+        );
+      }
+      return;
+    }
     if (
       scene === 'chat' ||
       scene === 'vision' ||

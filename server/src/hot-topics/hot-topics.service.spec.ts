@@ -52,7 +52,7 @@ function setup() {
       .mockResolvedValue([{ id: 1, isEnabled: true, accessMode: 'page' }]),
   };
   const configs = { findUsableTopicDiscoveryConfig: jest.fn() };
-  const providers = {};
+  const providers = { resolveWebSearchTarget: jest.fn().mockResolvedValue({}) };
   const collector = {};
   const articles = {
     create: jest.fn().mockResolvedValue({ id: 99 }),
@@ -78,6 +78,7 @@ function setup() {
     users,
     sources,
     configs,
+    providers,
     articles,
   };
 }
@@ -233,7 +234,7 @@ describe('热点选题核心', () => {
     });
     await expect(
       service.submit({ requestId: 'first', action: 'discover' }, 9),
-    ).rejects.toThrow('Responses');
+    ).rejects.toThrow('原生联网搜索');
     expect(runs.save).not.toHaveBeenCalled();
   });
   it.each(['disabled', 'bailianChat'] as const)(
@@ -275,9 +276,44 @@ describe('热点选题核心', () => {
     ]);
     await expect(
       service.submit({ requestId: 'search-only', action: 'discover' }, 9),
-    ).rejects.toThrow('Responses');
+    ).rejects.toThrow('原生联网搜索');
     expect(runs.save).not.toHaveBeenCalled();
   });
+  it('纯 AI 模式支持腾讯搜索，并在提交前使用共用模型卡片解析', async () => {
+    const { service, preferences, configs, providers, runs } = setup();
+    preferences.findOne.mockResolvedValue({
+      ...preference(),
+      mode: 'aiSearch',
+      aiConfigId: 1,
+    });
+    const config = {
+      id: 1,
+      providerId: 2,
+      model: 'hy3',
+      webSearchMode: 'tokenhubSearch',
+    };
+    configs.findUsableTopicDiscoveryConfig.mockResolvedValue(config);
+    runs.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue({ id: 7, userId: 9, status: 'pending' });
+    await expect(
+      service.submit({ requestId: 'tencent-search', action: 'discover' }, 9),
+    ).resolves.toMatchObject({ id: 7 });
+    expect(providers.resolveWebSearchTarget).toHaveBeenCalledWith({
+      id: 2,
+      model: 'hy3',
+      webSearchMode: 'tokenhubSearch',
+    });
+    providers.resolveWebSearchTarget.mockRejectedValueOnce(
+      new Error('当前模型缺少联网搜索卡片'),
+    );
+    runs.findOne.mockResolvedValue(null);
+    await expect(
+      service.submit({ requestId: 'missing-card', action: 'discover' }, 9),
+    ).rejects.toThrow('缺少联网搜索卡片');
+    expect(runs.save).toHaveBeenCalledTimes(1);
+  });
+
   it('文章生成权限单独校验，不因拥有热点权限放行', async () => {
     const { service, topics } = setup();
     const user = {

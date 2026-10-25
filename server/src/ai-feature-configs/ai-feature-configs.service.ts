@@ -6,8 +6,6 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Like, Repository } from 'typeorm';
 import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
-import { bailianResponsesUrl } from '../knowledge-ai-providers/knowledge-web-search.service';
-import { HotTopicFetchError } from '../hot-topics/hot-topic-network';
 import { MineruConfigsService } from '../mineru-configs/mineru-configs.service';
 import type { AiFeatureConfigType } from './ai-feature-config.constants';
 import type { AiMaterialGenerationMode } from '../ai-materials/ai-material.constants';
@@ -51,15 +49,12 @@ export class AiFeatureConfigsService {
       dto.webSearchMode &&
       dto.webSearchMode !== 'disabled'
     ) {
-      if (dto.webSearchMode !== 'bailianResponses')
-        throw new BadRequestException('联网搜索请使用百炼 Responses 协议');
-      try {
-        searchApiPath = new URL(bailianResponsesUrl(target.url)).pathname;
-      } catch (error) {
-        if (error instanceof HotTopicFetchError)
-          throw new BadRequestException(error.message);
-        throw error;
-      }
+      const search = await this.providersService.resolveWebSearchTarget({
+        id: dto.providerId,
+        model: dto.model,
+        webSearchMode: dto.webSearchMode,
+      });
+      searchApiPath = new URL(search.url).pathname;
     }
     // 只返回匹配摘要，不向功能编辑器返回账号凭据或完整账号配置。
     return {
@@ -542,6 +537,17 @@ export class AiFeatureConfigsService {
         ? 'documentParse'
         : (config.featureType ?? 'chat'),
     });
+    if (
+      config.isEnabled !== false &&
+      config.featureType === 'topicDiscovery' &&
+      config.webSearchMode &&
+      config.webSearchMode !== 'disabled'
+    )
+      await this.providersService.resolveWebSearchTarget({
+        id: config.providerId,
+        model: config.model,
+        webSearchMode: config.webSearchMode,
+      });
   }
 
   private toNullableText(value?: string) {

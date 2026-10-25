@@ -60,13 +60,16 @@ describe('AiFeatureConfigsService', () => {
     });
   });
 
-  it('热点检查校验实际 Responses 路径，拒绝不受支持的地址和旧协议', async () => {
+  it('热点检查委托共用搜索解析，显示平台实际路径并透传协议失败', async () => {
     const providers = {
       inspectFeatureEndpoint: jest.fn().mockResolvedValue({
         functionType: 'chat',
         functionLabel: '普通调用',
         source: 'standard',
         url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+      }),
+      resolveWebSearchTarget: jest.fn().mockResolvedValue({
+        url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/responses',
       }),
     };
     const configService = new AiFeatureConfigsService(
@@ -85,21 +88,36 @@ describe('AiFeatureConfigsService', () => {
     ).resolves.toMatchObject({
       searchApiPath: '/compatible-mode/v1/responses',
     });
+    expect(providers.resolveWebSearchTarget).toHaveBeenCalledWith({
+      id: 2,
+      model: 'qwen-plus',
+      webSearchMode: 'bailianResponses',
+    });
+    providers.resolveWebSearchTarget.mockRejectedValueOnce(
+      new Error('请选择已接入的原生联网搜索方式'),
+    );
     await expect(
       configService.checkModelEndpoint({
         ...payload,
         webSearchMode: 'bailianChat',
       }),
-    ).rejects.toThrow('百炼 Responses');
+    ).rejects.toThrow('原生联网搜索方式');
     providers.inspectFeatureEndpoint.mockResolvedValueOnce({
       functionType: 'chat',
       functionLabel: '普通调用',
       source: 'configured',
       url: 'https://tokenhub.tencentmaas.com/vendor/chat',
     });
-    await expect(configService.checkModelEndpoint(payload)).rejects.toThrow(
-      '当前仅支持百炼',
-    );
+    providers.resolveWebSearchTarget.mockResolvedValueOnce({
+      url: 'https://tokenhub.tencentmaas.com/v1/chat/completions',
+    });
+    await expect(
+      configService.checkModelEndpoint({
+        ...payload,
+        model: 'deepseek-v4-flash',
+        webSearchMode: 'tokenhubSearch',
+      }),
+    ).resolves.toMatchObject({ searchApiPath: '/v1/chat/completions' });
   });
 
   it('热点关闭联网时允许腾讯文本推荐，且不套用百炼路径', async () => {
@@ -111,6 +129,9 @@ describe('AiFeatureConfigsService', () => {
         url: 'https://tokenhub.tencentmaas.com/v1/chat/completions',
         secretKey: 'must-stay-internal',
       }),
+      resolveWebSearchTarget: jest
+        .fn()
+        .mockRejectedValue(new Error('百炼联网方式不适用于当前账号平台')),
     };
     const configService = new AiFeatureConfigsService(
       {} as Repository<AiFeatureConfig>,
@@ -136,12 +157,57 @@ describe('AiFeatureConfigsService', () => {
       model: 'glm-5.3',
       featureType: 'topicDiscovery',
     });
+    expect(providers.resolveWebSearchTarget).not.toHaveBeenCalled();
     await expect(
       configService.checkModelEndpoint({
         ...payload,
         webSearchMode: 'bailianResponses',
       }),
-    ).rejects.toThrow('当前仅支持百炼');
+    ).rejects.toThrow('不适用于当前账号平台');
+  });
+
+  it('启用联网配置保存前核对当前卡片，禁用失效配置不新增联网阻断', async () => {
+    const repository = {
+      create: jest.fn((value: unknown) => value),
+      save: jest.fn((value: unknown) => Promise.resolve(value)),
+    };
+    const providers = {
+      findOne: jest.fn().mockResolvedValue({ id: 2, name: '腾讯账号' }),
+      assertModelSupported: jest.fn(),
+      resolveWebSearchTarget: jest.fn().mockResolvedValue({
+        url: 'https://tokenhub.tencentmaas.com/v1/responses',
+      }),
+    };
+    const service = new AiFeatureConfigsService(
+      repository as unknown as Repository<AiFeatureConfig>,
+      providers as unknown as KnowledgeAiProvidersService,
+      {} as MineruConfigsService,
+    );
+    const input = {
+      name: '热点',
+      featureType: 'topicDiscovery',
+      providerId: 2,
+      model: 'hy3',
+      webSearchMode: 'tokenhubSearch',
+    } as const;
+    await expect(service.create(input)).resolves.toMatchObject({
+      webSearchMode: 'tokenhubSearch',
+    });
+    expect(providers.resolveWebSearchTarget).toHaveBeenCalledWith({
+      id: 2,
+      model: 'hy3',
+      webSearchMode: 'tokenhubSearch',
+    });
+    providers.resolveWebSearchTarget.mockRejectedValueOnce(
+      new Error('联网卡片已停用'),
+    );
+    await expect(service.create(input)).rejects.toThrow('联网卡片已停用');
+    expect(repository.save).toHaveBeenCalledTimes(1);
+    providers.resolveWebSearchTarget.mockClear();
+    await expect(
+      service.create({ ...input, isEnabled: false }),
+    ).resolves.toMatchObject({ isEnabled: false });
+    expect(providers.resolveWebSearchTarget).not.toHaveBeenCalled();
   });
 
   it('keeps MinerU refinement settings and validates a text model', async () => {

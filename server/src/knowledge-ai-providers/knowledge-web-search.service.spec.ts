@@ -116,10 +116,10 @@ describe('verified Bailian web search', () => {
     ).toThrow('可核验');
   });
   it('blocks unsupported Chat mode before a paid call', async () => {
-    const resolveChatTarget = jest.fn();
+    const resolveWebSearchTarget = jest.fn();
     const fetchMock = jest.spyOn(global, 'fetch');
     const service = new KnowledgeWebSearchService({
-      resolveChatTarget,
+      resolveWebSearchTarget,
     } as unknown as KnowledgeAiProvidersService);
     try {
       await expect(
@@ -129,16 +129,17 @@ describe('verified Bailian web search', () => {
           new AbortController().signal,
         ),
       ).rejects.toThrow('未调用计费接口');
-      expect(resolveChatTarget).not.toHaveBeenCalled();
+      expect(resolveWebSearchTarget).not.toHaveBeenCalled();
       expect(fetchMock).not.toHaveBeenCalled();
     } finally {
       fetchMock.mockRestore();
     }
   });
   it('sends only web_search tool and fixed core fields with official credentials', async () => {
-    const resolveChatTarget = jest.fn().mockResolvedValue({
+    const resolveWebSearchTarget = jest.fn().mockResolvedValue({
       model: 'qwen3.8-max',
-      url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+      url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/responses',
+      protocol: 'openaiResponses',
       secretKey: 'fixture-key',
     });
     const fetchMock = jest
@@ -147,7 +148,7 @@ describe('verified Bailian web search', () => {
         new Response(JSON.stringify(verified()), { status: 200 }),
       );
     const service = new KnowledgeWebSearchService({
-      resolveChatTarget,
+      resolveWebSearchTarget,
     } as unknown as KnowledgeAiProvidersService);
     try {
       await service.search(config, '热点', new AbortController().signal);
