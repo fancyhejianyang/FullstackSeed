@@ -162,7 +162,7 @@ const fields = computed<FormField[]>(() => {
               : form.featureType === "visualPrompt"
                 ? "用于从工作流原始提示词提炼格式、风格和模型规则，并按具体模型生成正向、负向提示词；固定返回 JSON，不调用 Agent。"
                 : form.featureType === "imageGeneration"
-                  ? "用于素材管理直接生成图片；只使用账号的生图模型目录和完整生图端点。"
+                  ? "用于素材管理直接生成图片；使用账号的生图目录，并按模型和功能场景自动读取厂商接口卡片。"
                   : form.featureType === "videoGeneration"
                     ? "用于素材管理异步生成视频；只使用账号的视频模型目录和完整 DashScope 视频端点。"
                     : form.featureType === "rerank"

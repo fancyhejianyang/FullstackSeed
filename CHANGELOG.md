@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-10-25 账号专用接口收敛到模型功能卡片
+
+- 大模型账号编辑和查看移除 Chat 路径、生图协议、生图地址、视频地址；前后端提交/返回类型、DTO 和服务载荷同步去除四项字段。账号继续维护平台基础地址、密钥、业务空间、模型目录与启用状态。历史数据库列保留存量值，不删除数据、不再写入或作为业务调用回退地址。
+- 生图、生视频按“账号平台 + 模型编码 + 本次功能场景”读取已启用接口卡片；缺卡片或已停用时明确阻止，提示前往第三方配置补充，不使用旧地址、不推测媒体接口、不发起供应商请求。Agent 候选与引用校验只认可有效文生图卡片；文章封面没有卡片时跳过可选生图步骤，不影响正文。
+- 普通调用、识图、向量化和模型校验优先读取对应功能卡片；没有专用卡片时按基础地址与标准 Chat Completions/Embeddings 协议解析。百炼仅填共享/业务空间根地址或原生 `/api/v1` 时可自动解析兼容路径，避免重复 `/v1`；自定义基础路径和已填写的标准完整端点保持可用。非标准历史 Chat 路径需在对应模型功能卡片中维护。
+- 同步调整 Agent 和 AI 功能配置的指引，接口协议/路径统一在“第三方配置 → 模型厂商调用接口”维护。模型校验仍禁止通过文本接口验证生图/视频；更新配置契约、旧值不回退、场景分离、标准地址解析和模型校验路由的回归规格。
+- 新增文件：无。删除文件：无。
+- 修改文件（后端）：`server/src/knowledge-ai-providers/dto/knowledge-ai-provider.dto.ts`、`server/src/knowledge-ai-providers/entities/knowledge-ai-provider.entity.ts`、`server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`、`server/src/knowledge-ai-providers/knowledge-ai-media-target.spec.ts`、`server/src/model-endpoints/model-endpoint-routing.spec.ts`、`server/src/agent-apps/agent-apps.service.ts`、`server/src/agent-apps/agent-apps.service.spec.ts`、`server/src/content-articles/content-cover.service.ts`。
+- 修改文件（前端及文档）：`web/src/api/knowledgeAiProvider.ts`、`web/src/views/knowledge-ai-provider/Edit.vue`、`web/src/views/knowledge-ai-provider/View.vue`、`web/src/views/agent-app/Edit.vue`、`web/src/views/ai-feature-config/Edit.vue`、`.design-spec.md`、本文件。
+- 验证：前后端业务类型检查、受影响测试及其业务依赖的 TypeScript 静态检查、修改文件定向 ESLint、TypeORM 实体列校验和 diff 检查通过；扫描确认旧四项配置仅保留在历史实体列/迁移与兼容性回归规格中，运行逻辑和前端无引用。按重构约定仅做静态检查，未执行测试、构建、启动/重启服务、数据库迁移或真实模型请求。用户已有的 `web/auto-imports.d.ts`、`web/src/api/hotTopic.ts` 改动保留且不纳入提交。
+
 ### 2026-10-25 大模型账号自动识别平台与模型功能接口卡片
 
 - 大模型账号根据 API URL 的真实 hostname 自动识别腾讯 TokenHub（国内/国际）、阿里云百炼（共享域名/业务空间域名）或自定义平台；编辑时即时预览，列表与详情以后端判定为准，不依赖模型名或 URL 关键词，不暴露真实密钥。账号表单移除“描述”输入，保留历史数据。

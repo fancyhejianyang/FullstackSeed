@@ -3,6 +3,9 @@ import { KnowledgeAiProvidersService } from './knowledge-ai-providers.service';
 import { KnowledgeAiProvider } from './entities/knowledge-ai-provider.entity';
 import type { AiFeatureConfig } from '../ai-feature-configs/entities/ai-feature-config.entity';
 import type { LogRecordsService } from '../log-records/log-records.service';
+import { ModelEndpointsService } from '../model-endpoints/model-endpoints.service';
+import type { ModelEndpoint } from '../model-endpoints/entities/model-endpoint.entity';
+import type { ModelFunction } from '../model-endpoints/model-endpoint.constants';
 
 describe('Agent media targets', () => {
   function harness() {
@@ -28,22 +31,50 @@ describe('Agent media targets', () => {
       },
     );
     const repository = { findOne: jest.fn().mockResolvedValue(provider) };
+    const imageEndpoint = {
+      protocol: 'dashscopeImage',
+      executionMode: 'sync',
+      apiPath: '/api/v1/services/aigc/multimodal-generation/generation',
+      taskApiPath: '',
+    };
+    const videoEndpoint = {
+      protocol: 'dashscopeVideo',
+      executionMode: 'async',
+      apiPath: '/api/v1/services/aigc/video-generation/video-synthesis',
+      taskApiPath: '/api/v1/tasks/{taskId}',
+    };
+    const builder = new ModelEndpointsService({} as Repository<ModelEndpoint>);
+    const endpoints = {
+      resolve: jest.fn(
+        (_platform: string, model: string, functionType: ModelFunction) =>
+          Promise.resolve(
+            model === 'image' && functionType === 'textToImage'
+              ? imageEndpoint
+              : model === 'wan' && functionType === 'textToVideo'
+                ? videoEndpoint
+                : null,
+          ),
+      ),
+      imageRoutes: jest.fn().mockResolvedValue([]),
+      buildUrl: (base: string, path: string) => builder.buildUrl(base, path),
+    };
     const service = new KnowledgeAiProvidersService(
       repository as unknown as Repository<KnowledgeAiProvider>,
       {} as Repository<AiFeatureConfig>,
       {} as LogRecordsService,
+      endpoints as unknown as ModelEndpointsService,
     );
-    return { provider, service };
+    return { provider, service, endpoints, imageEndpoint };
   }
 
-  it('uses the configured media catalog, protocol and full endpoint, not the chat path', async () => {
+  it('uses the model function card and account origin, ignoring legacy account endpoints', async () => {
     const { service } = harness();
     await expect(
       service.resolveAgentMediaTarget(2, 'image', 'imageGeneration'),
     ).resolves.toMatchObject({
       model: 'image',
       protocol: 'dashscope',
-      url: 'https://workspace.cn-beijing.maas.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation',
+      url: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation',
     });
     await expect(
       service.resolveAgentMediaTarget(2, 'vision', 'vision'),
@@ -66,33 +97,37 @@ describe('Agent media targets', () => {
     ).resolves.toMatchObject({
       model: 'wan',
       protocol: 'dashscope',
-      url: 'https://workspace.cn-beijing.maas.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis',
-      taskUrlTemplate:
-        'https://workspace.cn-beijing.maas.aliyuncs.com/api/v1/tasks/{taskId}',
+      url: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis',
+      taskUrlTemplate: 'https://dashscope.aliyuncs.com/api/v1/tasks/{taskId}',
     });
   });
-  it('兼容修正历史视频接口中缺失的 aigc 路径分隔符', async () => {
+  it('历史视频地址不再影响实际调用路径', async () => {
     const { service, provider } = harness();
     provider.videoGenerationApiUrl =
       'https://old.cn-beijing.maas.aliyuncs.com/api/v1/services/aigcvideo-generation/video-synthesis';
     await expect(
       service.resolveMediaTarget(2, 'wan', 'videoGeneration'),
     ).resolves.toMatchObject({
-      url: 'https://workspace.cn-beijing.maas.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis',
-      taskUrlTemplate:
-        'https://workspace.cn-beijing.maas.aliyuncs.com/api/v1/tasks/{taskId}',
+      url: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis',
+      taskUrlTemplate: 'https://dashscope.aliyuncs.com/api/v1/tasks/{taskId}',
     });
   });
-  it('拒绝不是视频合成服务的宽泛 services 地址', async () => {
-    const { service, provider } = harness();
-    provider.videoGenerationApiUrl =
-      'https://old.cn-beijing.maas.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation';
+  it('缺少卡片时即使旧账号填写过地址也明确拒绝', async () => {
+    const { service, endpoints } = harness();
+    endpoints.resolve.mockResolvedValue(null);
     await expect(
       service.resolveMediaTarget(2, 'wan', 'videoGeneration'),
-    ).rejects.toThrow('video-generation/video-synthesis');
+    ).rejects.toThrow('文生视频');
+    await expect(
+      service.resolveMediaTarget(2, 'image', 'imageGeneration'),
+    ).rejects.toThrow('文生图');
+    await expect(
+      service.resolveMediaTarget(2, 'image', 'imageGeneration', 'imageToImage'),
+    ).rejects.toThrow('参考生图');
   });
   it('内容封面直接选同账号首个有效生图模型，缺配置跳过且不调用 Agent 入口', async () => {
-    const { service, provider } = harness();
+    const { service, provider, endpoints, imageEndpoint } = harness();
+    endpoints.resolve.mockResolvedValue(imageEndpoint);
     const agent = jest.spyOn(service, 'resolveAgentMediaTarget');
     provider.imageGenerationModels = '\n#无编码\nfirst#首选\nsecond#备用';
     await expect(service.resolveContentCoverTarget(2)).resolves.toMatchObject({
@@ -106,11 +141,11 @@ describe('Agent media targets', () => {
     provider.imageGenerationModels = '#无编码';
     await expect(service.resolveContentCoverTarget(2)).resolves.toBeNull();
     provider.imageGenerationModels = 'image';
-    provider.imageGenerationApiUrl = '';
+    endpoints.resolve.mockResolvedValue(null);
     await expect(service.resolveContentCoverTarget(2)).resolves.toBeNull();
   });
 
-  it('rejects missing catalog, disabled account, missing key and unsafe generation endpoints', async () => {
+  it('rejects missing catalog, disabled account and missing key; legacy URLs are never used', async () => {
     const { service, provider } = harness();
     provider.visionModels = null;
     await expect(
@@ -139,7 +174,9 @@ describe('Agent media targets', () => {
       provider.imageGenerationApiUrl = url;
       await expect(
         service.resolveAgentMediaTarget(2, 'image', 'imageGeneration'),
-      ).rejects.toThrow();
+      ).resolves.toMatchObject({
+        url: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation',
+      });
     }
   });
 });

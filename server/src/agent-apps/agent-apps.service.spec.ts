@@ -102,7 +102,7 @@ describe('AgentAppsService access and tool policy', () => {
       secretKeySet: true,
       visionModels: 'vision#识图',
       imageGenerationModels: 'image#生图',
-      imageGenerationApiUrl: 'https://provider.example/images',
+      imageEndpointModels: ['image'],
     });
     const references = {
       vision: { providerId: 2, model: 'vision' },
@@ -152,7 +152,7 @@ describe('AgentAppsService access and tool policy', () => {
       isEnabled: true,
       secretKeySet: true,
       imageGenerationModels: 'image',
-      imageGenerationApiUrl: '',
+      imageEndpointModels: [],
     });
     repository.findOne.mockResolvedValue({
       id: 1,
@@ -167,7 +167,7 @@ describe('AgentAppsService access and tool policy', () => {
           imageGeneration: { providerId: 2, model: 'image' },
         },
       }),
-    ).rejects.toThrow('生图接口地址');
+    ).rejects.toThrow('模型厂商调用接口');
   });
 
   it('filters user-scoped apps while allowing administrators', async () => {

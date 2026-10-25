@@ -171,10 +171,8 @@ export class AgentAppsService {
           .filter((item) => item.secretKeySet)
           .flatMap((item) =>
             this.parseModelOptions(item.imageGenerationModels)
-              .filter(
-                (model) =>
-                  item.imageEndpointModels?.includes(model.value) ??
-                  !!item.imageGenerationApiUrl,
+              .filter((model) =>
+                item.imageEndpointModels?.includes(model.value),
               )
               .map((model) => ({
                 providerId: item.id,
@@ -393,13 +391,10 @@ export class AgentAppsService {
         throw new BadRequestException(`${label}模型账号未启用或未配置密钥`);
       if (
         key === 'imageGeneration' &&
-        !(
-          provider.imageEndpointModels?.includes(reference.model.trim()) ??
-          !!provider.imageGenerationApiUrl
-        )
+        !provider.imageEndpointModels?.includes(reference.model.trim())
       )
         throw new BadRequestException(
-          '请先在模型厂商调用接口中配置文生图场景，或补充账号兼容生图接口地址',
+          '请先在第三方配置 → 模型厂商调用接口中配置并启用该模型的文生图场景',
         );
       const models = this.parseModelOptions(
         key === 'vision'

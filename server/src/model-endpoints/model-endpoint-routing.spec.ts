@@ -44,6 +44,14 @@ describe('账号按模型功能解析调用接口', () => {
     const view = await service.findOne(1);
     expect(view.platformType).toBe('tencentTokenhub');
     expect(view).not.toHaveProperty('secretKey');
+    for (const field of [
+      'chatApiPath',
+      'imageGenerationProtocol',
+      'imageGenerationApiUrl',
+      'videoGenerationApiUrl',
+    ]) {
+      expect(view).not.toHaveProperty(field);
+    }
     const result = await service.findAll({});
     expect(result.list[0].platformType).toBe('tencentTokenhub');
   });
@@ -126,5 +134,87 @@ describe('账号按模型功能解析调用接口', () => {
       service.resolveMediaTarget(1, 'not-authorized', 'imageGeneration'),
     ).rejects.toThrow('不在');
     expect(endpoints.resolve).not.toHaveBeenCalled();
+  });
+
+  it('没有媒体卡片时不使用历史账号地址，候选也不因旧地址而开放', async () => {
+    const { service, provider } = harness();
+    provider.imageGenerationApiUrl = 'https://legacy.example/images';
+    provider.videoGenerationApiUrl = 'https://legacy.example/videos';
+    await expect(
+      service.resolveMediaTarget(
+        1,
+        'seedream-image-v5.0-pro',
+        'imageGeneration',
+      ),
+    ).rejects.toThrow('模型厂商调用接口');
+    await expect(
+      service.resolveMediaTarget(1, 'video-model', 'videoGeneration'),
+    ).rejects.toThrow('文生视频');
+    await expect(service.findOne(1)).resolves.toMatchObject({
+      imageEndpointModels: [],
+    });
+    await expect(service.resolveContentCoverTarget(1)).resolves.toBeNull();
+  });
+
+  it.each([
+    [
+      'https://tokenhub.tencentmaas.com',
+      'https://tokenhub.tencentmaas.com/v1/chat/completions',
+      'https://tokenhub.tencentmaas.com/v1/embeddings',
+    ],
+    [
+      'https://dashscope.aliyuncs.com',
+      'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+      'https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings',
+    ],
+    [
+      'https://old.cn-beijing.maas.aliyuncs.com/api/v1',
+      'https://old.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions',
+      'https://old.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/embeddings',
+    ],
+    [
+      'https://gateway.example/proxy/v1',
+      'https://gateway.example/proxy/v1/chat/completions',
+      'https://gateway.example/proxy/v1/embeddings',
+    ],
+  ])(
+    '基础地址 %s 自动解析标准 Chat 和向量接口',
+    async (base, chat, embedding) => {
+      const { service, provider } = harness();
+      provider.apiUrl = base;
+      provider.chatApiPath = 'old/unused/path';
+      await expect(
+        service.resolveChatTarget({ id: 1, model: 'chat-model' }),
+      ).resolves.toMatchObject({ url: chat });
+      await expect(
+        service.resolveEmbeddingTarget({ id: 1, model: 'embedding-model' }),
+      ).resolves.toMatchObject({ url: embedding });
+    },
+  );
+
+  it('模型校验同样使用功能卡片，不再另走旧 Chat 路径', async () => {
+    const { service, endpoints } = harness();
+    endpoints.resolve.mockResolvedValue({ apiPath: '/v2/vision-check' });
+    const fetcher = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(new Response('{}'));
+    try {
+      await service.validateModel({
+        id: 1,
+        model: 'vision-model',
+        featureType: 'ocr',
+      });
+      expect(endpoints.resolve).toHaveBeenCalledWith(
+        'tencentTokenhub',
+        'vision-model',
+        'vision',
+      );
+      expect(fetcher).toHaveBeenCalledWith(
+        'https://tokenhub.tencentmaas.com/v2/vision-check',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    } finally {
+      fetcher.mockRestore();
+    }
   });
 });

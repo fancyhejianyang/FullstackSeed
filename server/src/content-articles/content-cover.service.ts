@@ -65,7 +65,8 @@ export class ContentCoverService {
         return {
           status: 'skipped',
           data: {
-            message: '当前模型账号未配置生图模型或生图接口，已跳过封面。',
+            message:
+              '当前账号未登记生图模型或该模型缺少文生图接口卡片，已跳过封面。',
           },
         };
       data.model = target.model;

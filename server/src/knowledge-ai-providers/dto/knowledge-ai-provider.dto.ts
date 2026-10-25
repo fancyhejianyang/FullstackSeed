@@ -35,11 +35,6 @@ export class CreateKnowledgeAiProviderDto {
 
   @IsString()
   @IsOptional()
-  @MaxLength(200)
-  chatApiPath?: string;
-
-  @IsString()
-  @IsOptional()
   secretKey?: string;
 
   @IsString()
@@ -58,23 +53,9 @@ export class CreateKnowledgeAiProviderDto {
   @IsOptional()
   imageGenerationModels?: string;
 
-  @IsOptional()
-  @IsIn(['openai', 'dashscope'])
-  imageGenerationProtocol?: 'openai' | 'dashscope';
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(500)
-  imageGenerationApiUrl?: string;
-
   @IsString()
   @IsOptional()
   videoGenerationModels?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(500)
-  videoGenerationApiUrl?: string;
 
   @IsString()
   @IsOptional()

@@ -421,7 +421,7 @@ const fields = computed<FormField[]>(() => [
       disabled: !form.providerId || probeBusy.value,
       notFoundText: "无生图候选：请配置该账号的生图模型、协议及完整接口地址",
     },
-    hint: `来源为当前账号的生图目录与完整生图端点，不能从文本/视觉目录推断。${mediaCheckHint("imageGeneration")}`,
+    hint: `来源为当前账号的生图目录及已启用的文生图接口卡片；接口在第三方配置 → 模型厂商调用接口中维护。${mediaCheckHint("imageGeneration")}`,
   },
   {
     prop: "mediaProbeControls",

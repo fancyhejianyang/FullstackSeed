@@ -31,16 +31,12 @@ const form = reactive<KnowledgeAiProviderForm>({
   name: "",
   apiUrl: "",
   workspaceId: "",
-  chatApiPath: "v1/chat/completions",
   secretKey: "",
   models: "qwen-plus",
   textModels: "",
   visionModels: "",
   imageGenerationModels: "",
-  imageGenerationProtocol: "openai",
-  imageGenerationApiUrl: "",
   videoGenerationModels: "",
-  videoGenerationApiUrl: "",
   embeddingModels: "",
   isEnabled: true,
   description: "",
@@ -58,6 +54,7 @@ const fields: FormField[] = [
     label: "API 地址",
     type: "input",
     placeholder: "如 https://api.openai.com",
+    hint: "填写平台基础地址；各模型功能的协议与调用路径统一在第三方配置 → 模型厂商调用接口中维护。",
   },
   { prop: "platformType", label: "平台类型", slot: true },
   {
@@ -65,12 +62,6 @@ const fields: FormField[] = [
     label: "业务空间",
     type: "input",
     placeholder: "阿里云百炼 WorkspaceId；非阿里云可留空",
-  },
-  {
-    prop: "chatApiPath",
-    label: "Chat 路径",
-    type: "input",
-    placeholder: "v1/chat/completions",
   },
   {
     prop: "secretKey",
@@ -115,36 +106,12 @@ const fields: FormField[] = [
     hint: "单独登记账号已开通的图片生成模型；不会自动并入文本或视觉识别目录。",
   },
   {
-    prop: "imageGenerationProtocol",
-    label: "生图协议",
-    type: "select",
-    options: [
-      { label: "OpenAI Images 兼容接口", value: "openai" },
-      { label: "阿里云 DashScope 同步多模态生图", value: "dashscope" },
-    ],
-    hint: "OpenAI Images 兼容协议用于同步文生图；DashScope 同步多模态协议可承载文生图和参考图编辑。请按供应商实际支持选择。",
-  },
-  {
-    prop: "imageGenerationApiUrl",
-    label: "生图接口地址",
-    type: "input",
-    placeholder: "完整 HTTPS 地址（不是 Chat 路径）",
-    hint: "兼容旧配置；平台与模型有对应功能卡片时使用卡片中的路径和协议。没有匹配卡片时才使用此完整地址。",
-  },
-  {
     prop: "videoGenerationModels",
     label: "视频生成模型",
     type: "textarea",
     rows: 3,
     placeholder: "模型编码#模型名称（每行一个）\nwan2.6-t2v#万相文生视频",
     hint: "单独登记账号已开通的视频生成模型，用于文生、首帧及多参考素材生视频。",
-  },
-  {
-    prop: "videoGenerationApiUrl",
-    label: "视频生成接口",
-    type: "input",
-    placeholder: "完整 DashScope 视频生成 HTTPS 地址",
-    hint: "兼容原 DashScope 视频配置；模型功能卡片可独立配置各场景的生成与查询路径。",
   },
   {
     prop: "embeddingModels",
@@ -175,17 +142,13 @@ function resetForm() {
   form.name = "";
   form.apiUrl = "";
   form.workspaceId = "";
-  form.chatApiPath = "v1/chat/completions";
   form.secretKey = "";
   secretKeyMasked.value = "";
   form.models = "qwen-plus";
   form.textModels = "";
   form.visionModels = "";
   form.imageGenerationModels = "";
-  form.imageGenerationProtocol = "openai";
-  form.imageGenerationApiUrl = "";
   form.videoGenerationModels = "";
-  form.videoGenerationApiUrl = "";
   form.embeddingModels = "";
   form.isEnabled = true;
   form.description = "";
@@ -195,17 +158,13 @@ function fillForm(data: KnowledgeAiProvider) {
   form.name = data.name ?? "";
   form.apiUrl = data.apiUrl ?? "";
   form.workspaceId = data.workspaceId ?? "";
-  form.chatApiPath = data.chatApiPath || "v1/chat/completions";
   secretKeyMasked.value = data.secretKeyMasked || "";
   form.secretKey = secretKeyMasked.value;
   form.models = data.models || "qwen-plus";
   form.textModels = data.textModels || "";
   form.visionModels = data.visionModels || "";
   form.imageGenerationModels = data.imageGenerationModels || "";
-  form.imageGenerationProtocol = data.imageGenerationProtocol || "openai";
-  form.imageGenerationApiUrl = data.imageGenerationApiUrl || "";
   form.videoGenerationModels = data.videoGenerationModels || "";
-  form.videoGenerationApiUrl = data.videoGenerationApiUrl || "";
   form.embeddingModels = data.embeddingModels || "";
   form.isEnabled = !!data.isEnabled;
   form.description = data.description ?? "";

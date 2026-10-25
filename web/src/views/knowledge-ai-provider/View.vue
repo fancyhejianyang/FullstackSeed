@@ -77,12 +77,6 @@ function shouldShowModelGroup(value?: string | null) {
         <el-descriptions-item label="业务空间">
           {{ rowData?.workspaceId || "-" }}
         </el-descriptions-item>
-        <el-descriptions-item
-          v-if="!isEmbeddingOnlyProvider"
-          label="Chat API 路径"
-        >
-          {{ rowData?.chatApiPath || "-" }}
-        </el-descriptions-item>
         <el-descriptions-item label="密钥">
           <el-tag :type="rowData?.secretKeySet ? 'success' : 'warning'">
             {{ rowData?.secretKeySet ? "已配置" : "未配置" }}
@@ -138,22 +132,9 @@ function shouldShowModelGroup(value?: string | null) {
         <el-descriptions-item label="生图模型">
           {{ getModelLines(rowData?.imageGenerationModels).join("、") || "-" }}
         </el-descriptions-item>
-        <el-descriptions-item label="生图协议">
-          {{
-            rowData?.imageGenerationProtocol === "dashscope"
-              ? "DashScope 同步多模态"
-              : "OpenAI Images 兼容"
-          }}
-        </el-descriptions-item>
-        <el-descriptions-item label="生图接口地址">{{
-          rowData?.imageGenerationApiUrl || "未配置"
-        }}</el-descriptions-item>
         <el-descriptions-item label="视频生成模型">
           {{ getModelLines(rowData?.videoGenerationModels).join("、") || "-" }}
         </el-descriptions-item>
-        <el-descriptions-item label="视频生成接口地址">{{
-          rowData?.videoGenerationApiUrl || "未配置"
-        }}</el-descriptions-item>
         <el-descriptions-item label="向量模型">
           <div
             v-if="getModelLines(rowData?.embeddingModels).length"

@@ -14,6 +14,7 @@ import { LogRecordsService } from '../log-records/log-records.service';
 import { ModelEndpointsService } from '../model-endpoints/model-endpoints.service';
 import {
   detectModelPlatform,
+  FUNCTION_LABELS,
   mediaProtocol,
   type ModelFunction,
 } from '../model-endpoints/model-endpoint.constants';
@@ -290,7 +291,7 @@ export class KnowledgeAiProvidersService {
     let currentProvider = provider;
     let disabledConfigCount = 0;
     try {
-      const target = this.resolveFeatureTarget(
+      const target = await this.resolveFeatureTarget(
         provider,
         dto.featureType,
         model,
@@ -437,7 +438,6 @@ export class KnowledgeAiProvidersService {
     const model = this.parseModels(provider.imageGenerationModels)[0]?.code;
     if (!model) return null;
     if (
-      !provider.imageGenerationApiUrl?.trim() &&
       !(await this.endpoints?.resolve(
         detectModelPlatform(provider.apiUrl),
         model,
@@ -505,80 +505,34 @@ export class KnowledgeAiProvidersService {
       selected,
       operation,
     );
-    if (endpoint && this.endpoints)
-      return {
-        providerId: provider.id,
-        providerName: provider.name,
-        model: selected,
-        url: this.endpoints.buildUrl(
-          this.applyWorkspaceId(provider),
-          endpoint.apiPath,
-        ),
-        secretKey: this.normalizeSecretKey(provider.secretKey),
-        protocol: mediaProtocol(endpoint.protocol),
-        executionMode: endpoint.executionMode,
-        taskUrlTemplate: endpoint.taskApiPath
+    if (!endpoint && kind !== 'vision')
+      throw new BadRequestException(
+        `模型 ${selected} 缺少“${FUNCTION_LABELS[operation]}”调用接口，请在第三方配置 → 模型厂商调用接口中配置`,
+      );
+    return {
+      providerId: provider.id,
+      providerName: provider.name,
+      model: selected,
+      url:
+        endpoint && this.endpoints
+          ? this.endpoints.buildUrl(
+              this.applyWorkspaceId(provider),
+              endpoint.apiPath,
+            )
+          : this.buildChatUrl(provider),
+      secretKey: this.normalizeSecretKey(provider.secretKey),
+      protocol: endpoint
+        ? mediaProtocol(endpoint.protocol)
+        : ('openai' as const),
+      executionMode: endpoint?.executionMode ?? ('sync' as const),
+      taskUrlTemplate:
+        endpoint?.taskApiPath && this.endpoints
           ? this.endpoints.buildUrl(
               this.applyWorkspaceId(provider),
               endpoint.taskApiPath,
             )
           : null,
-      };
-    let url = this.buildChatUrl(provider);
-    let taskUrlTemplate: string | null = null;
-    if (kind === 'imageGeneration') {
-      if (!provider.imageGenerationApiUrl)
-        throw new BadRequestException('请在模型账号中配置完整的生图接口地址');
-      url = this.applyWorkspaceId({
-        ...provider,
-        apiUrl: provider.imageGenerationApiUrl,
-      });
-      this.assertImageGenerationUrl(url);
-    } else if (kind === 'videoGeneration') {
-      if (!provider.videoGenerationApiUrl)
-        throw new BadRequestException(
-          '请在模型账号中配置完整的视频生成接口地址',
-        );
-      url = this.normalizeVideoGenerationUrl(
-        this.applyWorkspaceId({
-          ...provider,
-          apiUrl: provider.videoGenerationApiUrl,
-        }),
-      );
-      this.assertVideoGenerationUrl(url);
-      taskUrlTemplate = this.buildVideoTaskUrlTemplate(url);
-    }
-    return {
-      providerId: provider.id,
-      providerName: provider.name,
-      model: selected,
-      url,
-      secretKey: this.normalizeSecretKey(provider.secretKey),
-      protocol:
-        kind === 'videoGeneration'
-          ? ('dashscope' as const)
-          : provider.imageGenerationProtocol || 'openai',
-      taskUrlTemplate,
     };
-  }
-
-  private assertImageGenerationUrl(value: string) {
-    try {
-      const url = new URL(value);
-      if (
-        url.protocol === 'https:' &&
-        !url.username &&
-        !url.password &&
-        !url.hash &&
-        !url.search
-      )
-        return;
-    } catch {
-      /* 统一返回配置错误，不回显密钥或地址。 */
-    }
-    throw new BadRequestException(
-      '生图接口须为完整 HTTPS 地址，不能包含账号、密码、查询参数或片段',
-    );
   }
 
   private async resolveConfiguredUrl(
@@ -597,41 +551,6 @@ export class KnowledgeAiProvidersService {
           endpoint.apiPath,
         )
       : null;
-  }
-
-  private assertVideoGenerationUrl(value: string) {
-    try {
-      const url = new URL(value);
-      if (
-        url.protocol === 'https:' &&
-        !url.username &&
-        !url.password &&
-        !url.hash &&
-        !url.search &&
-        /^\/api\/v1\/services\/aigc\/video-generation\/video-synthesis\/?$/.test(
-          url.pathname,
-        )
-      )
-        return;
-    } catch {
-      /* 统一返回配置错误，不回显密钥或地址。 */
-    }
-    throw new BadRequestException(
-      '视频生成接口须为完整 DashScope HTTPS 地址，路径必须是 /api/v1/services/aigc/video-generation/video-synthesis',
-    );
-  }
-
-  private normalizeVideoGenerationUrl(value: string) {
-    return value.replace(
-      '/api/v1/services/aigcvideo-generation/video-synthesis',
-      '/api/v1/services/aigc/video-generation/video-synthesis',
-    );
-  }
-
-  private buildVideoTaskUrlTemplate(value: string) {
-    const url = new URL(value);
-    const serviceIndex = url.pathname.indexOf('/services/');
-    return `${url.origin}${url.pathname.slice(0, serviceIndex)}/tasks/{taskId}`;
   }
 
   async resolveEmbeddingTarget(
@@ -664,11 +583,11 @@ export class KnowledgeAiProvidersService {
     };
   }
 
-  private resolveFeatureTarget(
+  private async resolveFeatureTarget(
     provider: KnowledgeAiProvider,
     featureType: AiModelFeatureType,
     model: string,
-  ): KnowledgeAiChatTarget {
+  ): Promise<KnowledgeAiChatTarget> {
     if (!provider.isEnabled) {
       throw new BadRequestException('该大模型账号未启用');
     }
@@ -689,9 +608,18 @@ export class KnowledgeAiProvidersService {
       workspaceId: provider.workspaceId ?? null,
       model,
       url:
-        featureType === 'embedding'
+        (await this.resolveConfiguredUrl(
+          provider,
+          model,
+          featureType === 'embedding'
+            ? 'embedding'
+            : featureType === 'ocr'
+              ? 'vision'
+              : 'chat',
+        )) ??
+        (featureType === 'embedding'
           ? this.buildEmbeddingUrl(provider)
-          : this.buildChatUrl(provider),
+          : this.buildChatUrl(provider)),
       secretKey: this.normalizeSecretKey(provider.secretKey),
     };
   }
@@ -1172,9 +1100,6 @@ export class KnowledgeAiProvidersService {
     if (dto.workspaceId !== undefined) {
       payload.workspaceId = dto.workspaceId.trim() || null;
     }
-    if (dto.chatApiPath !== undefined || isCreate) {
-      payload.chatApiPath = (dto.chatApiPath || 'v1/chat/completions').trim();
-    }
     if (dto.secretKey !== undefined) {
       const secretKey = this.normalizeSecretKey(dto.secretKey);
       if (secretKey || isCreate) {
@@ -1195,24 +1120,10 @@ export class KnowledgeAiProvidersService {
         dto.imageGenerationModels,
       );
     }
-    if (dto.imageGenerationProtocol !== undefined || isCreate)
-      payload.imageGenerationProtocol = dto.imageGenerationProtocol || 'openai';
-    if (dto.imageGenerationApiUrl !== undefined) {
-      const url = dto.imageGenerationApiUrl.trim();
-      if (url) this.assertImageGenerationUrl(url);
-      payload.imageGenerationApiUrl = url || null;
-    }
     if (dto.videoGenerationModels !== undefined) {
       payload.videoGenerationModels = this.toNullableText(
         dto.videoGenerationModels,
       );
-    }
-    if (dto.videoGenerationApiUrl !== undefined) {
-      const url = this.normalizeVideoGenerationUrl(
-        dto.videoGenerationApiUrl.trim(),
-      );
-      if (url) this.assertVideoGenerationUrl(url);
-      payload.videoGenerationApiUrl = url || null;
     }
     if (dto.embeddingModels !== undefined) {
       payload.embeddingModels = this.toNullableText(dto.embeddingModels);
@@ -1237,7 +1148,7 @@ export class KnowledgeAiProvidersService {
           (item) =>
             item.platformType === platformType && item.modelCode === code,
         );
-        return route ? route.isActive : !!provider.imageGenerationApiUrl;
+        return !!route?.isActive;
       })
       .map(({ code }) => code);
     return {
@@ -1247,17 +1158,11 @@ export class KnowledgeAiProvidersService {
       platformType,
       imageEndpointModels,
       workspaceId: provider.workspaceId ?? '',
-      chatApiPath: provider.chatApiPath,
       models: provider.models ?? '',
       textModels: provider.textModels ?? '',
       visionModels: provider.visionModels ?? '',
       imageGenerationModels: provider.imageGenerationModels ?? '',
-      imageGenerationProtocol: provider.imageGenerationProtocol || 'openai',
-      imageGenerationApiUrl: provider.imageGenerationApiUrl ?? '',
       videoGenerationModels: provider.videoGenerationModels ?? '',
-      videoGenerationApiUrl: provider.videoGenerationApiUrl
-        ? this.normalizeVideoGenerationUrl(provider.videoGenerationApiUrl)
-        : '',
       embeddingModels: provider.embeddingModels ?? '',
       isEnabled: !!provider.isEnabled,
       description: provider.description ?? '',
@@ -1269,19 +1174,32 @@ export class KnowledgeAiProvidersService {
   }
 
   private buildChatUrl(provider: KnowledgeAiProvider) {
-    const apiUrl = this.applyWorkspaceId(provider).replace(/\/+$/, '');
-    const chatPath = provider.chatApiPath || 'v1/chat/completions';
-    if (/\/chat\/completions$/.test(apiUrl)) return apiUrl;
-    return this.appendApiPath(apiUrl, chatPath);
+    return this.buildStandardUrl(provider, 'chat/completions');
   }
 
   private buildEmbeddingUrl(provider: KnowledgeAiProvider) {
-    const apiUrl = this.applyWorkspaceId(provider).replace(/\/+$/, '');
-    if (/\/embeddings$/.test(apiUrl)) return apiUrl;
-    if (/\/chat\/completions$/.test(apiUrl)) {
-      return apiUrl.replace(/\/chat\/completions$/, '/embeddings');
+    return this.buildStandardUrl(provider, 'embeddings');
+  }
+
+  /** 标准协议缺省值只用于普通调用/识图/向量化，绝不推测生图或视频路径。 */
+  private buildStandardUrl(
+    provider: KnowledgeAiProvider,
+    resource: 'chat/completions' | 'embeddings',
+  ) {
+    let base = this.applyWorkspaceId(provider).replace(/\/+$/, '');
+    if (/\/(?:chat\/completions|embeddings)$/.test(base)) {
+      return base.replace(
+        /\/(?:chat\/completions|embeddings)$/,
+        `/${resource}`,
+      );
     }
-    return this.appendApiPath(apiUrl, 'v1/embeddings');
+    const url = new URL(base);
+    if (
+      detectModelPlatform(base) === 'aliyunBailian' &&
+      ['/', '/api/v1'].includes(url.pathname)
+    )
+      base = `${url.origin}/compatible-mode/v1`;
+    return this.appendApiPath(base, `v1/${resource}`);
   }
 
   private appendApiPath(baseUrl: string, path: string) {
