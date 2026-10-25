@@ -241,10 +241,12 @@ export class KnowledgeAiProvidersService {
   }
 
   async update(id: number, dto: UpdateKnowledgeAiProviderDto) {
-    const provider = await this.findEntity(id);
-    Object.assign(provider, this.toEntityPayload(dto, false));
-    const saved = await this.providerRepository.save(provider);
-    return this.toView(saved);
+    await this.findEntity(id);
+    const patch = this.toEntityPayload(dto, false);
+    // 不保存查询时的整份旧实体，避免覆盖并发退役清理后的模型目录。
+    if (Object.keys(patch).length)
+      await this.providerRepository.update({ id }, patch);
+    return this.toView(await this.findEntity(id));
   }
 
   async remove(id: number) {
@@ -268,6 +270,56 @@ export class KnowledgeAiProvidersService {
 
   async test(dto: TestKnowledgeAiProviderDto) {
     return this.callChat(dto);
+  }
+
+  /** 仅由已验证的官方退役响应调用；行锁内局部更新，避免覆盖同时编辑的账号信息。 */
+  async removeRetiredModel(payload: {
+    providerId: number;
+    model: string;
+    url: string;
+    secretKey: string;
+  }): Promise<boolean> {
+    const requested = new URL(payload.url);
+    if (
+      requested.protocol !== 'https:' ||
+      detectModelPlatform(payload.url) === 'custom'
+    )
+      return false;
+    return this.providerRepository.manager.transaction(async (manager) => {
+      const repository = manager.getRepository(KnowledgeAiProvider);
+      const provider = await repository.findOne({
+        where: { id: payload.providerId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (
+        !provider ||
+        !provider.isEnabled ||
+        new URL(this.applyWorkspaceId(provider)).origin !== requested.origin ||
+        this.normalizeSecretKey(provider.secretKey) !== payload.secretKey
+      )
+        return false;
+      const patch: Partial<KnowledgeAiProvider> = {};
+      const fields = [
+        'models',
+        'textModels',
+        'visionModels',
+        'imageGenerationModels',
+        'videoGenerationModels',
+        'embeddingModels',
+      ] as const;
+      for (const field of fields) {
+        const value = provider[field];
+        if (
+          value
+            ?.split(/\r?\n/)
+            .some((line) => line.split('#')[0].trim() === payload.model)
+        )
+          patch[field] = this.removeModelFromList(value, payload.model);
+      }
+      if (Object.keys(patch).length)
+        await repository.update({ id: provider.id }, patch);
+      return true;
+    });
   }
 
   async assertModelSupported(payload: {
@@ -1364,7 +1416,8 @@ export class KnowledgeAiProvidersService {
       }
     }
     if (dto.models !== undefined || isCreate) {
-      payload.models = (dto.models || 'qwen-plus').trim();
+      payload.models =
+        dto.models === undefined ? 'qwen-plus' : (dto.models ?? '').trim();
     }
     if (dto.textModels !== undefined) {
       payload.textModels = this.toNullableText(dto.textModels);
@@ -1580,7 +1633,8 @@ export class KnowledgeAiProvidersService {
 
   private resolveModel(models: string | null, requested?: string) {
     const available = this.parseModels(models);
-    if (!available.length) return requested || 'qwen-plus';
+    if (!available.length)
+      throw new BadRequestException('账号未配置可用模型，请先配置对应模型目录');
     if (!requested) return available[0].code;
     if (available.some((item) => item.code === requested)) return requested;
     throw new BadRequestException('调用模型不在该账号模型列表中');
@@ -1679,7 +1733,7 @@ export class KnowledgeAiProvidersService {
   }
 
   private parseModels(models: string | null) {
-    return (models || 'qwen-plus')
+    return (models || '')
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter(Boolean)

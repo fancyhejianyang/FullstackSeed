@@ -27,6 +27,8 @@ import type { TestAiFeatureModelDto } from '../ai-feature-configs/dto/ai-feature
 import { createVisionChallenge } from '../agent-apps/agent-media-probe';
 import { bailianResponsesUrl } from './knowledge-web-search.service';
 import { HotTopicFetchError } from '../hot-topics/hot-topic-network';
+import { isRetiredModelError } from '../common/ai/model-retirement';
+import { detectModelPlatform } from '../model-endpoints/model-endpoint.constants';
 
 type TestTarget = Awaited<
   ReturnType<KnowledgeAiProvidersService['resolveEndpointTestTarget']>
@@ -54,6 +56,7 @@ export interface ModelEndpointTestResult {
   featureType?: TestAiFeatureModelDto['featureType'];
   useMineru?: boolean;
   webSearchMode?: TestAiFeatureModelDto['webSearchMode'];
+  modelRemoved?: boolean;
 }
 interface TestRecord {
   origin: 'card' | 'feature';
@@ -455,6 +458,39 @@ export class ModelEndpointTestsService {
         querying
           ? `${billingMessage} 原任务状态尚未确认，处理账号计费问题后可继续查询；不会重新生成。`
           : billingMessage,
+      );
+      return;
+    }
+    const isErrorResponse =
+      !response.ok ||
+      !!payload.error ||
+      !!(payload.code && payload.code !== '0' && payload.message);
+    if (
+      !querying &&
+      isErrorResponse &&
+      new URL(url).protocol === 'https:' &&
+      new URL(url).origin === new URL(target.url).origin &&
+      detectModelPlatform(url) !== 'custom' &&
+      isRetiredModelError(value, target.model)
+    ) {
+      let removed = false;
+      try {
+        removed = await this.providers.removeRetiredModel({
+          providerId: entry.providerId,
+          model: target.model,
+          url: target.url,
+          secretKey: target.secretKey,
+        });
+      } catch {
+        // 目录写入失败不能抹掉已经确认的供应商退役结果，也不能谎报移除成功。
+      }
+      entry.result.modelRemoved = removed;
+      this.finish(
+        entry,
+        'failed',
+        removed
+          ? '官方确认该模型已下线，已从当前账号模型目录移除，请重新选择模型。'
+          : '官方确认该模型已下线，账号目录尚未更新，请检查账号后手动移除该模型。',
       );
       return;
     }

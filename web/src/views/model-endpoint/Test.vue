@@ -14,6 +14,7 @@ import {
   type ModelEndpointTestResult,
 } from "@/api/modelEndpoint";
 import { getPermissionActionColor } from "@/utils/permission";
+import { removedModelMatchesSelection } from "@/utils/retiredModelOptions";
 
 const props = defineProps<{ row: ModelEndpoint | null }>();
 const visible = defineModel<boolean>("visible", { required: true });
@@ -35,10 +36,12 @@ const form = reactive({
 const isBuiltin = computed(() => options.value?.card.source === "builtin");
 const availableModels = computed(
   () =>
-    options.value?.accounts.find((item) => item.id === form.providerId)
+    options.value?.accounts.find((item) => item.id === Number(form.providerId))
       ?.models ?? [],
 );
 let session = 0;
+let optionsSequence = 0;
+let synchronizingRemovedOptions = false;
 let timer: ReturnType<typeof setTimeout> | undefined;
 const pending = computed(
   () =>
@@ -107,14 +110,17 @@ const rules = computed<FormRules>(() => ({
 watch(
   () => form.providerId,
   () => {
-    if (!isBuiltin.value) return;
+    optionsSequence += 1;
+    if (synchronizingRemovedOptions || !isBuiltin.value) return;
     if (!availableModels.value.some((item) => item.code === form.model))
       form.model = availableModels.value[0]?.code ?? "";
   },
+  { flush: "sync" },
 );
 watch(
   () => form.model,
   (model) => {
+    optionsSequence += 1;
     if (!isBuiltin.value || !form.requestBody) return;
     try {
       const body: unknown = JSON.parse(form.requestBody);
@@ -128,6 +134,7 @@ watch(
       /* 保留用户正在编辑的 JSON，不自动清空或覆盖。 */
     }
   },
+  { flush: "sync" },
 );
 const statusLabels = {
   running: "调用中",
@@ -157,6 +164,89 @@ function message(error: unknown) {
 function stopPolling() {
   if (timer) clearTimeout(timer);
   timer = undefined;
+}
+function selectionKey() {
+  return JSON.stringify([
+    Number(form.providerId),
+    isBuiltin.value ? form.model : options.value?.card.modelCode,
+  ]);
+}
+function clearRemovedSelection(data: ModelEndpointTestResult) {
+  if (
+    !removedModelMatchesSelection(
+      data,
+      form.providerId,
+      isBuiltin.value ? form.model : options.value?.card.modelCode,
+    )
+  )
+    return;
+  const account = options.value?.accounts.find(
+    (item) => item.id === Number(form.providerId),
+  );
+  if (
+    account &&
+    (!isBuiltin.value ||
+      account.models?.some((item) => item.code === data.model))
+  )
+    return;
+  form.model = "";
+  if (!account) form.providerId = "";
+}
+function applyLiveModelRemoval(data: ModelEndpointTestResult) {
+  if (
+    data.modelRemoved !== true ||
+    !data.providerId ||
+    !data.model ||
+    !options.value ||
+    (!isBuiltin.value && options.value.card.modelCode !== data.model)
+  )
+    return;
+  optionsSequence += 1;
+  synchronizingRemovedOptions = true;
+  try {
+    options.value = {
+      ...options.value,
+      accounts: options.value.accounts.flatMap((account) => {
+        if (account.id !== data.providerId) return [account];
+        if (!isBuiltin.value) return [];
+        const models = account.models?.filter(
+          (item) => item.code !== data.model,
+        );
+        return models?.length ? [{ ...account, models }] : [];
+      }),
+    };
+    clearRemovedSelection(data);
+  } finally {
+    synchronizingRemovedOptions = false;
+  }
+}
+async function refreshRemovedOptions(
+  data: ModelEndpointTestResult,
+  current: number,
+) {
+  if (data.modelRemoved !== true || !props.row || !visible.value) return;
+  const endpointId = props.row.id;
+  const sequence = ++optionsSequence;
+  try {
+    const fresh = await getModelEndpointTestOptions(endpointId);
+    if (
+      current !== session ||
+      !visible.value ||
+      props.row?.id !== endpointId ||
+      sequence !== optionsSequence
+    )
+      return;
+    synchronizingRemovedOptions = true;
+    try {
+      // 只更新当前候选；旧历史不能再次移除管理员重新加入的模型。
+      options.value = fresh;
+      clearRemovedSelection(data);
+    } finally {
+      synchronizingRemovedOptions = false;
+    }
+  } catch {
+    // 后端已持久化移除；读取失败保留本次结果，不自动提交供应商请求。
+  }
 }
 function notifyResult(data: ModelEndpointTestResult, explicit = false) {
   const key = `${data.requestId}:${data.status}:${data.message}`;
@@ -205,6 +295,7 @@ watch(
   visible,
   async (value) => {
     const current = ++session;
+    optionsSequence += 1;
     stopPolling();
     loading.value = false;
     submitting.value = false;
@@ -218,11 +309,15 @@ watch(
     form.model = "";
     form.requestBody = "";
     loading.value = true;
+    const sequence = ++optionsSequence;
     try {
       const data = await getModelEndpointTestOptions(props.row.id);
-      if (current !== session) return;
-      options.value = data;
+      if (current !== session || !visible.value || sequence !== optionsSequence)
+        return;
       const previous = data.recentTest;
+      const restoringRemovedModel = previous?.result.modelRemoved === true;
+      synchronizingRemovedOptions = true;
+      options.value = data;
       testedAccountName.value = previous
         ? (data.accounts.find((item) => item.id === previous.providerId)
             ?.name ?? `账号 ${previous.providerId}`)
@@ -231,16 +326,21 @@ watch(
         previous &&
         data.accounts.some((item) => item.id === previous.providerId)
           ? previous.providerId
-          : data.accounts.length === 1
-            ? data.accounts[0]!.id
-            : "";
+          : restoringRemovedModel
+            ? ""
+            : data.accounts.length === 1
+              ? data.accounts[0]!.id
+              : "";
       form.requestBody = JSON.stringify(data.requestBody, null, 2);
       form.model = previous?.result.model ?? "";
       if (
         data.card.source === "builtin" &&
         !availableModels.value.some((item) => item.code === form.model)
       )
-        form.model = availableModels.value[0]?.code ?? "";
+        form.model = restoringRemovedModel
+          ? ""
+          : (availableModels.value[0]?.code ?? "");
+      synchronizingRemovedOptions = false;
       result.value = previous?.result ?? null;
       lastNotifiedResult = previous
         ? `${previous.result.requestId}:${previous.result.status}:${previous.result.message}`
@@ -248,8 +348,10 @@ watch(
       requestId.value = previous?.result.requestId ?? "";
       schedulePoll(current, false);
     } catch (error) {
-      if (current === session) errorMessage.value = message(error);
+      if (current === session && visible.value && sequence === optionsSequence)
+        errorMessage.value = message(error);
     } finally {
+      synchronizingRemovedOptions = false;
       if (current === session) loading.value = false;
     }
   },
@@ -257,12 +359,17 @@ watch(
 );
 onBeforeUnmount(() => {
   session += 1;
+  optionsSequence += 1;
   stopPolling();
 });
 
 async function startTest() {
   if (!props.row || pending.value || loading.value || querying.value) return;
+  const current = session;
+  const selection = selectionKey();
   await formRef.value?.validate();
+  if (current !== session || !visible.value || selection !== selectionKey())
+    return;
   let requestBody: unknown;
   try {
     requestBody = JSON.parse(form.requestBody);
@@ -281,13 +388,12 @@ async function startTest() {
     );
     return;
   }
-  const current = session;
   stopPolling();
   errorMessage.value = "";
   requestId.value = crypto.randomUUID();
   testedAccountName.value =
-    options.value?.accounts.find((item) => item.id === form.providerId)?.name ??
-    "";
+    options.value?.accounts.find((item) => item.id === Number(form.providerId))
+      ?.name ?? "";
   result.value = null;
   submitting.value = true;
   try {
@@ -297,12 +403,15 @@ async function startTest() {
       requestId: requestId.value,
       requestBody: requestBody as Record<string, unknown>,
     });
-    if (current !== session) return;
+    if (current !== session || !visible.value) return;
     result.value = data;
+    applyLiveModelRemoval(data);
     notifyResult(data, true);
+    await refreshRemovedOptions(data, current);
+    if (current !== session || !visible.value) return;
     schedulePoll(current);
   } catch (error) {
-    if (current === session) {
+    if (current === session && visible.value) {
       errorMessage.value = `${message(error)} 若请求已被供应商受理，可能已计费；请先查询本次结果。`;
       if (!(isAxiosError(error) && error.response?.status === 401))
         ElMessage.warning(errorMessage.value);
@@ -312,19 +421,29 @@ async function startTest() {
   }
 }
 async function refreshResult(explicit = false) {
-  if (!props.row || !requestId.value || querying.value || submitting.value)
+  if (
+    !visible.value ||
+    !props.row ||
+    !requestId.value ||
+    querying.value ||
+    submitting.value
+  )
     return;
   const current = session;
+  const selection = selectionKey();
   querying.value = true;
   errorMessage.value = "";
   try {
     const data = await queryModelEndpointTest(props.row.id, requestId.value);
-    if (current !== session) return;
+    if (current !== session || !visible.value || selection !== selectionKey())
+      return;
     result.value = data;
     notifyResult(data, explicit);
+    await refreshRemovedOptions(data, current);
+    if (current !== session || !visible.value) return;
     schedulePoll(current);
   } catch (error) {
-    if (current === session) {
+    if (current === session && visible.value && selection === selectionKey()) {
       errorMessage.value = message(error);
       if (result.value)
         result.value = {
@@ -358,7 +477,7 @@ async function refreshResult(explicit = false) {
       <div v-if="options" class="endpoint-test__path">
         POST
         {{
-          options.accounts.find((item) => item.id === form.providerId)
+          options.accounts.find((item) => item.id === Number(form.providerId))
             ?.apiPath ?? options.card.apiPath
         }}
         <div v-if="options.card.executionMode === 'async'">

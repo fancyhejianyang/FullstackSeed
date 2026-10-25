@@ -76,7 +76,7 @@ const testFields = computed<FormField[]>(() => [
     prop: 'model',
     label: '模型',
     type: 'select',
-    options: getModelOptions(editingRow.value?.models ?? ''),
+    options: getModelOptions(editingRow.value),
   },
   {
     prop: 'question',
@@ -126,27 +126,49 @@ function getModelLines(models: string) {
     .filter(Boolean);
 }
 
-function getModelOptions(models: string) {
-  return getModelLines(models).map((line) => {
-    const [code, name] = line.split('#');
-    return {
-      label: name || code,
-      value: code,
-    };
-  });
+function getModelOptions(provider: KnowledgeAiProvider | null) {
+  const catalog = [provider?.models, provider?.textModels]
+    .filter(Boolean)
+    .join('\n');
+  const seen = new Set<string>();
+  return getModelLines(catalog)
+    .map((line) => {
+      const [code, name] = line.split('#');
+      return {
+        label: name?.trim() || code.trim(),
+        value: code.trim(),
+      };
+    })
+    .filter((option) => {
+      if (!option.value || seen.has(option.value)) return false;
+      seen.add(option.value);
+      return true;
+    });
 }
 
 function openTest(row: KnowledgeAiProvider) {
   editingRow.value = row;
-  const options = getModelOptions(row.textModels || row.models || 'qwen-plus');
+  const options = getModelOptions(row);
+  if (!options.length) {
+    testForm.model = '';
+    testResult.value = null;
+    ElMessage.warning('当前账号没有可用文本模型，请先配置后再测试。');
+    return;
+  }
   testForm.id = row.id;
-  testForm.model = String(options[0]?.value ?? 'qwen-plus');
+  testForm.model = options[0].value;
   testForm.question = '请用一句话说明当前模型已经可以正常响应。';
   testResult.value = null;
   testVisible.value = true;
 }
 
 async function handleTest() {
+  const options = getModelOptions(editingRow.value);
+  if (!options.length) {
+    testForm.model = '';
+    ElMessage.warning('当前账号没有可用文本模型，请先配置后再测试。');
+    return;
+  }
   await testFormRef.value?.validate();
   testing.value = true;
   try {

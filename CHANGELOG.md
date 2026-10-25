@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-10-25 官方模型明确下线后自动移除账号候选
+
+- AI 功能配置与厂商卡片的新提交真实测试，收到官方 HTTPS 平台明确已完成退役的模型错误时，从当前账号六类目录精确移除本次模型编码。仅检查错误字段中的中英文退役语义并绑定当前模型，不根据 HTTP 404/410、ModelNotFound、权限、不支持、欠费或额度推断；正常回答、请求回显、预下线、维护/临时停用、否定语义、其它模型及 TokenHub 410001 会话供应商下线均不触发清理。查询原任务不执行新删除，仍保留任务编号待核实。
+- 清理使用事务行锁读取当前账号并核对实际请求域名与密钥，只更新包含精确编码的目录字段；按每行 `#` 前编码匹配，保留同系列其它版本、其它账号及全局接口卡片，不停用关联配置。测试返回前后端对齐的可选 `modelRemoved`，只有清理成功才为真；清理失败保留明确下线原因并提示账号目录未更新。账号普通编辑也改为只更新显式提交字段，交错更新名称不会把刚移除的模型写回；明确手工重新登记仍允许。
+- 功能配置实时回包同步对应账号候选，只清空仍指向退役模型的选择并提示重选；厂商卡片测试同步当前账号/模型候选。两入口保留关闭/重开、请求序号及选择快照隔离，清理不自动改选账号、模型或发起其它测试。历史恢复及手动查询读取当前服务端目录，不按旧记录重新删除人工加回的模型；读取失败保留已确认结果，不重投供应商任务。
+- 删除最后一个模型后保持空目录：修正后端解析、正式调用、账号更新及前端已有账号回显/测试中的默认模型回填；空目录明确阻止调用，账号测试只合并普通调用与文本目录，不借用媒体目录。新建账号的初始默认值保留。无新增实体列、数据库迁移、配置开关或生命周期状态，旧账号 `validateModel` 入口的既有行为不在本次扩展范围内。
+- 新增文件：`server/src/common/ai/model-retirement.ts`、`server/src/common/ai/model-retirement.spec.ts`、`server/src/knowledge-ai-providers/retired-model-removal.spec.ts`、`web/src/utils/retiredModelOptions.ts`、`web/src/utils/retiredModelOptions.test.mjs`。
+- 修改文件：`server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`、`server/src/knowledge-ai-providers/model-endpoint-tests.service.ts`、`web/src/api/modelEndpoint.ts`、`web/src/api/thirdPartyConfig.ts`、`web/src/views/ai-feature-config/Edit.vue`、`web/src/views/knowledge-ai-provider/Edit.vue`、`web/src/views/knowledge-ai-provider/Index.vue`、`web/src/views/model-endpoint/Test.vue`、`.design-spec.md`、本文件。删除文件：无。用户已有 `web/auto-imports.d.ts`、`web/src/api/hotTopic.ts` 改动保留且不纳入提交。
+- 验证：相关后端 6 套件 125 项模拟测试与前端 4 项目录处理测试通过，覆盖明确/不确定退役、官方来源、精确编码、账号隔离、清理失败、幂等、任务查询、空目录与并发编辑不复活。前后端业务类型、定向 ESLint/格式、组件复用扫描、实体列检查、生产构建及 diff 检查通过；前端保留既有 PURE 注释与分块大小提示。未启动/重启服务、未修改运行中的数据库或调用真实付费模型。
+- 官方边界依据：[TokenHub API 错误码](https://intl.cloud.tencent.com/zh/document/product/1300/82348)、[TokenHub 模型状态](https://cloud.tencent.com/document/api/1823/132279)、[百炼错误码](https://help.aliyun.com/zh/model-studio/error-code)。依据明确区分模型退役、会话失效、维护、停新购和模型不存在，不虚构统一退役错误码。
+
 ### 2026-10-25 修复热点功能切换非百炼账号沿用联网协议
 
 - 修复热点发现与推荐切换到腾讯等非百炼账号后，仍携带旧的百炼 Responses 协议触发错误的配置联动。第三方安全选项新增后端根据账号地址派生的 `platformType`，前端按平台提供联网候选；仅百炼显示可用的 Responses 选项，切到其它平台时切换为不联网分析推荐，切回百炼不自动开启联网。

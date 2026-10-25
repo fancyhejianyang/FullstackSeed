@@ -181,6 +181,8 @@ export interface ModelEndpointTestResult {
   checkedAt: string;
   model?: string;
   apiPath?: string;
+  providerId?: number;
+  modelRemoved?: boolean;
 }
 export interface ModelEndpointTestOptions {
   card: ModelEndpoint;

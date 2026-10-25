@@ -160,7 +160,7 @@ function fillForm(data: KnowledgeAiProvider) {
   form.workspaceId = data.workspaceId ?? "";
   secretKeyMasked.value = data.secretKeyMasked || "";
   form.secretKey = secretKeyMasked.value;
-  form.models = data.models || "qwen-plus";
+  form.models = data.models ?? "";
   form.textModels = data.textModels || "";
   form.visionModels = data.visionModels || "";
   form.imageGenerationModels = data.imageGenerationModels || "";

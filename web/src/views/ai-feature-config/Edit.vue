@@ -9,6 +9,10 @@ import {
   FeatureModelTestQueue,
   FeatureModelTestHistory,
 } from "@/utils/featureModelTest";
+import {
+  removedModelMatchesSelection,
+  removeRetiredModelOptions,
+} from "@/utils/retiredModelOptions";
 import { getPermissionActionColor } from "@/utils/permission";
 import {
   createAiFeatureConfig,
@@ -48,6 +52,8 @@ const validatingModel = ref(false);
 const modelValidationHint = ref("");
 let modelValidationSequence = 0;
 let dialogSession = 0;
+let retiredOptionsSequence = 0;
+const appliedModelRemovals = new Set<string>();
 const modelTestHint = ref("");
 const modelTests = ref<AiFeatureModelTestResult[]>([]);
 const testSubmissionBusy = ref(false);
@@ -113,10 +119,11 @@ const modelTestQueue = new FeatureModelTestQueue<
   onResult: (job, result, context) => {
     if (!result) return;
     const stored = storeModelTest(result);
-    if (
+    const current =
       context.isCurrent() &&
-      selectionKey(job.selection) === selectionKey(currentTestSelection())
-    ) {
+      selectionKey(job.selection) === selectionKey(currentTestSelection());
+    const cleared = applyLiveModelRemoval(stored);
+    if (current || cleared) {
       latestTestRequestId.value = result.requestId;
       modelTestHint.value = `${testLabels[stored.status]}：${stored.message}`;
       notifyModelTest(stored);
@@ -196,6 +203,64 @@ function notifyModelTest(result: AiFeatureModelTestResult) {
   else if (result.status === "unknown") ElMessage.warning(text);
   else ElMessage.info(text);
 }
+function clearRemovedModelSelection(result: AiFeatureModelTestResult) {
+  if (!removedModelMatchesSelection(result, form.providerId, form.model))
+    return false;
+  // 清空触发原有 watcher 取消待测任务，不自动补选或测试其它模型。
+  form.model = "";
+  latestTestRequestId.value = result.requestId;
+  modelTestHint.value = `${testLabels[result.status]}：${result.message}`;
+  return true;
+}
+function applyLiveModelRemoval(result: AiFeatureModelTestResult) {
+  if (
+    !visible.value ||
+    result.modelRemoved !== true ||
+    appliedModelRemovals.has(result.requestId)
+  )
+    return false;
+  retiredOptionsSequence += 1;
+  appliedModelRemovals.add(result.requestId);
+  providers.value = removeRetiredModelOptions(providers.value, result);
+  return clearRemovedModelSelection(result);
+}
+async function refreshRetiredModelOptions(
+  records: AiFeatureModelTestResult[],
+  session = dialogSession,
+) {
+  const removed = records.filter(
+    (result) =>
+      result.modelRemoved === true && result.providerId && result.model,
+  );
+  if (!removed.length || !visible.value) return false;
+  const sequence = ++retiredOptionsSequence;
+  try {
+    const options = await getThirdPartyOptions({ silentError: true });
+    if (
+      session !== dialogSession ||
+      !visible.value ||
+      sequence !== retiredOptionsSequence
+    )
+      return false;
+    const providerIds = new Set(removed.map((item) => item.providerId));
+    // 历史移除记录不能覆盖管理员后来重新加入的模型，以当前服务端目录为准。
+    providers.value = providers.value.map((provider) =>
+      providerIds.has(provider.id)
+        ? (options.providers.find((item) => item.id === provider.id) ??
+          provider)
+        : provider,
+    );
+    const current = removed.find(
+      (result) =>
+        removedModelMatchesSelection(result, form.providerId, form.model) &&
+        !modelOptions.value.some((item) => item.value === form.model),
+    );
+    return current ? clearRemovedModelSelection(current) : false;
+  } catch {
+    // 移除已由后端持久化；读取失败不回放旧删除，也不重新提交供应商请求。
+    return false;
+  }
+}
 function stopModelTestPoll() {
   if (modelTestPollTimer) clearTimeout(modelTestPollTimer);
   modelTestPollTimer = undefined;
@@ -238,9 +303,12 @@ async function queryModelTest(
     const result = await queryAiFeatureModelTest(record.requestId);
     if (session !== dialogSession || !visible.value) return;
     const stored = storeModelTest(result);
+    const cleared = await refreshRetiredModelOptions([stored], session);
+    if (session !== dialogSession || !visible.value) return;
     const current =
-      result.requestId === latestTestRequestId.value &&
-      selectionKey(result) === selectionKey(currentTestSelection());
+      cleared ||
+      (result.requestId === latestTestRequestId.value &&
+        selectionKey(result) === selectionKey(currentTestSelection()));
     if (current) {
       modelTestHint.value = `${testLabels[stored.status]}：${stored.message}`;
       scheduleModelTestPoll(stored);
@@ -283,6 +351,8 @@ async function loadRecentModelTests(session = dialogSession) {
     const records = await listAiFeatureModelTests();
     if (session !== dialogSession || !visible.value) return;
     for (const record of records) storeModelTest(record, false, false);
+    if (formReadyForModelValidation.value)
+      await refreshRetiredModelOptions(records, session);
   } catch (error) {
     if (session === dialogSession)
       recentTestsError.value = modelTestError(error);
@@ -755,6 +825,8 @@ watch(
   visible,
   async (value) => {
     const session = ++dialogSession;
+    retiredOptionsSequence += 1;
+    appliedModelRemovals.clear();
     modelValidationSequence += 1;
     formReadyForModelValidation.value = false;
     validatingModel.value = false;
@@ -788,6 +860,8 @@ watch(
     } finally {
       // 先恢复已提交任务，避免初始化结束后选择模型时重复提交旧的异步测试。
       await recentTestsPromise;
+      if (session === dialogSession && visible.value)
+        await refreshRetiredModelOptions(modelTests.value, session);
       await nextTick();
       if (session === dialogSession && visible.value) {
         loading.value = false;
@@ -806,6 +880,7 @@ watch(
 
 onBeforeUnmount(() => {
   dialogSession += 1;
+  retiredOptionsSequence += 1;
   modelValidationSequence += 1;
   modelTestQueue.close();
   stopModelTestPoll();
@@ -894,6 +969,7 @@ watch(
     ] as const,
   () => {
     const sequence = ++modelValidationSequence;
+    retiredOptionsSequence += 1;
     modelTestQueue.cancelPending();
     stopModelTestPoll();
     latestTestRequestId.value = "";

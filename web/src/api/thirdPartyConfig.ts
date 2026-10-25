@@ -18,11 +18,11 @@ export interface MineruOption {
   name: string;
   isEnabled: boolean;
 }
-export function getThirdPartyOptions() {
+export function getThirdPartyOptions(options?: { silentError?: boolean }) {
   return request.get<
     unknown,
     { providers: ProviderOption[]; mineruConfigs: MineruOption[] }
-  >('/third-party-config/options');
+  >('/third-party-config/options', options);
 }
 export interface ThirdPartySummary {
   key: string;
