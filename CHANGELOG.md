@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-10-25 修复热点功能切换非百炼账号沿用联网协议
+
+- 修复热点发现与推荐切换到腾讯等非百炼账号后，仍携带旧的百炼 Responses 协议触发错误的配置联动。第三方安全选项新增后端根据账号地址派生的 `platformType`，前端按平台提供联网候选；仅百炼显示可用的 Responses 选项，切到其它平台时切换为不联网分析推荐，切回百炼不自动开启联网。
+- 编辑回填保持历史值，不静默保存或发起真实测试；历史不兼容协议显示不可用说明，必须主动重选。切换时清除旧接口匹配结果，沿用原有测试队列、最终选择防抖和迟到结果隔离。普通文本推荐仍支持其它平台；本次不新增其它平台的原生联网适配器，也不放宽后端官方端点校验。
+- 选项只返回原有安全字段及平台标识，不暴露账号地址、密钥或完整配置。复用 Form/Select 的动态候选及提示，不新增开关、数据库列或权限。
+- 新增文件：`web/src/views/ai-feature-config/topicProvider.test.mjs`。修改文件：`server/src/third-party-config/third-party-config.service.ts`、`server/src/third-party-config/third-party-config.service.spec.ts`、`server/src/ai-feature-configs/ai-feature-configs.service.spec.ts`、`web/src/api/thirdPartyConfig.ts`、`web/src/views/ai-feature-config/Edit.vue`、`.design-spec.md`、本文件。删除文件：无。原有 `web/auto-imports.d.ts` 与 `web/src/api/hotTopic.ts` 未提交内容保留，不纳入本次提交。
+- 验证：前后端业务类型检查、后端定向 ESLint、前端组件复用扫描及 diff 检查通过；补充平台选项/凭据隔离、腾讯关闭联网、切换/回填及不兼容协议的回归用例，测试文件做静态语法检查。按修复类约定未执行测试、构建、启动/重启服务或真实计费请求。
+
 ### 2026-10-25 免费额度不可用且未开通付费的错误提示
 
 - 将用户确认的完整供应商报错 `No free trial quota is available for the service and postpaid billing is not enabled` 映射为“该服务暂无免费额度，且未开启按量付费，请开通后重试。”，功能配置与厂商卡片真实测试不再只提示通用 HTTP 402。公共解析返回对应中文原因，保持原欠费映射；识别已归一化中文，避免 Agent、媒体和内容创建的上层错误处理覆盖具体原因。

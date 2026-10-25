@@ -9,6 +9,7 @@ import { THIRD_PARTY_MENUS } from '../menus/menu-structure';
 import { ComfyConnection } from '../comfyui/entities/comfy-connection.entity';
 import { HotTopicSource } from '../hot-topics/entities/hot-topic.entity';
 import { ModelEndpoint } from '../model-endpoints/entities/model-endpoint.entity';
+import { detectModelPlatform } from '../model-endpoints/model-endpoint.constants';
 
 export interface ThirdPartySummary {
   key: string;
@@ -51,6 +52,7 @@ export class ThirdPartyConfigService {
             'id',
             'name',
             'isEnabled',
+            'apiUrl',
             'models',
             'textModels',
             'visionModels',
@@ -66,7 +68,21 @@ export class ThirdPartyConfigService {
           .getRepository(MineruConfig)
           .find({ select: ['id', 'name', 'isEnabled'], order: { id: 'DESC' } })
       : [];
-    return { providers, mineruConfigs };
+    return {
+      providers: providers.map((provider) => ({
+        id: provider.id,
+        name: provider.name,
+        isEnabled: provider.isEnabled,
+        models: provider.models,
+        textModels: provider.textModels,
+        visionModels: provider.visionModels,
+        imageGenerationModels: provider.imageGenerationModels,
+        videoGenerationModels: provider.videoGenerationModels,
+        embeddingModels: provider.embeddingModels,
+        platformType: detectModelPlatform(provider.apiUrl),
+      })),
+      mineruConfigs,
+    };
   }
 
   async overview(user: AuthUser): Promise<ThirdPartySummary[]> {

@@ -72,6 +72,7 @@ describe('third-party access and credentials', () => {
         'id',
         'name',
         'isEnabled',
+        'apiUrl',
         'models',
         'textModels',
         'visionModels',
@@ -81,6 +82,58 @@ describe('third-party access and credentials', () => {
       ],
       order: { id: 'DESC' },
     });
+  });
+  it('derives provider platform options without exposing URLs or credentials', async () => {
+    const repo = {
+      find: jest.fn().mockResolvedValue([
+        {
+          id: 1,
+          name: '腾讯账号',
+          isEnabled: true,
+          apiUrl: 'https://tokenhub.tencentmaas.com/v1',
+          secretKey: 'must-stay-internal',
+          models: 'glm-5.3',
+          textModels: 'glm-5.3',
+        },
+        {
+          id: 2,
+          name: '百炼账号',
+          isEnabled: true,
+          apiUrl:
+            'https://workspace.cn-beijing.maas.aliyuncs.com/compatible-mode',
+          secretKey: 'another-internal-secret',
+          models: 'qwen-plus',
+        },
+        {
+          id: 3,
+          name: '自定义账号',
+          isEnabled: true,
+          apiUrl: 'https://models.example.com/v1',
+          models: 'text-model',
+        },
+      ]),
+    };
+    const service = new ThirdPartyConfigService(
+      { getRepository: jest.fn(() => repo) } as unknown as DataSource,
+      {} as StorageConfigService,
+    );
+    const result = await service.options(user(['KnowledgeAiProvider.read']));
+    expect(result.providers.map((provider) => provider.platformType)).toEqual([
+      'tencentTokenhub',
+      'aliyunBailian',
+      'custom',
+    ]);
+    expect(result.providers[0]).toMatchObject({
+      id: 1,
+      models: 'glm-5.3',
+      textModels: 'glm-5.3',
+    });
+    for (const provider of result.providers) {
+      expect(provider).not.toHaveProperty('apiUrl');
+      expect(provider).not.toHaveProperty('secretKey');
+    }
+    expect(JSON.stringify(result)).not.toContain('https://');
+    expect(JSON.stringify(result)).not.toContain('internal');
   });
   it('never echoes credentials, retains blank values and clears only explicitly', () => {
     const safe = publicStorageConfig(secretConfig);
@@ -128,10 +181,7 @@ describe('third-party access and credentials', () => {
       ),
     ).toEqual(['StorageConfig.update']);
     expect(
-      Reflect.getMetadata(
-        PERMISSIONS_KEY,
-        DashboardController.prototype.save,
-      ),
+      Reflect.getMetadata(PERMISSIONS_KEY, DashboardController.prototype.save),
     ).toEqual(['DashboardConfig.read', 'DashboardConfig.update']);
   });
 });

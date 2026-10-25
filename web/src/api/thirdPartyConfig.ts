@@ -4,6 +4,7 @@ export type ProviderOption = Pick<
   KnowledgeAiProvider,
   | 'id'
   | 'name'
+  | 'platformType'
   | 'isEnabled'
   | 'models'
   | 'textModels'

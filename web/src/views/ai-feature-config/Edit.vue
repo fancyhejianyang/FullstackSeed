@@ -398,6 +398,41 @@ const isMineruOcrFeature = computed(
 );
 const isWritingFeature = computed(() => form.featureType === "contentCreation");
 const isTopicFeature = computed(() => form.featureType === "topicDiscovery");
+const canUseBailianSearch = computed(
+  () => selectedProvider.value?.platformType === "aliyunBailian",
+);
+const webSearchOptions = computed(() => {
+  const options = [
+    { label: "不联网（仅分析已采集资料）", value: "disabled", disabled: false },
+  ];
+  if (canUseBailianSearch.value) {
+    options.push({
+      label: "百炼 Responses 原生搜索",
+      value: "bailianResponses",
+      disabled: false,
+    });
+  } else if (form.webSearchMode === "bailianResponses") {
+    options.push({
+      label: "百炼 Responses 原生搜索（当前账号不适用）",
+      value: "bailianResponses",
+      disabled: true,
+    });
+  }
+  if (form.webSearchMode === "bailianChat") {
+    options.push({
+      label: "百炼 Chat 联网（旧协议不可用，请重新选择）",
+      value: "bailianChat",
+      disabled: true,
+    });
+  }
+  return options;
+});
+const webSearchHint = computed(() => {
+  if (!selectedProvider.value) return "请先选择大模型账号。";
+  if (!canUseBailianSearch.value)
+    return "本项目尚未接入当前平台的原生联网搜索；可选择“不联网”分析和推荐已采集资料。热点偏好请使用直接采集模式；需要 AI 联网获取时，请另选百炼配置。";
+  return "仅百炼官方兼容端点可使用当前联网适配器，所选模型仍需支持 web_search；平台识别不等于模型能力验证。不联网时仅分析已采集资料。";
+});
 const isVisualPromptFeature = computed(
   () => form.featureType === "visualPrompt",
 );
@@ -544,11 +579,9 @@ const fields = computed<FormField[]>(() => {
       prop: "webSearchMode",
       label: "联网方式",
       type: "select",
-      options: [
-        { label: "不联网（仅分析已采集资料）", value: "disabled" },
-        { label: "百炼 Responses 原生搜索", value: "bailianResponses" },
-      ],
-      hint: "只对热点获取生效。需百炼官方兼容端点及支持 web_search 的模型；没有真实搜索来源时明确报错，不把模型记忆当成今日热点。",
+      options: webSearchOptions,
+      componentProps: { clearable: false },
+      hint: webSearchHint,
     });
   }
   if (isTextFeature.value) {
@@ -779,6 +812,17 @@ onBeforeUnmount(() => {
 });
 
 watch(
+  () => [form.providerId, form.featureType] as const,
+  () => {
+    // 只归一化用户主动切换；历史配置回填不改值，也不触发真实测试。
+    if (!formReadyForModelValidation.value) return;
+    if (!isTopicFeature.value || !canUseBailianSearch.value)
+      form.webSearchMode = "disabled";
+  },
+  { flush: "sync" },
+);
+
+watch(
   () => form.featureType,
   (type, previousType) => {
     // 用户切换为内容创作时默认纯文本；编辑回显保留已有格式。
@@ -856,6 +900,7 @@ watch(
     modelTestHint.value = "";
     validatingModel.value = false;
     modelValidationHint.value = "";
+    checkedEndpoint.value = null;
     if (
       !visible.value ||
       !formReadyForModelValidation.value ||
@@ -1047,6 +1092,17 @@ async function validateSelectedModel() {
     !model
   )
     return false;
+  if (
+    isTopicFeature.value &&
+    form.webSearchMode &&
+    form.webSearchMode !== "disabled" &&
+    (!canUseBailianSearch.value || form.webSearchMode !== "bailianResponses")
+  ) {
+    checkedEndpoint.value = null;
+    modelValidationHint.value =
+      "当前账号与所选联网协议不匹配，请选择“不联网”用于热点分析推荐，或切换百炼账号并选择 Responses；未发起实际测试。";
+    return false;
+  }
   const requestSequence = ++modelValidationSequence;
   validatingModel.value = true;
   modelValidationHint.value = "";

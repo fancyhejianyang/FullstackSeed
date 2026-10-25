@@ -102,6 +102,48 @@ describe('AiFeatureConfigsService', () => {
     );
   });
 
+  it('热点关闭联网时允许腾讯文本推荐，且不套用百炼路径', async () => {
+    const providers = {
+      inspectFeatureEndpoint: jest.fn().mockResolvedValue({
+        functionType: 'chat',
+        functionLabel: '普通调用',
+        source: 'standard',
+        url: 'https://tokenhub.tencentmaas.com/v1/chat/completions',
+        secretKey: 'must-stay-internal',
+      }),
+    };
+    const configService = new AiFeatureConfigsService(
+      {} as Repository<AiFeatureConfig>,
+      providers as unknown as KnowledgeAiProvidersService,
+      {} as MineruConfigsService,
+    );
+    const payload = {
+      providerId: 2,
+      model: 'glm-5.3',
+      featureType: 'topicDiscovery',
+      webSearchMode: 'disabled',
+    } as const;
+    await expect(configService.checkModelEndpoint(payload)).resolves.toEqual({
+      functionType: 'chat',
+      functionLabel: '普通调用',
+      source: 'standard',
+      ruleName: undefined,
+      apiPath: '/v1/chat/completions',
+      searchApiPath: null,
+    });
+    expect(providers.inspectFeatureEndpoint).toHaveBeenCalledWith({
+      id: 2,
+      model: 'glm-5.3',
+      featureType: 'topicDiscovery',
+    });
+    await expect(
+      configService.checkModelEndpoint({
+        ...payload,
+        webSearchMode: 'bailianResponses',
+      }),
+    ).rejects.toThrow('当前仅支持百炼');
+  });
+
   it('keeps MinerU refinement settings and validates a text model', async () => {
     const repository = {
       create: jest.fn((value: unknown) => value),
