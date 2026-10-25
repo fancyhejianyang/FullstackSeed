@@ -276,6 +276,26 @@ export class KnowledgeAiProvidersService {
     }
   }
 
+  /** 编辑器只检查配置；不请求供应商、不修改账号目录或关联功能。 */
+  async inspectFeatureEndpoint(payload: {
+    id: number;
+    model: string;
+    featureType: AiModelFeatureType;
+  }) {
+    const provider = await this.findEntity(payload.id);
+    const { endpoint, url, functionType } = await this.resolveFeatureEndpoint(
+      provider,
+      payload.featureType,
+      payload.model.trim(),
+    );
+    return {
+      functionType,
+      functionLabel: FUNCTION_LABELS[functionType],
+      source: endpoint ? ('configured' as const) : ('standard' as const),
+      url,
+    };
+  }
+
   async validateModel(dto: ValidateKnowledgeAiProviderModelDto) {
     if (
       dto.featureType === 'imageGeneration' ||
@@ -395,9 +415,7 @@ export class KnowledgeAiProvidersService {
       providerName: provider.name,
       workspaceId: provider.workspaceId ?? null,
       model,
-      url:
-        (await this.resolveConfiguredUrl(provider, model, 'chat')) ??
-        this.buildChatUrl(provider),
+      url: (await this.resolveFunctionEndpoint(provider, model, 'chat')).url,
       secretKey: this.normalizeSecretKey(provider.secretKey),
     };
   }
@@ -424,9 +442,7 @@ export class KnowledgeAiProvidersService {
       providerName: provider.name,
       workspaceId: provider.workspaceId ?? null,
       model,
-      url:
-        (await this.resolveConfiguredUrl(provider, model, 'vision')) ??
-        this.buildChatUrl(provider),
+      url: (await this.resolveFunctionEndpoint(provider, model, 'vision')).url,
       secretKey: this.normalizeSecretKey(provider.secretKey),
     };
   }
@@ -500,26 +516,16 @@ export class KnowledgeAiProvidersService {
             ];
     if (!allowed.includes(operation))
       throw new BadRequestException('模型功能场景与能力目录不匹配');
-    const endpoint = await this.endpoints?.resolve(
-      detectModelPlatform(provider.apiUrl),
+    const { endpoint, url } = await this.resolveFunctionEndpoint(
+      provider,
       selected,
       operation,
     );
-    if (!endpoint && kind !== 'vision')
-      throw new BadRequestException(
-        `模型 ${selected} 缺少“${FUNCTION_LABELS[operation]}”调用接口，请在第三方配置 → 模型厂商调用接口中配置`,
-      );
     return {
       providerId: provider.id,
       providerName: provider.name,
       model: selected,
-      url:
-        endpoint && this.endpoints
-          ? this.endpoints.buildUrl(
-              this.applyWorkspaceId(provider),
-              endpoint.apiPath,
-            )
-          : this.buildChatUrl(provider),
+      url,
       secretKey: this.normalizeSecretKey(provider.secretKey),
       protocol: endpoint
         ? mediaProtocol(endpoint.protocol)
@@ -535,7 +541,7 @@ export class KnowledgeAiProvidersService {
     };
   }
 
-  private async resolveConfiguredUrl(
+  private async resolveFunctionEndpoint(
     provider: KnowledgeAiProvider,
     model: string,
     functionType: ModelFunction,
@@ -545,12 +551,20 @@ export class KnowledgeAiProvidersService {
       model,
       functionType,
     );
-    return endpoint && this.endpoints
-      ? this.endpoints.buildUrl(
-          this.applyWorkspaceId(provider),
-          endpoint.apiPath,
-        )
-      : null;
+    if (!endpoint && !['chat', 'vision', 'embedding'].includes(functionType))
+      throw new BadRequestException(
+        `模型 ${model} 缺少“${FUNCTION_LABELS[functionType]}”调用接口，请在第三方配置 → 模型厂商调用接口中配置`,
+      );
+    const url =
+      endpoint && this.endpoints
+        ? this.endpoints.buildUrl(
+            this.applyWorkspaceId(provider),
+            endpoint.apiPath,
+          )
+        : functionType === 'embedding'
+          ? this.buildEmbeddingUrl(provider)
+          : this.buildChatUrl(provider);
+    return { endpoint, url };
   }
 
   async resolveEmbeddingTarget(
@@ -576,9 +590,8 @@ export class KnowledgeAiProvidersService {
       providerName: provider.name,
       workspaceId: provider.workspaceId ?? null,
       model,
-      url:
-        (await this.resolveConfiguredUrl(provider, model, 'embedding')) ??
-        this.buildEmbeddingUrl(provider),
+      url: (await this.resolveFunctionEndpoint(provider, model, 'embedding'))
+        .url,
       secretKey: this.normalizeSecretKey(provider.secretKey),
     };
   }
@@ -588,6 +601,26 @@ export class KnowledgeAiProvidersService {
     featureType: AiModelFeatureType,
     model: string,
   ): Promise<KnowledgeAiChatTarget> {
+    const { url } = await this.resolveFeatureEndpoint(
+      provider,
+      featureType,
+      model,
+    );
+    return {
+      providerId: provider.id,
+      providerName: provider.name,
+      workspaceId: provider.workspaceId ?? null,
+      model,
+      url,
+      secretKey: this.normalizeSecretKey(provider.secretKey),
+    };
+  }
+
+  private async resolveFeatureEndpoint(
+    provider: KnowledgeAiProvider,
+    featureType: AiModelFeatureType,
+    model: string,
+  ) {
     if (!provider.isEnabled) {
       throw new BadRequestException('该大模型账号未启用');
     }
@@ -602,25 +635,19 @@ export class KnowledgeAiProvidersService {
         '所选模型不在当前大模型账号对应类型的模型列表中',
       );
     }
-    return {
-      providerId: provider.id,
-      providerName: provider.name,
-      workspaceId: provider.workspaceId ?? null,
-      model,
-      url:
-        (await this.resolveConfiguredUrl(
-          provider,
-          model,
-          featureType === 'embedding'
+    const functionType: ModelFunction =
+      featureType === 'imageGeneration'
+        ? 'textToImage'
+        : featureType === 'videoGeneration'
+          ? 'textToVideo'
+          : featureType === 'embedding'
             ? 'embedding'
             : featureType === 'ocr'
               ? 'vision'
-              : 'chat',
-        )) ??
-        (featureType === 'embedding'
-          ? this.buildEmbeddingUrl(provider)
-          : this.buildChatUrl(provider)),
-      secretKey: this.normalizeSecretKey(provider.secretKey),
+              : 'chat';
+    return {
+      ...(await this.resolveFunctionEndpoint(provider, model, functionType)),
+      functionType,
     };
   }
 

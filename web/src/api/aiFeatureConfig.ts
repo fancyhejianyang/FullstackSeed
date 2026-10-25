@@ -1,4 +1,5 @@
 import request from "@/utils/request";
+import type { ModelFunction } from "@/api/modelEndpoint";
 
 export type AiFeatureType =
   | "chat"
@@ -68,6 +69,30 @@ export interface AiFeatureConfigForm {
   supportsImageToVideo?: boolean;
   isEnabled?: boolean;
   description?: string;
+}
+
+export interface AiFeatureModelEndpointCheck {
+  providerId: number;
+  model: string;
+  featureType: AiFeatureType;
+  useMineru?: boolean;
+  webSearchMode?: AiWebSearchMode;
+}
+
+export interface AiFeatureModelEndpointResult {
+  functionType: ModelFunction;
+  functionLabel: string;
+  source: "configured" | "standard";
+  apiPath: string;
+  searchApiPath: string | null;
+}
+
+export function checkAiFeatureModelEndpoint(data: AiFeatureModelEndpointCheck) {
+  return request.post<unknown, AiFeatureModelEndpointResult>(
+    "/ai-feature-configs/check-model-endpoint",
+    data,
+    { silentError: true },
+  );
 }
 
 export function getAiFeatureConfigs(params: QueryAiFeatureConfigParams) {

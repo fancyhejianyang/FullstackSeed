@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-10-25 AI 功能编辑统一检查模型厂商接口
+
+- 修复 AI 功能配置切换模型时生图、生视频和热点类型直接跳过检查、普通类型依赖账号编辑权限的问题。全部功能统一通过只读 `POST /ai-feature-configs/check-model-endpoint` 检查账号启用、密钥是否配置、对应模型目录与实际接口；沿用功能配置的 `Menu.read` 权限，只返回功能/路径/匹配来源摘要，不暴露密钥或完整账号配置。
+- 编辑检查与运行时共用平台/模型/功能解析：聊天、创作、热点、提示词整理、文档解析与 LLM 重排匹配普通调用，视觉 OCR 匹配识图，MinerU 后文本整理匹配普通调用；图片/视频生成检查文生图/文生视频卡片。非媒体场景缺少卡片时明确展示标准接口来源；媒体缺卡片、接口停用时明确阻止。参考图、参考视频等其它媒体模式继续在实际任务中按本次场景读取对应卡片。
+- 热点启用联网时复用真实搜索链路的百炼 Responses 地址检查，提前提示不支持的账号/路径或旧 Chat 联网协议。自动检查不向供应商发送请求，不执行生成/联网搜索，不从账号目录移除模型或停用关联功能；配置匹配通过不代表远端模型授权、余额或实际调用成功。
+- 打开已有配置、切换账号/模型/功能/OCR 引擎/联网协议及保存前均检查；表单展示匹配场景、调用路径与卡片/标准来源。补齐关闭、清空、快速切换、重新打开和卸载时的旧响应隔离，避免迟到结果覆盖当前选择；保存前失败或选择已变化时停止提交。修正 OCR 引擎切换后的模型目录检查，以及视频和参考生图的旧端点提示。
+- 新增文件：无。删除文件：无。
+- 修改文件（后端）：`server/src/ai-feature-configs/dto/ai-feature-config.dto.ts`、`server/src/ai-feature-configs/ai-feature-configs.controller.ts`、`server/src/ai-feature-configs/ai-feature-configs.service.ts`、`server/src/ai-feature-configs/ai-feature-configs.service.spec.ts`、`server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`、`server/src/model-endpoints/model-endpoint-routing.spec.ts`。
+- 修改文件（前端及文档）：`web/src/api/aiFeatureConfig.ts`、`web/src/views/ai-feature-config/Edit.vue`、`.design-spec.md`、本文件。
+- 验证：前后端业务类型检查、受影响回归规格及其依赖的 TypeScript 静态检查、修改后端文件定向 ESLint、组件复用扫描与 diff 检查通过。补充全功能映射、编辑/实际解析一致、标准回退/媒体拒绝、账号状态/目录、权限、MinerU 与 Responses 检查的回归规格。按修复类约定仅做静态检查，未执行测试、构建、启动/重启服务或真实模型请求。用户已有的 `web/auto-imports.d.ts`、`web/src/api/hotTopic.ts` 改动保留且不纳入提交。
+
 ### 2026-10-25 账号专用接口收敛到模型功能卡片
 
 - 大模型账号编辑和查看移除 Chat 路径、生图协议、生图地址、视频地址；前后端提交/返回类型、DTO 和服务载荷同步去除四项字段。账号继续维护平台基础地址、密钥、业务空间、模型目录与启用状态。历史数据库列保留存量值，不删除数据、不再写入或作为业务调用回退地址。

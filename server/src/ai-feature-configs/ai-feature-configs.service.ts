@@ -6,11 +6,14 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Like, Repository } from 'typeorm';
 import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
+import { bailianResponsesUrl } from '../knowledge-ai-providers/knowledge-web-search.service';
+import { HotTopicFetchError } from '../hot-topics/hot-topic-network';
 import { MineruConfigsService } from '../mineru-configs/mineru-configs.service';
 import type { AiFeatureConfigType } from './ai-feature-config.constants';
 import type { AiMaterialGenerationMode } from '../ai-materials/ai-material.constants';
 import {
   CreateAiFeatureConfigDto,
+  CheckAiFeatureModelEndpointDto,
   QueryAiFeatureConfigDto,
   UpdateAiFeatureConfigDto,
 } from './dto/ai-feature-config.dto';
@@ -32,6 +35,41 @@ export class AiFeatureConfigsService {
     private readonly providersService: KnowledgeAiProvidersService,
     private readonly mineruConfigsService: MineruConfigsService,
   ) {}
+
+  async checkModelEndpoint(dto: CheckAiFeatureModelEndpointDto) {
+    const target = await this.providersService.inspectFeatureEndpoint({
+      id: dto.providerId,
+      model: dto.model,
+      featureType:
+        dto.featureType === 'ocr' && dto.useMineru
+          ? 'documentParse'
+          : dto.featureType,
+    });
+    let searchApiPath: string | null = null;
+    if (
+      dto.featureType === 'topicDiscovery' &&
+      dto.webSearchMode &&
+      dto.webSearchMode !== 'disabled'
+    ) {
+      if (dto.webSearchMode !== 'bailianResponses')
+        throw new BadRequestException('联网搜索请使用百炼 Responses 协议');
+      try {
+        searchApiPath = new URL(bailianResponsesUrl(target.url)).pathname;
+      } catch (error) {
+        if (error instanceof HotTopicFetchError)
+          throw new BadRequestException(error.message);
+        throw error;
+      }
+    }
+    // 只返回匹配摘要，不向功能编辑器返回账号凭据或完整账号配置。
+    return {
+      functionType: target.functionType,
+      functionLabel: target.functionLabel,
+      source: target.source,
+      apiPath: new URL(target.url).pathname,
+      searchApiPath,
+    };
+  }
 
   async findAll(query: QueryAiFeatureConfigDto) {
     const page = query.page ?? 1;

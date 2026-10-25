@@ -3,12 +3,103 @@ import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge
 import { MineruConfigsService } from '../mineru-configs/mineru-configs.service';
 import { AiFeatureConfig } from './entities/ai-feature-config.entity';
 import { AiFeatureConfigsService } from './ai-feature-configs.service';
+import { AiFeatureConfigsController } from './ai-feature-configs.controller';
+import { PERMISSIONS_KEY } from '../common/decorators/require-permissions.decorator';
 
 interface AiFeatureConfigInternals {
   normalizeFeatureSpecificSettings: (config: Partial<AiFeatureConfig>) => void;
 }
 
 describe('AiFeatureConfigsService', () => {
+  it('模型接口检查使用功能编辑权限，不要求账号管理权限', () => {
+    const permissions = Reflect.getMetadata(
+      PERMISSIONS_KEY,
+      Object.getOwnPropertyDescriptor(
+        AiFeatureConfigsController.prototype,
+        'checkModelEndpoint',
+      )?.value as object,
+    ) as string[];
+    expect(permissions).toEqual(['Menu.read']);
+  });
+
+  it('MinerU OCR 整理检查普通调用，不将账号凭据返回编辑器', async () => {
+    const providers = {
+      inspectFeatureEndpoint: jest.fn().mockResolvedValue({
+        functionType: 'chat',
+        functionLabel: '普通调用',
+        source: 'configured',
+        url: 'https://example.com/vendor/text',
+        secretKey: 'must-stay-internal',
+      }),
+    };
+    const configService = new AiFeatureConfigsService(
+      {} as Repository<AiFeatureConfig>,
+      providers as unknown as KnowledgeAiProvidersService,
+      {} as MineruConfigsService,
+    );
+    await expect(
+      configService.checkModelEndpoint({
+        providerId: 2,
+        model: 'text-model',
+        featureType: 'ocr',
+        useMineru: true,
+      }),
+    ).resolves.toEqual({
+      functionType: 'chat',
+      functionLabel: '普通调用',
+      source: 'configured',
+      apiPath: '/vendor/text',
+      searchApiPath: null,
+    });
+    expect(providers.inspectFeatureEndpoint).toHaveBeenCalledWith({
+      id: 2,
+      model: 'text-model',
+      featureType: 'documentParse',
+    });
+  });
+
+  it('热点检查校验实际 Responses 路径，拒绝不受支持的地址和旧协议', async () => {
+    const providers = {
+      inspectFeatureEndpoint: jest.fn().mockResolvedValue({
+        functionType: 'chat',
+        functionLabel: '普通调用',
+        source: 'standard',
+        url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+      }),
+    };
+    const configService = new AiFeatureConfigsService(
+      {} as Repository<AiFeatureConfig>,
+      providers as unknown as KnowledgeAiProvidersService,
+      {} as MineruConfigsService,
+    );
+    const payload = {
+      providerId: 2,
+      model: 'qwen-plus',
+      featureType: 'topicDiscovery',
+      webSearchMode: 'bailianResponses',
+    } as const;
+    await expect(
+      configService.checkModelEndpoint(payload),
+    ).resolves.toMatchObject({
+      searchApiPath: '/compatible-mode/v1/responses',
+    });
+    await expect(
+      configService.checkModelEndpoint({
+        ...payload,
+        webSearchMode: 'bailianChat',
+      }),
+    ).rejects.toThrow('百炼 Responses');
+    providers.inspectFeatureEndpoint.mockResolvedValueOnce({
+      functionType: 'chat',
+      functionLabel: '普通调用',
+      source: 'configured',
+      url: 'https://tokenhub.tencentmaas.com/vendor/chat',
+    });
+    await expect(configService.checkModelEndpoint(payload)).rejects.toThrow(
+      '当前仅支持百炼',
+    );
+  });
+
   it('keeps MinerU refinement settings and validates a text model', async () => {
     const repository = {
       create: jest.fn((value: unknown) => value),

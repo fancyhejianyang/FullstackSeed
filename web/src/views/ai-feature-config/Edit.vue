@@ -1,24 +1,23 @@
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from "vue";
+import { isAxiosError } from "axios";
 import { ElMessage, type FormRules } from "element-plus";
 import Dialog from "@/components/Dialog.vue";
 import Form, { type FormField } from "@/components/Form.vue";
 import {
   createAiFeatureConfig,
+  checkAiFeatureModelEndpoint,
   getAiFeatureConfig,
   updateAiFeatureConfig,
   type AiFeatureConfig,
   type AiFeatureConfigForm,
   type AiFeatureType,
 } from "@/api/aiFeatureConfig";
-import { validateKnowledgeAiProviderModel } from "@/api/knowledgeAiProvider";
 import {
   getThirdPartyOptions,
   type ProviderOption,
   type MineruOption,
 } from "@/api/thirdPartyConfig";
-import { useUserStore } from "@/stores/user";
-const user = useUserStore();
 
 const props = defineProps<{
   row?: AiFeatureConfig | null;
@@ -36,6 +35,7 @@ const formReadyForModelValidation = ref(false);
 const validatingModel = ref(false);
 const modelValidationHint = ref("");
 let modelValidationSequence = 0;
+let dialogSession = 0;
 
 type AiFeatureConfigEditForm = AiFeatureConfigForm & {
   thinkingParametersText: string;
@@ -164,7 +164,7 @@ const fields = computed<FormField[]>(() => {
                 : form.featureType === "imageGeneration"
                   ? "用于素材管理直接生成图片；使用账号的生图目录，并按模型和功能场景自动读取厂商接口卡片。"
                   : form.featureType === "videoGeneration"
-                    ? "用于素材管理异步生成视频；只使用账号的视频模型目录和完整 DashScope 视频端点。"
+                    ? "用于素材管理异步生成视频；按账号平台、模型和功能场景读取厂商接口卡片。"
                     : form.featureType === "rerank"
                       ? "当前为 LLM 重排：模型只给召回的知识片段评分和排序，不参与最终回答。"
                       : form.featureType === "ocr"
@@ -213,15 +213,15 @@ const fields = computed<FormField[]>(() => {
         options: modelOptions,
         placeholder: modelPlaceholder.value,
         hint: validatingModel.value
-          ? `正在校验“${form.model}”是否可用…`
+          ? `正在匹配“${form.model}”的功能接口…`
           : modelValidationHint.value ||
             (isTopicFeature.value
-              ? "仅校验账号文本模型目录；联网能力在手动获取热点时验证，可能产生模型及搜索费用。"
+              ? "切换模型或联网协议时检查接口配置；实际联网能力在手动获取热点时验证，可能产生费用。"
               : isMediaGenerationFeature.value
-                ? "选择只校验媒体模型目录；实际可用性在明确发起素材生成时验证，可能计费且不会自动重试。"
+                ? "切换模型时检查对应功能的接口卡片；实际生成由素材任务明确触发，可能计费。"
                 : isRerankFeature.value
                   ? "请选择通用文本模型。系统会固定用温度 0 和内置 JSON 评分提示词调用它，不会生成最终回答。"
-                  : "切换模型后会自动调用账号接口校验；确认不存在时会从该账号模型列表中移除。"),
+                  : "切换模型后自动匹配厂商接口；无专用卡片时使用标准普通调用或识图接口。本检查不调用模型。"),
       },
     );
     if (usesTemperature.value) {
@@ -359,7 +359,7 @@ const fields = computed<FormField[]>(() => {
       component: "Switch",
       componentProps: { activeText: "支持", inactiveText: "不支持" },
       hint: form.supportsImageToImage
-        ? "素材任务可上传参考图；当前仅在 DashScope 多模态生图协议下执行，不支持时会明确报错。"
+        ? "素材任务可上传参考图，并按该模型的“参考生图”接口卡片执行；缺少卡片时明确提示。"
         : "素材任务仅允许文生图，不显示为可用的图生图配置。",
     });
   }
@@ -419,23 +419,46 @@ const rules = computed<FormRules>(() => ({
     : {}),
 }));
 
-watch(visible, async (value) => {
-  if (!value) return;
-  formReadyForModelValidation.value = false;
-  modelValidationHint.value = "";
-  loading.value = true;
-  try {
-    await fetchOptions();
-    if (props.row?.id) {
-      fillForm(await getAiFeatureConfig(props.row.id));
-    } else {
-      resetForm();
-    }
-  } finally {
+watch(
+  visible,
+  async (value) => {
+    const session = ++dialogSession;
+    modelValidationSequence += 1;
+    formReadyForModelValidation.value = false;
+    validatingModel.value = false;
+    modelValidationHint.value = "";
     loading.value = false;
-    await nextTick();
-    formReadyForModelValidation.value = true;
-  }
+    if (!value) return;
+    loading.value = true;
+    let initialized = false;
+    try {
+      const rowId = props.row?.id;
+      const [options, detail] = await Promise.all([
+        getThirdPartyOptions(),
+        rowId ? getAiFeatureConfig(rowId) : Promise.resolve(null),
+      ]);
+      if (session !== dialogSession || !visible.value) return;
+      providers.value = options.providers;
+      mineruConfigs.value = options.mineruConfigs;
+      if (detail) fillForm(detail);
+      else resetForm();
+      initialized = true;
+    } finally {
+      await nextTick();
+      if (session === dialogSession && visible.value) {
+        loading.value = false;
+        formReadyForModelValidation.value = initialized;
+        if (initialized && form.providerId && form.model)
+          void validateSelectedModel();
+      }
+    }
+  },
+  { flush: "sync" },
+);
+
+onBeforeUnmount(() => {
+  dialogSession += 1;
+  modelValidationSequence += 1;
 });
 
 watch(
@@ -462,9 +485,6 @@ watch(
     providers.value.length,
   ],
   () => {
-    modelValidationSequence += 1;
-    validatingModel.value = false;
-    modelValidationHint.value = "";
     if (!isOcrFeature.value) {
       form.useMineru = false;
       form.mineruConfigId = "";
@@ -491,10 +511,7 @@ watch(
     if (isMarkdownFeature.value) {
       form.responseFormat = "markdown";
     }
-    if (isMineruOcrFeature.value) {
-      return;
-    }
-    form.mineruConfigId = "";
+    if (!isMineruOcrFeature.value) form.mineruConfigId = "";
     const options = modelOptions.value;
     if (
       selectedProvider.value &&
@@ -507,21 +524,32 @@ watch(
 
 watch(
   () =>
-    [form.model, form.providerId, form.featureType, form.useMineru] as const,
+    [
+      form.model,
+      form.providerId,
+      form.featureType,
+      form.useMineru,
+      form.webSearchMode,
+    ] as const,
   () => {
-    if (!formReadyForModelValidation.value || !form.providerId || !form.model) {
+    const sequence = ++modelValidationSequence;
+    validatingModel.value = false;
+    modelValidationHint.value = "";
+    if (
+      !visible.value ||
+      !formReadyForModelValidation.value ||
+      !form.providerId ||
+      !form.model
+    ) {
       return;
     }
-    if (isMediaGenerationFeature.value || isTopicFeature.value) return;
-    void validateSelectedModel();
+    // 先等功能切换引起的模型目录和表单归一化完成，再检查最终选择。
+    void nextTick(() => {
+      if (sequence === modelValidationSequence) void validateSelectedModel();
+    });
   },
+  { flush: "sync" },
 );
-
-async function fetchOptions() {
-  const options = await getThirdPartyOptions();
-  providers.value = options.providers;
-  mineruConfigs.value = options.mineruConfigs;
-}
 
 function resetForm() {
   form.name = "";
@@ -623,6 +651,7 @@ function resolveThinkingParameters() {
 }
 
 async function handleSubmit() {
+  if (loading.value || submitting.value) return;
   await formRef.value?.validate();
   let payload: AiFeatureConfigForm;
   try {
@@ -635,6 +664,14 @@ async function handleSubmit() {
   }
   submitting.value = true;
   try {
+    if (!(await validateSelectedModel())) {
+      if (visible.value)
+        ElMessage.warning(
+          modelValidationHint.value ||
+            "模型选择已变化，请确认接口匹配结果后保存",
+        );
+      return;
+    }
     if (props.row?.id) {
       await updateAiFeatureConfig(props.row.id, payload);
       ElMessage.success("更新成功");
@@ -677,45 +714,47 @@ function getModelText(
 }
 
 async function validateSelectedModel() {
-  // 热点配置只在用户明确提交发现任务后调用模型，不在选择时触发计费。
-  if (form.featureType === "topicDiscovery") return;
-  if (!user.hasPermission("KnowledgeAiProvider.update")) return;
   const providerId = Number(form.providerId);
   const model = form.model?.trim() ?? "";
-  if (!providerId || !model) return;
+  if (
+    !visible.value ||
+    !formReadyForModelValidation.value ||
+    !providerId ||
+    !model
+  )
+    return false;
   const requestSequence = ++modelValidationSequence;
   validatingModel.value = true;
   modelValidationHint.value = "";
   try {
-    const result = await validateKnowledgeAiProviderModel({
-      id: providerId,
+    const result = await checkAiFeatureModelEndpoint({
+      providerId,
       model,
-      featureType: isMineruOcrFeature.value
-        ? "documentParse"
-        : form.featureType,
+      featureType: form.featureType,
+      useMineru: isMineruOcrFeature.value,
+      webSearchMode: isTopicFeature.value ? form.webSearchMode : "disabled",
     });
-    if (requestSequence !== modelValidationSequence) return;
-    providers.value = providers.value.map((item) =>
-      item.id === result.provider.id ? result.provider : item,
-    );
-    if (result.isAvailable) {
-      modelValidationHint.value = `“${model}”已通过当前账号可用性校验。`;
-      return;
-    }
-    modelValidationHint.value =
-      result.errorMessage || `“${model}”暂时无法校验。`;
-    if (result.removed) {
-      form.model = "";
-      ElMessage.warning(
-        result.disabledConfigCount
-          ? `模型“${model}”已从账号列表移除，并停用了 ${result.disabledConfigCount} 个关联配置。`
-          : `模型“${model}”已从账号列表移除，请重新选择可用模型。`,
-      );
-    }
-  } catch {
+    if (requestSequence !== modelValidationSequence) return false;
+    const source =
+      result.source === "configured"
+        ? "已匹配厂商接口"
+        : "无专用卡片，使用标准接口";
+    const search = result.searchApiPath
+      ? `；联网搜索：${result.searchApiPath}`
+      : "";
+    modelValidationHint.value = `${source}（${result.functionLabel}）：${result.apiPath}${search}。仅检查配置，未调用模型。`;
+    return true;
+  } catch (error) {
     if (requestSequence === modelValidationSequence) {
-      modelValidationHint.value = `“${model}”校验请求失败，请检查账号网络、密钥或模型授权。`;
+      const message: unknown = isAxiosError(error)
+        ? error.response?.data?.message
+        : error instanceof Error
+          ? error.message
+          : null;
+      modelValidationHint.value =
+        typeof message === "string" ? message : "接口配置检查失败，请重试。";
     }
+    return false;
   } finally {
     if (requestSequence === modelValidationSequence) {
       validatingModel.value = false;

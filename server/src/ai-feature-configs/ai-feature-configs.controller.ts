@@ -14,6 +14,7 @@ import { RequirePermissions } from '../common/decorators/require-permissions.dec
 import { AiFeatureConfigsService } from './ai-feature-configs.service';
 import {
   BatchDeleteAiFeatureConfigDto,
+  CheckAiFeatureModelEndpointDto,
   CreateAiFeatureConfigDto,
   QueryAiFeatureConfigDto,
   UpdateAiFeatureConfigDto,
@@ -30,6 +31,13 @@ export class AiFeatureConfigsController {
   @ApiOperation({ summary: '分页查询 AI 功能配置' })
   findAll(@Query() query: QueryAiFeatureConfigDto) {
     return this.configsService.findAll(query);
+  }
+
+  @Post('check-model-endpoint')
+  @RequirePermissions('Menu.read')
+  @ApiOperation({ summary: '检查功能模型对应接口配置（不调用供应商）' })
+  checkModelEndpoint(@Body() dto: CheckAiFeatureModelEndpointDto) {
+    return this.configsService.checkModelEndpoint(dto);
   }
 
   @Get(':id')

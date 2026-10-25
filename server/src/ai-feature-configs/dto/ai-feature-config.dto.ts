@@ -120,6 +120,29 @@ export class UpdateAiFeatureConfigDto extends PartialType(
   CreateAiFeatureConfigDto,
 ) {}
 
+export class CheckAiFeatureModelEndpointDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  providerId: number;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(120)
+  model: string;
+
+  @IsIn(AI_FEATURE_CONFIG_TYPES)
+  featureType: AiFeatureConfigType;
+
+  @IsBoolean()
+  @IsOptional()
+  useMineru?: boolean;
+
+  @IsIn(AI_WEB_SEARCH_MODES)
+  @IsOptional()
+  webSearchMode?: AiWebSearchMode;
+}
+
 export class QueryAiFeatureConfigDto {
   @Type(() => Number)
   @IsInt()

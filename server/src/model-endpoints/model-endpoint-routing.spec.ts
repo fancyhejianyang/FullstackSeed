@@ -39,6 +39,129 @@ function harness() {
 }
 
 describe('账号按模型功能解析调用接口', () => {
+  it.each([
+    ['chat', 'chat-model', 'chat'],
+    ['contentCreation', 'chat-model', 'chat'],
+    ['topicDiscovery', 'chat-model', 'chat'],
+    ['visualPrompt', 'chat-model', 'chat'],
+    ['documentParse', 'chat-model', 'chat'],
+    ['rerank', 'chat-model', 'chat'],
+    ['ocr', 'vision-model', 'vision'],
+    ['embedding', 'embedding-model', 'embedding'],
+    ['imageGeneration', 'seedream-image-v5.0-pro', 'textToImage'],
+    ['videoGeneration', 'video-model', 'textToVideo'],
+  ] as const)(
+    '%s 编辑检查与实际调用共用场景解析',
+    async (featureType, model, functionType) => {
+      const { service, endpoints } = harness();
+      endpoints.resolve.mockResolvedValue({
+        apiPath: `/vendor/${functionType}`,
+        protocol: 'openaiChat',
+      });
+      const fetchSpy = jest
+        .spyOn(globalThis, 'fetch')
+        .mockRejectedValue(new Error('编辑检查不得调用供应商'));
+      try {
+        const result = await service.inspectFeatureEndpoint({
+          id: 1,
+          model,
+          featureType,
+        });
+        expect(result).toMatchObject({
+          functionType,
+          source: 'configured',
+          url: `https://tokenhub.tencentmaas.com/vendor/${functionType}`,
+        });
+        expect(endpoints.resolve).toHaveBeenCalledWith(
+          'tencentTokenhub',
+          model,
+          functionType,
+        );
+        const target =
+          featureType === 'imageGeneration' || featureType === 'videoGeneration'
+            ? await service.resolveMediaTarget(1, model, featureType)
+            : featureType === 'ocr'
+              ? await service.resolveVisionTarget({ id: 1, model })
+              : featureType === 'embedding'
+                ? await service.resolveEmbeddingTarget({ id: 1, model })
+                : await service.resolveChatTarget({ id: 1, model });
+        expect(target.url).toBe(result.url);
+        expect(result).not.toHaveProperty('secretKey');
+        expect(fetchSpy).not.toHaveBeenCalled();
+      } finally {
+        fetchSpy.mockRestore();
+      }
+    },
+  );
+
+  it('编辑检查只允许标准文本回退，缺失和停用媒体卡片不回退', async () => {
+    const { service, endpoints } = harness();
+    await expect(
+      service.inspectFeatureEndpoint({
+        id: 1,
+        model: 'chat-model',
+        featureType: 'chat',
+      }),
+    ).resolves.toMatchObject({
+      source: 'standard',
+      url: 'https://tokenhub.tencentmaas.com/v1/chat/completions',
+    });
+    await expect(
+      service.inspectFeatureEndpoint({
+        id: 1,
+        model: 'seedream-image-v5.0-pro',
+        featureType: 'imageGeneration',
+      }),
+    ).rejects.toThrow('文生图');
+    await expect(
+      service.inspectFeatureEndpoint({
+        id: 1,
+        model: 'video-model',
+        featureType: 'videoGeneration',
+      }),
+    ).rejects.toThrow('文生视频');
+    endpoints.resolve.mockRejectedValueOnce(
+      new Error('当前模型功能的调用接口已停用'),
+    );
+    await expect(
+      service.inspectFeatureEndpoint({
+        id: 1,
+        model: 'chat-model',
+        featureType: 'chat',
+      }),
+    ).rejects.toThrow('已停用');
+  });
+
+  it('编辑检查拒绝未启用、缺密钥和不在对应目录的模型，保留账号原值', async () => {
+    const { service, provider } = harness();
+    const originalModels = provider.models;
+    await expect(
+      service.inspectFeatureEndpoint({
+        id: 1,
+        model: 'not-in-catalog',
+        featureType: 'chat',
+      }),
+    ).rejects.toThrow('模型列表');
+    expect(provider.models).toBe(originalModels);
+    provider.isEnabled = false;
+    await expect(
+      service.inspectFeatureEndpoint({
+        id: 1,
+        model: 'chat-model',
+        featureType: 'chat',
+      }),
+    ).rejects.toThrow('未启用');
+    provider.isEnabled = true;
+    provider.secretKey = '';
+    await expect(
+      service.inspectFeatureEndpoint({
+        id: 1,
+        model: 'chat-model',
+        featureType: 'chat',
+      }),
+    ).rejects.toThrow('未配置密钥');
+  });
+
   it('账号列表和详情由后端识别平台，不返回真实密钥', async () => {
     const { service } = harness();
     const view = await service.findOne(1);
