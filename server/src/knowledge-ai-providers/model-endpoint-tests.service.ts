@@ -23,10 +23,19 @@ import {
   modelBillingErrorMessage,
   readModelProviderError,
 } from '../common/ai/model-provider-error';
+import type { TestAiFeatureModelDto } from '../ai-feature-configs/dto/ai-feature-config.dto';
+import { createVisionChallenge } from '../agent-apps/agent-media-probe';
+import { bailianResponsesUrl } from './knowledge-web-search.service';
+import { HotTopicFetchError } from '../hot-topics/hot-topic-network';
 
 type TestTarget = Awaited<
   ReturnType<KnowledgeAiProvidersService['resolveEndpointTestTarget']>
->;
+> & {
+  functionLabel?: string;
+  ruleName?: string;
+  source?: 'configured' | 'builtin' | 'standard';
+};
+type FeatureSelection = Omit<TestAiFeatureModelDto, 'requestId'>;
 export interface ModelEndpointTestResult {
   requestId: string;
   status: 'running' | 'accepted' | 'succeeded' | 'failed' | 'unknown';
@@ -38,8 +47,18 @@ export interface ModelEndpointTestResult {
   checkedAt: string;
   model?: string;
   apiPath?: string;
+  providerId?: number;
+  functionLabel?: string;
+  ruleName?: string;
+  source?: 'configured' | 'builtin' | 'standard';
+  featureType?: TestAiFeatureModelDto['featureType'];
+  useMineru?: boolean;
+  webSearchMode?: TestAiFeatureModelDto['webSearchMode'];
 }
 interface TestRecord {
+  origin: 'card' | 'feature';
+  feature?: FeatureSelection;
+  visionMatches?: (answer: unknown) => boolean;
   endpointId: number;
   providerId: number;
   fingerprint: string;
@@ -68,7 +87,9 @@ export class ModelEndpointTestsService {
     const recent = [...this.records.entries()]
       .filter(
         ([key, item]) =>
-          key.startsWith(`${userId}:`) && item.endpointId === endpointId,
+          key.startsWith(`${userId}:`) &&
+          item.origin === 'card' &&
+          item.endpointId === endpointId,
       )
       .at(-1)?.[1];
     return {
@@ -99,10 +120,144 @@ export class ModelEndpointTestsService {
       throw new BadRequestException(
         '请按官方文档替换请求参数中的全部 REPLACE_WITH_ 占位符后再测试',
       );
-    const key = `${userId}:${dto.requestId}`;
     const fingerprint = createHash('sha256')
       .update(`${endpointId}:${dto.providerId}:${dto.model ?? ''}:${bodyText}`)
       .digest('hex');
+    return this.execute(
+      'card',
+      endpointId,
+      dto.providerId,
+      dto.requestId,
+      fingerprint,
+      userId,
+      () =>
+        dto.model === undefined
+          ? this.providers.resolveEndpointTestTarget(endpointId, dto.providerId)
+          : this.providers.resolveEndpointTestTarget(
+              endpointId,
+              dto.providerId,
+              dto.model,
+            ),
+      () => dto.requestBody,
+    );
+  }
+
+  async startFeature(dto: TestAiFeatureModelDto, userId: number) {
+    const selection: FeatureSelection = {
+      providerId: dto.providerId,
+      model: dto.model.trim(),
+      featureType: dto.featureType,
+      useMineru: !!dto.useMineru,
+      webSearchMode: dto.webSearchMode ?? 'disabled',
+    };
+    // 指纹只绑定稳定选择；随机测试图只在真正创建新请求时生成。
+    const fingerprint = createHash('sha256')
+      .update(JSON.stringify(selection))
+      .digest('hex');
+    return this.execute(
+      'feature',
+      0,
+      dto.providerId,
+      dto.requestId,
+      fingerprint,
+      userId,
+      () => this.resolveFeatureTarget(selection),
+      (target, entry) => {
+        if (target.functionType === 'vision') {
+          const challenge = createVisionChallenge();
+          entry.visionMatches = (answer) => challenge.matches(answer);
+          return {
+            model: target.model,
+            messages: [
+              {
+                role: 'user',
+                content: [
+                  { type: 'text', text: challenge.question },
+                  {
+                    type: 'image_url',
+                    image_url: {
+                      url: `data:${challenge.mimeType};base64,${challenge.data.toString('base64')}`,
+                    },
+                  },
+                ],
+              },
+            ],
+            max_tokens: 256,
+            stream: false,
+          };
+        }
+        return endpointTestTemplate({
+          modelCode: target.model,
+          functionType: target.functionType,
+          protocol: target.protocol,
+        });
+      },
+      selection,
+    );
+  }
+
+  recentFeatures(userId: number) {
+    this.prune();
+    return [...this.records.entries()]
+      .filter(
+        ([key, entry]) =>
+          key.startsWith(`${userId}:`) && entry.origin === 'feature',
+      )
+      .slice(-10)
+      .reverse()
+      .map(([, entry]) => ({ ...entry.result }));
+  }
+
+  private async resolveFeatureTarget(
+    selection: FeatureSelection,
+  ): Promise<TestTarget> {
+    const target: TestTarget = await this.providers.resolveFeatureTestTarget({
+      id: selection.providerId,
+      model: selection.model,
+      featureType:
+        selection.featureType === 'ocr' && selection.useMineru
+          ? 'documentParse'
+          : selection.featureType,
+    });
+    if (
+      selection.featureType === 'topicDiscovery' &&
+      selection.webSearchMode &&
+      selection.webSearchMode !== 'disabled'
+    ) {
+      if (selection.webSearchMode !== 'bailianResponses')
+        throw new BadRequestException('联网搜索请使用百炼 Responses 协议');
+      try {
+        target.url = bailianResponsesUrl(target.url);
+      } catch (error) {
+        if (error instanceof HotTopicFetchError)
+          throw new BadRequestException(error.message);
+        throw error;
+      }
+      target.protocol = 'openaiResponses';
+      target.functionType = 'webSearch';
+      target.functionLabel = '联网搜索';
+      target.ruleName = `${target.ruleName ?? '百炼'} · Responses 联网搜索`;
+    }
+    return target;
+  }
+
+  private async execute(
+    origin: TestRecord['origin'],
+    endpointId: number,
+    providerId: number,
+    requestId: string,
+    selectionFingerprint: string,
+    userId: number,
+    resolveTarget: () => Promise<TestTarget>,
+    buildBody: (
+      target: TestTarget,
+      entry: TestRecord,
+    ) => Record<string, unknown>,
+    feature?: FeatureSelection,
+  ) {
+    this.prune();
+    const key = `${userId}:${requestId}`;
+    const fingerprint = `${origin}:${selectionFingerprint}`;
     const previous = this.records.get(key);
     if (previous) {
       if (previous.fingerprint !== fingerprint)
@@ -122,20 +277,12 @@ export class ModelEndpointTestsService {
       );
     this.activeUsers.add(userId);
     try {
-      const target =
-        dto.model === undefined
-          ? await this.providers.resolveEndpointTestTarget(
-              endpointId,
-              dto.providerId,
-            )
-          : await this.providers.resolveEndpointTestTarget(
-              endpointId,
-              dto.providerId,
-              dto.model,
-            );
+      const target = await resolveTarget();
       const entry: TestRecord = {
+        origin,
+        feature,
         endpointId,
-        providerId: dto.providerId,
+        providerId,
         fingerprint,
         route: this.route(target),
         startedAt: Date.now(),
@@ -143,7 +290,7 @@ export class ModelEndpointTestsService {
         querying: false,
         model: target.model,
         result: {
-          requestId: dto.requestId,
+          requestId,
           status: 'running',
           message: '正在调用接口',
           httpStatus: null,
@@ -153,13 +300,24 @@ export class ModelEndpointTestsService {
           checkedAt: new Date().toISOString(),
           model: target.model,
           apiPath: new URL(target.url).pathname,
+          providerId,
+          functionLabel: target.functionLabel,
+          ruleName: target.ruleName,
+          source: target.source,
+          ...(feature
+            ? {
+                featureType: feature.featureType,
+                useMineru: feature.useMineru,
+                webSearchMode: feature.webSearchMode,
+              }
+            : {}),
         },
       };
       this.records.set(key, entry);
       this.attempts.set(userId, [...recent, Date.now()]);
       try {
         const body = {
-          ...dto.requestBody,
+          ...buildBody(target, entry),
           model: target.model,
           ...(['openaiChat', 'openaiChatSearch', 'openaiResponses'].includes(
             target.protocol,
@@ -182,9 +340,22 @@ export class ModelEndpointTestsService {
   }
 
   async query(endpointId: number, requestId: string, userId: number) {
+    return this.queryRecord('card', endpointId, requestId, userId);
+  }
+
+  async queryFeature(requestId: string, userId: number) {
+    return this.queryRecord('feature', 0, requestId, userId);
+  }
+
+  private async queryRecord(
+    origin: TestRecord['origin'],
+    endpointId: number,
+    requestId: string,
+    userId: number,
+  ) {
     this.prune();
     const entry = this.records.get(`${userId}:${requestId}`);
-    if (!entry || entry.endpointId !== endpointId)
+    if (!entry || entry.origin !== origin || entry.endpointId !== endpointId)
       throw new NotFoundException(
         '测试记录不存在或已过期，服务重启也会清空临时结果；请先核实供应商任务，避免重复生成',
       );
@@ -196,11 +367,14 @@ export class ModelEndpointTestsService {
       return { ...entry.result };
     entry.querying = true;
     try {
-      const target = await this.providers.resolveEndpointTestTarget(
-        endpointId,
-        entry.providerId,
-        entry.model,
-      );
+      const target =
+        entry.origin === 'feature' && entry.feature
+          ? await this.resolveFeatureTarget(entry.feature)
+          : await this.providers.resolveEndpointTestTarget(
+              endpointId,
+              entry.providerId,
+              entry.model,
+            );
       if (this.route(target) !== entry.route || !target.taskUrlTemplate)
         throw new BadRequestException(
           '账号或接口已变化，不能使用新路径查询旧任务',
@@ -349,6 +523,27 @@ export class ModelEndpointTestsService {
                 String(record(part).text).trim(),
             );
       if (!hasText) throw new Error('missing_content');
+      if (
+        entry.visionMatches &&
+        !entry.visionMatches(
+          typeof content === 'string'
+            ? content
+            : (content as unknown[])
+                .map((part) =>
+                  typeof record(part).text === 'string'
+                    ? record(part).text
+                    : '',
+                )
+                .join(''),
+        )
+      ) {
+        this.finish(
+          entry,
+          'unknown',
+          '接口已响应，但测试图片结果未通过核验，无法确认识图能力；不修改模型目录。',
+        );
+        return;
+      }
       this.finish(entry, 'succeeded', '接口已返回有效消息内容。');
     } else if (scene === 'embedding' || scene === 'multimodalEmbedding') {
       const first = record(

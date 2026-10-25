@@ -13,6 +13,7 @@ import {
   Max,
   Min,
   ValidateIf,
+  IsUUID,
 } from 'class-validator';
 import { PartialType } from '@nestjs/swagger';
 import {
@@ -141,6 +142,11 @@ export class CheckAiFeatureModelEndpointDto {
   @IsIn(AI_WEB_SEARCH_MODES)
   @IsOptional()
   webSearchMode?: AiWebSearchMode;
+}
+
+export class TestAiFeatureModelDto extends CheckAiFeatureModelEndpointDto {
+  @IsUUID('4')
+  requestId: string;
 }
 
 export class QueryAiFeatureConfigDto {

@@ -4,6 +4,13 @@ import { isAxiosError } from "axios";
 import { ElMessage, type FormRules } from "element-plus";
 import Dialog from "@/components/Dialog.vue";
 import Form, { type FormField } from "@/components/Form.vue";
+import Button from "@/components/Button.vue";
+import Switch from "@/components/Switch.vue";
+import {
+  FeatureModelTestQueue,
+  FeatureModelTestHistory,
+} from "@/utils/featureModelTest";
+import { getPermissionActionColor } from "@/utils/permission";
 import {
   createAiFeatureConfig,
   checkAiFeatureModelEndpoint,
@@ -12,6 +19,12 @@ import {
   type AiFeatureConfig,
   type AiFeatureConfigForm,
   type AiFeatureType,
+  type AiFeatureModelEndpointCheck,
+  type AiFeatureModelEndpointResult,
+  type AiFeatureModelTestResult,
+  testAiFeatureModel,
+  queryAiFeatureModelTest,
+  listAiFeatureModelTests,
 } from "@/api/aiFeatureConfig";
 import {
   getThirdPartyOptions,
@@ -36,6 +49,293 @@ const validatingModel = ref(false);
 const modelValidationHint = ref("");
 let modelValidationSequence = 0;
 let dialogSession = 0;
+const autoTestModel = ref(true);
+const modelTestHint = ref("");
+const modelTests = ref<AiFeatureModelTestResult[]>([]);
+const testSubmissionBusy = ref(false);
+const testQueued = ref(false);
+const queryingTests = ref<string[]>([]);
+const latestTestRequestId = ref("");
+const recentTestsError = ref("");
+const modelTestHistory =
+  new FeatureModelTestHistory<AiFeatureModelTestResult>();
+const checkedEndpoint = ref<AiFeatureModelEndpointResult | null>(null);
+let modelTestPollTimer: ReturnType<typeof setTimeout> | undefined;
+const testLabels = {
+  running: "调用中",
+  accepted: "已受理，尚未完成",
+  succeeded: "测试成功",
+  failed: "测试失败",
+  unknown: "结果待核实",
+};
+type FeatureTestJob = {
+  selection: AiFeatureModelEndpointCheck;
+  requestId: string;
+  startedAt: number;
+  sent: boolean;
+};
+const modelTestQueue = new FeatureModelTestQueue<
+  FeatureTestJob,
+  AiFeatureModelTestResult | null
+>({
+  canReuseActive: (job) => job.sent,
+  run: async (job, context) => {
+    if (!context.isCurrent()) return null;
+    if (!(await validateSelectedModel())) {
+      if (context.isCurrent()) {
+        modelTestHint.value =
+          modelValidationHint.value || "接口匹配未通过，未发起实际测试。";
+        ElMessage.error(modelTestHint.value);
+      }
+      return null;
+    }
+    if (!context.isCurrent()) return null;
+    job.startedAt = Date.now();
+    job.sent = true;
+    latestTestRequestId.value = job.requestId;
+    modelTestHint.value = `已匹配接口，正在实际测试“${job.selection.model}”…`;
+    storeModelTest(
+      {
+        ...job.selection,
+        requestId: job.requestId,
+        status: "running",
+        message: "正在实际调用所选模型。",
+        httpStatus: null,
+        responseBody: "",
+        taskId: null,
+        elapsedMilliseconds: 0,
+        checkedAt: new Date().toISOString(),
+        apiPath: checkedEndpoint.value?.apiPath,
+        ruleName: checkedEndpoint.value?.ruleName,
+      },
+      true,
+    );
+    return testAiFeatureModel({ ...job.selection, requestId: job.requestId });
+  },
+  onResult: (job, result, context) => {
+    if (!result) return;
+    const stored = storeModelTest(result);
+    if (
+      context.isCurrent() &&
+      selectionKey(job.selection) === selectionKey(currentTestSelection())
+    ) {
+      latestTestRequestId.value = result.requestId;
+      modelTestHint.value = `${testLabels[stored.status]}：${stored.message}`;
+      notifyModelTest(stored);
+      scheduleModelTestPoll(stored);
+    }
+  },
+  onError: (job, error, context) => {
+    if (!job.sent) return;
+    const status = isAxiosError(error) ? error.response?.status : undefined;
+    const rejected =
+      status !== undefined && status >= 400 && status < 500 && status !== 408;
+    const result: AiFeatureModelTestResult = {
+      ...job.selection,
+      requestId: job.requestId,
+      status: rejected ? "failed" : "unknown",
+      message: `${modelTestError(error)}${rejected ? "" : " 供应商可能已受理，请先查询原测试结果；不会自动重投。"}`,
+      httpStatus: status ?? null,
+      responseBody: "",
+      taskId: null,
+      elapsedMilliseconds: Date.now() - job.startedAt,
+      checkedAt: new Date().toISOString(),
+    };
+    const stored = storeModelTest(result, true);
+    if (context.isCurrent()) {
+      latestTestRequestId.value = job.requestId;
+      modelTestHint.value = `${testLabels[stored.status]}：${stored.message}`;
+      if (status !== 401 && stored === result) notifyModelTest(stored);
+    }
+  },
+  onState: (busy, queued) => {
+    testSubmissionBusy.value = busy;
+    testQueued.value = queued;
+  },
+});
+
+function modelTestError(error: unknown) {
+  const value: unknown = isAxiosError(error)
+    ? error.response?.data?.message
+    : error instanceof Error
+      ? error.message
+      : null;
+  return typeof value === "string"
+    ? value
+    : "测试请求未完成，请稍后查询原结果。";
+}
+function currentTestSelection(): AiFeatureModelEndpointCheck {
+  return {
+    providerId: Number(form.providerId),
+    model: form.model?.trim() ?? "",
+    featureType: form.featureType,
+    useMineru: isMineruOcrFeature.value,
+    webSearchMode: isTopicFeature.value ? form.webSearchMode : "disabled",
+  };
+}
+function selectionKey(selection: Partial<AiFeatureModelEndpointCheck>) {
+  return JSON.stringify([
+    selection.providerId,
+    selection.model,
+    selection.featureType,
+    !!selection.useMineru,
+    selection.webSearchMode ?? "disabled",
+  ]);
+}
+function storeModelTest(
+  result: AiFeatureModelTestResult,
+  local = false,
+  prioritize = true,
+) {
+  const records = modelTestHistory.store(result, local, prioritize);
+  modelTests.value = records;
+  return records.find((item) => item.requestId === result.requestId) ?? result;
+}
+function notifyModelTest(result: AiFeatureModelTestResult) {
+  const text = `模型“${result.model ?? "未知"}”：${testLabels[result.status]}。${result.message}`;
+  if (result.status === "succeeded") ElMessage.success(text);
+  else if (result.status === "failed") ElMessage.error(text);
+  else if (result.status === "unknown") ElMessage.warning(text);
+  else ElMessage.info(text);
+}
+function stopModelTestPoll() {
+  if (modelTestPollTimer) clearTimeout(modelTestPollTimer);
+  modelTestPollTimer = undefined;
+}
+function scheduleModelTestPoll(result: AiFeatureModelTestResult) {
+  stopModelTestPoll();
+  if (
+    !visible.value ||
+    result.requestId !== latestTestRequestId.value ||
+    !["running", "accepted"].includes(result.status)
+  )
+    return;
+  const age =
+    result.elapsedMilliseconds +
+    Math.max(0, Date.now() - Date.parse(result.checkedAt));
+  if (age >= 15 * 60000) {
+    const stopped = {
+      ...result,
+      status: "unknown" as const,
+      message:
+        "已停止自动查询，供应商任务可能继续；请手动查询原测试结果，不会重新生成。",
+    };
+    storeModelTest(stopped, true);
+    modelTestHint.value = stopped.message;
+    notifyModelTest(stopped);
+    return;
+  }
+  modelTestPollTimer = setTimeout(() => {
+    void queryModelTest(result, false);
+  }, 3000);
+}
+async function queryModelTest(
+  record: AiFeatureModelTestResult,
+  explicit = true,
+) {
+  if (!visible.value || queryingTests.value.includes(record.requestId)) return;
+  const session = dialogSession;
+  queryingTests.value = [...queryingTests.value, record.requestId];
+  try {
+    const result = await queryAiFeatureModelTest(record.requestId);
+    if (session !== dialogSession || !visible.value) return;
+    const stored = storeModelTest(result);
+    const current =
+      result.requestId === latestTestRequestId.value &&
+      selectionKey(result) === selectionKey(currentTestSelection());
+    if (current) {
+      modelTestHint.value = `${testLabels[stored.status]}：${stored.message}`;
+      scheduleModelTestPoll(stored);
+    }
+    if (
+      explicit ||
+      (current &&
+        stored.status !== record.status &&
+        !["running", "accepted"].includes(stored.status))
+    )
+      notifyModelTest(stored);
+  } catch (error) {
+    if (session !== dialogSession || !visible.value) return;
+    const result: AiFeatureModelTestResult = {
+      ...record,
+      status: "unknown",
+      message: modelTestError(error),
+      checkedAt: new Date().toISOString(),
+    };
+    const stored = storeModelTest(result, true);
+    if (record.requestId === latestTestRequestId.value) {
+      stopModelTestPoll();
+      modelTestHint.value = stored.message;
+    }
+    if (
+      !(isAxiosError(error) && error.response?.status === 401) &&
+      stored === result
+    )
+      notifyModelTest(stored);
+  } finally {
+    if (session === dialogSession)
+      queryingTests.value = queryingTests.value.filter(
+        (id) => id !== record.requestId,
+      );
+  }
+}
+async function loadRecentModelTests(session = dialogSession) {
+  recentTestsError.value = "";
+  try {
+    const records = await listAiFeatureModelTests();
+    if (session !== dialogSession || !visible.value) return;
+    for (const record of records) storeModelTest(record, false, false);
+  } catch (error) {
+    if (session === dialogSession)
+      recentTestsError.value = modelTestError(error);
+  }
+}
+function queueModelTest(immediate = false) {
+  if (
+    !visible.value ||
+    !formReadyForModelValidation.value ||
+    !form.providerId ||
+    !form.model ||
+    submitting.value
+  )
+    return;
+  const selection = currentTestSelection();
+  const active = modelTestQueue.activeValueFor(selectionKey(selection));
+  if (active) {
+    modelTestQueue.schedule(active, selectionKey(selection), immediate);
+    latestTestRequestId.value = active.requestId;
+    modelTestHint.value = `正在实际测试“${selection.model}”，未重复提交。`;
+    return;
+  }
+  const previous = modelTests.value.find(
+    (item) =>
+      selectionKey(item) === selectionKey(selection) &&
+      ["running", "accepted", "unknown"].includes(item.status),
+  );
+  if (previous && !immediate) {
+    latestTestRequestId.value = previous.requestId;
+    modelTestHint.value = `保留原测试：${previous.message}；本次切换未重新提交。`;
+    if (["running", "accepted"].includes(previous.status))
+      scheduleModelTestPoll(previous);
+    else notifyModelTest(previous);
+    return;
+  }
+  if (previous && ["running", "accepted"].includes(previous.status)) {
+    latestTestRequestId.value = previous.requestId;
+    void queryModelTest(previous);
+    return;
+  }
+  const job = modelTestQueue.schedule(
+    { selection, requestId: crypto.randomUUID(), startedAt: 0, sent: false },
+    selectionKey(selection),
+    immediate,
+  );
+  latestTestRequestId.value = job.requestId;
+  if (testQueued.value)
+    modelTestHint.value = testSubmissionBusy.value
+      ? "已排队，前次提交结束后只测试最后选择的模型。"
+      : "即将实际测试当前选择的模型…";
+}
 
 type AiFeatureConfigEditForm = AiFeatureConfigForm & {
   thinkingParametersText: string;
@@ -214,14 +514,21 @@ const fields = computed<FormField[]>(() => {
         placeholder: modelPlaceholder.value,
         hint: validatingModel.value
           ? `正在匹配“${form.model}”的功能接口…`
-          : modelValidationHint.value ||
+          : modelTestHint.value ||
+            modelValidationHint.value ||
             (isTopicFeature.value
-              ? "切换模型或联网协议时检查接口配置；实际联网能力在手动获取热点时验证，可能产生费用。"
+              ? "切换模型或联网协议时按当前设置真实测试；实际内容效果仍以业务任务为准。"
               : isMediaGenerationFeature.value
-                ? "切换模型时检查对应功能的接口卡片；实际生成由素材任务明确触发，可能计费。"
+                ? "开启自动测试时切换模型会生成测试内容，可能计费；不会保存为业务素材。"
                 : isRerankFeature.value
                   ? "请选择通用文本模型。系统会固定用温度 0 和内置 JSON 评分提示词调用它，不会生成最终回答。"
-                  : "切换模型后自动匹配厂商接口；无专用卡片时使用标准普通调用或识图接口。本检查不调用模型。"),
+                  : "切换模型后匹配厂商接口。开启下方自动测试时会真实调用，可能产生费用。"),
+      },
+      {
+        prop: "modelTestControls",
+        label: "真实测试",
+        slot: true,
+        hint: "开关仅用于当前窗口，不保存到配置。关闭自动测试后，仍可手动测试或只查询已提交任务。",
       },
     );
     if (usesTemperature.value) {
@@ -427,8 +734,19 @@ watch(
     formReadyForModelValidation.value = false;
     validatingModel.value = false;
     modelValidationHint.value = "";
+    checkedEndpoint.value = null;
+    modelTestQueue.close();
+    stopModelTestPoll();
+    latestTestRequestId.value = "";
+    modelTestHint.value = "";
+    queryingTests.value = [];
     loading.value = false;
     if (!value) return;
+    modelTestQueue.open();
+    autoTestModel.value = true;
+    modelTests.value = [];
+    modelTestHistory.clear();
+    const recentTestsPromise = loadRecentModelTests(session);
     loading.value = true;
     let initialized = false;
     try {
@@ -444,9 +762,16 @@ watch(
       else resetForm();
       initialized = true;
     } finally {
+      // 先恢复已提交任务，避免初始化结束后选择模型时重复提交旧的异步测试。
+      await recentTestsPromise;
       await nextTick();
       if (session === dialogSession && visible.value) {
         loading.value = false;
+        if (recentTestsError.value) {
+          autoTestModel.value = false;
+          modelTestHint.value =
+            "最近测试记录读取失败，已暂停自动测试；请先读取记录核实原任务，或明确手动测试。";
+        }
         formReadyForModelValidation.value = initialized;
         if (initialized && form.providerId && form.model)
           void validateSelectedModel();
@@ -459,6 +784,19 @@ watch(
 onBeforeUnmount(() => {
   dialogSession += 1;
   modelValidationSequence += 1;
+  modelTestQueue.close();
+  stopModelTestPoll();
+});
+
+watch(autoTestModel, (enabled) => {
+  if (!enabled) {
+    modelTestQueue.cancelPending();
+    stopModelTestPoll();
+    modelTestHint.value = "已关闭自动测试；切换模型只检查配置，仍可手动测试。";
+  } else if (formReadyForModelValidation.value) {
+    modelTestHint.value =
+      "已开启自动测试，下次切换模型或账号时将真实调用，可能计费。";
+  }
 });
 
 watch(
@@ -533,6 +871,10 @@ watch(
     ] as const,
   () => {
     const sequence = ++modelValidationSequence;
+    modelTestQueue.cancelPending();
+    stopModelTestPoll();
+    latestTestRequestId.value = "";
+    modelTestHint.value = "";
     validatingModel.value = false;
     modelValidationHint.value = "";
     if (
@@ -546,7 +888,8 @@ watch(
     // 先等功能切换引起的模型目录和表单归一化完成，再检查最终选择。
     void nextTick(() => {
       if (sequence === modelValidationSequence)
-        void validateSelectedModel(true);
+        if (autoTestModel.value) queueModelTest();
+        else void validateSelectedModel(true);
     });
   },
   { flush: "sync" },
@@ -653,6 +996,9 @@ function resolveThinkingParameters() {
 
 async function handleSubmit() {
   if (loading.value || submitting.value) return;
+  // 保存只检查配置，取消尚未发出的自动测试；已提交请求不重复发送。
+  modelTestQueue.cancelPending();
+  stopModelTestPoll();
   await formRef.value?.validate();
   let payload: AiFeatureConfigForm;
   try {
@@ -736,6 +1082,7 @@ async function validateSelectedModel(notify = false) {
       webSearchMode: isTopicFeature.value ? form.webSearchMode : "disabled",
     });
     if (requestSequence !== modelValidationSequence) return false;
+    checkedEndpoint.value = result;
     const source =
       result.source === "standard"
         ? "使用自定义平台标准接口"
@@ -824,13 +1171,119 @@ function joinModelTexts(...values: Array<string | null | undefined>) {
     @confirm="handleSubmit"
   >
     <div v-loading="loading">
+      <el-alert
+        class="ai-feature-config-edit__test-notice"
+        title="开启自动测试后，切换账号、模型或功能会真实调用，可能计费；图片/视频会生成测试内容。打开、回显和保存不发起实际测试。关闭窗口不取消已提交的供应商任务。"
+        type="warning"
+        :closable="false"
+      />
       <Form
         ref="formRef"
         v-model="form"
         :fields="fields"
         :rules="rules"
         label-width="110px"
-      />
+      >
+        <template #field-modelTestControls>
+          <div class="ai-feature-config-edit__test-controls">
+            <Switch
+              v-model="autoTestModel"
+              active-text="切换时自动测试"
+              inactive-text="仅手动测试"
+            />
+            <Button
+              perm="Menu.read"
+              icon="Connection"
+              :confirm="false"
+              :loading="testSubmissionBusy"
+              :disabled="
+                loading ||
+                submitting ||
+                testSubmissionBusy ||
+                !form.providerId ||
+                !form.model
+              "
+              @click="queueModelTest(true)"
+              >立即测试（可能计费）</Button
+            >
+          </div>
+        </template>
+      </Form>
+      <el-collapse
+        v-if="modelTests.length || recentTestsError"
+        class="ai-feature-config-edit__tests"
+      >
+        <el-collapse-item
+          :title="`最近真实测试（${modelTests.length}）`"
+          name="recent-model-tests"
+        >
+          <el-alert
+            v-if="recentTestsError"
+            :title="recentTestsError"
+            type="warning"
+            :closable="false"
+          />
+          <Button
+            v-if="recentTestsError"
+            perm="Menu.read"
+            :confirm="false"
+            @click="loadRecentModelTests()"
+            >重新读取记录</Button
+          >
+          <article
+            v-for="record in modelTests"
+            :key="record.requestId"
+            class="ai-feature-config-edit__test-record"
+          >
+            <div class="ai-feature-config-edit__test-heading">
+              <strong>{{ record.model }}</strong>
+              <el-tag
+                :type="
+                  getPermissionActionColor(
+                    record.status === 'succeeded'
+                      ? 'create'
+                      : record.status === 'failed'
+                        ? 'delete'
+                        : 'read',
+                  )
+                "
+                >{{ testLabels[record.status] }}</el-tag
+              >
+              <Button
+                v-if="!['succeeded', 'failed'].includes(record.status)"
+                perm="Menu.read"
+                link
+                :confirm="false"
+                :loading="queryingTests.includes(record.requestId)"
+                @click="queryModelTest(record)"
+                >查询原测试</Button
+              >
+            </div>
+            <p>{{ record.message }}</p>
+            <div>
+              {{ record.functionLabel || record.featureType || "模型测试" }} ·
+              账号：{{
+                providers.find((item) => item.id === record.providerId)?.name ||
+                record.providerId ||
+                "未记录"
+              }}
+            </div>
+            <div v-if="record.ruleName">{{ record.ruleName }}</div>
+            <div>
+              HTTP：{{ record.httpStatus ?? "暂无响应" }} · 耗时：{{
+                (record.elapsedMilliseconds / 1000).toFixed(2)
+              }}
+              秒 · {{ new Date(record.checkedAt).toLocaleString() }}
+            </div>
+            <div v-if="record.taskId">供应商任务：{{ record.taskId }}</div>
+            <div>测试编号：{{ record.requestId }}</div>
+          </article>
+          <p class="ai-feature-config-edit__test-retention">
+            记录仅供本次账号和模型测试核实，服务端最多保留 30
+            分钟，重启后清空；结果不确定时先查询原测试，避免重复生成。
+          </p>
+        </el-collapse-item>
+      </el-collapse>
       <div v-if="isRerankFeature" class="ai-feature-config-edit__rerank-tip">
         LLM 重排固定以温度 0 和 JSON 评分格式执行，系统会把“用户问题 +
         初步召回片段”交给所选模型重新排序；聊天提示词、Think
@@ -841,6 +1294,32 @@ function joinModelTexts(...values: Array<string | null | undefined>) {
 </template>
 
 <style scoped>
+.ai-feature-config-edit__test-notice {
+  margin-bottom: 16px;
+}
+.ai-feature-config-edit__test-controls,
+.ai-feature-config-edit__test-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.ai-feature-config-edit__tests {
+  margin-top: 16px;
+}
+.ai-feature-config-edit__test-record {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.ai-feature-config-edit__test-record p {
+  margin: 6px 0;
+}
+.ai-feature-config-edit__test-retention {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
 .ai-feature-config-edit__rerank-tip {
   margin-top: 8px;
   color: #909399;

@@ -8,6 +8,7 @@ import {
   Patch,
   Post,
   Query,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermissions } from '../common/decorators/require-permissions.decorator';
@@ -18,13 +19,46 @@ import {
   CreateAiFeatureConfigDto,
   QueryAiFeatureConfigDto,
   UpdateAiFeatureConfigDto,
+  TestAiFeatureModelDto,
 } from './dto/ai-feature-config.dto';
+import {
+  CurrentUser,
+  type AuthUser,
+} from '../common/decorators/current-user.decorator';
+import { ModelEndpointTestsService } from '../knowledge-ai-providers/model-endpoint-tests.service';
 
 @ApiTags('AiFeatureConfig')
 @ApiBearerAuth()
 @Controller('ai-feature-configs')
 export class AiFeatureConfigsController {
-  constructor(private readonly configsService: AiFeatureConfigsService) {}
+  constructor(
+    private readonly configsService: AiFeatureConfigsService,
+    private readonly tests: ModelEndpointTestsService,
+  ) {}
+
+  @Post('test-model')
+  @RequirePermissions('Menu.read')
+  @ApiOperation({ summary: '实际测试当前所选模型，可能计费，不保存业务配置' })
+  testModel(@Body() dto: TestAiFeatureModelDto, @CurrentUser() user: AuthUser) {
+    return this.tests.startFeature(dto, user.userId);
+  }
+
+  @Get('model-tests')
+  @RequirePermissions('Menu.read')
+  @ApiOperation({ summary: '本人最近十次功能模型测试，不重新调用模型' })
+  recentModelTests(@CurrentUser() user: AuthUser) {
+    return this.tests.recentFeatures(user.userId);
+  }
+
+  @Get('model-tests/:requestId')
+  @RequirePermissions('Menu.read')
+  @ApiOperation({ summary: '读取功能模型测试或查询原任务，不重新生成' })
+  queryModelTest(
+    @Param('requestId', new ParseUUIDPipe({ version: '4' })) requestId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.tests.queryFeature(requestId, user.userId);
+  }
 
   @Get()
   @RequirePermissions('Menu.read')

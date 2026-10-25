@@ -1,5 +1,8 @@
 import request from "@/utils/request";
-import type { ModelFunction } from "@/api/modelEndpoint";
+import type {
+  ModelFunction,
+  ModelEndpointTestResult,
+} from "@/api/modelEndpoint";
 
 export type AiFeatureType =
   | "chat"
@@ -92,6 +95,40 @@ export function checkAiFeatureModelEndpoint(data: AiFeatureModelEndpointCheck) {
   return request.post<unknown, AiFeatureModelEndpointResult>(
     "/ai-feature-configs/check-model-endpoint",
     data,
+    { silentError: true },
+  );
+}
+
+export interface AiFeatureModelTestResult extends ModelEndpointTestResult {
+  providerId?: number;
+  featureType?: AiFeatureType;
+  useMineru?: boolean;
+  webSearchMode?: AiWebSearchMode;
+  ruleName?: string;
+  functionLabel?: string;
+  source?: "configured" | "builtin" | "standard";
+}
+
+export function testAiFeatureModel(
+  data: AiFeatureModelEndpointCheck & { requestId: string },
+) {
+  return request.post<unknown, AiFeatureModelTestResult>(
+    "/ai-feature-configs/test-model",
+    data,
+    { timeout: 75000, silentError: true },
+  );
+}
+
+export function queryAiFeatureModelTest(requestId: string) {
+  return request.get<unknown, AiFeatureModelTestResult>(
+    `/ai-feature-configs/model-tests/${requestId}`,
+    { timeout: 35000, silentError: true },
+  );
+}
+
+export function listAiFeatureModelTests() {
+  return request.get<unknown, AiFeatureModelTestResult[]>(
+    "/ai-feature-configs/model-tests",
     { silentError: true },
   );
 }

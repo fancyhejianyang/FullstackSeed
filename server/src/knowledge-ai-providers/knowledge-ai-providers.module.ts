@@ -22,6 +22,10 @@ import { ModelEndpointTestsService } from './model-endpoint-tests.service';
     KnowledgeWebSearchService,
     ModelEndpointTestsService,
   ],
-  exports: [KnowledgeAiProvidersService, KnowledgeWebSearchService],
+  exports: [
+    KnowledgeAiProvidersService,
+    KnowledgeWebSearchService,
+    ModelEndpointTestsService,
+  ],
 })
 export class KnowledgeAiProvidersModule {}

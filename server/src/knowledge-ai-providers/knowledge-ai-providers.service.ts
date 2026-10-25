@@ -315,6 +315,53 @@ export class KnowledgeAiProvidersService {
     };
   }
 
+  /** 功能编辑器测试与正式业务使用相同的目录、停用状态和模型功能解析。 */
+  async resolveFeatureTestTarget(payload: {
+    id: number;
+    model: string;
+    featureType: AiModelFeatureType;
+  }) {
+    const provider = await this.findEntity(payload.id);
+    const model = payload.model.trim();
+    if (!model || /[\s*?]/.test(model))
+      throw new BadRequestException('请选择具体测试模型');
+    const { endpoint, url, functionType } = await this.resolveFeatureEndpoint(
+      provider,
+      payload.featureType,
+      model,
+    );
+    return {
+      model,
+      functionType,
+      protocol:
+        endpoint?.protocol ??
+        (functionType === 'embedding'
+          ? ('openaiEmbedding' as const)
+          : ('openaiChat' as const)),
+      executionMode: endpoint?.executionMode ?? ('sync' as const),
+      taskMethod: endpoint
+        ? protocolTaskMethod(endpoint.protocol)
+        : ('GET' as const),
+      url,
+      taskUrlTemplate:
+        endpoint?.taskApiPath && this.endpoints
+          ? this.endpoints.buildUrl(
+              this.applyWorkspaceId(provider),
+              endpoint.taskApiPath,
+            )
+          : null,
+      secretKey: this.normalizeSecretKey(provider.secretKey),
+      functionLabel: FUNCTION_LABELS[functionType],
+      source: endpoint?.source ?? ('standard' as const),
+      ruleName:
+        endpoint?.source === 'builtin'
+          ? endpoint.modelName
+          : endpoint
+            ? `模型专用 · ${model}（${FUNCTION_LABELS[functionType]}）`
+            : '自定义平台标准接口',
+    };
+  }
+
   async endpointTestAccounts(
     endpointId: number,
   ): Promise<ModelEndpointTestAccount[]> {

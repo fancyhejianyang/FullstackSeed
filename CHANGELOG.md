@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-10-25 AI 功能配置切换模型支持真实测试
+
+- 编辑页新增默认开启、仅当前窗口生效的真实测试开关和手动测试入口，明确可能计费，图片/视频会生成系统测试内容。初始化/回显完成并恢复最近记录后，用户切换有效账号、模型或功能场景，最终选择经 400ms 防抖和只读配置匹配后才提交真实测试；打开、初始化、回显、保存均不请求供应商。关闭自动测试时保留原配置检查，开启时配置匹配阶段静默，仅突出实际测试结果。失败/欠费/待核实通过 ElMessage 返回，不删除模型或停用关联配置，不阻止保存接口匹配合法的配置。
+- 新增配置页 POST `/ai-feature-configs/test-model`、GET `/ai-feature-configs/model-tests`、GET `/ai-feature-configs/model-tests/:requestId`，沿用 `Menu.read` 并置于 `:id` 路由之前。输入复用功能检查字段并增加 UUID；不接收供应商地址、密钥、业务提示词或自定义测试体。目标继续按共用模型专用/系统通用规则解析；文本类测试连通性，MinerU 只测整理文本模型，OCR 使用随机色块 PNG 并核验真实结果，图片/视频按当前功能模板生成测试，联网使用支持的 Responses+web_search 并核验检索证据。测试不等于完整业务流程验收，不保存生成素材。
+- 扩展并复用厂商卡片测试 runner，记录按用户和 `card/feature` 来源隔离，卡片查询/恢复与功能页查询/最近记录不能交叉读取，共享已有并发、频率和容量限制。功能测试幂等指纹绑定稳定 DTO，随机 OCR 图只在首次请求生成，重复编号不会再次请求。请求错误、欠费、未知状态、异步已受理和成功保持区分；后续仅查询原供应商任务，路径变化后不使用新配置查询旧任务，不自动重新生成。
+- 前端抽出调度与历史合并工具：每次只保留最新待测选择，等待在途提交结束后再处理；已提交 A→B→A 复用原 A，尚未发出 POST 的失效预检会重新排队，旧结果只更新历史、不串当前模型提示。关闭/保存取消未发送任务，网络不确定不自动重投，同选择已有运行/受理记录时只查询；显式重新测试保留费用提示。初始化等待历史恢复，恢复失败先暂停自动测试；最近十条记录可展开核实与查询，服务端仍最多保留 30 分钟、重启清空。
+- 结果沿用已有 `ModelEndpointTestResult`，增加可选 `providerId/functionLabel/ruleName/source/featureType/useMineru/webSearchMode`，两端字段对齐；服务器权威结果优先于本地网络未知占位，迟到响应不会把成功状态回退，提示、历史和轮询使用相同最终结果。无新增数据库表、实体字段、迁移或永久可用状态。
+- 新增文件：`server/src/knowledge-ai-providers/feature-model-tests.service.spec.ts`、`web/src/utils/featureModelTest.ts`、`web/src/utils/featureModelTest.test.mjs`。
+- 修改文件：`server/src/ai-feature-configs/dto/ai-feature-config.dto.ts`、`server/src/ai-feature-configs/ai-feature-configs.controller.ts`、`server/src/knowledge-ai-providers/knowledge-ai-providers.module.ts`、`server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`、`server/src/knowledge-ai-providers/model-endpoint-tests.service.ts`、`web/src/api/aiFeatureConfig.ts`、`web/src/views/ai-feature-config/Edit.vue`、`.design-spec.md`、本文件。删除文件：无。用户已有 `web/auto-imports.d.ts`、`web/src/api/hotTopic.ts` 改动保留且不纳入提交。
+- 验证：相关后端 19 套件 317 项模拟测试与前端调度/历史 9 项测试通过，覆盖来源/用户隔离、真实模型参数与固定样例、OCR 幂等/结果核验、欠费、异步原任务查询、搜索证据、限频并发、快速切换、关闭/保存取消、网络未知不重投和历史恢复竞态。定向 ESLint/格式、前后端业务类型、实体列检查、组件复用扫描、生产构建和 diff 检查通过；前端保留既有 PURE 注释及大分块提示。未启动/重启服务、未改数据库或调用真实付费模型。更新前后端后，在功能配置编辑页切换模型即可按开关进行真实测试。
+
 ### 2026-10-25 将已确认的模型拒绝报错转换为欠费提示
 
 - 按用户确认，将完整英文 `Access to model denied. Please make sure you are eligible for using the model` 转换为固定中文“大模型账号已欠费，请充值后重试。”。新增共享识别函数，只匹配该完整报错或已转换中文；JSON 仅访问错误封装字段，不扫描正常回答/提示词/凭据，不将普通 AccessDenied、403、鉴权或限流扩大认定为欠费。媒体错误体最多读取 64 KB，支持 JSON 与纯文本，读取失败沿用原提示。
