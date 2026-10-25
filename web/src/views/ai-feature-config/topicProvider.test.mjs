@@ -162,7 +162,7 @@ test('切回百炼不自动重新开启联网', async (t) => {
   );
 });
 
-test('腾讯原生搜索按模型卡片校验，回填保持选择且不触发真实请求', async (t) => {
+test('腾讯原生搜索使用系统规则，回填保持选择且不触发真实请求', async (t) => {
   const h = await harness(
     t,
     { providerId: 2, model: 'hy3', webSearchMode: 'tokenhubSearch' },
@@ -180,7 +180,11 @@ test('腾讯原生搜索按模型卡片校验，回填保持选择且不触发�
   assert.equal(h.form.webSearchMode, 'tokenhubSearch');
   assert.equal(h.scheduled.length, 0);
   assert.equal(h.checked.length, 0);
-  assert.match(vue.unref(h.searchField().hint), /按当前模型.*接口卡片/);
+  assert.match(
+    vue.unref(h.searchField().hint),
+    /自动选择联网接口.*无需逐个配置卡片.*专用卡片优先/,
+  );
+  assert.match(vue.unref(h.searchField().hint), /以真实测试返回的搜索来源为准/);
   h.formReadyForModelValidation.value = true;
   assert.equal(await h.validateSelectedModel(), true);
   assert.equal(h.checked.length, 1);
@@ -194,9 +198,14 @@ test('腾讯切换模型及同平台账号保留原生搜索，仅检查最终�
     t,
     { providerId: 2, model: 'hy3', webSearchMode: 'tokenhubSearch' },
     {
-      checkEndpoint: async () => {
-        throw new Error('当前模型缺少已启用的联网搜索接口卡片');
-      },
+      checkEndpoint: async () => ({
+        functionType: 'chat',
+        functionLabel: '普通调用',
+        source: 'builtin',
+        ruleName: '腾讯普通调用',
+        apiPath: '/v1/chat/completions',
+        searchApiPath: '/v1/responses',
+      }),
     },
   );
   h.formReadyForModelValidation.value = true;
@@ -208,9 +217,12 @@ test('腾讯切换模型及同平台账号保留原生搜索，仅检查最终�
   assert.equal(h.scheduled.length, 1);
   assert.equal(h.scheduled[0].selection.model, 'deepseek-v4-flash-202605');
   assert.equal(h.scheduled[0].selection.webSearchMode, 'tokenhubSearch');
-  assert.equal(await h.validateSelectedModel(), false);
+  assert.equal(await h.validateSelectedModel(), true);
   assert.equal(h.checked.at(-1).model, 'deepseek-v4-flash-202605');
-  assert.match(h.modelValidationHint.value, /缺少.*联网搜索接口卡片/);
+  assert.match(
+    h.modelValidationHint.value,
+    /联网搜索：\/v1\/responses.*仅检查配置，未调用模型/,
+  );
   assert.equal(h.form.model, 'deepseek-v4-flash-202605');
   assert.equal(h.form.webSearchMode, 'tokenhubSearch');
   h.form.providerId = 5;

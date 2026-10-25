@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-10-25 将百炼与腾讯联网搜索格式内置为系统规则
+
+- 按用户要求取消联网搜索必须逐模型新建专用卡片的前置条件。在原六张系统规则外增加三张只读联网卡片：百炼 Responses（`-7`）、腾讯默认 Responses（`-8`）、腾讯 DeepSeek Chat（`-9`）。腾讯四个精确编码 `deepseek-v4-flash`、`deepseek-v4-pro`、`deepseek-v4-flash-0731`、`deepseek-v4-pro-0813` 使用 Chat 搜索，其他账号文本目录中的完整型号按默认 Responses 格式尝试；不替换原厂别名、版本或请求 model，不将默认格式匹配当作厂商能力或账号开通的证明。
+- 两家均按“模型专用覆盖优先 → 系统通用”解析联网目标，配置检查、保存、功能真实测试、卡片调试及热点业务共用规则。已停用的专用卡片直接阻止，软删除后恢复默认；已有人工编辑和历史卡片不改写、不删除。新补官方预设排除五张与系统格式相同的联网卡片，专用预设由 186 项变为 181 项，不生成可编辑影子配置。三张系统卡仅列出实际归属该规则的账号文本模型，腾讯两种协议不能从错误卡片跨越提交。
+- 百炼独立解析 `webSearch`，不再从普通 Chat 卡片路径派生搜索地址，保留官方同源 HTTPS/标准端口及 `/compatible-mode/v1/responses` 校验，Coding Plan 地址不能用于此搜索入口，普通 Coding Chat 保持原行为。腾讯默认使用 `tools: web_search`，四个 DeepSeek 精确型号使用 `web_search_options`；轻量搜索和 `low` 推理强度固定于请求构造，避免实际接口拒绝 `no_think`。百炼参数保持独立。卡片模板与功能测试、正式搜索共用请求构造。
+- 配置页腾讯选项改为“系统自动匹配”，去掉“无精确卡片不能搜”的提示；保留百炼选项和跨平台检查，不自动开启旧配置的联网方式。系统卡片页面明确默认格式不代表联网能力。真实搜索继续核验供应商工具调用和结构化来源，普通 HTTP 200、正文中的链接或用量计数不能冒充成功；无来源消息提示核对模型能力与账号联网服务，不自动更换协议、模型或重投付费请求。
+- 使用用户明确授权的腾讯凭据进行了六次短请求（凭据不回显、不写文件、不入库）：第一轮 Hy3 Responses 和 GLM-5.3 Responses 返回 200，但无搜索调用/来源；DeepSeek V4 Flash Chat 的 `no_think` 返回 400 参数拒绝。第二轮均改为 `low`，三型号均返回 200，依然无可核验来源。因此本次只确认请求可返回和参数修复，不能声明该账号或这些型号已成功联网。未测试百炼真实账号，不将腾讯结果外推为百炼实测结果，未再追加付费探测。
+- 新增文件：无。删除文件：无。修改文件（后端）：`server/src/model-endpoints/model-endpoint.builtins.ts`、`server/src/model-endpoints/model-endpoints.service.ts`、`server/src/model-endpoints/model-endpoint.builtins.spec.ts`、`server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`、`server/src/knowledge-ai-providers/knowledge-web-search-target.spec.ts`、`server/src/knowledge-ai-providers/knowledge-web-search.utils.ts`、`server/src/knowledge-ai-providers/knowledge-web-search.tokenhub.spec.ts`、`server/src/knowledge-ai-providers/model-endpoint-test.utils.ts`、`server/src/knowledge-ai-providers/model-endpoint-tests.service.spec.ts`。
+- 修改文件（前端及文档）：`web/src/views/ai-feature-config/Edit.vue`、`web/src/views/ai-feature-config/topicProvider.test.mjs`、`web/src/views/model-endpoint/Index.vue`、`.design-spec.md`、本文件。共修改 14 个文件；用户已有 `web/auto-imports.d.ts`、`web/src/api/hotTopic.ts` 改动保留、不纳入提交。无新增字段、数据库迁移或表单开关。
+- 验证：后端相关 9 套件 173 项、前端平台联动 9 项及热点偏好 15 项模拟测试通过（合计 197 项），覆盖默认路由、精确型号、未知型号原样传递、专用覆盖/停用/软删、两张腾讯卡候选隔离、百炼同址与 Coding 拒绝、双平台参数、真实/缺失来源及热点校验。前后端类型、定向 ESLint、沿用文件风格的格式检查、组件复用检查和 diff 检查通过。本次为现有接入规则简化及兼容修复，未 build、未启动或重启服务、未修改运行中数据库。
+- 官方依据：[腾讯联网搜索矩阵与请求参数](https://cloud.tencent.com/document/product/1823/132358)、[腾讯 Responses 兼容模式可能丢弃内置搜索工具的说明](https://cloud.tencent.com/document/product/1823/135873)、[百炼 Responses 联网工具与来源字段](https://help.aliyun.com/zh/model-studio/web-search)。用户提供的只有 `input` 的普通 Responses 示例没有启用搜索工具，不能单凭回复成功验证联网。
+
 ### 2026-10-25 补通腾讯原生联网配置、测试与热点搜索
 
 - AI 功能配置的 `webSearchMode` 前后端增加 `tokenhubSearch`，腾讯账号可明确选择“腾讯 TokenHub 原生搜索”，不再因平台不是百炼而只提供不联网。保留旧配置值和关闭状态，不自动开启联网或改写用户模式；主动切平台只清除不兼容协议，历史回显保留说明。热点偏好、日程校验及执行均识别对应平台的已接入搜索方式，保留平台直读、混合模式和网易固定接口例外。

@@ -75,13 +75,13 @@ describe('腾讯联网搜索请求与真实来源', () => {
           enable: true,
           search_source: 'lite',
         });
-        expect(body.reasoning_effort).toBe('no_think');
+        expect(body.reasoning_effort).toBe('low');
         expect(body).not.toHaveProperty('input');
       } else {
         expect(body.tools).toEqual([
           { type: 'web_search', search_source: 'lite' },
         ]);
-        expect(body.reasoning).toEqual({ effort: 'no_think' });
+        expect(body.reasoning).toEqual({ effort: 'low' });
         expect(body).not.toHaveProperty('messages');
       }
     },

@@ -438,6 +438,8 @@ describe('模型接口卡片调试', () => {
       ['chat', 'openaiChat'],
       ['vision', 'openaiChat'],
       ['embedding', 'openaiEmbedding'],
+      ['webSearch', 'openaiResponses'],
+      ['webSearch', 'openaiChatSearch'],
       ['textToImage', 'tokenhubSeedreamImage'],
       ['imageToImage', 'tokenhubHunyuanImageChat'],
       ['textToVideo', 'tokenhubHunyuanVideo'],
@@ -453,6 +455,18 @@ describe('模型接口卡片调试', () => {
           protocol,
         }),
       ).toMatchObject({ model: 'saved-model' });
+    const bailianSearch = endpointTestTemplate({
+      modelCode: 'qwen3.8-flash',
+      platformType: 'aliyunBailian',
+      functionType: 'webSearch',
+      protocol: 'openaiResponses',
+    });
+    expect(bailianSearch).toMatchObject({
+      model: 'qwen3.8-flash',
+      enable_thinking: false,
+      tools: [{ type: 'web_search' }],
+    });
+    expect(bailianSearch).not.toHaveProperty('reasoning');
     expect(
       endpointTestTemplate({
         modelCode: 'vidu-video-q2-pro',

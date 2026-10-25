@@ -5,6 +5,11 @@ import { KnowledgeAiProvider } from './entities/knowledge-ai-provider.entity';
 import type { AiFeatureConfig } from '../ai-feature-configs/entities/ai-feature-config.entity';
 import type { LogRecordsService } from '../log-records/log-records.service';
 import type { ModelEndpointsService } from '../model-endpoints/model-endpoints.service';
+import { builtinModelEndpoint } from '../model-endpoints/model-endpoint.builtins';
+import type {
+  ModelFunction,
+  PlatformType,
+} from '../model-endpoints/model-endpoint.constants';
 
 function harness() {
   const provider = Object.assign(new KnowledgeAiProvider(), {
@@ -39,12 +44,16 @@ function harness() {
     });
   const endpoints = {
     resolve: jest.fn(
-      (_platform: string, model: string, functionType: string) => {
+      (platform: PlatformType, model: string, functionType: ModelFunction) => {
         if (functionType === 'webSearch') {
-          const card = cards.get(model);
+          const card =
+            cards.get(`${platform}:${model}`) ??
+            (platform === 'tencentTokenhub' ? cards.get(model) : undefined);
           if (card?.isActive === false)
             throw new BadRequestException('当前模型功能的调用接口已停用');
-          return Promise.resolve(card ?? null);
+          return Promise.resolve(
+            card ?? builtinModelEndpoint(platform, functionType, model),
+          );
         }
         return Promise.resolve({
           source: 'builtin',
@@ -107,7 +116,7 @@ describe('业务原生搜索目标共用厂商联网卡片解析', () => {
     },
   );
   it.each(['glm-5.3', 'deepseek-v4-flash-202605'])(
-    '普通目录存在 %s 不意味着具备搜索卡片，也不替换为其它版本',
+    '目录中的 %s 使用默认格式尝试，具体编码原样保留且配置检查不发付费调用',
     async (model) => {
       const { service, endpoints } = harness();
       await expect(
@@ -116,7 +125,13 @@ describe('业务原生搜索目标共用厂商联网卡片解析', () => {
           model,
           webSearchMode: 'tokenhubSearch',
         }),
-      ).rejects.toThrow('缺少“联网搜索”');
+      ).resolves.toMatchObject({
+        model,
+        protocol: 'openaiResponses',
+        url: 'https://tokenhub.tencentmaas.com/v1/responses',
+        source: 'builtin',
+        ruleName: '腾讯 TokenHub · 联网搜索 Responses（系统通用）',
+      });
       expect(endpoints.resolve).toHaveBeenCalledWith(
         'tencentTokenhub',
         model,
@@ -224,6 +239,61 @@ describe('业务原生搜索目标共用厂商联网卡片解析', () => {
     ).resolves.toMatchObject({
       protocol: 'openaiResponses',
       url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/responses',
+      source: 'builtin',
     });
+  });
+
+  it('百炼专用联网卡片优先，停用或错误协议不得回退通用格式', async () => {
+    const { service, provider, cards } = harness();
+    provider.apiUrl = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
+    const card = {
+      id: 17,
+      functionType: 'webSearch',
+      protocol: 'openaiResponses',
+      source: 'configured',
+      executionMode: 'sync',
+      isActive: true,
+      apiPath: '/compatible-mode/v1/responses',
+    };
+    cards.set('aliyunBailian:qwen-plus', card);
+    const input = {
+      id: 2,
+      model: 'qwen-plus',
+      webSearchMode: 'bailianResponses' as const,
+    };
+    await expect(service.resolveWebSearchTarget(input)).resolves.toMatchObject({
+      source: 'configured',
+      ruleName: '模型专用 · qwen-plus（联网搜索）',
+    });
+    card.isActive = false;
+    await expect(service.resolveWebSearchTarget(input)).rejects.toThrow(
+      '已停用',
+    );
+    card.isActive = true;
+    card.protocol = 'openaiChatSearch';
+    await expect(service.resolveWebSearchTarget(input)).rejects.toThrow(
+      '协议配置',
+    );
+    card.protocol = 'openaiResponses';
+    card.apiPath = '/vendor/responses';
+    await expect(service.resolveWebSearchTarget(input)).rejects.toThrow(
+      '官方 Responses',
+    );
+  });
+
+  it.each([
+    'https://coding.dashscope.aliyuncs.com/v1',
+    'https://dashscope.aliyuncs.com:8443/compatible-mode/v1',
+    'http://dashscope.aliyuncs.com/compatible-mode/v1',
+  ])('百炼联网拒绝未接入的专用域名或不安全地址 %s', async (apiUrl) => {
+    const { service, provider } = harness();
+    provider.apiUrl = apiUrl;
+    await expect(
+      service.resolveWebSearchTarget({
+        id: 2,
+        model: 'qwen-plus',
+        webSearchMode: 'bailianResponses',
+      }),
+    ).rejects.toThrow();
   });
 });

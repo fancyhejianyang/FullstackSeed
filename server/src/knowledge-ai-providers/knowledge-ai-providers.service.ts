@@ -25,7 +25,10 @@ import {
   modelCategory,
 } from '../model-endpoints/model-endpoint.constants';
 import type { ModelEndpoint } from '../model-endpoints/entities/model-endpoint.entity';
-import { builtinModelEndpointPath } from '../model-endpoints/model-endpoint.builtins';
+import {
+  builtinModelEndpoint,
+  builtinModelEndpointPath,
+} from '../model-endpoints/model-endpoint.builtins';
 import { modelBillingErrorMessage } from '../common/ai/model-provider-error';
 import {
   CreateKnowledgeAiProviderDto,
@@ -456,71 +459,19 @@ export class KnowledgeAiProvidersService {
     if (payload.webSearchMode === 'bailianResponses') {
       if (platform !== 'aliyunBailian')
         throw new BadRequestException('百炼联网方式不适用于当前账号平台');
-      const target = await this.resolveFeatureTestTarget({
-        id: payload.id,
-        model,
-        featureType: 'topicDiscovery',
-      });
-      let url: string;
-      try {
-        url = bailianResponsesUrl(target.url);
-      } catch (error) {
-        throw new BadRequestException(
-          error instanceof Error ? error.message : '百炼联网搜索地址不可用',
-        );
-      }
-      return {
-        ...target,
-        functionType: 'webSearch',
-        protocol: 'openaiResponses',
-        executionMode: 'sync',
-        taskMethod: 'GET',
-        taskUrlTemplate: null,
-        url,
-        secretKey,
-        functionLabel: '联网搜索',
-        ruleName: `${target.ruleName} · 百炼 Responses 联网搜索`,
-      };
-    }
-    if (payload.webSearchMode !== 'tokenhubSearch')
+    } else if (payload.webSearchMode === 'tokenhubSearch') {
+      if (platform !== 'tencentTokenhub')
+        throw new BadRequestException('腾讯原生联网方式不适用于当前账号平台');
+    } else {
       throw new BadRequestException('请选择已接入的原生联网搜索方式');
-    if (platform !== 'tencentTokenhub')
-      throw new BadRequestException('腾讯原生联网方式不适用于当前账号平台');
-    const base = new URL(this.applyWorkspaceId(provider));
-    if (
-      base.protocol !== 'https:' ||
-      base.username ||
-      base.password ||
-      base.search ||
-      base.hash ||
-      (base.port && base.port !== '443')
-    )
-      throw new BadRequestException(
-        '腾讯联网搜索仅支持官方 HTTPS 标准端口地址',
-      );
+    }
     const { endpoint, url } = await this.resolveFunctionEndpoint(
       provider,
       model,
       'webSearch',
     );
-    if (
-      !endpoint ||
-      endpoint.source !== 'configured' ||
-      !endpoint.isActive ||
-      endpoint.functionType !== 'webSearch' ||
-      endpoint.executionMode !== 'sync' ||
-      !['openaiResponses', 'openaiChatSearch'].includes(endpoint.protocol)
-    )
-      throw new BadRequestException('当前模型的联网接口协议配置不受支持');
-    const resolved = new URL(url);
-    if (
-      resolved.origin !== base.origin ||
-      resolved.protocol !== 'https:' ||
-      detectModelPlatform(url) !== 'tencentTokenhub'
-    )
-      throw new BadRequestException(
-        '联网搜索接口必须与当前腾讯账号官方地址同源',
-      );
+    if (!endpoint)
+      throw new BadRequestException('当前平台未配置联网搜索调用规则');
     return {
       model,
       functionType: 'webSearch',
@@ -531,8 +482,11 @@ export class KnowledgeAiProvidersService {
       url,
       secretKey,
       functionLabel: '联网搜索',
-      source: 'configured',
-      ruleName: `模型专用 · ${model}（联网搜索）`,
+      source: endpoint.source,
+      ruleName:
+        endpoint.source === 'builtin'
+          ? endpoint.modelName
+          : `模型专用 · ${model}（联网搜索）`,
     };
   }
 
@@ -565,7 +519,27 @@ export class KnowledgeAiProvidersService {
         return [];
       if (builtin) {
         const models = this.endpointCatalog(provider, endpoint.functionType);
-        const available = models.filter((item) => !overrides.has(item.code));
+        const available = models.filter(
+          (item) =>
+            !overrides.has(item.code) &&
+            builtinModelEndpoint(
+              endpoint.platformType,
+              endpoint.functionType,
+              item.code,
+            )?.id === endpoint.id,
+        );
+        if (endpoint.functionType === 'webSearch') {
+          try {
+            this.assertWebSearchEndpoint(
+              provider,
+              endpoint,
+              new URL(this.applyWorkspaceId(provider)).origin +
+                endpoint.apiPath,
+            );
+          } catch {
+            return [];
+          }
+        }
         return available.length
           ? [
               {
@@ -955,7 +929,78 @@ export class KnowledgeAiProvidersService {
         : functionType === 'embedding'
           ? this.buildEmbeddingUrl(provider)
           : this.buildChatUrl(provider);
+    if (functionType === 'webSearch')
+      this.assertWebSearchEndpoint(provider, endpoint, url);
     return { endpoint, url };
+  }
+
+  /** 配置检查、卡片测试和热点执行共用协议与官方地址校验；格式匹配不代表实际已联网。 */
+  private assertWebSearchEndpoint(
+    provider: KnowledgeAiProvider,
+    endpoint:
+      | {
+          source: string;
+          isActive: boolean;
+          functionType: ModelFunction;
+          executionMode: string;
+          protocol: string;
+        }
+      | null
+      | undefined,
+    url: string,
+  ) {
+    const platform = detectModelPlatform(provider.apiUrl);
+    const base = new URL(this.applyWorkspaceId(provider));
+    if (
+      !['aliyunBailian', 'tencentTokenhub'].includes(platform) ||
+      base.protocol !== 'https:' ||
+      base.username ||
+      base.password ||
+      base.search ||
+      base.hash ||
+      (base.port && base.port !== '443')
+    )
+      throw new BadRequestException('联网搜索仅支持官方 HTTPS 标准端口地址');
+    if (
+      !endpoint ||
+      !['configured', 'builtin'].includes(endpoint.source) ||
+      !endpoint.isActive ||
+      endpoint.functionType !== 'webSearch' ||
+      endpoint.executionMode !== 'sync' ||
+      !(
+        platform === 'aliyunBailian'
+          ? ['openaiResponses']
+          : ['openaiResponses', 'openaiChatSearch']
+      ).includes(endpoint.protocol)
+    )
+      throw new BadRequestException('当前模型的联网接口协议配置不受支持');
+    const resolved = new URL(url);
+    if (
+      resolved.origin !== base.origin ||
+      resolved.protocol !== 'https:' ||
+      detectModelPlatform(url) !== platform ||
+      resolved.username ||
+      resolved.password ||
+      resolved.search ||
+      resolved.hash
+    )
+      throw new BadRequestException('联网搜索接口必须与当前账号官方地址同源');
+    if (platform === 'aliyunBailian') {
+      let expected: string;
+      try {
+        expected = bailianResponsesUrl(
+          base.origin + '/compatible-mode/v1/chat/completions',
+        );
+      } catch (error) {
+        throw new BadRequestException(
+          error instanceof Error ? error.message : '百炼联网搜索地址不可用',
+        );
+      }
+      if (resolved.toString() !== expected)
+        throw new BadRequestException(
+          '百炼联网搜索必须使用官方 Responses 地址',
+        );
+    }
   }
 
   async resolveEmbeddingTarget(

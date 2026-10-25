@@ -239,7 +239,7 @@ export class ModelEndpointsService implements OnModuleInit {
       throw new BadRequestException('当前模型功能的调用接口已停用');
     return row
       ? { ...row, source: 'configured' as const, isReadOnly: false }
-      : builtinModelEndpoint(platformType, functionType);
+      : builtinModelEndpoint(platformType, functionType, modelCode);
   }
 
   overriddenModels(platformType: PlatformType, functionType: ModelFunction) {

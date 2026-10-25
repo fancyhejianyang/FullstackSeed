@@ -201,7 +201,8 @@ export function buildVerifiedSearchRequest(input: {
           { role: 'user', content: question },
         ],
         web_search_options: { enable: true, search_source: 'lite' },
-        reasoning_effort: input.enableThinking ? 'low' : 'no_think',
+        // 部分腾讯模型实际拒绝 no_think；联网统一使用已验证可接受的低推理强度。
+        reasoning_effort: 'low',
       };
     if (input.protocol === 'openaiResponses')
       return {
@@ -212,7 +213,7 @@ export function buildVerifiedSearchRequest(input: {
           { role: 'user', content: question },
         ],
         tools: [{ type: 'web_search', search_source: 'lite' }],
-        reasoning: { effort: input.enableThinking ? 'low' : 'no_think' },
+        reasoning: { effort: 'low' },
       };
   }
   throw new HotTopicFetchError(
@@ -283,7 +284,7 @@ export function parseTokenhubSearchResponse(
     )
       throw new HotTopicFetchError(
         'search_unverified',
-        '腾讯未返回已完成的搜索调用，未使用模型回答补造热点',
+        '腾讯接口已返回，但未返回已完成的搜索调用；请核对模型联网能力及账号联网服务是否开通。普通回答不能作为搜索结果。',
       );
     for (const item of output) {
       if (item.type !== 'message' || !Array.isArray(item.content)) continue;
@@ -305,7 +306,7 @@ export function parseTokenhubSearchResponse(
   if (!verified.size)
     throw new HotTopicFetchError(
       'search_unverified',
-      '腾讯未返回可核验的搜索来源，可能未执行搜索、搜索为空或服务不可用；未使用模型记忆补造热点',
+      '腾讯未返回可核验的搜索来源，可能未执行搜索或结果为空；请核对模型联网能力及账号联网服务是否开通。普通回答不能作为搜索结果。',
     );
   const usage = hotRecord(data.usage);
   const total =

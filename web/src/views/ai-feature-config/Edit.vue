@@ -500,7 +500,7 @@ const webSearchOptions = computed(() => {
   }
   if (canUseTokenhubSearch.value) {
     options.push({
-      label: "腾讯 TokenHub 原生搜索（按模型接口卡片）",
+      label: "腾讯 TokenHub 原生搜索（系统自动匹配）",
       value: "tokenhubSearch",
       disabled: false,
     });
@@ -523,7 +523,7 @@ const webSearchOptions = computed(() => {
 const webSearchHint = computed(() => {
   if (!selectedProvider.value) return "请先选择大模型账号。";
   if (canUseTokenhubSearch.value)
-    return "腾讯原生搜索按当前模型匹配已启用的“联网搜索”接口卡片，具体协议以卡片为准；普通调用可用不代表支持联网。没有已确认的联网卡片时不能搜索，配置检查会提示具体原因；选择“不联网”仍可分析已采集资料。";
+    return "系统按当前模型自动选择联网接口，无需逐个配置卡片；已有专用卡片优先使用。是否支持联网，以真实测试返回的搜索来源为准；供应商不支持时直接提示，不自动更换模型或重复请求。选择“不联网”仍可分析已采集资料。";
   if (canUseBailianSearch.value)
     return "百炼官方端点使用 Responses 原生搜索，所选模型仍需支持 web_search；平台识别不等于模型能力验证。不联网时仅分析已采集资料。";
   return "本项目尚未接入当前平台的原生联网搜索；可选择“不联网”分析和推荐已采集资料。AI 联网获取需选择已配置原生搜索的百炼或腾讯账号，并核对当前模型的联网能力。";
@@ -1205,7 +1205,7 @@ async function validateSelectedModel() {
   ) {
     checkedEndpoint.value = null;
     modelValidationHint.value =
-      "当前账号与所选联网方式不匹配，请选择当前平台的原生搜索或“不联网”；腾讯搜索还须匹配当前模型的已启用联网接口卡片。未发起实际测试。";
+      "当前账号与所选联网方式不匹配，请选择当前平台的原生搜索或“不联网”。未发起实际测试。";
     return false;
   }
   const requestSequence = ++modelValidationSequence;

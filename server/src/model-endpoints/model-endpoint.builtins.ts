@@ -15,7 +15,18 @@ const definitions = [
   { id: -4, platformType: 'tencentTokenhub', functionType: 'chat' },
   { id: -5, platformType: 'tencentTokenhub', functionType: 'vision' },
   { id: -6, platformType: 'tencentTokenhub', functionType: 'embedding' },
+  { id: -7, platformType: 'aliyunBailian', functionType: 'webSearch' },
+  { id: -8, platformType: 'tencentTokenhub', functionType: 'webSearch' },
+  { id: -9, platformType: 'tencentTokenhub', functionType: 'webSearch' },
 ] as const;
+
+/** 官方联网矩阵中的精确编码；其他编码按默认格式尝试，不改写原厂别名或版本。 */
+const tokenhubChatSearchModels = new Set([
+  'deepseek-v4-flash',
+  'deepseek-v4-pro',
+  'deepseek-v4-flash-0731',
+  'deepseek-v4-pro-0813',
+]);
 
 export const BUILTIN_MODEL_ENDPOINTS = definitions.map(
   ({ id, platformType, functionType }) => ({
@@ -23,13 +34,20 @@ export const BUILTIN_MODEL_ENDPOINTS = definitions.map(
     platformType,
     // 仅用于展示适用范围；实际请求必须另选账号目录中的具体模型。
     modelCode: '*',
-    modelName: `${PLATFORM_LABELS[platformType]} · ${FUNCTION_LABELS[functionType]}（系统通用）`,
+    modelName:
+      functionType === 'webSearch'
+        ? `${PLATFORM_LABELS[platformType]} · 联网搜索 ${id === -9 ? 'DeepSeek Chat' : 'Responses'}（系统通用）`
+        : `${PLATFORM_LABELS[platformType]} · ${FUNCTION_LABELS[functionType]}（系统通用）`,
     functionType,
     protocol:
-      functionType === 'embedding'
-        ? ('openaiEmbedding' as const)
-        : ('openaiChat' as const),
-    apiPath: `${platformType === 'aliyunBailian' ? '/compatible-mode' : ''}/v1/${functionType === 'embedding' ? 'embeddings' : 'chat/completions'}`,
+      functionType === 'webSearch'
+        ? id === -9
+          ? ('openaiChatSearch' as const)
+          : ('openaiResponses' as const)
+        : functionType === 'embedding'
+          ? ('openaiEmbedding' as const)
+          : ('openaiChat' as const),
+    apiPath: `${platformType === 'aliyunBailian' ? '/compatible-mode' : ''}/v1/${functionType === 'webSearch' && id !== -9 ? 'responses' : functionType === 'embedding' ? 'embeddings' : 'chat/completions'}`,
     taskApiPath: '',
     taskMethod: 'GET' as const,
     executionMode: 'sync' as const,
@@ -38,27 +56,44 @@ export const BUILTIN_MODEL_ENDPOINTS = definitions.map(
     isReadOnly: true,
     category: modelCategory(functionType),
     documentationUrl:
-      platformType === 'aliyunBailian'
-        ? functionType === 'embedding'
-          ? 'https://help.aliyun.com/zh/model-studio/embedding-interfaces-compatible-with-openai'
-          : 'https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions/'
-        : `https://cloud.tencent.com/document/product/1823/${functionType === 'embedding' ? '133515' : functionType === 'vision' ? '136956' : '130079'}`,
+      functionType === 'webSearch'
+        ? platformType === 'aliyunBailian'
+          ? 'https://help.aliyun.com/zh/model-studio/web-search'
+          : 'https://cloud.tencent.com/document/product/1823/132358'
+        : platformType === 'aliyunBailian'
+          ? functionType === 'embedding'
+            ? 'https://help.aliyun.com/zh/model-studio/embedding-interfaces-compatible-with-openai'
+            : 'https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions/'
+          : `https://cloud.tencent.com/document/product/1823/${functionType === 'embedding' ? '133515' : functionType === 'vision' ? '136956' : '130079'}`,
   }),
 );
 
 export function builtinModelEndpoint(
   platformType: PlatformType,
   functionType: ModelFunction,
+  modelCode?: string,
 ) {
+  const searchId =
+    platformType === 'tencentTokenhub' && functionType === 'webSearch'
+      ? tokenhubChatSearchModels.has(modelCode ?? '')
+        ? -9
+        : -8
+      : null;
   const rule = BUILTIN_MODEL_ENDPOINTS.find(
     (item) =>
-      item.platformType === platformType && item.functionType === functionType,
+      item.platformType === platformType &&
+      item.functionType === functionType &&
+      (searchId === null || item.id === searchId),
   );
   return rule ? { ...rule } : null;
 }
 
 export function usesBuiltinModelEndpoint(card: CreateModelEndpointDto) {
-  const rule = builtinModelEndpoint(card.platformType, card.functionType);
+  const rule = builtinModelEndpoint(
+    card.platformType,
+    card.functionType,
+    card.modelCode,
+  );
   return (
     !!rule &&
     rule.protocol === card.protocol &&
@@ -79,7 +114,8 @@ export function builtinModelEndpointPath(
 ) {
   const host = new URL(baseUrl).hostname.toLowerCase().replace(/\.$/, '');
   return rule.platformType === 'aliyunBailian' &&
-    host === 'coding.dashscope.aliyuncs.com'
+    host === 'coding.dashscope.aliyuncs.com' &&
+    rule.functionType !== 'webSearch'
     ? `/v1/${rule.functionType === 'embedding' ? 'embeddings' : 'chat/completions'}`
     : rule.apiPath;
 }
