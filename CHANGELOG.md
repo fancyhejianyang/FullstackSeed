@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-10-25 模型厂商接口卡片增加真实调用测试
+
+- 每张接口卡片通过 Table 的 actions 插槽追加“测试”，复用 Dialog/Form/Button 展示同平台账号、预填请求 JSON、实际 HTTP、耗时、时间、任务编号与脱敏响应；普通调用、识图、向量化、文生图/参考生图、文生视频/图生视频/参考生视频/首尾帧均可调试。文本/媒体模板复用现有协议构造，首尾帧提供 Vidu 双图片模板（参数依据：https://cloud.tencent.cn/document/product/1823/135756）。用户须替换参考素材占位符，明确点击费用提示按钮才发起真实调用，不自动测试或生成，不新增草稿/备注字段。
+- 后端在已有模型账号模块内增加卡片调试 DTO/Controller/Service，复用 demo 分层和全局权限/校验；避免账号模块已引用接口模块时产生循环依赖，无新增业务表、菜单权限或数据库迁移。选项/执行/查询均要求 `ModelEndpoint.update`，只返回同平台、已启用、具备密钥且对应能力目录登记该模型的账号 ID/名称；服务端按指定已保存卡片构造地址/协议、固定模型并强制普通调用非流式，不接收客户端地址或密钥。
+- HTTP 200 还须包含协议对应消息、数值向量或媒体结果；异步任务只判“已受理”，随后仅 GET 已有任务并区分成功、失败、未知。图片/视频查询异常保留编号供继续核实，路径或模型改变后不使用新配置查询旧任务。响应有界读取和脱敏，隐藏密钥、Authorization、大段 Base64 等，不执行供应商错误中的内容，不因测试结果修改账号目录或关联配置。
+- 使用用户隔离的临时测试编号保护当前进程内重复提交，最多保留 500 条、30 分钟，限制每用户并发和每分钟测试次数；请求超时/查询失败不自动重投。重新打开卡片恢复本人最近一次结果，关闭/卸载停止界面轮询并忽略迟到响应；超过 15 分钟停止自动查询并允许手动查询原任务，服务重启/过期后明确提示先核实供应商任务。
+- 新增文件：`server/src/knowledge-ai-providers/dto/model-endpoint-test.dto.ts`、`server/src/knowledge-ai-providers/model-endpoint-test.utils.ts`、`server/src/knowledge-ai-providers/model-endpoint-tests.controller.ts`、`server/src/knowledge-ai-providers/model-endpoint-tests.service.ts`、`server/src/knowledge-ai-providers/model-endpoint-tests.service.spec.ts`、`web/src/views/model-endpoint/Test.vue`。
+- 修改文件：`server/src/knowledge-ai-providers/knowledge-ai-providers.module.ts`、`server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`、`server/src/model-endpoints/model-endpoint-routing.spec.ts`、`web/src/api/modelEndpoint.ts`、`web/src/views/model-endpoint/Index.vue`、`.design-spec.md`、本文件。删除文件：无。用户已有的 `web/auto-imports.d.ts`、`web/src/api/hotTopic.ts` 改动保留且不纳入提交。
+- 验证：相关后端 4 套件 52 项测试通过（全用模拟供应商响应）；前后端业务类型检查、后端定向 ESLint、实体列校验、组件复用扫描、生产构建和 diff 检查通过。前端构建子进程最初被系统 EPERM 阻止，经授权后完成；保留既有 PURE 注释和大分块提示。未启动/重启应用、未执行数据库迁移或真实付费模型请求。
+
 ### 2026-10-25 AI 功能编辑统一检查模型厂商接口
 
 - 修复 AI 功能配置切换模型时生图、生视频和热点类型直接跳过检查、普通类型依赖账号编辑权限的问题。全部功能统一通过只读 `POST /ai-feature-configs/check-model-endpoint` 检查账号启用、密钥是否配置、对应模型目录与实际接口；沿用功能配置的 `Menu.read` 权限，只返回功能/路径/匹配来源摘要，不暴露密钥或完整账号配置。

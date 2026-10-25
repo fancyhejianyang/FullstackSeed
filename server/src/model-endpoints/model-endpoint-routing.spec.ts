@@ -22,9 +22,11 @@ function harness() {
   });
   const repository = {
     findOne: jest.fn().mockResolvedValue(provider),
+    find: jest.fn().mockResolvedValue([provider]),
     findAndCount: jest.fn().mockResolvedValue([[provider], 1]),
   };
   const endpoints = {
+    findOne: jest.fn(),
     resolve: jest.fn().mockResolvedValue(null),
     imageRoutes: jest.fn().mockResolvedValue([]),
     buildUrl: (base: string, path: string) => new URL(base).origin + path,
@@ -39,6 +41,42 @@ function harness() {
 }
 
 describe('账号按模型功能解析调用接口', () => {
+  it('卡片测试账号只返回同平台且已登记模型的账号标识，不返回凭据', async () => {
+    const { service, endpoints, provider } = harness();
+    const route = {
+      id: 9,
+      platformType: 'tencentTokenhub',
+      modelCode: 'seedream-image-v5.0-pro',
+      functionType: 'imageToImage',
+      protocol: 'tokenhubSeedreamImage',
+      apiPath: '/v1/wand/si-image/generation',
+      taskApiPath: '',
+      executionMode: 'sync',
+      isActive: true,
+    };
+    endpoints.findOne.mockResolvedValue(route);
+    endpoints.resolve.mockResolvedValue(route);
+    await expect(service.endpointTestAccounts(9)).resolves.toEqual([
+      { id: 1, name: '腾讯账号' },
+    ]);
+    await expect(
+      service.resolveEndpointTestTarget(9, 1),
+    ).resolves.toMatchObject({
+      functionType: 'imageToImage',
+      model: 'seedream-image-v5.0-pro',
+      url: 'https://tokenhub.tencentmaas.com/v1/wand/si-image/generation',
+    });
+    provider.imageGenerationModels = '';
+    await expect(service.endpointTestAccounts(9)).resolves.toEqual([]);
+    await expect(service.resolveEndpointTestTarget(9, 1)).rejects.toThrow(
+      '能力目录',
+    );
+    provider.apiUrl = 'https://dashscope.aliyuncs.com';
+    await expect(service.resolveEndpointTestTarget(9, 1)).rejects.toThrow(
+      '平台不一致',
+    );
+  });
+
   it.each([
     ['chat', 'chat-model', 'chat'],
     ['contentCreation', 'chat-model', 'chat'],

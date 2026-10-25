@@ -16,6 +16,7 @@ import { modelPlatformLabels } from "@/utils/modelPlatform";
 import { getPermissionActionColor } from "@/utils/permission";
 import Edit from "./Edit.vue";
 import View from "./View.vue";
+import Test from "./Test.vue";
 
 const tableRef = ref<{
   refresh: () => Promise<void>;
@@ -59,6 +60,8 @@ const editVisible = ref(false);
 const editingRow = ref<ModelEndpoint | null>(null);
 const viewVisible = ref(false);
 const viewingRow = ref<ModelEndpoint | null>(null);
+const testVisible = ref(false);
+const testingRow = ref<ModelEndpoint | null>(null);
 const label = (items: Array<{ value: string; label: string }>, value: string) =>
   items.find((item) => item.value === value)?.label ?? value;
 function openCreate() {
@@ -72,6 +75,10 @@ function handleEdit(row: ModelEndpoint) {
 function handleView(row: ModelEndpoint) {
   viewingRow.value = row;
   viewVisible.value = true;
+}
+function handleTest(row: ModelEndpoint) {
+  testingRow.value = row;
+  testVisible.value = true;
 }
 onMounted(async () => {
   options.value = await getModelEndpointOptions();
@@ -134,6 +141,16 @@ onMounted(async () => {
           <span>GET</span><code>{{ row.taskApiPath }}</code>
         </div>
       </template>
+      <template #actions="{ row }">
+        <Button
+          perm="ModelEndpoint.update"
+          link
+          icon="Connection"
+          :confirm="false"
+          @click="handleTest(row)"
+          >测试</Button
+        >
+      </template>
     </Table>
     <Edit
       v-model:visible="editVisible"
@@ -141,6 +158,7 @@ onMounted(async () => {
       @success="tableRef?.refresh()"
     />
     <View v-model:visible="viewVisible" :row="viewingRow" :options="options" />
+    <Test v-model:visible="testVisible" :row="testingRow" />
   </PageContainer>
 </template>
 

@@ -7,6 +7,8 @@ import { KnowledgeAiProvidersController } from './knowledge-ai-providers.control
 import { KnowledgeAiProvidersService } from './knowledge-ai-providers.service';
 import { KnowledgeWebSearchService } from './knowledge-web-search.service';
 import { ModelEndpointsModule } from '../model-endpoints/model-endpoints.module';
+import { ModelEndpointTestsController } from './model-endpoint-tests.controller';
+import { ModelEndpointTestsService } from './model-endpoint-tests.service';
 
 @Module({
   imports: [
@@ -14,8 +16,12 @@ import { ModelEndpointsModule } from '../model-endpoints/model-endpoints.module'
     LogRecordsModule,
     TypeOrmModule.forFeature([KnowledgeAiProvider, AiFeatureConfig]),
   ],
-  controllers: [KnowledgeAiProvidersController],
-  providers: [KnowledgeAiProvidersService, KnowledgeWebSearchService],
+  controllers: [KnowledgeAiProvidersController, ModelEndpointTestsController],
+  providers: [
+    KnowledgeAiProvidersService,
+    KnowledgeWebSearchService,
+    ModelEndpointTestsService,
+  ],
   exports: [KnowledgeAiProvidersService, KnowledgeWebSearchService],
 })
 export class KnowledgeAiProvidersModule {}

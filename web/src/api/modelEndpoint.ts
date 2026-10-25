@@ -86,3 +86,46 @@ export function batchDeleteModelEndpoints(ids: Array<string | number>) {
     ids: ids.map(Number),
   });
 }
+
+export interface ModelEndpointTestResult {
+  requestId: string;
+  status: "running" | "accepted" | "succeeded" | "failed" | "unknown";
+  message: string;
+  httpStatus: number | null;
+  responseBody: string;
+  taskId: string | null;
+  elapsedMilliseconds: number;
+  checkedAt: string;
+}
+export interface ModelEndpointTestOptions {
+  card: ModelEndpoint;
+  accounts: Array<{ id: number; name: string }>;
+  requestBody: Record<string, unknown>;
+  recentTest: { providerId: number; result: ModelEndpointTestResult } | null;
+}
+export function getModelEndpointTestOptions(id: number) {
+  return request.get<unknown, ModelEndpointTestOptions>(
+    `/model-endpoint-tests/${id}/accounts`,
+    { silentError: true },
+  );
+}
+export function testModelEndpoint(
+  id: number,
+  data: {
+    providerId: number;
+    requestId: string;
+    requestBody: Record<string, unknown>;
+  },
+) {
+  return request.post<unknown, ModelEndpointTestResult>(
+    `/model-endpoint-tests/${id}`,
+    data,
+    { timeout: 75000, silentError: true },
+  );
+}
+export function queryModelEndpointTest(id: number, requestId: string) {
+  return request.get<unknown, ModelEndpointTestResult>(
+    `/model-endpoint-tests/${id}/${requestId}`,
+    { timeout: 35000, silentError: true },
+  );
+}

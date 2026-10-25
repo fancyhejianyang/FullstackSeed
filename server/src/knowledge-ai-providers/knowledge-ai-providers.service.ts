@@ -296,6 +296,78 @@ export class KnowledgeAiProvidersService {
     };
   }
 
+  async endpointTestAccounts(endpointId: number) {
+    const endpoint = await this.endpoints?.findOne(endpointId);
+    if (!endpoint) throw new NotFoundException('模型调用接口不存在');
+    const providers = await this.providerRepository.find({
+      where: { isEnabled: true },
+      order: { id: 'DESC' },
+    });
+    return providers
+      .filter(
+        (provider) =>
+          !!provider.secretKey &&
+          detectModelPlatform(provider.apiUrl) === endpoint.platformType &&
+          this.parseModels(
+            this.getFeatureModels(
+              provider,
+              this.endpointFeatureType(endpoint.functionType),
+            ),
+          ).some((model) => model.code === endpoint.modelCode),
+      )
+      .map(({ id, name }) => ({ id, name }));
+  }
+
+  /** 测试只使用指定的已保存卡片，不接受客户端地址、密钥或其它模型。 */
+  async resolveEndpointTestTarget(endpointId: number, providerId: number) {
+    const route = await this.endpoints?.findOne(endpointId);
+    if (!route) throw new NotFoundException('模型调用接口不存在');
+    const provider = await this.findEntity(providerId);
+    if (detectModelPlatform(provider.apiUrl) !== route.platformType)
+      throw new BadRequestException('测试账号与接口卡片的平台不一致');
+    if (!provider.isEnabled || !provider.secretKey)
+      throw new BadRequestException('测试账号未启用或未配置密钥');
+    const catalog = this.getFeatureModels(
+      provider,
+      this.endpointFeatureType(route.functionType),
+    );
+    if (
+      !this.parseModels(catalog).some((item) => item.code === route.modelCode)
+    )
+      throw new BadRequestException('测试模型未登记在账号对应能力目录中');
+    const { endpoint, url } = await this.resolveFunctionEndpoint(
+      provider,
+      route.modelCode,
+      route.functionType,
+    );
+    if (!endpoint || endpoint.id !== endpointId)
+      throw new BadRequestException('接口卡片已变化，请刷新后重新测试');
+    return {
+      model: endpoint.modelCode,
+      functionType: endpoint.functionType,
+      protocol: endpoint.protocol,
+      executionMode: endpoint.executionMode,
+      url,
+      taskUrlTemplate:
+        endpoint.taskApiPath && this.endpoints
+          ? this.endpoints.buildUrl(
+              this.applyWorkspaceId(provider),
+              endpoint.taskApiPath,
+            )
+          : null,
+      secretKey: this.normalizeSecretKey(provider.secretKey),
+    };
+  }
+
+  private endpointFeatureType(functionType: ModelFunction): AiModelFeatureType {
+    if (functionType === 'chat') return 'chat';
+    if (functionType === 'vision') return 'ocr';
+    if (functionType === 'embedding') return 'embedding';
+    return ['textToImage', 'imageToImage'].includes(functionType)
+      ? 'imageGeneration'
+      : 'videoGeneration';
+  }
+
   async validateModel(dto: ValidateKnowledgeAiProviderModelDto) {
     if (
       dto.featureType === 'imageGeneration' ||
