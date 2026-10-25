@@ -10,6 +10,10 @@ import {
 import { imageGenerationRequest, visionRequest } from './agent-media.service';
 import { imageGenerationResult } from '../common/ai/image-generation';
 import {
+  modelBillingErrorMessage,
+  readModelProviderError,
+} from '../common/ai/model-provider-error';
+import {
   classifyMediaProbeError,
   createVisionChallenge,
   record,
@@ -130,21 +134,21 @@ export class AgentMediaProbeService {
         },
         body: JSON.stringify(body),
       });
-      let value: unknown;
-      try {
-        value = await readMediaJson(response);
-      } catch {
-        if (response.ok) throw new Error('invalid_response');
-        const failure = classifyMediaProbeError(response.status, null);
+      if (!response.ok) {
+        const error = await readModelProviderError(response);
+        controller.signal.throwIfAborted();
+        const failure = classifyMediaProbeError(response.status, error);
         return finish(result(failure.status, failure.reason, failure.message));
       }
+      const value = await readMediaJson(response);
       const payload = record(value);
       let outcome: AgentMediaProbeResult;
-      if (!response.ok || payload.error || (payload.code && payload.message)) {
-        const failure = classifyMediaProbeError(
-          response.ok ? 400 : response.status,
-          value,
-        );
+      if (
+        payload.error ||
+        (payload.code && payload.message) ||
+        modelBillingErrorMessage(value)
+      ) {
+        const failure = classifyMediaProbeError(400, value);
         outcome = result(failure.status, failure.reason, failure.message);
       } else if (challenge) {
         const choice: unknown = Array.isArray(payload.choices)
@@ -180,8 +184,21 @@ export class AgentMediaProbeService {
       }
       controller.signal.throwIfAborted();
       return finish(outcome);
-    } catch {
+    } catch (error) {
       // 不泄漏供应商原始错误/响应（可能带密钥），失败也不冒充“非视觉模型”。
+      const billingMessage = controller.signal.aborted
+        ? null
+        : modelBillingErrorMessage(
+            error instanceof Error ? error.message : error,
+          );
+      if (billingMessage)
+        return finish(
+          result(
+            'inconclusive',
+            'quota',
+            `${billingMessage}无法确认图片能力，未移除候选。`,
+          ),
+        );
       return finish(
         controller.signal.aborted
           ? result(

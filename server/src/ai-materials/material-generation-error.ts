@@ -1,4 +1,5 @@
 import type { AiMaterialMediaType } from './ai-material.constants';
+import { modelBillingErrorMessage } from '../common/ai/model-provider-error';
 
 export const AI_MATERIAL_IMAGE_TIMEOUT_MS = 5 * 60 * 1000;
 export const AI_MATERIAL_VIDEO_TIMEOUT_MS = 15 * 60 * 1000;
@@ -29,6 +30,7 @@ export type MaterialGenerationPhase =
 export class MaterialProviderHttpError extends Error {
   readonly providerCode: string;
   readonly providerMessage: string;
+  readonly billingMessage: string | null;
 
   constructor(
     readonly statusCode: number,
@@ -36,6 +38,7 @@ export class MaterialProviderHttpError extends Error {
   ) {
     super(`provider_http_${statusCode}`);
     this.name = 'MaterialProviderHttpError';
+    this.billingMessage = modelBillingErrorMessage(providerResponse);
     const details = providerErrorDetails(providerResponse);
     this.providerCode = details.code;
     this.providerMessage = details.message;
@@ -73,6 +76,13 @@ export function describeMaterialGenerationFailure(
       message: `生成超时：已达到 ${minutes} 分钟执行上限；供应商可能仍在处理或计费，原素材未修改，系统不会自动重试`,
     };
   }
+  const billingMessage =
+    error instanceof MaterialProviderHttpError
+      ? error.billingMessage
+      : modelBillingErrorMessage(
+          error instanceof Error ? error.message : error,
+        );
+  if (billingMessage) return { status: 'failed', message: billingMessage };
   if (error instanceof MaterialProviderHttpError) {
     if (context.mediaType === 'video' && providerRejectsAsyncCall(error)) {
       return {

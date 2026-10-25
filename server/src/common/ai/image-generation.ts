@@ -1,6 +1,10 @@
 import { BadRequestException } from '@nestjs/common';
 import type { MediaProtocol } from '../../model-endpoints/model-endpoint.constants';
 import { readMediaJson } from './image-utils';
+import {
+  modelBillingErrorMessage,
+  readModelProviderError,
+} from './model-provider-error';
 import { setTimeout as wait } from 'node:timers/promises';
 import {
   EXTENDED_IMAGE_PROTOCOLS,
@@ -110,6 +114,8 @@ export function imageGenerationRequest(
 
 /** 只解析真实图片字段；绝不把模型回复中的 Markdown URL 当作生图回执。 */
 export function generationResult(value: unknown, protocol: MediaProtocol) {
+  const billingMessage = modelBillingErrorMessage(value);
+  if (billingMessage) throw new BadRequestException(billingMessage);
   if (EXTENDED_IMAGE_PROTOCOLS.includes(protocol)) {
     const result = extendedTokenhubResult(value, protocol as ModelProtocol);
     if (result?.status === 'succeeded' && result.url)
@@ -169,6 +175,8 @@ export async function imageGenerationResult(
   signal: AbortSignal,
   onTask?: (taskId: string) => Promise<unknown>,
 ) {
+  const billingMessage = modelBillingErrorMessage(value);
+  if (billingMessage) throw new BadRequestException(billingMessage);
   if (
     target.protocol !== 'tokenhubViduImage' &&
     !EXTENDED_IMAGE_PROTOCOLS.includes(target.protocol)
@@ -198,6 +206,8 @@ export async function imageGenerationResult(
     let submitting = true;
     for (;;) {
       signal.throwIfAborted();
+      const billingMessage = modelBillingErrorMessage(body);
+      if (billingMessage) throw new BadRequestException(billingMessage);
       const state = extendedTokenhubResult(
         body,
         target.protocol as ModelProtocol,
@@ -217,9 +227,12 @@ export async function imageGenerationResult(
         headers: { Authorization: `Bearer ${target.secretKey}` },
       });
       if (!response.ok) {
-        await response.body?.cancel();
+        const billingMessage = modelBillingErrorMessage(
+          await readModelProviderError(response),
+        );
         throw new BadRequestException(
-          `图片查询失败（HTTP ${response.status}），不会重新提交`,
+          billingMessage ??
+            `图片查询失败（HTTP ${response.status}），不会重新提交`,
         );
       }
       body = await readMediaJson(response);
@@ -247,6 +260,8 @@ export async function imageGenerationResult(
   await onTask?.(id);
   for (;;) {
     signal.throwIfAborted();
+    const billingMessage = modelBillingErrorMessage(body);
+    if (billingMessage) throw new BadRequestException(billingMessage);
     if (body.state === 'success')
       return generationResult(body, target.protocol);
     if (body.state === 'failed' || body.error)
@@ -261,9 +276,12 @@ export async function imageGenerationResult(
       headers: { Authorization: `Bearer ${target.secretKey}` },
     });
     if (!response.ok) {
-      await response.body?.cancel();
+      const billingMessage = modelBillingErrorMessage(
+        await readModelProviderError(response),
+      );
       throw new BadRequestException(
-        `生图任务查询失败（HTTP ${response.status}），不会重新提交生成任务`,
+        billingMessage ??
+          `生图任务查询失败（HTTP ${response.status}），不会重新提交生成任务`,
       );
     }
     body = record(await readMediaJson(response));

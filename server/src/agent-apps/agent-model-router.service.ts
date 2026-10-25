@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { modelBillingErrorMessage } from '../common/ai/model-provider-error';
 import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
 import type { KnowledgeAiTokenUsage } from '../knowledge-ai-providers/knowledge-ai-providers.service';
 import type { AgentApp } from './entities/agent-app.entity';
@@ -41,7 +42,10 @@ interface ModelHealth {
 @Injectable()
 export class AgentModelRouterService {
   private readonly health = new Map<string, ModelHealth>();
-  private readonly accountCooldown = new Map<number, number>();
+  private readonly accountCooldown = new Map<
+    number,
+    { until: number; billingMessage: string | null }
+  >();
   private sequence = 0;
 
   constructor(private readonly providers: KnowledgeAiProvidersService) {}
@@ -231,9 +235,11 @@ export class AgentModelRouterService {
       const now = Date.now();
       if (now >= deadline)
         throw new BadRequestException('本轮处理已超时，未执行新的业务操作');
-      if ((this.accountCooldown.get(request.app.providerId) ?? 0) > now) {
+      const cooldown = this.accountCooldown.get(request.app.providerId);
+      if (cooldown && cooldown.until > now) {
         throw new BadRequestException(
-          '模型账号鉴权或余额异常，暂缓重试；请检查账号后再试',
+          cooldown.billingMessage ??
+            '模型账号鉴权或余额异常，暂缓重试；请检查账号后再试',
         );
       }
       this.accountCooldown.delete(request.app.providerId);
@@ -277,18 +283,26 @@ export class AgentModelRouterService {
       );
       let outcome: AgentModelOutcome<T> | undefined;
       let reason: string | null = null;
+      let billingMessage: string | null = null;
       try {
         outcome = await this.providers.withExecutionSignal(
           controller.signal,
           () => invoke(model),
         );
-        if (!outcome.isSuccess)
+        if (!outcome.isSuccess) {
           reason = modelFailureReason(outcome.errorMessage ?? '');
+          billingMessage = modelBillingErrorMessage(outcome.errorMessage);
+        }
         if (controller.signal.aborted) reason = 'timeout';
       } catch (error) {
+        billingMessage = modelBillingErrorMessage(
+          error instanceof Error ? error.message : error,
+        );
         reason = controller.signal.aborted
           ? 'timeout'
-          : modelFailureReason(error instanceof Error ? error.message : '');
+          : modelFailureReason(
+              billingMessage ?? (error instanceof Error ? error.message : ''),
+            );
       } finally {
         clearTimeout(timer);
         state.inFlight--;
@@ -310,12 +324,13 @@ export class AgentModelRouterService {
       }
       lastReason = reason ?? 'request_failed';
       if (reason === 'account_auth' || reason === 'account_balance') {
-        this.accountCooldown.set(
-          request.app.providerId,
-          Date.now() + policy.cooldownSeconds * 1000,
-        );
+        this.accountCooldown.set(request.app.providerId, {
+          until: Date.now() + policy.cooldownSeconds * 1000,
+          billingMessage,
+        });
         throw new BadRequestException(
-          '模型账号鉴权或余额异常，切换同账号模型无法解决，请检查账号',
+          billingMessage ??
+            '模型账号鉴权或余额异常，切换同账号模型无法解决，请检查账号',
         );
       }
       // 上下文超限是请求问题，不将模型对其它会话全局熔断。

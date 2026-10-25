@@ -19,6 +19,10 @@ import { videoTaskId, videoTaskResult } from '../common/ai/video-generation';
 import { mediaProtocol } from '../model-endpoints/model-endpoint.constants';
 import { modelCategory } from '../model-endpoints/model-endpoint.constants';
 import { extendedTokenhubResult } from '../common/ai/tokenhub-adapters';
+import {
+  modelBillingErrorMessage,
+  readModelProviderError,
+} from '../common/ai/model-provider-error';
 
 type TestTarget = Awaited<
   ReturnType<KnowledgeAiProvidersService['resolveEndpointTestTarget']>
@@ -256,7 +260,9 @@ export class ModelEndpointTestsService {
     entry.result.httpStatus = response.status;
     let value: unknown;
     try {
-      value = await readMediaJson(response);
+      value = response.ok
+        ? await readMediaJson(response)
+        : await readModelProviderError(response);
     } catch {
       this.finish(
         entry,
@@ -267,6 +273,17 @@ export class ModelEndpointTestsService {
     }
     entry.result.responseBody = endpointTestResponse(value, target.secretKey);
     const payload = record(value);
+    const billingMessage = modelBillingErrorMessage(value);
+    if (billingMessage) {
+      this.finish(
+        entry,
+        querying ? 'unknown' : 'failed',
+        querying
+          ? `${billingMessage} 原任务状态尚未确认，可在充值后继续查询；不会重新生成。`
+          : billingMessage,
+      );
+      return;
+    }
     const extended = response.ok
       ? extendedTokenhubResult(value, target.protocol, !querying)
       : null;

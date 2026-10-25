@@ -22,6 +22,7 @@ import {
 } from '../model-endpoints/model-endpoint.constants';
 import type { ModelEndpoint } from '../model-endpoints/entities/model-endpoint.entity';
 import { builtinModelEndpointPath } from '../model-endpoints/model-endpoint.builtins';
+import { modelBillingErrorMessage } from '../common/ai/model-provider-error';
 import {
   CreateKnowledgeAiProviderDto,
   QueryKnowledgeAiProviderDto,
@@ -506,6 +507,16 @@ export class KnowledgeAiProvidersService {
       }
 
       const errorMessage = await response.text();
+      const billingMessage = modelBillingErrorMessage(errorMessage);
+      if (billingMessage)
+        return {
+          isAvailable: false,
+          model,
+          removed: false,
+          disabledConfigCount,
+          errorMessage: billingMessage,
+          provider: this.toView(currentProvider),
+        };
       if (this.isMissingModelError(response.status, errorMessage)) {
         currentProvider = await this.removeMissingModel(provider, model);
         const result = await this.featureConfigRepository.update(
@@ -906,11 +917,14 @@ export class KnowledgeAiProvidersService {
       if (!response.ok) {
         const errorText = await response.text();
         throw new BadRequestException(
-          `模型接口调用失败：${response.status} ${errorText}；${this.buildTargetDebugInfo(target)}`,
+          modelBillingErrorMessage(errorText) ??
+            `模型接口调用失败：${response.status} ${errorText}；${this.buildTargetDebugInfo(target)}`,
         );
       }
 
       const data = (await response.json()) as ChatCompletionResponse;
+      const billingMessage = modelBillingErrorMessage(data);
+      if (billingMessage) throw new BadRequestException(billingMessage);
       const answer = this.extractResponseContent(data);
       if (!answer) {
         throw new BadRequestException(
@@ -969,7 +983,8 @@ export class KnowledgeAiProvidersService {
       if (!response.ok) {
         const errorText = await response.text();
         throw new BadRequestException(
-          `模型接口调用失败：${response.status} ${errorText}；${this.buildTargetDebugInfo(payload.target)}`,
+          modelBillingErrorMessage(errorText) ??
+            `模型接口调用失败：${response.status} ${errorText}；${this.buildTargetDebugInfo(payload.target)}`,
         );
       }
       if (!response.body) {
@@ -1029,11 +1044,14 @@ export class KnowledgeAiProvidersService {
       if (!response.ok) {
         const errorText = await response.text();
         throw new BadRequestException(
-          `视觉模型 OCR 调用失败：${response.status} ${errorText}；${this.buildTargetDebugInfo(payload.target)}`,
+          modelBillingErrorMessage(errorText) ??
+            `视觉模型 OCR 调用失败：${response.status} ${errorText}；${this.buildTargetDebugInfo(payload.target)}`,
         );
       }
 
       const data = (await response.json()) as ChatCompletionResponse;
+      const billingMessage = modelBillingErrorMessage(data);
+      if (billingMessage) throw new BadRequestException(billingMessage);
       const answer = this.extractResponseContent(data);
       if (!answer) {
         throw new BadRequestException(
@@ -1140,11 +1158,14 @@ export class KnowledgeAiProvidersService {
     if (!response.ok) {
       const errorText = await response.text();
       throw new BadRequestException(
-        `向量模型调用失败：${response.status} ${errorText}；${this.buildTargetDebugInfo(target)}，请确认它是文本向量模型且在当前账号/地域可用`,
+        modelBillingErrorMessage(errorText) ??
+          `向量模型调用失败：${response.status} ${errorText}；${this.buildTargetDebugInfo(target)}，请确认它是文本向量模型且在当前账号/地域可用`,
       );
     }
 
     const data = (await response.json()) as EmbeddingResponse;
+    const billingMessage = modelBillingErrorMessage(data);
+    if (billingMessage) throw new BadRequestException(billingMessage);
     const embeddings = this.extractEmbeddings(data);
     if (embeddings.length !== input.length) {
       throw new BadRequestException(
@@ -1656,27 +1677,39 @@ export class KnowledgeAiProvidersService {
     let answer = '';
     let usage: KnowledgeAiTokenUsage | null = null;
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const blocks = buffer.split(/\r?\n\r?\n/);
-      buffer = blocks.pop() ?? '';
-      for (const block of blocks) {
-        const result = this.consumeStreamBlock(block, onDelta, onThinkingDelta);
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const blocks = buffer.split(/\r?\n\r?\n/);
+        buffer = blocks.pop() ?? '';
+        for (const block of blocks) {
+          const result = this.consumeStreamBlock(
+            block,
+            onDelta,
+            onThinkingDelta,
+          );
+          answer += result.content;
+          usage = result.usage ?? usage;
+          if (result.isDone) return { answer, usage };
+        }
+      }
+
+      buffer += decoder.decode();
+      if (buffer.trim()) {
+        const result = this.consumeStreamBlock(
+          buffer,
+          onDelta,
+          onThinkingDelta,
+        );
         answer += result.content;
         usage = result.usage ?? usage;
-        if (result.isDone) return { answer, usage };
       }
+      return { answer, usage };
+    } finally {
+      await reader.cancel().catch(() => undefined);
     }
-
-    buffer += decoder.decode();
-    if (buffer.trim()) {
-      const result = this.consumeStreamBlock(buffer, onDelta, onThinkingDelta);
-      answer += result.content;
-      usage = result.usage ?? usage;
-    }
-    return { answer, usage };
   }
 
   private consumeStreamBlock(
@@ -1697,6 +1730,8 @@ export class KnowledgeAiProvidersService {
       }
 
       const parsed = JSON.parse(data) as ChatCompletionStreamResponse;
+      const billingMessage = modelBillingErrorMessage(parsed);
+      if (billingMessage) throw new BadRequestException(billingMessage);
       usage = this.extractTokenUsage(parsed) ?? usage;
       const choice = parsed.choices?.[0];
       const delta = this.readMessageContent(

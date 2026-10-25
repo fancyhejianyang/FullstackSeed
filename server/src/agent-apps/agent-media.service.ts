@@ -6,6 +6,10 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
+  modelBillingErrorMessage,
+  readModelProviderError,
+} from '../common/ai/model-provider-error';
+import {
   imageGenerationRequest,
   imageGenerationResult,
 } from '../common/ai/image-generation';
@@ -191,13 +195,18 @@ export class AgentMediaService {
         body: JSON.stringify(body),
       });
       if (!response.ok) {
-        await response.body?.cancel();
+        const billingMessage = modelBillingErrorMessage(
+          await readModelProviderError(response),
+        );
         throw new BadRequestException(
-          `媒体模型请求失败（HTTP ${response.status}），请检查账号额度、模型权限和接口协议；系统不会自动重试`,
+          billingMessage ??
+            `媒体模型请求失败（HTTP ${response.status}），请检查账号额度、模型权限和接口协议；系统不会自动重试`,
         );
       }
       const value = await readMediaJson(response);
       controller.signal.throwIfAborted();
+      const billingMessage = modelBillingErrorMessage(value);
+      if (billingMessage) throw new BadRequestException(billingMessage);
       const metadata = { providerId: target.providerId, model: target.model };
       if (mode === 'vision') {
         const content = record(
@@ -238,6 +247,10 @@ export class AgentMediaService {
         throw new BadRequestException(
           '媒体任务已停止或超时；供应商可能仍在处理或计费，请核实后再发起新请求',
         );
+      const billingMessage = modelBillingErrorMessage(
+        error instanceof Error ? error.message : error,
+      );
+      if (billingMessage) throw new BadRequestException(billingMessage);
       if (
         error instanceof BadRequestException ||
         error instanceof NotFoundException

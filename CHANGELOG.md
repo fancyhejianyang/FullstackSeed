@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-10-25 将已确认的模型拒绝报错转换为欠费提示
+
+- 按用户确认，将完整英文 `Access to model denied. Please make sure you are eligible for using the model` 转换为固定中文“大模型账号已欠费，请充值后重试。”。新增共享识别函数，只匹配该完整报错或已转换中文；JSON 仅访问错误封装字段，不扫描正常回答/提示词/凭据，不将普通 AccessDenied、403、鉴权或限流扩大认定为欠费。媒体错误体最多读取 64 KB，支持 JSON 与纯文本，读取失败沿用原提示。
+- 模型接口卡片测试在协议解析和通用错误之前识别欠费，沿用现有 `message`、详情和 ElMessage 展示；提交失败明确为失败，查询阶段保留原任务编号并显示待核实、充值后继续查询，不自动重新生成。共用 Chat/流式 SSE/OCR/文本向量及模型校验返回固定中文，校验不移除模型或停用关联配置；SSE 结束或异常时清理读取器。
+- Agent 图片测试归类为额度异常并保留候选；实际媒体请求、共享生图结果及异步查询保留欠费原因。模型调度归类为账号余额异常，停止同账号切换，并在冷却期继续显示已确认原因。内容正文、封面和素材任务不再用上层通用提示覆盖欠费，仍不透传其它供应商原始响应、密钥或地址；取消、超时、版本冲突等原有状态优先，不自动重试。
+- 新增文件：`server/src/common/ai/model-provider-error.ts`。
+- 修改文件：`server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`、`server/src/knowledge-ai-providers/model-endpoint-tests.service.ts`、`server/src/common/ai/image-generation.ts`、`server/src/agent-apps/agent-media-probe.ts`、`server/src/agent-apps/agent-media-probe.service.ts`、`server/src/agent-apps/agent-media.service.ts`、`server/src/agent-apps/agent-model-routing.ts`、`server/src/agent-apps/agent-model-router.service.ts`、`server/src/ai-materials/ai-materials.service.ts`、`server/src/ai-materials/material-generation-error.ts`、`server/src/content-articles/content-cover.service.ts`、`server/src/content-articles/content-generation.service.ts`、`.design-spec.md`、本文件。删除文件：无。用户已有 `web/auto-imports.d.ts`、`web/src/api/hotTopic.ts` 改动保留且不纳入提交。
+- 前后端范围：复用已有 `message/errorMessage/reason` 契约和消息组件，未改 DTO、实体、权限或前端文件；只在真实响应返回该错误时提示，不因配置匹配检查推断欠费。
+- 验证：修改代码定向 ESLint/格式、后端业务类型检查和 diff 检查通过；静态核对精确报错匹配、JSON/文本错误读取、目录/候选保留、账号调度分类、固定中文透传、原任务不重投与取消/超时优先。按修复类约定未执行测试、build、启动/重启服务、数据库变更或真实模型调用。
+
 ### 2026-10-25 模型接口采用系统通用规则与模型专用覆盖
 
 - “模型厂商调用接口”新增“系统通用 / 模型专用”页签，均复用 Table 卡片、搜索、分页及 Dialog/Form/Button。百炼和 TokenHub 分别提供普通调用、识图、文本向量三类，共六张由代码维护的只读规则；允许查看和测试，不显示编辑、删除和勾选入口，服务端同时拒绝负数系统标识的编辑、删除及混合批量删除。系统规则不写数据库，无实体列/迁移、草稿、备注或可编辑副本。

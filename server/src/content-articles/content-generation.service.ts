@@ -13,6 +13,7 @@ import { EntityManager, IsNull, LessThan, MoreThan, Repository } from 'typeorm';
 import { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-configs.service';
 import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
 import { ContentTemplatesService } from '../content-templates/content-templates.service';
+import { modelBillingErrorMessage } from '../common/ai/model-provider-error';
 import { ContentArticle } from './entities/content-article.entity';
 import { ContentCoverService } from './content-cover.service';
 import {
@@ -492,6 +493,9 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
           }),
       );
       totalTokens = response.usage?.totalTokens ?? null;
+      if (!response.isSuccess && !this.activeAbort.signal.aborted)
+        errorMessage =
+          modelBillingErrorMessage(response.errorMessage) ?? errorMessage;
       if (response.isSuccess) {
         const parsed = parseContentWritingResponse(response.answer ?? '', true);
         if (parsed) {
@@ -506,8 +510,13 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
             '模型未返回有效的标题、正文与编辑提示结构，未采用响应、未修改原文；可能已计费，请检查模型或提示词后手动重试';
         }
       }
-    } catch {
+    } catch (error) {
       /* 不记录供应商原始错误、密钥或内部思考内容。 */
+      if (!this.activeAbort.signal.aborted)
+        errorMessage =
+          modelBillingErrorMessage(
+            error instanceof Error ? error.message : error,
+          ) ?? errorMessage;
     }
     if (this.stopped) {
       status = 'interrupted';

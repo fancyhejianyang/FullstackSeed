@@ -2,6 +2,7 @@ import {
   EXTENDED_IMAGE_PROTOCOLS,
   EXTENDED_VIDEO_PROTOCOLS,
 } from '../common/ai/tokenhub-adapters';
+import { readModelProviderError } from '../common/ai/model-provider-error';
 import {
   BadRequestException,
   ConflictException,
@@ -897,12 +898,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
   private async assertProviderResponse(response: Response) {
     if (response.ok) return;
     const statusCode = response.status;
-    let providerResponse: unknown;
-    try {
-      providerResponse = await readMediaJson(response, 64 * 1024);
-    } catch {
-      await response.body?.cancel().catch(() => undefined);
-    }
+    const providerResponse = await readModelProviderError(response);
     throw new MaterialProviderHttpError(statusCode, providerResponse);
   }
 

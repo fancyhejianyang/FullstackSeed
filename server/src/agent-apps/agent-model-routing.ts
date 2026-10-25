@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { modelBillingErrorMessage } from '../common/ai/model-provider-error';
 
 export const AGENT_MODEL_STRATEGIES = [
   'priority',
@@ -100,6 +101,7 @@ export function parseModelDecision(text: string): AgentModelDecision {
 
 /** 错误分类只用于调度，不把供应商原始响应/密钥信息写入调度轨迹。 */
 export function modelFailureReason(message: string): string {
+  if (modelBillingErrorMessage(message)) return 'account_balance';
   if (/\b401\b|invalid.?api.?key|unauthorized|鉴权失败/i.test(message))
     return 'account_auth';
   if (/insufficient.?balance|arrears|欠费|余额不足/i.test(message))

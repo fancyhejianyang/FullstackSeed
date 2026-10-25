@@ -1,5 +1,6 @@
 import { randomInt } from 'node:crypto';
 import { deflateSync } from 'node:zlib';
+import { modelBillingErrorMessage } from '../common/ai/model-provider-error';
 
 export type AgentMediaKind = 'vision' | 'imageGeneration';
 export interface AgentMediaProbeResult {
@@ -18,6 +19,13 @@ export function classifyMediaProbeError(
   status: number,
   value: unknown,
 ): Pick<AgentMediaProbeResult, 'status' | 'reason' | 'message'> {
+  const billingMessage = modelBillingErrorMessage(value);
+  if (billingMessage)
+    return {
+      status: 'inconclusive',
+      reason: 'quota',
+      message: `${billingMessage}无法确认图片能力，未移除候选。`,
+    };
   const body = record(value);
   const error = record(body.error);
   const code = textField(error.code ?? body.code).slice(0, 200);

@@ -2,6 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
 import { UploadsService } from '../uploads/uploads.service';
 import {
+  modelBillingErrorMessage,
+  readModelProviderError,
+} from '../common/ai/model-provider-error';
+import {
   downloadGeneratedImage,
   imageMime,
   readMediaJson,
@@ -86,7 +90,10 @@ export class ContentCoverService {
           }),
       );
       data.totalTokens = brief.usage?.totalTokens ?? null;
-      if (!brief.isSuccess) throw new Error('封面描述生成失败');
+      if (!brief.isSuccess)
+        throw new Error(
+          modelBillingErrorMessage(brief.errorMessage) ?? '封面描述生成失败',
+        );
       data.prompt = parseCoverBrief(brief.answer ?? '');
       signal.throwIfAborted();
       const prompt = `${data.prompt}\n情绪化概念插画，无文字、无水印，不模拟真实新闻现场。`;
@@ -103,14 +110,15 @@ export class ContentCoverService {
         ),
       });
       if (!response.ok) {
-        await response.body?.cancel();
-        throw new Error('生图失败');
+        const billingMessage = modelBillingErrorMessage(
+          await readModelProviderError(response),
+        );
+        throw new Error(billingMessage ?? '生图失败');
       }
-      const image = await imageGenerationResult(
-        await readMediaJson(response),
-        target,
-        signal,
-      );
+      const value = await readMediaJson(response);
+      const billingMessage = modelBillingErrorMessage(value);
+      if (billingMessage) throw new Error(billingMessage);
+      const image = await imageGenerationResult(value, target, signal);
       const buffer =
         image.data ?? (await downloadGeneratedImage(image.url, signal));
       const mime = imageMime(buffer);
@@ -134,13 +142,17 @@ export class ContentCoverService {
         throw new Error('封面存储地址无效');
       data.url = saved.url;
       return { status: 'succeeded', data };
-    } catch {
+    } catch (error) {
       // 不透传供应商响应、地址或密钥；不重试、不回退其它账号或模型。
       return {
         status: signal.aborted ? 'interrupted' : 'failed',
         data: {
           ...data,
           message:
+            (!signal.aborted &&
+              modelBillingErrorMessage(
+                error instanceof Error ? error.message : error,
+              )) ||
             '封面生成失败或中断，正文已保留；供应商可能已计费，不会自动重试。',
         },
       };
