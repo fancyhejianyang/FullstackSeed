@@ -341,6 +341,14 @@ test("每日计划启用前校验执行权限、可用来源与真正联网协�
     /缺少热点执行权限/,
   );
   assert.match(validateSchedule(preference, choices, true), /联网协议/);
+  assert.match(
+    validateSchedule(
+      preference,
+      { ...choices, aiConfigs: [{ id: 9, webSearchMode: "bailianChat" }] },
+      true,
+    ),
+    /Responses 联网协议/,
+  );
   assert.equal(
     validateSchedule(
       preference,
@@ -363,7 +371,7 @@ test("每日计划启用前校验执行权限、可用来源与真正联网协�
   );
 });
 
-test("仅选择网易国内新闻时所有模式允许无联网协议，混入平台搜索仍需联网", () => {
+test("网易始终直读，纯 AI 依赖搜索，混合有直读来源时允许无联网协议", () => {
   const choices = {
     aiConfigs: [{ id: 9, webSearchMode: "disabled" }],
     sources: [
@@ -383,16 +391,81 @@ test("仅选择网易国内新闻时所有模式允许无联网协议，混入�
       );
     }
   }
-  for (const mode of ["aiSearch", "hybrid"]) {
-    assert.match(
+  assert.match(
+    validateSchedule(
+      {
+        mode: "aiSearch",
+        aiConfigId: 9,
+        sourceIds: [4, 5],
+        scheduleEnabled: true,
+      },
+      choices,
+      true,
+    ),
+    /Responses 联网协议/,
+  );
+  for (const aiConfigId of [null, 9]) {
+    assert.equal(
       validateSchedule(
-        { mode, aiConfigId: 9, sourceIds: [4, 5], scheduleEnabled: true },
+        {
+          mode: "hybrid",
+          aiConfigId,
+          sourceIds: [4, 5],
+          scheduleEnabled: true,
+        },
         choices,
         true,
       ),
-      /联网协议/,
+      null,
     );
   }
+});
+
+test("搜索来源为主的混合模式严格要求 Responses，直读来源允许普通 AI 推荐", () => {
+  const preference = {
+    mode: "hybrid",
+    aiConfigId: 9,
+    sourceIds: [5],
+    scheduleEnabled: true,
+  };
+  const searchSource = { id: 5, kind: "weiboHot", accessMode: "search" };
+  for (const webSearchMode of ["disabled", "bailianChat"]) {
+    const choices = {
+      aiConfigs: [{ id: 9, webSearchMode }],
+      sources: [searchSource],
+    };
+    assert.match(
+      validateSchedule(preference, choices, true),
+      /Responses 联网协议/,
+    );
+    assert.equal(
+      validateSchedule(
+        preference,
+        { ...choices, sources: [{ ...searchSource, accessMode: "page" }] },
+        true,
+      ),
+      null,
+    );
+    assert.equal(
+      validateSchedule(
+        preference,
+        { ...choices, sources: [{ ...searchSource, kind: "neteaseNews" }] },
+        true,
+      ),
+      null,
+    );
+  }
+  assert.equal(
+    validateSchedule(
+      preference,
+      {
+        aiConfigs: [{ id: 9, webSearchMode: "bailianResponses" }],
+        sources: [searchSource],
+      },
+      true,
+    ),
+    null,
+  );
 });
 
 test("创建并生成权限与模型选项读取权限一致，成功文案依据实际任务回执", () => {

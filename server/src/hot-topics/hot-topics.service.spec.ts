@@ -236,6 +236,48 @@ describe('热点选题核心', () => {
     ).rejects.toThrow('Responses');
     expect(runs.save).not.toHaveBeenCalled();
   });
+  it.each(['disabled', 'bailianChat'] as const)(
+    '混合模式有直读来源时保留平台采集与普通推荐：%s',
+    async (webSearchMode) => {
+      const { service, sources, configs } = setup();
+      const config = { id: 1, webSearchMode };
+      configs.findUsableTopicDiscoveryConfig.mockResolvedValue(config);
+      sources.selected.mockResolvedValue([
+        { id: 1, kind: 'weiboHot', accessMode: 'page', isEnabled: true },
+      ]);
+      const internal = service as unknown as {
+        validateExecution(
+          pref: HotPreferenceInput,
+          action: 'discover',
+        ): Promise<unknown>;
+      };
+      await expect(
+        internal.validateExecution(
+          { ...preference(), mode: 'hybrid', aiConfigId: 1 },
+          'discover',
+        ),
+      ).resolves.toBe(config);
+    },
+  );
+  it('混合模式仅有搜索来源时仍拒绝未开启的联网配置', async () => {
+    const { service, preferences, configs, sources, runs } = setup();
+    preferences.findOne.mockResolvedValue({
+      ...preference(),
+      mode: 'hybrid',
+      aiConfigId: 1,
+    });
+    configs.findUsableTopicDiscoveryConfig.mockResolvedValue({
+      id: 1,
+      webSearchMode: 'disabled',
+    });
+    sources.selected.mockResolvedValue([
+      { id: 1, kind: 'weiboHot', accessMode: 'search', isEnabled: true },
+    ]);
+    await expect(
+      service.submit({ requestId: 'search-only', action: 'discover' }, 9),
+    ).rejects.toThrow('Responses');
+    expect(runs.save).not.toHaveBeenCalled();
+  });
   it('文章生成权限单独校验，不因拥有热点权限放行', async () => {
     const { service, topics } = setup();
     const user = {

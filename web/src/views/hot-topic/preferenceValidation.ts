@@ -1,5 +1,20 @@
 import type { HotOptions, HotPreference } from "@/api/hotTopic";
 
+/** 混合模式只在没有可直读来源时才必须依赖 AI 搜索。 */
+export function preferenceRequiresSearch(
+  mode: HotPreference["mode"],
+  sources: Pick<HotOptions["sources"][number], "kind" | "accessMode">[],
+): boolean {
+  if (mode === "platform") return false;
+  if (mode === "aiSearch")
+    return (
+      !sources.length || sources.some((source) => source.kind !== "neteaseNews")
+    );
+  return !sources.some(
+    (source) => source.kind === "neteaseNews" || source.accessMode === "page",
+  );
+}
+
 /** An incomplete preference form must never prevent disabling a schedule. */
 export function scheduleValidationError(
   preference: HotPreference,
@@ -23,15 +38,16 @@ export function scheduleValidationError(
     return "平台或混合模式至少选择一个来源";
   if (
     preference.mode === "platform" &&
-    sources.some((source) => source.accessMode === "search")
+    sources.some(
+      (source) =>
+        source.kind !== "neteaseNews" && source.accessMode === "search",
+    )
   )
     return "所选来源需要 AI 搜索，请切换到 AI 联网或混合模式";
   if (
-    preference.mode !== "platform" &&
-    (!sources.length ||
-      sources.some((source) => source.kind !== "neteaseNews")) &&
-    (!config || config.webSearchMode === "disabled")
+    preferenceRequiresSearch(preference.mode, sources) &&
+    config?.webSearchMode !== "bailianResponses"
   )
-    return "AI 搜索或混合模式需要选择已启用联网协议的热点 AI 配置";
+    return "当前获取方式需要已启用 Responses 联网协议的热点 AI 配置；仅需平台采集和普通 AI 推荐时，请改选“平台来源”";
   return null;
 }

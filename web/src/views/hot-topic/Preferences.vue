@@ -6,7 +6,10 @@ import Dialog from "@/components/Dialog.vue";
 import Form, { type FormField } from "@/components/Form.vue";
 import Button from "@/components/Button.vue";
 import { useUserStore } from "@/stores/user";
-import { scheduleValidationError } from "./preferenceValidation";
+import {
+  preferenceRequiresSearch,
+  scheduleValidationError,
+} from "./preferenceValidation";
 import {
   getHotPreference,
   saveHotPreference,
@@ -61,10 +64,30 @@ const directSourcesIgnored = computed(
         source.accessMode !== "search",
     ),
 );
+const selectedSources = computed(() =>
+  options.value.sources.filter((source) =>
+    form.sourceIds.includes(String(source.id)),
+  ),
+);
+const searchProtocolHint = computed(() => {
+  if (loading.value) return "";
+  const config = options.value.aiConfigs.find(
+    (item) => item.id === form.aiConfigId,
+  );
+  if (config?.webSearchMode === "bailianResponses") return "";
+  if (preferenceRequiresSearch(form.mode, selectedSources.value))
+    return "当前获取方式依赖 AI 联网搜索，但尚未选用支持 Responses 联网的热点 AI 配置。仅需平台采集并用普通 AI 推荐时，请将获取模式改为“平台来源”；需要 AI 联网搜索时，请选择已启用 Responses 联网的热点 AI 配置。";
+  if (
+    form.mode === "hybrid" &&
+    selectedSources.value.some((source) => source.kind !== "neteaseNews")
+  )
+    return "当前未选用支持 Responses 联网的热点 AI 配置，混合模式仍可先采集能直接读取的来源，AI 搜索不可用的原因会记录在任务来源结果中。仅需平台采集并用普通 AI 推荐可选“平台来源”；需要 AI 联网搜索时，请选择已启用 Responses 联网的热点 AI 配置。";
+  return "";
+});
 const configOptions = computed(() => {
   const rows = options.value.aiConfigs.map((item) => ({
     value: item.id,
-    label: `${item.name} · ${item.model || "未设置模型"} · ${item.webSearchMode === "disabled" ? "未开启联网" : "已配置联网协议"}`,
+    label: `${item.name} · ${item.model || "未设置模型"} · ${item.webSearchMode === "bailianResponses" ? "Responses 联网搜索" : item.webSearchMode === "bailianChat" ? "仅分析已采集资料（旧联网不支持搜索）" : "仅分析已采集资料"}`,
   }));
   if (form.aiConfigId && !rows.some((item) => item.value === form.aiConfigId))
     rows.push({
@@ -91,7 +114,7 @@ const fields = computed<FormField[]>(() => [
     type: "select",
     options: configOptions,
     span: 2,
-    hint: "使用独立“热点发现”功能配置。平台模式或仅选择网易国内新闻时可不选 AI；选用 AI 时用于推荐，网易接口读取不要求联网协议。",
+    hint: "使用独立“热点发现”功能配置。平台采集可选普通 AI 配置进行推荐；AI 联网搜索需要已启用 Responses 的配置。网易接口读取不要求联网协议。",
   },
   {
     prop: "sourceIds",
@@ -265,10 +288,14 @@ async function submit() {
       ><Button @click="load">重新读取</Button></el-empty
     >
     <template v-else>
-      <p v-if="directSourcesIgnored" class="mode-warning">
+      <p v-if="searchProtocolHint" class="mode-warning">
+        {{ searchProtocolHint }}
+      </p>
+      <p v-else-if="directSourcesIgnored" class="mode-warning">
         当前为“仅 AI
-        联网搜索”，所选平台页面不会被直接读取。如需按来源地址采集并用 AI
-        补充，请选择“平台 + AI 联网搜索”。网易国内新闻始终通过固定接口获取。
+        联网搜索”，所选平台页面不会被直接读取。按来源地址采集并用普通 AI
+        推荐请选择“平台来源”；需要同时采集和联网搜索补充，请选择“平台 + AI
+        联网搜索”。网易国内新闻始终通过固定接口获取。
       </p>
       <Form
         ref="formRef"

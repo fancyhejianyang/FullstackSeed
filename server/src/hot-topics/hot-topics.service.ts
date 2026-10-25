@@ -410,19 +410,29 @@ export class HotTopicsService implements OnModuleInit, OnModuleDestroy {
         throw new BadRequestException('请至少选择一个启用的热点来源');
       if (
         pref.mode === 'platform' &&
-        selected.some((source) => source.accessMode === 'search')
+        selected.some(
+          (source) =>
+            source.kind !== 'neteaseNews' && source.accessMode === 'search',
+        )
       )
         throw new BadRequestException(
           '所选来源采用 AI 搜索，请切换为 AI 联网或混合模式',
         );
+      const hasDirectSource = selected.some(
+        (source) =>
+          source.kind === 'neteaseNews' || source.accessMode === 'page',
+      );
+      const requiresSearch =
+        pref.mode === 'aiSearch' ||
+        (pref.mode === 'hybrid' && !hasDirectSource);
       if (
-        pref.mode !== 'platform' &&
+        requiresSearch &&
         (!selected.length ||
           selected.some((source) => source.kind !== 'neteaseNews')) &&
         (!config || config.webSearchMode !== 'bailianResponses')
       )
         throw new BadRequestException(
-          'AI 搜索需要选择百炼 Responses 联网协议；Chat 协议缺少可验证搜索来源，不能用于热点发现',
+          '当前获取方式需要 AI 联网搜索，请在“偏好与计划”中选择已启用百炼 Responses 的热点 AI 配置；如需直接采集并由普通模型推荐，请将获取模式改为“平台来源”。',
         );
     }
     return config;
