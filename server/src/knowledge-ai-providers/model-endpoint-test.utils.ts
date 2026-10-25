@@ -2,6 +2,8 @@ import { imageGenerationRequest } from '../common/ai/image-generation';
 import { videoGenerationRequest } from '../common/ai/video-generation';
 import { mediaProtocol } from '../model-endpoints/model-endpoint.constants';
 import type { ModelEndpoint } from '../model-endpoints/entities/model-endpoint.entity';
+import { extendedTokenhubRequest } from '../common/ai/tokenhub-adapters';
+import type { AiMaterialGenerationMode } from '../ai-materials/ai-material.constants';
 
 export const record = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' && !Array.isArray(value)
@@ -14,6 +16,40 @@ export function endpointTestTemplate(
   const model = card.modelCode;
   const scene = card.functionType;
   const image = 'REPLACE_WITH_IMAGE_URL';
+  const extended = extendedTokenhubRequest({
+    model,
+    functionType: scene,
+    protocol: card.protocol,
+    image: [
+      'imageToImage',
+      'imageToVideo',
+      'startEndToVideo',
+      'imageTo3d',
+      'motionControl',
+    ].includes(scene)
+      ? image
+      : undefined,
+    lastImage:
+      scene === 'startEndToVideo' ? 'REPLACE_WITH_LAST_FRAME_URL' : undefined,
+    references: ['referenceToVideo', 'omniVideo'].includes(scene)
+      ? [{ type: 'reference_image', url: image }]
+      : undefined,
+  });
+  if (extended) return extended;
+  if (scene === 'videoUnderstanding')
+    return {
+      model,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: '请概述视频内容' },
+            { type: 'video_url', video_url: { url: 'REPLACE_WITH_VIDEO_URL' } },
+          ],
+        },
+      ],
+      stream: false,
+    };
   if (scene === 'chat')
     return {
       model,
@@ -56,7 +92,7 @@ export function endpointTestTemplate(
     {
       model,
       prompt: '镜头缓缓移动，画面中的云朵轻轻飘动。',
-      generationMode: scene,
+      generationMode: scene as AiMaterialGenerationMode,
       referenceImageDataUrl: scene === 'imageToVideo' ? image : undefined,
       referenceMedia:
         scene === 'referenceToVideo'

@@ -179,4 +179,40 @@ describe('Agent media targets', () => {
       });
     }
   });
+  it('新 3D/音频调试只选同平台有效账号，无专用业务目录仍可核实，媒体目录约束继续生效', async () => {
+    const { service, provider, endpoints } = harness();
+    provider.apiUrl = 'https://tokenhub-intl.tencentmaas.com/v1';
+    const card = {
+      id: 10,
+      modelCode: 'hy-3d-3.1',
+      functionType: 'textTo3d' as const,
+      protocol: 'tokenhub3d' as const,
+      executionMode: 'async',
+      apiPath: '/v1/api/3d/submit',
+      taskApiPath: '/v1/api/3d/query',
+    };
+    Object.assign(endpoints, {
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ ...card, platformType: 'tencentTokenhub' }),
+    });
+    endpoints.resolve.mockResolvedValue(card);
+    await expect(
+      service.resolveEndpointTestTarget(10, 2),
+    ).resolves.toMatchObject({
+      model: 'hy-3d-3.1',
+      taskMethod: 'POST',
+      url: 'https://tokenhub-intl.tencentmaas.com/v1/api/3d/submit',
+      taskUrlTemplate: 'https://tokenhub-intl.tencentmaas.com/v1/api/3d/query',
+    });
+    provider.isEnabled = false;
+    await expect(service.resolveEndpointTestTarget(10, 2)).rejects.toThrow(
+      '未启用',
+    );
+    provider.isEnabled = true;
+    provider.apiUrl = 'https://dashscope.aliyuncs.com/v1';
+    await expect(service.resolveEndpointTestTarget(10, 2)).rejects.toThrow(
+      '平台不一致',
+    );
+  });
 });

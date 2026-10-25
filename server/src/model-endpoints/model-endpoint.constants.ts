@@ -24,6 +24,7 @@ export function detectModelPlatform(value: string): PlatformType {
     if (
       [
         'tokenhub.tencentmaas.com',
+        'tokenhub-intl.tencentmaas.com',
         'tokenhub-intl.tencentcloudmaas.com',
       ].includes(host)
     )
@@ -56,14 +57,103 @@ export const FUNCTION_LABELS = {
   imageToVideo: '图生视频',
   referenceToVideo: '参考生视频',
   startEndToVideo: '首尾帧生视频',
+  omniVideo: '全能视频生成',
+  motionControl: '动作控制',
+  avatarVideo: '人像驱动',
+  videoUnderstanding: '视频理解',
+  multimodalEmbedding: '多模态向量',
+  webSearch: '联网搜索',
+  textTo3d: '文生 3D',
+  imageTo3d: '图生 3D',
+  multiViewTo3d: '多视图生 3D',
+  threeDComponent: '3D 组件拆分',
+  threeDFormat: '3D 格式转换',
+  threeDTexture: '3D 纹理生成',
+  threeDUv: '3D UV 展开',
+  threeDRetopology: '3D 拓扑重构',
+  threeDRiggingCheck: '3D 绑骨检查',
+  threeDRigging: '3D 绑骨蒙皮',
+  threeDAnimation: '3D 动画重定向',
+  threeDMotion: '3D 动作生成',
+  worldScene: '世界场景生成',
+  worldPanorama: '世界全景生成',
+  speechRecognition: '同步语音识别',
+  speechRecognitionAsync: '异步语音识别',
+  speechSynthesis: '语音合成',
+  voiceClone: '音色复刻',
+  voiceDesign: '音色设计',
+  dubbing: '视频翻译配音',
+  musicGeneration: '歌曲生成',
+  musicEasyGeneration: '提示词生成歌曲',
+  instrumentalGeneration: '纯音乐生成',
 } as const;
 export type ModelFunction = keyof typeof FUNCTION_LABELS;
 export const MODEL_FUNCTIONS = Object.keys(FUNCTION_LABELS) as ModelFunction[];
 
+export const CATEGORY_FUNCTIONS = {
+  language: ['chat'],
+  image: ['textToImage', 'imageToImage'],
+  video: [
+    'textToVideo',
+    'imageToVideo',
+    'referenceToVideo',
+    'startEndToVideo',
+    'omniVideo',
+    'motionControl',
+    'avatarVideo',
+  ],
+  threeD: [
+    'textTo3d',
+    'imageTo3d',
+    'multiViewTo3d',
+    'threeDComponent',
+    'threeDFormat',
+    'threeDTexture',
+    'threeDUv',
+    'threeDRetopology',
+    'threeDRiggingCheck',
+    'threeDRigging',
+    'threeDAnimation',
+    'threeDMotion',
+    'worldScene',
+    'worldPanorama',
+  ],
+  audio: [
+    'speechRecognition',
+    'speechRecognitionAsync',
+    'speechSynthesis',
+    'voiceClone',
+    'voiceDesign',
+    'dubbing',
+    'musicGeneration',
+    'musicEasyGeneration',
+    'instrumentalGeneration',
+  ],
+  understanding: ['vision', 'videoUnderstanding'],
+  embedding: ['embedding', 'multimodalEmbedding'],
+  search: ['webSearch'],
+} as const satisfies Record<string, readonly ModelFunction[]>;
+export type ModelCategory = keyof typeof CATEGORY_FUNCTIONS;
+export const CATEGORY_LABELS: Record<ModelCategory, string> = {
+  language: '语言模型',
+  image: '图像生成',
+  video: '视频生成',
+  threeD: '3D 与世界模型',
+  audio: '语音与音乐',
+  understanding: '多模态理解',
+  embedding: '向量模型',
+  search: '联网搜索',
+};
+export function modelCategory(scene: ModelFunction): ModelCategory {
+  return (Object.entries(CATEGORY_FUNCTIONS).find(([, scenes]) =>
+    (scenes as readonly ModelFunction[]).includes(scene),
+  )?.[0] ?? 'language') as ModelCategory;
+}
+
 export const PROTOCOLS = {
   openaiChat: {
     label: 'Chat Completions',
-    functions: ['chat', 'vision'],
+    functions: ['chat', 'vision', 'videoUnderstanding'],
     mode: 'sync',
   },
   openaiEmbedding: {
@@ -121,9 +211,152 @@ export const PROTOCOLS = {
     ],
     mode: 'async',
   },
+  tokenhubWandImage: {
+    label: 'TokenHub WAND 生图',
+    functions: ['textToImage', 'imageToImage'],
+    mode: 'async',
+  },
+  tokenhubKlingImage: {
+    label: 'TokenHub Kling 生图',
+    functions: ['textToImage', 'imageToImage'],
+    mode: 'async',
+  },
+  tokenhubWandVideo: {
+    label: 'TokenHub WAND 视频',
+    functions: [
+      'textToVideo',
+      'imageToVideo',
+      'referenceToVideo',
+      'startEndToVideo',
+    ],
+    mode: 'async',
+  },
+  tokenhubPixverseVideo: {
+    label: 'TokenHub PixVerse 视频',
+    functions: [
+      'textToVideo',
+      'imageToVideo',
+      'referenceToVideo',
+      'startEndToVideo',
+    ],
+    mode: 'async',
+  },
+  tokenhubKlingVideo: {
+    label: 'TokenHub Kling 视频',
+    functions: [
+      'textToVideo',
+      'imageToVideo',
+      'referenceToVideo',
+      'startEndToVideo',
+      'omniVideo',
+      'motionControl',
+    ],
+    mode: 'async',
+  },
+  tokenhubMinimaxVideo: {
+    label: 'TokenHub MiniMax 视频 V1',
+    functions: ['textToVideo', 'imageToVideo', 'startEndToVideo'],
+    mode: 'async',
+  },
+  tokenhubMinimaxVideoV2: {
+    label: 'TokenHub MiniMax 视频 V2',
+    functions: [
+      'textToVideo',
+      'imageToVideo',
+      'referenceToVideo',
+      'startEndToVideo',
+    ],
+    mode: 'async',
+  },
+  tokenhubYoutuVideo: {
+    label: 'TokenHub 优图人像',
+    functions: ['avatarVideo'],
+    mode: 'async',
+  },
+  tokenhub3d: {
+    label: 'TokenHub 3D 任务',
+    functions: CATEGORY_FUNCTIONS.threeD.filter(
+      (scene) => scene !== 'worldScene' && scene !== 'worldPanorama',
+    ),
+    mode: 'async',
+  },
+  tokenhubWorldScene: {
+    label: 'TokenHub 世界场景',
+    functions: ['worldScene'],
+    mode: 'async',
+  },
+  tokenhubWorldPanorama: {
+    label: 'TokenHub 世界全景',
+    functions: ['worldPanorama'],
+    mode: 'sync',
+  },
+  tokenhubAsrSync: {
+    label: 'TokenHub 同步 ASR',
+    functions: ['speechRecognition'],
+    mode: 'sync',
+  },
+  tokenhubAsrAsync: {
+    label: 'TokenHub 异步 ASR',
+    functions: ['speechRecognitionAsync'],
+    mode: 'async',
+  },
+  tokenhubTts: {
+    label: 'TokenHub MiniMax TTS',
+    functions: ['speechSynthesis'],
+    mode: 'sync',
+  },
+  tokenhubVoiceClone: {
+    label: 'TokenHub MiniMax 音色复刻',
+    functions: ['voiceClone'],
+    mode: 'sync',
+  },
+  tokenhubVoiceDesign: {
+    label: 'TokenHub MiniMax 音色设计',
+    functions: ['voiceDesign'],
+    mode: 'sync',
+  },
+  tokenhubDubbing: {
+    label: 'TokenHub WAND 配音',
+    functions: ['dubbing'],
+    mode: 'async',
+  },
+  tokenhubMusic: {
+    label: 'TokenHub MiniMax 音乐',
+    functions: ['musicGeneration', 'instrumentalGeneration'],
+    mode: 'sync',
+  },
+  tokenhubMurekaMusic: {
+    label: 'TokenHub Mureka 音乐',
+    functions: [
+      'musicGeneration',
+      'musicEasyGeneration',
+      'instrumentalGeneration',
+    ],
+    mode: 'sync',
+  },
+  tokenhubMultimodalEmbedding: {
+    label: 'TokenHub 多模态 Embeddings',
+    functions: ['multimodalEmbedding'],
+    mode: 'sync',
+  },
+  openaiChatSearch: {
+    label: 'TokenHub Chat 联网搜索',
+    functions: ['webSearch'],
+    mode: 'sync',
+  },
+  openaiResponses: {
+    label: 'Responses 联网搜索',
+    functions: ['webSearch'],
+    mode: 'sync',
+  },
 } as const;
 export type ModelProtocol = keyof typeof PROTOCOLS;
 export const MODEL_PROTOCOLS = Object.keys(PROTOCOLS) as ModelProtocol[];
+export function protocolTaskMethod(protocol: ModelProtocol): 'GET' | 'POST' {
+  return protocol === 'tokenhub3d' || protocol === 'tokenhubYoutuVideo'
+    ? 'POST'
+    : 'GET';
+}
 export type MediaProtocol =
   | 'openai'
   | 'dashscope'

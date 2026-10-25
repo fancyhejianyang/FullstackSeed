@@ -46,7 +46,10 @@ const fields = computed<FormField[]>(() => [
       value: item.id,
     })),
     componentProps: { disabled: pending.value },
-    hint: "只显示同平台、已启用且已登记当前模型的账号；未显示时请先补充账号对应模型目录和密钥。",
+    hint:
+      options.value?.accountCatalogRequired === false
+        ? "此类新能力仅在卡片页调试，账号尚无专用模型目录；按同平台、启用与密钥选择账号，模型是否开通由明确测试核实。"
+        : "只显示同平台、已启用且已登记当前模型的账号；未显示时请先补充账号对应模型目录和密钥。",
   },
   {
     prop: "requestBody",
@@ -54,7 +57,7 @@ const fields = computed<FormField[]>(() => [
     type: "textarea",
     rows: 14,
     componentProps: { disabled: pending.value },
-    hint: "可修改测试内容和参数。参考图片/首尾帧场景须替换 REPLACE_WITH_ 占位符；模型编码以当前卡片为准。",
+    hint: "可修改测试内容和原生参数。请按官方文档替换全部 REPLACE_WITH_ 占位符（图片、音视频、模型文件或音色等）；模型编码以当前卡片为准。",
   },
 ]);
 const rules: FormRules = {
@@ -196,7 +199,7 @@ async function startTest() {
     )
       throw new Error("请求参数必须是 JSON 对象");
     if (form.requestBody.includes("REPLACE_WITH_"))
-      throw new Error("请先替换参考图片地址占位符");
+      throw new Error("请按官方文档替换全部 REPLACE_WITH_ 占位符后再测试");
   } catch (error) {
     ElMessage.warning(
       error instanceof SyntaxError ? "请求参数不是有效 JSON" : message(error),
@@ -278,6 +281,16 @@ async function refreshResult(explicit = false) {
       />
       <div v-if="options" class="endpoint-test__path">
         POST {{ options.card.apiPath }}
+        <div v-if="options.card.executionMode === 'async'">
+          {{ options.card.taskMethod ?? "GET" }} {{ options.card.taskApiPath }}
+        </div>
+        <el-link
+          v-if="options.card.documentationUrl"
+          :href="options.card.documentationUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+          >查看官方参数说明</el-link
+        >
       </div>
       <Form
         ref="formRef"

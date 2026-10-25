@@ -32,6 +32,13 @@ export class ModelEndpointsController {
     return this.service.options();
   }
 
+  @Post('import-official')
+  @RequirePermissions('ModelEndpoint.create')
+  @ApiOperation({ summary: '补充已核对的官方预设，保留已编辑、停用和删除记录' })
+  importOfficial() {
+    return this.service.importPresets();
+  }
+
   @Get()
   @RequirePermissions('ModelEndpoint.read')
   @ApiOperation({ summary: '分页查询模型调用接口' })

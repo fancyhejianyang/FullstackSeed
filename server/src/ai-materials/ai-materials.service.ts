@@ -1,4 +1,8 @@
 import {
+  EXTENDED_IMAGE_PROTOCOLS,
+  EXTENDED_VIDEO_PROTOCOLS,
+} from '../common/ai/tokenhub-adapters';
+import {
   BadRequestException,
   ConflictException,
   Injectable,
@@ -814,9 +818,12 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
     setPhase: (phase: MaterialGenerationPhase) => void,
   ) {
     if (
-      !['dashscope', 'tokenhubHunyuanVideo', 'tokenhubViduVideo'].includes(
-        target.protocol,
-      ) ||
+      ![
+        'dashscope',
+        'tokenhubHunyuanVideo',
+        'tokenhubViduVideo',
+        ...EXTENDED_VIDEO_PROTOCOLS,
+      ].includes(target.protocol) ||
       !target.taskUrlTemplate
     )
       throw new BadRequestException('视频生成配置缺少有效的异步协议或查询路径');
@@ -989,6 +996,8 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
         'tokenhubViduImage',
         'tokenhubHunyuanVideo',
         'tokenhubViduVideo',
+        ...EXTENDED_IMAGE_PROTOCOLS,
+        ...EXTENDED_VIDEO_PROTOCOLS,
       ].includes(target.protocol)
     )
       throw new BadRequestException('所选模型协议不支持当前参考素材生成场景');

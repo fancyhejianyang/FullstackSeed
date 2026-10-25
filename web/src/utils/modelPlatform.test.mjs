@@ -5,6 +5,7 @@ import { detectModelPlatform } from "./modelPlatform.ts";
 test("账号编辑实时识别官方平台域名", () => {
   for (const address of [
     "https://tokenhub.tencentmaas.com/v1",
+    "https://tokenhub-intl.tencentmaas.com/v1",
     "https://tokenhub-intl.tencentcloudmaas.com/v1",
     "https://TOKENHUB.TENCENTMAAS.COM./v1",
   ]) {

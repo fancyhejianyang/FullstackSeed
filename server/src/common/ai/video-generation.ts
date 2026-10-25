@@ -1,5 +1,11 @@
 import { BadRequestException } from '@nestjs/common';
 import type { MediaProtocol } from '../../model-endpoints/model-endpoint.constants';
+import type { ModelProtocol } from '../../model-endpoints/model-endpoint.constants';
+import {
+  EXTENDED_VIDEO_PROTOCOLS,
+  extendedTokenhubRequest,
+  extendedTokenhubResult,
+} from './tokenhub-adapters';
 import type {
   AiMaterialGenerationMode,
   AiMaterialReferenceMedia,
@@ -39,6 +45,24 @@ export function videoGenerationRequest(
     !payload.referenceMedia?.length
   )
     throw new BadRequestException('多参考生视频缺少参考素材');
+  if (EXTENDED_VIDEO_PROTOCOLS.includes(protocol)) {
+    if (
+      protocol === 'tokenhubPixverseVideo' &&
+      payload.referenceMedia?.some((item) => item.type !== 'reference_image')
+    )
+      throw new BadRequestException('PixVerse 参考生视频仅支持图片参考素材');
+    return extendedTokenhubRequest({
+      model: payload.model,
+      functionType: payload.generationMode,
+      protocol: protocol as ModelProtocol,
+      prompt: payload.prompt,
+      image: payload.referenceImageDataUrl,
+      references: payload.referenceMedia,
+      resolution: payload.resolution,
+      ratio: payload.ratio,
+      duration: payload.duration,
+    })!;
+  }
   if (protocol === 'tokenhubHunyuanVideo' || protocol === 'tokenhubViduVideo') {
     if (protocol === 'tokenhubHunyuanVideo') {
       if (!['textToVideo', 'imageToVideo'].includes(payload.generationMode))
@@ -122,6 +146,16 @@ export function videoTaskId(
   value: unknown,
   protocol: MediaProtocol = 'dashscope',
 ) {
+  if (EXTENDED_VIDEO_PROTOCOLS.includes(protocol)) {
+    const result = extendedTokenhubResult(
+      value,
+      protocol as ModelProtocol,
+      true,
+    );
+    if (result?.status === 'failed' || !result?.taskId)
+      throw new BadRequestException('视频接口未返回有效任务编号');
+    return result.taskId;
+  }
   const taskId =
     protocol === 'dashscope'
       ? record(record(value).output).task_id
@@ -138,6 +172,18 @@ export function videoTaskResult(
   videoUrl?: string;
   errorMessage?: string;
 } {
+  if (EXTENDED_VIDEO_PROTOCOLS.includes(protocol)) {
+    const result = extendedTokenhubResult(value, protocol as ModelProtocol);
+    if (result?.status === 'pending') return { status: 'pending' };
+    if (result?.status === 'succeeded' && result.url)
+      return { status: 'succeeded', videoUrl: result.url };
+    if (result?.status === 'failed')
+      return {
+        status: 'failed',
+        errorMessage: '供应商视频任务失败，请查看模型配置与输入',
+      };
+    throw new BadRequestException('视频任务状态或结果无法识别');
+  }
   const body = record(value);
   if (protocol === 'tokenhubHunyuanVideo' || protocol === 'tokenhubViduVideo') {
     const status =

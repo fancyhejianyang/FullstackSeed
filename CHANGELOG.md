@@ -1,5 +1,18 @@
 # CHANGELOG
 
+### 2026-10-25 按腾讯官方调用指南补全模型接口目录
+
+- 联网核对 TokenHub 总模型表及图像/视频/3D/语音音乐/多模态/向量/联网搜索详细调用指南，预设现覆盖 126 个腾讯模型编码、253 个模型功能场景；保留原有 2 条百炼卡片后共 255 条。腾讯分类数量：语言 40、图像 26、视频 75、3D 与世界模型 40、语音音乐 21、多模态理解 42、向量 4、联网搜索 5。继续使用“平台 + 模型 + 功能”唯一配置，不新增实体列、草稿或备注字段。
+- 卡片列表增加八类筛选、官方调用文档和“补充官方接口”，沿用 Table/Form/Dialog/Button 和原权限；补充操作要求 `ModelEndpoint.create`。启动和手动补充共用幂等逻辑，只新增缺失记录，保留已有编辑、停用及软删除记录；不会自动恢复用户已删除预设。派生返回 `category/taskMethod/documentationUrl`、选项增加分类和查询方法，两端字段对齐，无数据库迁移。
+- 新增 WAND/Kling 生图，WAND/PixVerse/Kling/MiniMax 视频、3D/世界模型、ASR/TTS/音色/配音/音乐、多模态向量及两种联网协议的测试模板和结果校验；Kling Omni/O1 的文生、图生、首尾帧使用全能入口，MiniMax V1/V2 提交与查询成对区分。语音路径采用详细指南的 `/asrproxy/sync_transcribe`、`/asrproxy/async_create` 和 `/minimax-tts/sync_tts`，3D/优图按 POST `{model,id}` 查询已有任务。新协议失败、未知、受理和完成分别展示，HTTP 200 或缺少实际结果不冒充成功，联网还须有可核验搜索调用/来源。
+- WAND/Kling 图片与新增视频适配进入共用媒体调用层，供原有 Agent 生图、封面及素材链路按卡片解析；轮询只查询原任务，同域校验、取消信号、脱敏和防重复提交继续生效。原生分辨率按协议验证，不偷偷把 720P 转为 768P，卡片调试允许按官方文档填原生参数；现有素材表单的清晰度选项范围未扩展。3D/语音等新能力当前只开放卡片配置与调试，账号尚无对应专用模型目录时按同平台启用账号和密钥核实开通情况，不修改原有媒体目录约束或增加未实现的 Agent/内容创作能力。高级原生输入用显式占位符要求按文档补齐，不猜输入字段；Mureka 默认只生成一首。
+- 账号平台识别补充官方新加坡域名 `tokenhub-intl.tencentmaas.com`，继续保留已有地域域名识别。总表中的 `indextts-2`、`wand-dubbing-sts-v1` 缺少明确调用指南，标记为待核实且不登记猜测端点；已下线 Qwen3.5 与旧 `kl-video-*` 别名未纳入。将来下线日期尚未到达的模型按当前可用目录保留。
+- 新增文件：`server/src/model-endpoints/tokenhub-official.presets.ts`、`server/src/model-endpoints/tokenhub-official.presets.spec.ts`、`server/src/common/ai/tokenhub-adapters.ts`、`server/src/common/ai/tokenhub-adapters.spec.ts`。
+- 修改文件（后端）：`server/src/model-endpoints/model-endpoint.constants.ts`、`server/src/model-endpoints/model-endpoint.presets.ts`、`server/src/model-endpoints/dto/model-endpoint.dto.ts`、`server/src/model-endpoints/model-endpoints.controller.ts`、`server/src/model-endpoints/model-endpoints.service.ts`、`server/src/model-endpoints/model-endpoints.service.spec.ts`、`server/src/common/ai/image-generation.ts`、`server/src/common/ai/video-generation.ts`、`server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`、`server/src/knowledge-ai-providers/knowledge-ai-media-target.spec.ts`、`server/src/knowledge-ai-providers/model-endpoint-test.utils.ts`、`server/src/knowledge-ai-providers/model-endpoint-tests.service.ts`、`server/src/knowledge-ai-providers/model-endpoint-tests.service.spec.ts`、`server/src/ai-materials/ai-materials.service.ts`。
+- 修改文件（前端及文档）：`web/src/api/modelEndpoint.ts`、`web/src/utils/modelPlatform.ts`、`web/src/utils/modelPlatform.test.mjs`、`web/src/views/model-endpoint/Index.vue`、`web/src/views/model-endpoint/Edit.vue`、`web/src/views/model-endpoint/View.vue`、`web/src/views/model-endpoint/Test.vue`、`.design-spec.md`、本文件。删除文件：无。用户已有 `web/auto-imports.d.ts`、`web/src/api/hotTopic.ts` 改动保留且不纳入提交。
+- 验证：相关后端 13 套件 165 项检查（首次一项失败提示断言发现错误分支，修复后定向复查通过），全部使用模拟供应商响应；前端域名识别 2 项测试通过。前后端业务类型检查、修改代码定向 ESLint/格式检查、实体列检查、组件复用扫描和生产构建通过；前端保留既有 PURE 注释与分块大小提示。未启动/重启服务、未执行数据库迁移、未调用真实付费模型。正常更新并启动后端会补齐卡片，也可在更新后的页面点“补充官方接口”。
+- 主要官方依据：[总模型列表](https://cloud.tencent.com/document/product/1823/130051)、[图像模型概览](https://cloud.tencent.com/document/product/1823/135744)、[WAND 生图](https://cloud.tencent.com/document/product/1823/137203)、[Kling 生视频](https://cloud.tencent.com/document/product/1823/135742)、[3D 查询](https://cloud.tencent.com/document/product/1823/137181)、[WAND ASR](https://cloud.tencent.com/document/product/1823/135794)、[MiniMax TTS](https://cloud.tencent.com/document/product/1823/135796)、[联网搜索](https://cloud.tencent.com/document/product/1823/132358)。各模型对应具体文档链接在目录快照中维护。
+
 ### 2026-10-25 补齐模型检查与测试结果消息提示
 
 - 修复 AI 功能配置切换模型后只更新字段 hint、没有 ElMessage 的问题：全部功能共用现有检查结果，厂商卡片匹配通过给成功消息，标准接口回退给信息消息，失败给错误消息；均包含当前模型并明确只是配置检查、没有实际调用模型。初始化回显与保存前检查保持静默，保存结果沿用原提示。

@@ -2,6 +2,12 @@ import { BadRequestException } from '@nestjs/common';
 import type { MediaProtocol } from '../../model-endpoints/model-endpoint.constants';
 import { readMediaJson } from './image-utils';
 import { setTimeout as wait } from 'node:timers/promises';
+import {
+  EXTENDED_IMAGE_PROTOCOLS,
+  extendedTokenhubRequest,
+  extendedTokenhubResult,
+} from './tokenhub-adapters';
+import type { ModelProtocol } from '../../model-endpoints/model-endpoint.constants';
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -17,6 +23,14 @@ export function imageGenerationRequest(
   protocol: MediaProtocol,
   referenceImageDataUrl?: string,
 ) {
+  if (EXTENDED_IMAGE_PROTOCOLS.includes(protocol))
+    return extendedTokenhubRequest({
+      model,
+      protocol: protocol as ModelProtocol,
+      functionType: referenceImageDataUrl ? 'imageToImage' : 'textToImage',
+      prompt: content,
+      image: referenceImageDataUrl,
+    })!;
   if (protocol === 'tokenhubHunyuanImageChat')
     return {
       model,
@@ -96,6 +110,12 @@ export function imageGenerationRequest(
 
 /** 只解析真实图片字段；绝不把模型回复中的 Markdown URL 当作生图回执。 */
 export function generationResult(value: unknown, protocol: MediaProtocol) {
+  if (EXTENDED_IMAGE_PROTOCOLS.includes(protocol)) {
+    const result = extendedTokenhubResult(value, protocol as ModelProtocol);
+    if (result?.status === 'succeeded' && result.url)
+      return { url: result.url };
+    throw new BadRequestException('图片任务未成功或缺少真实图片结果');
+  }
   const body = record(value);
   if (body.error)
     throw new BadRequestException('图片生成失败，请检查输入内容和账号配置');
@@ -149,8 +169,63 @@ export async function imageGenerationResult(
   signal: AbortSignal,
   onTask?: (taskId: string) => Promise<unknown>,
 ) {
-  if (target.protocol !== 'tokenhubViduImage')
+  if (
+    target.protocol !== 'tokenhubViduImage' &&
+    !EXTENDED_IMAGE_PROTOCOLS.includes(target.protocol)
+  )
     return generationResult(value, target.protocol);
+  if (EXTENDED_IMAGE_PROTOCOLS.includes(target.protocol)) {
+    let body: unknown = value;
+    const initial = extendedTokenhubResult(
+      body,
+      target.protocol as ModelProtocol,
+      true,
+    );
+    if (initial?.status === 'succeeded')
+      return generationResult(body, target.protocol);
+    if (initial?.status === 'failed')
+      throw new BadRequestException('图片任务失败，不会重新提交');
+    const id = initial?.taskId;
+    if (!id || id.length > 256 || !target.taskUrlTemplate)
+      throw new BadRequestException('生图任务缺少有效编号或查询路径');
+    const taskUrl = target.taskUrlTemplate.replace(
+      '{taskId}',
+      encodeURIComponent(id),
+    );
+    if (new URL(taskUrl).origin !== new URL(target.url).origin)
+      throw new BadRequestException('生图查询地址必须与生成接口同域');
+    await onTask?.(id);
+    let submitting = true;
+    for (;;) {
+      signal.throwIfAborted();
+      const state = extendedTokenhubResult(
+        body,
+        target.protocol as ModelProtocol,
+        submitting,
+      );
+      if (state?.status === 'succeeded')
+        return generationResult(body, target.protocol);
+      if (state?.status !== 'pending')
+        throw new BadRequestException(
+          '图片任务失败或返回无法识别的状态，不会重新提交',
+        );
+      await wait(3000, undefined, { signal });
+      const response = await fetch(taskUrl, {
+        method: 'GET',
+        redirect: 'error',
+        signal,
+        headers: { Authorization: `Bearer ${target.secretKey}` },
+      });
+      if (!response.ok) {
+        await response.body?.cancel();
+        throw new BadRequestException(
+          `图片查询失败（HTTP ${response.status}），不会重新提交`,
+        );
+      }
+      body = await readMediaJson(response);
+      submitting = false;
+    }
+  }
   let body = record(value);
   if (body.state === 'success') return generationResult(body, target.protocol);
   const id = body.task_id;

@@ -1,4 +1,5 @@
 import type { CreateModelEndpointDto } from './dto/model-endpoint.dto';
+import { TOKENHUB_OFFICIAL_PRESETS } from './tokenhub-official.presets';
 import {
   PROTOCOLS,
   type ModelFunction,
@@ -119,3 +120,16 @@ MODEL_ENDPOINT_PRESETS.push(
     isActive: true,
   },
 );
+
+// 保留历史预设身份与名称；新官网目录仅追加未出现的模型/功能组合。
+for (const preset of TOKENHUB_OFFICIAL_PRESETS) {
+  if (
+    !MODEL_ENDPOINT_PRESETS.some(
+      (item) =>
+        item.platformType === preset.platformType &&
+        item.modelCode === preset.modelCode &&
+        item.functionType === preset.functionType,
+    )
+  )
+    MODEL_ENDPOINT_PRESETS.push(preset);
+}

@@ -40,9 +40,17 @@ const items = computed(() =>
         ],
         ["调用路径", "POST " + detail.value.apiPath],
         ...(detail.value.executionMode === "async"
-          ? [["查询路径", "GET " + detail.value.taskApiPath]]
+          ? [
+              [
+                "查询路径",
+                `${detail.value.taskMethod ?? "GET"} ${detail.value.taskApiPath}`,
+              ],
+            ]
           : []),
         ["状态", detail.value.isActive ? "启用" : "停用"],
+        ...(detail.value.documentationUrl
+          ? [["官方调用文档", detail.value.documentationUrl]]
+          : []),
         ["更新时间", formatDateTime(detail.value.updatedAt)],
       ]
     : [],

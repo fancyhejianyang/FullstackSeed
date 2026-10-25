@@ -1,13 +1,16 @@
 import { ConflictException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { Like, type Repository } from 'typeorm';
+import { In, Like, type Repository } from 'typeorm';
 import {
   CreateModelEndpointDto,
   QueryModelEndpointDto,
 } from './dto/model-endpoint.dto';
 import { ModelEndpoint } from './entities/model-endpoint.entity';
-import { detectModelPlatform } from './model-endpoint.constants';
+import {
+  CATEGORY_FUNCTIONS,
+  detectModelPlatform,
+} from './model-endpoint.constants';
 import { MODEL_ENDPOINT_PRESETS } from './model-endpoint.presets';
 import { ModelEndpointsService } from './model-endpoints.service';
 
@@ -45,6 +48,7 @@ const preset = (): CreateModelEndpointDto => ({
 describe('模型平台识别', () => {
   it.each([
     ['https://tokenhub.tencentmaas.com/v1', 'tencentTokenhub'],
+    ['https://tokenhub-intl.tencentmaas.com/v1', 'tencentTokenhub'],
     ['https://TOKENHUB.TENCENTMAAS.COM./v1', 'tencentTokenhub'],
     ['https://tokenhub-intl.tencentcloudmaas.com/v1', 'tencentTokenhub'],
     ['https://dashscope.aliyuncs.com/compatible-mode/v1', 'aliyunBailian'],
@@ -227,5 +231,48 @@ describe('模型调用接口配置', () => {
         plainToInstance(QueryModelEndpointDto, { pageSize: '10000' }),
       ),
     ).not.toHaveLength(0);
+  });
+  it('分类过滤覆盖该类所有功能，冲突的分类与功能不会误查', async () => {
+    const { service, repository } = harness();
+    await service.findAll({ category: 'audio', isActive: false });
+    expect(repository.findAndCount).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          functionType: In([...CATEGORY_FUNCTIONS.audio]),
+          isActive: false,
+        },
+      }),
+    );
+    await expect(
+      service.findAll({ category: 'audio', functionType: 'textToImage' }),
+    ).resolves.toEqual({ list: [], total: 0 });
+    expect(repository.findAndCount).toHaveBeenCalledTimes(1);
+  });
+  it('POST 查询接口允许固定路径，返回正确方法和官方文档', async () => {
+    const card = MODEL_ENDPOINT_PRESETS.find(
+      (item) => item.modelCode === 'hy-3d-3.1',
+    )!;
+    const view = await harness().service.create(card);
+    expect(view).toMatchObject({
+      taskMethod: 'POST',
+      category: 'threeD',
+      taskApiPath: '/v1/api/3d/query',
+      documentationUrl:
+        'https://cloud.tencent.com/document/product/1823/137181',
+    });
+  });
+  it('手动补充与启动导入共用保留策略并返回新增/跳过数量', async () => {
+    const { service, repository } = harness();
+    repository.findOne.mockResolvedValue({
+      id: 1,
+      isActive: false,
+      deletedAt: new Date(),
+    });
+    await expect(service.importPresets()).resolves.toMatchObject({
+      added: 0,
+      skipped: MODEL_ENDPOINT_PRESETS.length,
+      total: MODEL_ENDPOINT_PRESETS.length,
+    });
+    expect(repository.save).not.toHaveBeenCalled();
   });
 });

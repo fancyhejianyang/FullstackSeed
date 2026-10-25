@@ -11,6 +11,10 @@ import type {
   ModelProtocol,
 } from '../model-endpoints/model-endpoint.constants';
 import { PERMISSIONS_KEY } from '../common/decorators/require-permissions.decorator';
+import {
+  PROTOCOLS,
+  protocolTaskMethod,
+} from '../model-endpoints/model-endpoint.constants';
 
 const requestId = 'b57b5e26-3c88-43b5-94e8-0489919c973f';
 function harness(
@@ -21,10 +25,8 @@ function harness(
     model: 'saved-model',
     functionType,
     protocol,
-    executionMode:
-      protocol === 'tokenhubViduImage' || protocol.endsWith('Video')
-        ? 'async'
-        : 'sync',
+    executionMode: PROTOCOLS[protocol].mode,
+    taskMethod: protocolTaskMethod(protocol),
     url: 'https://provider.example/generate',
     taskUrlTemplate: 'https://provider.example/tasks/{taskId}',
     secretKey: 'never-return-this-key',
@@ -215,6 +217,66 @@ describe('模型接口卡片调试', () => {
     );
     await service.query(1, requestId, 7);
     expect(fetchSpy).toHaveBeenCalledTimes(3);
+  });
+  it('3D POST 查询仅发送已保存模型和原任务编号，查询不会再次生成', async () => {
+    const { service, dto, target } = harness('textTo3d', 'tokenhub3d');
+    target.taskUrlTemplate = 'https://provider.example/query';
+    const fetchSpy = jest
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(json({ id: 'original-3d', status: 'queued' }))
+      .mockResolvedValueOnce(json({ id: 'original-3d', status: 'in_progress' }))
+      .mockResolvedValueOnce(
+        json({
+          id: 'original-3d',
+          status: 'completed',
+          output: { model_url: 'https://result.example/a.glb' },
+        }),
+      );
+    await expect(service.start(1, dto, 7)).resolves.toMatchObject({
+      status: 'accepted',
+      taskId: 'original-3d',
+    });
+    await expect(service.query(1, requestId, 7)).resolves.toMatchObject({
+      status: 'accepted',
+    });
+    await expect(service.query(1, requestId, 7)).resolves.toMatchObject({
+      status: 'succeeded',
+    });
+    expect(
+      fetchSpy.mock.calls
+        .slice(1)
+        .map(([url, init]) => [
+          url,
+          init?.method,
+          JSON.parse(init?.body as string) as unknown,
+        ]),
+    ).toEqual([
+      [
+        'https://provider.example/query',
+        'POST',
+        { model: 'saved-model', id: 'original-3d' },
+      ],
+      [
+        'https://provider.example/query',
+        'POST',
+        { model: 'saved-model', id: 'original-3d' },
+      ],
+    ]);
+    await service.start(1, dto, 7);
+    await service.query(1, requestId, 7);
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+  });
+  it('多模态向量采用同一向量校验，空响应不能成功', async () => {
+    const { service, dto } = harness(
+      'multimodalEmbedding',
+      'tokenhubMultimodalEmbedding',
+    );
+    jest
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(json({ data: [{ embedding: [0.1, 0.2, 0.3] }] }));
+    await expect(service.start(1, dto, 7)).resolves.toMatchObject({
+      status: 'succeeded',
+    });
   });
 
   it.each([

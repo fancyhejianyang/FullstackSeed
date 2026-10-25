@@ -19,6 +19,7 @@ export function detectModelPlatform(value: string): ModelPlatform {
     if (
       [
         "tokenhub.tencentmaas.com",
+        "tokenhub-intl.tencentmaas.com",
         "tokenhub-intl.tencentcloudmaas.com",
       ].includes(host)
     )

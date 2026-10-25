@@ -17,6 +17,8 @@ import {
   MODEL_FUNCTIONS,
   MODEL_PROTOCOLS,
   PLATFORM_TYPES,
+  CATEGORY_LABELS,
+  type ModelCategory,
   type ModelFunction,
   type ModelProtocol,
   type PlatformType,
@@ -65,6 +67,9 @@ export class UpdateModelEndpointDto extends PartialType(
 ) {}
 
 export class QueryModelEndpointDto {
+  @IsIn(Object.keys(CATEGORY_LABELS))
+  @IsOptional()
+  category?: ModelCategory;
   @Type(() => Number)
   @IsInt()
   @Min(1)

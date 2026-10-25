@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
+import { ElMessage } from "element-plus";
 import PageContainer from "@/components/PageContainer.vue";
 import Table from "@/components/Table.vue";
 import Button from "@/components/Button.vue";
@@ -9,6 +10,7 @@ import {
   deleteModelEndpoint,
   getModelEndpointOptions,
   getModelEndpoints,
+  importOfficialModelEndpoints,
   type ModelEndpoint,
   type ModelEndpointOptions,
 } from "@/api/modelEndpoint";
@@ -28,6 +30,12 @@ const options = ref<ModelEndpointOptions>({
   protocols: [],
 });
 const searchFields = computed<FormField[]>(() => [
+  {
+    prop: "category",
+    label: "类别",
+    type: "select",
+    options: options.value.categories ?? [],
+  },
   {
     prop: "keyword",
     label: "模型",
@@ -62,6 +70,20 @@ const viewVisible = ref(false);
 const viewingRow = ref<ModelEndpoint | null>(null);
 const testVisible = ref(false);
 const testingRow = ref<ModelEndpoint | null>(null);
+const importingOfficial = ref(false);
+async function importOfficial() {
+  if (importingOfficial.value) return;
+  importingOfficial.value = true;
+  try {
+    const result = await importOfficialModelEndpoints();
+    const message = `新增 ${result.added} 条接口，保留 ${result.skipped} 条已有配置（含停用或删除记录）。`;
+    if (result.added) ElMessage.success(message);
+    else ElMessage.info(message);
+    await tableRef.value?.refresh();
+  } finally {
+    importingOfficial.value = false;
+  }
+}
 const label = (items: Array<{ value: string; label: string }>, value: string) =>
   items.find((item) => item.value === value)?.label ?? value;
 function openCreate() {
@@ -106,6 +128,14 @@ onMounted(async () => {
           >新增接口</Button
         >
         <Button
+          perm="ModelEndpoint.create"
+          icon="Download"
+          :confirm="false"
+          :loading="importingOfficial"
+          @click="importOfficial"
+          >补充官方接口</Button
+        >
+        <Button
           perm="ModelEndpoint.batchDelete"
           :confirm="false"
           :disabled="!selectedRows.length"
@@ -133,12 +163,21 @@ onMounted(async () => {
         </div>
         <div class="endpoint-card__protocol">
           {{ label(options.protocols, row.protocol) }}
+          <el-link
+            v-if="row.documentationUrl"
+            :href="row.documentationUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="endpoint-card__documentation"
+            >官方调用文档</el-link
+          >
         </div>
         <div class="endpoint-card__path">
           <span>POST</span><code>{{ row.apiPath }}</code>
         </div>
         <div v-if="row.executionMode === 'async'" class="endpoint-card__path">
-          <span>GET</span><code>{{ row.taskApiPath }}</code>
+          <span>{{ row.taskMethod ?? "GET" }}</span
+          ><code>{{ row.taskApiPath }}</code>
         </div>
       </template>
       <template #actions="{ row }">
@@ -193,6 +232,10 @@ onMounted(async () => {
   font-size: 13px;
   margin-bottom: 12px;
   color: var(--el-text-color-regular);
+}
+.endpoint-card__documentation {
+  margin-left: 12px;
+  font-size: 12px;
 }
 .endpoint-card__path {
   display: flex;

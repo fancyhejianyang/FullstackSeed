@@ -17,10 +17,19 @@ import {
   FUNCTION_LABELS,
   PLATFORM_LABELS,
   PROTOCOLS,
+  CATEGORY_LABELS,
+  CATEGORY_FUNCTIONS,
+  modelCategory,
+  protocolTaskMethod,
   type ModelFunction,
   type PlatformType,
 } from './model-endpoint.constants';
 import { MODEL_ENDPOINT_PRESETS } from './model-endpoint.presets';
+import {
+  TOKENHUB_DOCUMENTATION,
+  TOKENHUB_OFFICIAL_PRESETS,
+  TOKENHUB_UNVERIFIED_MODELS,
+} from './tokenhub-official.presets';
 
 @Injectable()
 export class ModelEndpointsService implements OnModuleInit {
@@ -30,6 +39,12 @@ export class ModelEndpointsService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
+    await this.importPresets();
+  }
+
+  async importPresets() {
+    let added = 0;
+    let skipped = 0;
     // 仅补缺项；编辑、停用、软删除过的预设不会在重启时被覆盖或复活。
     for (const preset of MODEL_ENDPOINT_PRESETS) {
       const existing = await this.repository.findOne({
@@ -43,16 +58,28 @@ export class ModelEndpointsService implements OnModuleInit {
       if (!existing) {
         try {
           await this.create(preset);
+          added += 1;
         } catch (error) {
           if (!(error instanceof ConflictException)) throw error;
+          skipped += 1;
         }
-      }
+      } else skipped += 1;
     }
+    return {
+      added,
+      skipped,
+      total: MODEL_ENDPOINT_PRESETS.length,
+      unverifiedModels: TOKENHUB_UNVERIFIED_MODELS,
+    };
   }
 
   options() {
     return {
       platforms: Object.entries(PLATFORM_LABELS).map(([value, label]) => ({
+        value,
+        label,
+      })),
+      categories: Object.entries(CATEGORY_LABELS).map(([value, label]) => ({
         value,
         label,
       })),
@@ -65,14 +92,24 @@ export class ModelEndpointsService implements OnModuleInit {
         label: item.label,
         functions: item.functions,
         executionMode: item.mode,
+        taskMethod: protocolTaskMethod(value as keyof typeof PROTOCOLS),
       })),
     };
   }
 
   async findAll(query: QueryModelEndpointDto) {
+    const scenes = query.category
+      ? (CATEGORY_FUNCTIONS[query.category] as readonly ModelFunction[])
+      : null;
+    if (scenes && query.functionType && !scenes.includes(query.functionType))
+      return { list: [], total: 0 };
     const base = {
       ...(query.platformType ? { platformType: query.platformType } : {}),
-      ...(query.functionType ? { functionType: query.functionType } : {}),
+      ...(query.functionType
+        ? { functionType: query.functionType }
+        : scenes
+          ? { functionType: In([...scenes]) }
+          : {}),
       ...(query.isActive === undefined ? {} : { isActive: query.isActive }),
     };
     const keyword = query.keyword?.trim();
@@ -237,12 +274,27 @@ export class ModelEndpointsService implements OnModuleInit {
     )
       throw new BadRequestException('当前协议不属于所选平台');
     this.validatePath(row.apiPath, false);
-    if (row.executionMode === 'async') this.validatePath(row.taskApiPath, true);
+    if (row.executionMode === 'async')
+      this.validatePath(
+        row.taskApiPath,
+        protocolTaskMethod(row.protocol) === 'GET',
+      );
     else row.taskApiPath = '';
     row.routeKey = `${row.platformType}:${row.modelCode}:${row.functionType}`;
   }
 
   private toView(row: ModelEndpoint) {
+    const official =
+      row.platformType === 'tencentTokenhub'
+        ? TOKENHUB_OFFICIAL_PRESETS.find(
+            (item) =>
+              item.modelCode === row.modelCode &&
+              item.functionType === row.functionType &&
+              item.protocol === row.protocol &&
+              item.apiPath === row.apiPath &&
+              (item.taskApiPath ?? '') === row.taskApiPath,
+          )
+        : null;
     return {
       id: row.id,
       platformType: row.platformType,
@@ -252,6 +304,11 @@ export class ModelEndpointsService implements OnModuleInit {
       protocol: row.protocol,
       apiPath: row.apiPath,
       taskApiPath: row.taskApiPath,
+      taskMethod: protocolTaskMethod(row.protocol),
+      category: modelCategory(row.functionType),
+      documentationUrl: official
+        ? TOKENHUB_DOCUMENTATION[`${row.modelCode}:${row.functionType}`]
+        : null,
       executionMode: row.executionMode,
       isActive: !!row.isActive,
       createdAt: row.createdAt,

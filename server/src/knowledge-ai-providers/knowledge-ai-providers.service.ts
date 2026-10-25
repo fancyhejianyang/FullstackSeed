@@ -17,6 +17,8 @@ import {
   FUNCTION_LABELS,
   mediaProtocol,
   type ModelFunction,
+  protocolTaskMethod,
+  modelCategory,
 } from '../model-endpoints/model-endpoint.constants';
 import type { ModelEndpoint } from '../model-endpoints/entities/model-endpoint.entity';
 import {
@@ -308,12 +310,13 @@ export class KnowledgeAiProvidersService {
         (provider) =>
           !!provider.secretKey &&
           detectModelPlatform(provider.apiUrl) === endpoint.platformType &&
-          this.parseModels(
-            this.getFeatureModels(
-              provider,
-              this.endpointFeatureType(endpoint.functionType),
-            ),
-          ).some((model) => model.code === endpoint.modelCode),
+          (!this.endpointFeatureType(endpoint.functionType) ||
+            this.parseModels(
+              this.getFeatureModels(
+                provider,
+                this.endpointFeatureType(endpoint.functionType)!,
+              ),
+            ).some((model) => model.code === endpoint.modelCode)),
       )
       .map(({ id, name }) => ({ id, name }));
   }
@@ -327,11 +330,12 @@ export class KnowledgeAiProvidersService {
       throw new BadRequestException('测试账号与接口卡片的平台不一致');
     if (!provider.isEnabled || !provider.secretKey)
       throw new BadRequestException('测试账号未启用或未配置密钥');
-    const catalog = this.getFeatureModels(
-      provider,
-      this.endpointFeatureType(route.functionType),
-    );
+    const featureType = this.endpointFeatureType(route.functionType);
+    const catalog = featureType
+      ? this.getFeatureModels(provider, featureType)
+      : null;
     if (
+      featureType &&
       !this.parseModels(catalog).some((item) => item.code === route.modelCode)
     )
       throw new BadRequestException('测试模型未登记在账号对应能力目录中');
@@ -347,6 +351,7 @@ export class KnowledgeAiProvidersService {
       functionType: endpoint.functionType,
       protocol: endpoint.protocol,
       executionMode: endpoint.executionMode,
+      taskMethod: protocolTaskMethod(endpoint.protocol),
       url,
       taskUrlTemplate:
         endpoint.taskApiPath && this.endpoints
@@ -359,13 +364,17 @@ export class KnowledgeAiProvidersService {
     };
   }
 
-  private endpointFeatureType(functionType: ModelFunction): AiModelFeatureType {
-    if (functionType === 'chat') return 'chat';
-    if (functionType === 'vision') return 'ocr';
-    if (functionType === 'embedding') return 'embedding';
-    return ['textToImage', 'imageToImage'].includes(functionType)
-      ? 'imageGeneration'
-      : 'videoGeneration';
+  private endpointFeatureType(
+    functionType: ModelFunction,
+  ): AiModelFeatureType | null {
+    const category = modelCategory(functionType);
+    if (category === 'language' || category === 'search') return 'chat';
+    if (category === 'understanding') return 'ocr';
+    if (category === 'embedding') return 'embedding';
+    if (category === 'image') return 'imageGeneration';
+    if (category === 'video') return 'videoGeneration';
+    // 新的 3D/语音仅开放卡片调试；账号尚无此类业务目录，以同平台认证和真实测试核实开通情况。
+    return null;
   }
 
   async validateModel(dto: ValidateKnowledgeAiProviderModelDto) {

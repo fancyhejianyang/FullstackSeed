@@ -17,6 +17,8 @@ import { readMediaJson, imageMime } from '../common/ai/image-utils';
 import { generationResult } from '../common/ai/image-generation';
 import { videoTaskId, videoTaskResult } from '../common/ai/video-generation';
 import { mediaProtocol } from '../model-endpoints/model-endpoint.constants';
+import { modelCategory } from '../model-endpoints/model-endpoint.constants';
+import { extendedTokenhubResult } from '../common/ai/tokenhub-adapters';
 
 type TestTarget = Awaited<
   ReturnType<KnowledgeAiProvidersService['resolveEndpointTestTarget']>
@@ -64,6 +66,9 @@ export class ModelEndpointTestsService {
       .at(-1)?.[1];
     return {
       card,
+      accountCatalogRequired: !['threeD', 'audio'].includes(
+        modelCategory(card.functionType),
+      ),
       accounts: await this.providers.endpointTestAccounts(endpointId),
       requestBody: endpointTestTemplate(card),
       recentTest: recent
@@ -77,11 +82,11 @@ export class ModelEndpointTestsService {
     const bodyText = JSON.stringify(dto.requestBody);
     if (Buffer.byteLength(bodyText) > 65536)
       throw new BadRequestException(
-        '测试请求参数不能超过 64 KB，请使用图片或视频地址',
+        '测试请求参数不能超过 64 KB，大文件请使用可访问的素材地址',
       );
     if (bodyText.includes('REPLACE_WITH_'))
       throw new BadRequestException(
-        '请先将请求参数中的参考图片占位符替换为可访问的图片地址',
+        '请按官方文档替换请求参数中的全部 REPLACE_WITH_ 占位符后再测试',
       );
     const key = `${userId}:${dto.requestId}`;
     const fingerprint = createHash('sha256')
@@ -135,7 +140,9 @@ export class ModelEndpointTestsService {
         const body = {
           ...dto.requestBody,
           model: target.model,
-          ...(['chat', 'vision'].includes(target.functionType)
+          ...(['openaiChat', 'openaiChatSearch', 'openaiResponses'].includes(
+            target.protocol,
+          )
             ? { stream: false }
             : {}),
         };
@@ -182,7 +189,17 @@ export class ModelEndpointTestsService {
       );
       if (new URL(url).origin !== new URL(target.url).origin)
         throw new BadRequestException('任务查询必须与生成接口同域');
-      await this.request(entry, target, url, 'GET');
+      const method = target.taskMethod ?? 'GET';
+      await this.request(
+        entry,
+        target,
+        url,
+        method,
+        method === 'POST'
+          ? { model: target.model, id: entry.result.taskId }
+          : undefined,
+        true,
+      );
     } catch {
       this.finish(
         entry,
@@ -201,13 +218,14 @@ export class ModelEndpointTestsService {
     url: string,
     method: 'POST' | 'GET',
     body?: Record<string, unknown>,
+    querying = false,
   ) {
     entry.result.httpStatus = null;
     entry.result.responseBody = '';
     const response = await fetch(url, {
       method,
       redirect: 'error',
-      signal: AbortSignal.timeout(method === 'POST' ? 60000 : 30000),
+      signal: AbortSignal.timeout(querying ? 30000 : 60000),
       headers: {
         Authorization: `Bearer ${target.secretKey}`,
         'Content-Type': 'application/json',
@@ -224,24 +242,64 @@ export class ModelEndpointTestsService {
     } catch {
       this.finish(
         entry,
-        method === 'GET' || response.ok ? 'unknown' : 'failed',
+        querying || response.ok ? 'unknown' : 'failed',
         `HTTP ${response.status}，接口未返回有效 JSON 或响应超过限制`,
       );
       return;
     }
     entry.result.responseBody = endpointTestResponse(value, target.secretKey);
     const payload = record(value);
-    if (!response.ok || payload.error || (payload.code && payload.message)) {
+    const extended = response.ok
+      ? extendedTokenhubResult(value, target.protocol, !querying)
+      : null;
+    if (extended) {
+      if (extended.taskId) entry.result.taskId = extended.taskId;
+      if (extended.status === 'pending') {
+        if (target.executionMode === 'async')
+          this.accept(entry, extended.taskId ?? entry.result.taskId);
+        else
+          this.finish(
+            entry,
+            'unknown',
+            '同步接口尚未返回完成结果，无法确认成功；不会自动重新提交。',
+          );
+      } else if (extended.status === 'succeeded') {
+        if (extended.url) this.resultUrl(extended.url);
+        this.finish(entry, 'succeeded', '接口已按对应协议返回有效结果。');
+      } else if (extended.status === 'failed')
+        this.finish(
+          entry,
+          'failed',
+          '供应商返回失败，请查看脱敏响应；不会自动重投。',
+        );
+      else
+        this.finish(
+          entry,
+          'unknown',
+          extended.message ??
+            '响应缺少该协议的有效终态或结果，请查看返回内容并核实原任务。',
+        );
+      return;
+    }
+    if (
+      !response.ok ||
+      payload.error ||
+      (payload.code && payload.code !== '0' && payload.message)
+    ) {
       // 查询失败不等于生成任务失败，保留原编号以便继续核实。
       this.finish(
         entry,
-        method === 'GET' ? 'unknown' : 'failed',
+        querying ? 'unknown' : 'failed',
         `接口返回错误（HTTP ${response.status}），请查看脱敏响应；不会自动重投。`,
       );
       return;
     }
     const scene = target.functionType;
-    if (scene === 'chat' || scene === 'vision') {
+    if (
+      scene === 'chat' ||
+      scene === 'vision' ||
+      scene === 'videoUnderstanding'
+    ) {
       const choice = record(
         Array.isArray(payload.choices) ? payload.choices[0] : null,
       );
@@ -257,7 +315,7 @@ export class ModelEndpointTestsService {
             );
       if (!hasText) throw new Error('missing_content');
       this.finish(entry, 'succeeded', '接口已返回有效消息内容。');
-    } else if (scene === 'embedding') {
+    } else if (scene === 'embedding' || scene === 'multimodalEmbedding') {
       const first = record(
         Array.isArray(payload.data) ? payload.data[0] : null,
       );

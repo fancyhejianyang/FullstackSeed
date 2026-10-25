@@ -10,7 +10,38 @@ export type ModelFunction =
   | "textToVideo"
   | "imageToVideo"
   | "referenceToVideo"
-  | "startEndToVideo";
+  | "startEndToVideo"
+  | ExtendedModelFunction;
+export type ExtendedModelFunction =
+  | "omniVideo"
+  | "motionControl"
+  | "avatarVideo"
+  | "videoUnderstanding"
+  | "multimodalEmbedding"
+  | "webSearch"
+  | "textTo3d"
+  | "imageTo3d"
+  | "multiViewTo3d"
+  | "threeDComponent"
+  | "threeDFormat"
+  | "threeDTexture"
+  | "threeDUv"
+  | "threeDRetopology"
+  | "threeDRiggingCheck"
+  | "threeDRigging"
+  | "threeDAnimation"
+  | "threeDMotion"
+  | "worldScene"
+  | "worldPanorama"
+  | "speechRecognition"
+  | "speechRecognitionAsync"
+  | "speechSynthesis"
+  | "voiceClone"
+  | "voiceDesign"
+  | "dubbing"
+  | "musicGeneration"
+  | "musicEasyGeneration"
+  | "instrumentalGeneration";
 export type ModelProtocol =
   | "openaiChat"
   | "openaiEmbedding"
@@ -22,7 +53,38 @@ export type ModelProtocol =
   | "tokenhubSeedreamImage"
   | "tokenhubViduImage"
   | "tokenhubHunyuanVideo"
-  | "tokenhubViduVideo";
+  | "tokenhubViduVideo"
+  | "tokenhubWandImage"
+  | "tokenhubKlingImage"
+  | "tokenhubWandVideo"
+  | "tokenhubPixverseVideo"
+  | "tokenhubKlingVideo"
+  | "tokenhubMinimaxVideo"
+  | "tokenhubMinimaxVideoV2"
+  | "tokenhubYoutuVideo"
+  | "tokenhub3d"
+  | "tokenhubWorldScene"
+  | "tokenhubWorldPanorama"
+  | "tokenhubAsrSync"
+  | "tokenhubAsrAsync"
+  | "tokenhubTts"
+  | "tokenhubVoiceClone"
+  | "tokenhubVoiceDesign"
+  | "tokenhubDubbing"
+  | "tokenhubMusic"
+  | "tokenhubMurekaMusic"
+  | "tokenhubMultimodalEmbedding"
+  | "openaiChatSearch"
+  | "openaiResponses";
+export type ModelCategory =
+  | "language"
+  | "image"
+  | "video"
+  | "threeD"
+  | "audio"
+  | "understanding"
+  | "embedding"
+  | "search";
 export interface ModelEndpointForm {
   platformType: ModelPlatform;
   modelCode: string;
@@ -38,8 +100,12 @@ export interface ModelEndpoint extends ModelEndpointForm {
   id: number;
   createdAt: string;
   updatedAt: string;
+  taskMethod?: "GET" | "POST";
+  category?: ModelCategory;
+  documentationUrl?: string | null;
 }
 export interface ModelEndpointOptions {
+  categories?: Array<{ value: ModelCategory; label: string }>;
   platforms: Array<{ value: ModelPlatform; label: string }>;
   functions: Array<{ value: ModelFunction; label: string }>;
   protocols: Array<{
@@ -47,9 +113,11 @@ export interface ModelEndpointOptions {
     label: string;
     functions: ModelFunction[];
     executionMode: "sync" | "async";
+    taskMethod?: "GET" | "POST";
   }>;
 }
 export interface QueryModelEndpointParams {
+  category?: ModelCategory | "";
   page?: number;
   pageSize?: number;
   keyword?: string;
@@ -87,6 +155,18 @@ export function batchDeleteModelEndpoints(ids: Array<string | number>) {
   });
 }
 
+export function importOfficialModelEndpoints() {
+  return request.post<
+    unknown,
+    {
+      added: number;
+      skipped: number;
+      total: number;
+      unverifiedModels: string[];
+    }
+  >("/model-endpoints/import-official");
+}
+
 export interface ModelEndpointTestResult {
   requestId: string;
   status: "running" | "accepted" | "succeeded" | "failed" | "unknown";
@@ -102,6 +182,7 @@ export interface ModelEndpointTestOptions {
   accounts: Array<{ id: number; name: string }>;
   requestBody: Record<string, unknown>;
   recentTest: { providerId: number; result: ModelEndpointTestResult } | null;
+  accountCatalogRequired?: boolean;
 }
 export function getModelEndpointTestOptions(id: number) {
   return request.get<unknown, ModelEndpointTestOptions>(

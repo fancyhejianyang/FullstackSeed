@@ -99,6 +99,11 @@ const fields = computed<FormField[]>(() => [
           label: "任务查询路径",
           type: "input" as const,
           placeholder: "/v1/wand/vidu-image/tasks/{taskId}",
+          hint:
+            options.value.protocols.find((item) => item.value === form.protocol)
+              ?.taskMethod === "POST"
+              ? "当前协议用 POST 查询，填写固定查询路径；任务编号由系统放入请求体。"
+              : "当前协议用 GET 查询，路径中须包含一个 {taskId}。",
         },
       ]
     : []),
