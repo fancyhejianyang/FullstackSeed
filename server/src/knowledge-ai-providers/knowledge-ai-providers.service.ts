@@ -21,6 +21,7 @@ import {
   modelCategory,
 } from '../model-endpoints/model-endpoint.constants';
 import type { ModelEndpoint } from '../model-endpoints/entities/model-endpoint.entity';
+import { builtinModelEndpointPath } from '../model-endpoints/model-endpoint.builtins';
 import {
   CreateKnowledgeAiProviderDto,
   QueryKnowledgeAiProviderDto,
@@ -105,6 +106,13 @@ export interface KnowledgeAiChatCallPayload {
 export interface KnowledgeAiChatTargetPayload {
   id?: number;
   model?: string;
+}
+
+export interface ModelEndpointTestAccount {
+  id: number;
+  name: string;
+  models?: Array<{ code: string; name: string }>;
+  apiPath?: string;
 }
 
 export interface KnowledgeAiChatTarget {
@@ -293,36 +301,73 @@ export class KnowledgeAiProvidersService {
     return {
       functionType,
       functionLabel: FUNCTION_LABELS[functionType],
-      source: endpoint ? ('configured' as const) : ('standard' as const),
+      source:
+        endpoint?.source ??
+        (endpoint ? ('configured' as const) : ('standard' as const)),
+      ruleName:
+        endpoint?.source === 'builtin'
+          ? endpoint.modelName
+          : endpoint
+            ? `模型专用 · ${payload.model.trim()}（${FUNCTION_LABELS[functionType]}）`
+            : '自定义平台标准接口',
       url,
     };
   }
 
-  async endpointTestAccounts(endpointId: number) {
+  async endpointTestAccounts(
+    endpointId: number,
+  ): Promise<ModelEndpointTestAccount[]> {
     const endpoint = await this.endpoints?.findOne(endpointId);
     if (!endpoint) throw new NotFoundException('模型调用接口不存在');
     const providers = await this.providerRepository.find({
       where: { isEnabled: true },
       order: { id: 'DESC' },
     });
-    return providers
-      .filter(
-        (provider) =>
-          !!provider.secretKey &&
-          detectModelPlatform(provider.apiUrl) === endpoint.platformType &&
-          (!this.endpointFeatureType(endpoint.functionType) ||
-            this.parseModels(
-              this.getFeatureModels(
-                provider,
-                this.endpointFeatureType(endpoint.functionType)!,
-              ),
-            ).some((model) => model.code === endpoint.modelCode)),
+    const builtin = endpoint.source === 'builtin';
+    const overrides = builtin
+      ? new Set(
+          (
+            await this.endpoints!.overriddenModels(
+              endpoint.platformType,
+              endpoint.functionType,
+            )
+          ).map((item) => item.modelCode),
+        )
+      : new Set<string>();
+    return providers.flatMap((provider) => {
+      if (
+        !provider.isEnabled ||
+        !provider.secretKey ||
+        detectModelPlatform(provider.apiUrl) !== endpoint.platformType
       )
-      .map(({ id, name }) => ({ id, name }));
+        return [];
+      const models = this.endpointCatalog(provider, endpoint.functionType);
+      if (builtin) {
+        const available = models.filter((item) => !overrides.has(item.code));
+        return available.length
+          ? [
+              {
+                id: provider.id,
+                name: provider.name,
+                models: available,
+                apiPath: builtinModelEndpointPath(provider.apiUrl, endpoint),
+              },
+            ]
+          : [];
+      }
+      return !this.endpointFeatureType(endpoint.functionType) ||
+        models.some((item) => item.code === endpoint.modelCode)
+        ? [{ id: provider.id, name: provider.name }]
+        : [];
+    });
   }
 
   /** 测试只使用指定的已保存卡片，不接受客户端地址、密钥或其它模型。 */
-  async resolveEndpointTestTarget(endpointId: number, providerId: number) {
+  async resolveEndpointTestTarget(
+    endpointId: number,
+    providerId: number,
+    selectedModel?: string,
+  ) {
     const route = await this.endpoints?.findOne(endpointId);
     if (!route) throw new NotFoundException('模型调用接口不存在');
     const provider = await this.findEntity(providerId);
@@ -331,23 +376,34 @@ export class KnowledgeAiProvidersService {
     if (!provider.isEnabled || !provider.secretKey)
       throw new BadRequestException('测试账号未启用或未配置密钥');
     const featureType = this.endpointFeatureType(route.functionType);
-    const catalog = featureType
-      ? this.getFeatureModels(provider, featureType)
-      : null;
+    const model =
+      route.source === 'builtin' ? selectedModel?.trim() : route.modelCode;
+    if (!model || /[\s*?]/.test(model))
+      throw new BadRequestException('请选择账号能力目录中的具体测试模型');
+    if (
+      route.source !== 'builtin' &&
+      selectedModel &&
+      selectedModel !== route.modelCode
+    )
+      throw new BadRequestException('专用卡片不能更换测试模型');
     if (
       featureType &&
-      !this.parseModels(catalog).some((item) => item.code === route.modelCode)
+      !this.endpointCatalog(provider, route.functionType).some(
+        (item) => item.code === model,
+      )
     )
       throw new BadRequestException('测试模型未登记在账号对应能力目录中');
     const { endpoint, url } = await this.resolveFunctionEndpoint(
       provider,
-      route.modelCode,
+      model,
       route.functionType,
     );
     if (!endpoint || endpoint.id !== endpointId)
-      throw new BadRequestException('接口卡片已变化，请刷新后重新测试');
+      throw new BadRequestException(
+        '该模型的实际匹配规则已变化或存在专用卡片，请到对应模型专用卡片测试',
+      );
     return {
-      model: endpoint.modelCode,
+      model,
       functionType: endpoint.functionType,
       protocol: endpoint.protocol,
       executionMode: endpoint.executionMode,
@@ -375,6 +431,20 @@ export class KnowledgeAiProvidersService {
     if (category === 'video') return 'videoGeneration';
     // 新的 3D/语音仅开放卡片调试；账号尚无此类业务目录，以同平台认证和真实测试核实开通情况。
     return null;
+  }
+
+  private endpointCatalog(
+    provider: KnowledgeAiProvider,
+    functionType: ModelFunction,
+  ) {
+    const featureType = this.endpointFeatureType(functionType);
+    const catalog =
+      functionType === 'vision'
+        ? provider.visionModels
+        : featureType
+          ? this.getFeatureModels(provider, featureType)
+          : null;
+    return catalog?.trim() ? this.parseModels(catalog) : [];
   }
 
   async validateModel(dto: ValidateKnowledgeAiProviderModelDto) {
@@ -632,6 +702,15 @@ export class KnowledgeAiProvidersService {
       model,
       functionType,
     );
+    if (
+      endpoint?.source === 'builtin' &&
+      !this.endpointCatalog(provider, functionType).some(
+        (item) => item.code === model,
+      )
+    )
+      throw new BadRequestException(
+        '所选模型未登记在账号对应功能目录中，不能使用系统通用规则',
+      );
     if (!endpoint && !['chat', 'vision', 'embedding'].includes(functionType))
       throw new BadRequestException(
         `模型 ${model} 缺少“${FUNCTION_LABELS[functionType]}”调用接口，请在第三方配置 → 模型厂商调用接口中配置`,
@@ -640,7 +719,9 @@ export class KnowledgeAiProvidersService {
       endpoint && this.endpoints
         ? this.endpoints.buildUrl(
             this.applyWorkspaceId(provider),
-            endpoint.apiPath,
+            endpoint.source === 'builtin'
+              ? builtinModelEndpointPath(provider.apiUrl, endpoint)
+              : endpoint.apiPath,
           )
         : functionType === 'embedding'
           ? this.buildEmbeddingUrl(provider)

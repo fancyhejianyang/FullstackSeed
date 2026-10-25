@@ -82,7 +82,8 @@ export interface AiFeatureModelEndpointCheck {
 export interface AiFeatureModelEndpointResult {
   functionType: ModelFunction;
   functionLabel: string;
-  source: "configured" | "standard";
+  source: "configured" | "builtin" | "standard";
+  ruleName: string;
   apiPath: string;
   searchApiPath: string | null;
 }

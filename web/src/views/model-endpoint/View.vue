@@ -20,7 +20,18 @@ const items = computed(() =>
   detail.value
     ? [
         ["平台", modelPlatformLabels[detail.value.platformType]],
-        ["模型编码", detail.value.modelCode],
+        [
+          "配置来源",
+          detail.value.source === "builtin"
+            ? "系统通用（只读）"
+            : "模型专用（优先）",
+        ],
+        [
+          detail.value.isReadOnly ? "适用模型" : "模型编码",
+          detail.value.isReadOnly
+            ? "账号对应功能目录中的模型；专用配置优先"
+            : detail.value.modelCode,
+        ],
         ["模型名称", detail.value.modelName],
         [
           "功能场景",
@@ -51,7 +62,12 @@ const items = computed(() =>
         ...(detail.value.documentationUrl
           ? [["官方调用文档", detail.value.documentationUrl]]
           : []),
-        ["更新时间", formatDateTime(detail.value.updatedAt)],
+        [
+          "更新时间",
+          detail.value.isReadOnly
+            ? "由系统维护"
+            : formatDateTime(detail.value.updatedAt ?? ""),
+        ],
       ]
     : [],
 );

@@ -32,6 +32,8 @@ export interface ModelEndpointTestResult {
   taskId: string | null;
   elapsedMilliseconds: number;
   checkedAt: string;
+  model?: string;
+  apiPath?: string;
 }
 interface TestRecord {
   endpointId: number;
@@ -41,6 +43,7 @@ interface TestRecord {
   startedAt: number;
   expiresAt: number;
   querying: boolean;
+  model: string;
   result: ModelEndpointTestResult;
 }
 
@@ -70,7 +73,11 @@ export class ModelEndpointTestsService {
         modelCategory(card.functionType),
       ),
       accounts: await this.providers.endpointTestAccounts(endpointId),
-      requestBody: endpointTestTemplate(card),
+      requestBody: endpointTestTemplate(
+        card.source === 'builtin'
+          ? { ...card, modelCode: 'REPLACE_WITH_MODEL_CODE' }
+          : card,
+      ),
       recentTest: recent
         ? { providerId: recent.providerId, result: { ...recent.result } }
         : null,
@@ -90,7 +97,7 @@ export class ModelEndpointTestsService {
       );
     const key = `${userId}:${dto.requestId}`;
     const fingerprint = createHash('sha256')
-      .update(`${endpointId}:${dto.providerId}:${bodyText}`)
+      .update(`${endpointId}:${dto.providerId}:${dto.model ?? ''}:${bodyText}`)
       .digest('hex');
     const previous = this.records.get(key);
     if (previous) {
@@ -111,10 +118,17 @@ export class ModelEndpointTestsService {
       );
     this.activeUsers.add(userId);
     try {
-      const target = await this.providers.resolveEndpointTestTarget(
-        endpointId,
-        dto.providerId,
-      );
+      const target =
+        dto.model === undefined
+          ? await this.providers.resolveEndpointTestTarget(
+              endpointId,
+              dto.providerId,
+            )
+          : await this.providers.resolveEndpointTestTarget(
+              endpointId,
+              dto.providerId,
+              dto.model,
+            );
       const entry: TestRecord = {
         endpointId,
         providerId: dto.providerId,
@@ -123,6 +137,7 @@ export class ModelEndpointTestsService {
         startedAt: Date.now(),
         expiresAt: Date.now() + 30 * 60000,
         querying: false,
+        model: target.model,
         result: {
           requestId: dto.requestId,
           status: 'running',
@@ -132,6 +147,8 @@ export class ModelEndpointTestsService {
           taskId: null,
           elapsedMilliseconds: 0,
           checkedAt: new Date().toISOString(),
+          model: target.model,
+          apiPath: new URL(target.url).pathname,
         },
       };
       this.records.set(key, entry);
@@ -178,6 +195,7 @@ export class ModelEndpointTestsService {
       const target = await this.providers.resolveEndpointTestTarget(
         endpointId,
         entry.providerId,
+        entry.model,
       );
       if (this.route(target) !== entry.route || !target.taskUrlTemplate)
         throw new BadRequestException(

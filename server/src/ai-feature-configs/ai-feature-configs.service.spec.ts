@@ -28,6 +28,7 @@ describe('AiFeatureConfigsService', () => {
         functionType: 'chat',
         functionLabel: '普通调用',
         source: 'configured',
+        ruleName: '模型专用 · text-model（普通调用）',
         url: 'https://example.com/vendor/text',
         secretKey: 'must-stay-internal',
       }),
@@ -48,6 +49,7 @@ describe('AiFeatureConfigsService', () => {
       functionType: 'chat',
       functionLabel: '普通调用',
       source: 'configured',
+      ruleName: '模型专用 · text-model（普通调用）',
       apiPath: '/vendor/text',
       searchApiPath: null,
     });

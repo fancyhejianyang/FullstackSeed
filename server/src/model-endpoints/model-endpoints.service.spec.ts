@@ -11,7 +11,10 @@ import {
   CATEGORY_FUNCTIONS,
   detectModelPlatform,
 } from './model-endpoint.constants';
-import { MODEL_ENDPOINT_PRESETS } from './model-endpoint.presets';
+import {
+  MODEL_ENDPOINT_PRESETS,
+  MODEL_SPECIFIC_PRESETS,
+} from './model-endpoint.presets';
 import { ModelEndpointsService } from './model-endpoints.service';
 
 function harness() {
@@ -270,8 +273,8 @@ describe('模型调用接口配置', () => {
     });
     await expect(service.importPresets()).resolves.toMatchObject({
       added: 0,
-      skipped: MODEL_ENDPOINT_PRESETS.length,
-      total: MODEL_ENDPOINT_PRESETS.length,
+      skipped: MODEL_SPECIFIC_PRESETS.length,
+      total: MODEL_SPECIFIC_PRESETS.length,
     });
     expect(repository.save).not.toHaveBeenCalled();
   });

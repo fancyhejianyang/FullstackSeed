@@ -13,6 +13,7 @@ import {
   importOfficialModelEndpoints,
   type ModelEndpoint,
   type ModelEndpointOptions,
+  type QueryModelEndpointParams,
 } from "@/api/modelEndpoint";
 import { modelPlatformLabels } from "@/utils/modelPlatform";
 import { getPermissionActionColor } from "@/utils/permission";
@@ -24,6 +25,10 @@ const tableRef = ref<{
   refresh: () => Promise<void>;
   runBatchDelete: () => Promise<void>;
 }>();
+const source = ref<"builtin" | "configured">("builtin");
+function loadEndpoints(params: QueryModelEndpointParams) {
+  return getModelEndpoints({ ...params, source: source.value });
+}
 const options = ref<ModelEndpointOptions>({
   platforms: [],
   functions: [],
@@ -38,9 +43,10 @@ const searchFields = computed<FormField[]>(() => [
   },
   {
     prop: "keyword",
-    label: "模型",
+    label: source.value === "builtin" ? "规则" : "模型",
     type: "input",
-    placeholder: "模型编码 / 名称",
+    placeholder:
+      source.value === "builtin" ? "平台 / 功能名称" : "模型编码 / 名称",
   },
   {
     prop: "platformType",
@@ -54,15 +60,19 @@ const searchFields = computed<FormField[]>(() => [
     type: "select",
     options: options.value.functions,
   },
-  {
-    prop: "isActive",
-    label: "状态",
-    type: "select",
-    options: [
-      { label: "启用", value: true },
-      { label: "停用", value: false },
-    ],
-  },
+  ...(source.value === "configured"
+    ? [
+        {
+          prop: "isActive",
+          label: "状态",
+          type: "select" as const,
+          options: [
+            { label: "启用", value: true },
+            { label: "停用", value: false },
+          ],
+        },
+      ]
+    : []),
 ]);
 const editVisible = ref(false);
 const editingRow = ref<ModelEndpoint | null>(null);
@@ -91,6 +101,7 @@ function openCreate() {
   editVisible.value = true;
 }
 function handleEdit(row: ModelEndpoint) {
+  if (row.isReadOnly) return;
   editingRow.value = row;
   editVisible.value = true;
 }
@@ -109,14 +120,31 @@ onMounted(async () => {
 
 <template>
   <PageContainer title="模型厂商调用接口">
+    <el-tabs v-model="source">
+      <el-tab-pane label="系统通用" name="builtin" />
+      <el-tab-pane label="模型专用" name="configured" />
+    </el-tabs>
+    <el-alert
+      class="endpoint-card__scope-hint"
+      :title="
+        source === 'builtin'
+          ? '系统规则只读，适用于账号对应功能目录中的模型。存在模型专用卡片时优先使用专用配置，停用的专用卡片会阻止调用。'
+          : '按具体模型和功能设置接口，优先于系统通用规则。历史卡片保留；生图、视频等专用功能必须配置对应接口。'
+      "
+      type="info"
+      :closable="false"
+    />
     <Table
+      :key="source"
       ref="tableRef"
       :columns="[]"
-      :request="getModelEndpoints"
+      :request="loadEndpoints"
       :search-fields="searchFields"
       display-mode="cards"
       :page-sizes="[12, 24, 48]"
-      check-able
+      :check-able="source === 'configured'"
+      :show-edit="source === 'configured'"
+      :show-delete="source === 'configured'"
       perm-module="modelEndpoint"
       :delete-request="(row: ModelEndpoint) => deleteModelEndpoint(row.id)"
       :batch-delete-request="({ ids }) => batchDeleteModelEndpoints(ids)"
@@ -124,10 +152,14 @@ onMounted(async () => {
       @edit="handleEdit"
     >
       <template #toolbar="{ selectedRows }">
-        <Button perm="ModelEndpoint.create" @click="openCreate"
+        <Button
+          v-if="source === 'configured'"
+          perm="ModelEndpoint.create"
+          @click="openCreate"
           >新增接口</Button
         >
         <Button
+          v-if="source === 'configured'"
           perm="ModelEndpoint.create"
           icon="Download"
           :confirm="false"
@@ -136,6 +168,7 @@ onMounted(async () => {
           >补充官方接口</Button
         >
         <Button
+          v-if="source === 'configured'"
           perm="ModelEndpoint.batchDelete"
           :confirm="false"
           :disabled="!selectedRows.length"
@@ -148,11 +181,23 @@ onMounted(async () => {
           <span>{{ modelPlatformLabels[row.platformType] }}</span>
           <el-tag
             :type="getPermissionActionColor(row.isActive ? 'create' : 'read')"
-            >{{ row.isActive ? "启用" : "停用" }}</el-tag
+            >{{
+              row.isReadOnly
+                ? "系统内置 · 只读"
+                : row.isActive
+                  ? "启用"
+                  : "停用"
+            }}</el-tag
           >
         </div>
         <h3 class="endpoint-card__title">{{ row.modelName }}</h3>
-        <div class="endpoint-card__model">{{ row.modelCode }}</div>
+        <div class="endpoint-card__model">
+          {{
+            row.isReadOnly
+              ? "适用模型：账号对应功能目录；无需逐版本配置"
+              : row.modelCode
+          }}
+        </div>
         <div class="endpoint-card__badges">
           <el-tag :type="getPermissionActionColor('read')">{{
             label(options.functions, row.functionType)
@@ -202,6 +247,9 @@ onMounted(async () => {
 </template>
 
 <style scoped lang="scss">
+.endpoint-card__scope-hint {
+  margin-bottom: 16px;
+}
 .endpoint-card__heading,
 .endpoint-card__badges {
   display: flex;

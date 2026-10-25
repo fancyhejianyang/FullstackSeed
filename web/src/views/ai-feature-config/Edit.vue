@@ -737,19 +737,16 @@ async function validateSelectedModel(notify = false) {
     });
     if (requestSequence !== modelValidationSequence) return false;
     const source =
-      result.source === "configured"
-        ? "已匹配厂商接口"
-        : "无专用卡片，使用标准接口";
+      result.source === "standard"
+        ? "使用自定义平台标准接口"
+        : `已匹配「${result.ruleName}」`;
     const search = result.searchApiPath
       ? `；联网搜索：${result.searchApiPath}`
       : "";
     modelValidationHint.value = `${source}（${result.functionLabel}）：${result.apiPath}${search}。仅检查配置，未调用模型。`;
     if (notify) {
-      const message =
-        result.source === "configured"
-          ? `模型“${model}”：${result.functionLabel}接口配置匹配通过；仅检查配置，未调用模型。`
-          : `模型“${model}”：无专用${result.functionLabel}卡片，使用标准接口；仅检查配置，未调用模型。`;
-      if (result.source === "configured") ElMessage.success(message);
+      const message = `模型“${model}”：${source}；仅检查配置，未调用模型。`;
+      if (result.source !== "standard") ElMessage.success(message);
       else ElMessage.info(message);
     }
     return true;

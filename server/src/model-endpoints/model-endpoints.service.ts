@@ -24,7 +24,11 @@ import {
   type ModelFunction,
   type PlatformType,
 } from './model-endpoint.constants';
-import { MODEL_ENDPOINT_PRESETS } from './model-endpoint.presets';
+import { MODEL_SPECIFIC_PRESETS } from './model-endpoint.presets';
+import {
+  BUILTIN_MODEL_ENDPOINTS,
+  builtinModelEndpoint,
+} from './model-endpoint.builtins';
 import {
   TOKENHUB_DOCUMENTATION,
   TOKENHUB_OFFICIAL_PRESETS,
@@ -46,7 +50,7 @@ export class ModelEndpointsService implements OnModuleInit {
     let added = 0;
     let skipped = 0;
     // 仅补缺项；编辑、停用、软删除过的预设不会在重启时被覆盖或复活。
-    for (const preset of MODEL_ENDPOINT_PRESETS) {
+    for (const preset of MODEL_SPECIFIC_PRESETS) {
       const existing = await this.repository.findOne({
         where: {
           platformType: preset.platformType,
@@ -68,7 +72,7 @@ export class ModelEndpointsService implements OnModuleInit {
     return {
       added,
       skipped,
-      total: MODEL_ENDPOINT_PRESETS.length,
+      total: MODEL_SPECIFIC_PRESETS.length,
       unverifiedModels: TOKENHUB_UNVERIFIED_MODELS,
     };
   }
@@ -103,6 +107,27 @@ export class ModelEndpointsService implements OnModuleInit {
       : null;
     if (scenes && query.functionType && !scenes.includes(query.functionType))
       return { list: [], total: 0 };
+    if (query.source === 'builtin') {
+      const keyword = query.keyword?.trim().toLowerCase();
+      const list = BUILTIN_MODEL_ENDPOINTS.filter(
+        (item) =>
+          (!query.platformType || item.platformType === query.platformType) &&
+          (!query.functionType || item.functionType === query.functionType) &&
+          (!scenes || scenes.includes(item.functionType)) &&
+          query.isActive !== false &&
+          (!keyword ||
+            `${item.modelName} ${item.apiPath}`
+              .toLowerCase()
+              .includes(keyword)),
+      );
+      const start = ((query.page ?? 1) - 1) * (query.pageSize ?? 12);
+      return {
+        list: list
+          .slice(start, start + (query.pageSize ?? 12))
+          .map((item) => ({ ...item })),
+        total: list.length,
+      };
+    }
     const base = {
       ...(query.platformType ? { platformType: query.platformType } : {}),
       ...(query.functionType
@@ -133,12 +158,19 @@ export class ModelEndpointsService implements OnModuleInit {
   }
 
   private async entity(id: number) {
+    if (id <= 0)
+      throw new BadRequestException('系统通用规则只读，不能编辑、删除或停用');
     const row = await this.repository.findOne({ where: { id } });
     if (!row) throw new NotFoundException('模型调用接口不存在');
     return row;
   }
 
   async findOne(id: number) {
+    if (id < 0) {
+      const rule = BUILTIN_MODEL_ENDPOINTS.find((item) => item.id === id);
+      if (!rule) throw new NotFoundException('系统通用规则不存在');
+      return { ...rule };
+    }
     return this.toView(await this.entity(id));
   }
 
@@ -178,6 +210,8 @@ export class ModelEndpointsService implements OnModuleInit {
   async batchRemove(ids: number[]) {
     const uniqueIds = [...new Set(ids)];
     if (!uniqueIds.length) return { ids: [] };
+    if (uniqueIds.some((id) => id <= 0))
+      throw new BadRequestException('系统通用规则只读，不能删除');
     await this.repository.manager.transaction(async (manager) => {
       const repository = manager.getRepository(ModelEndpoint);
       const rows = await repository.find({
@@ -203,7 +237,16 @@ export class ModelEndpointsService implements OnModuleInit {
     });
     if (row && !row.isActive)
       throw new BadRequestException('当前模型功能的调用接口已停用');
-    return row;
+    return row
+      ? { ...row, source: 'configured' as const, isReadOnly: false }
+      : builtinModelEndpoint(platformType, functionType);
+  }
+
+  overriddenModels(platformType: PlatformType, functionType: ModelFunction) {
+    return this.repository.find({
+      where: { platformType, functionType },
+      select: { modelCode: true },
+    });
   }
 
   imageRoutes() {
@@ -256,9 +299,9 @@ export class ModelEndpointsService implements OnModuleInit {
     row.modelName = row.modelName.trim();
     row.apiPath = row.apiPath.trim();
     row.taskApiPath = row.taskApiPath?.trim() ?? '';
-    if (!row.modelCode || !row.modelName || /\s/.test(row.modelCode))
+    if (!row.modelCode || !row.modelName || /[\s*?]/.test(row.modelCode))
       throw new BadRequestException(
-        '模型编码和名称不能为空，模型编码不能包含空白',
+        '模型编码和名称不能为空，模型编码须为具体名称，不能包含空白或通配符',
       );
     const definition = PROTOCOLS[row.protocol];
     if (
@@ -297,6 +340,8 @@ export class ModelEndpointsService implements OnModuleInit {
         : null;
     return {
       id: row.id,
+      source: 'configured' as const,
+      isReadOnly: false,
       platformType: row.platformType,
       modelCode: row.modelCode,
       modelName: row.modelName,

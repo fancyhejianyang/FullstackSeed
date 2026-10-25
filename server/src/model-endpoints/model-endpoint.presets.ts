@@ -1,5 +1,6 @@
 import type { CreateModelEndpointDto } from './dto/model-endpoint.dto';
 import { TOKENHUB_OFFICIAL_PRESETS } from './tokenhub-official.presets';
+import { usesBuiltinModelEndpoint } from './model-endpoint.builtins';
 import {
   PROTOCOLS,
   type ModelFunction,
@@ -133,3 +134,8 @@ for (const preset of TOKENHUB_OFFICIAL_PRESETS) {
   )
     MODEL_ENDPOINT_PRESETS.push(preset);
 }
+
+/** 通用协议交给系统规则；已有数据库卡片不删除，仍作为精确覆盖。 */
+export const MODEL_SPECIFIC_PRESETS = MODEL_ENDPOINT_PRESETS.filter(
+  (item) => !usesBuiltinModelEndpoint(item),
+);

@@ -66,6 +66,7 @@ export class AiFeatureConfigsService {
       functionType: target.functionType,
       functionLabel: target.functionLabel,
       source: target.source,
+      ruleName: target.ruleName,
       apiPath: new URL(target.url).pathname,
       searchApiPath,
     };

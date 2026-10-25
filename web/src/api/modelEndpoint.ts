@@ -98,8 +98,10 @@ export interface ModelEndpointForm {
 }
 export interface ModelEndpoint extends ModelEndpointForm {
   id: number;
-  createdAt: string;
-  updatedAt: string;
+  source: "builtin" | "configured";
+  isReadOnly: boolean;
+  createdAt?: string;
+  updatedAt?: string;
   taskMethod?: "GET" | "POST";
   category?: ModelCategory;
   documentationUrl?: string | null;
@@ -117,6 +119,7 @@ export interface ModelEndpointOptions {
   }>;
 }
 export interface QueryModelEndpointParams {
+  source?: "builtin" | "configured";
   category?: ModelCategory | "";
   page?: number;
   pageSize?: number;
@@ -176,10 +179,17 @@ export interface ModelEndpointTestResult {
   taskId: string | null;
   elapsedMilliseconds: number;
   checkedAt: string;
+  model?: string;
+  apiPath?: string;
 }
 export interface ModelEndpointTestOptions {
   card: ModelEndpoint;
-  accounts: Array<{ id: number; name: string }>;
+  accounts: Array<{
+    id: number;
+    name: string;
+    models?: Array<{ code: string; name: string }>;
+    apiPath?: string;
+  }>;
   requestBody: Record<string, unknown>;
   recentTest: { providerId: number; result: ModelEndpointTestResult } | null;
   accountCatalogRequired?: boolean;
@@ -194,6 +204,7 @@ export function testModelEndpoint(
   id: number,
   data: {
     providerId: number;
+    model?: string;
     requestId: string;
     requestBody: Record<string, unknown>;
   },

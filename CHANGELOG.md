@@ -1,5 +1,18 @@
 # CHANGELOG
 
+### 2026-10-25 模型接口采用系统通用规则与模型专用覆盖
+
+- “模型厂商调用接口”新增“系统通用 / 模型专用”页签，均复用 Table 卡片、搜索、分页及 Dialog/Form/Button。百炼和 TokenHub 分别提供普通调用、识图、文本向量三类，共六张由代码维护的只读规则；允许查看和测试，不显示编辑、删除和勾选入口，服务端同时拒绝负数系统标识的编辑、删除及混合批量删除。系统规则不写数据库，无实体列/迁移、草稿、备注或可编辑副本。
+- 共用解析器先匹配平台、具体模型、功能的专用卡片，再使用已确认的官方平台通用规则；专用卡片停用即阻止，不绕过到通用规则。删除专用卡片后可回到通用规则。生图、视频等不提供通用兜底；未知平台继续沿用既有标准兼容路径，来源明确为自定义平台，不冒充官方卡片。新模型版本直接采用账号目录中的实际编码，不添加 `qwen*` 等通配匹配。系统规则严格使用对应功能目录，识图不能借用普通调用目录，空目录不自动补默认模型；不自动开启 Think、工具或结构化输出能力。
+- 官方目录完整快照仍保留 255 项；其中 69 项与标准通用规则相同，后续启动/手动补充不再逐版本入库，专用预设为 186 项。历史数据库记录及人工修改、停用、软删除继续保留，已有标准路径卡片仍作为精确覆盖生效。系统通用路径保留官方地域和百炼专用域名差异；业务空间替换仍使用已保存账号信息。
+- 两端对齐卡片 `source/isReadOnly`、列表 `source`、功能检查 `ruleName`、测试 DTO 可选 `model`、测试账号可选 `models/apiPath` 及结果 `model/apiPath`。系统卡片测试选项按同平台、有效账号及能力目录返回具体版本，批量排除已有专用覆盖，提交时再次验证所属目录与实际命中规则；客户端请求 JSON 的模型不能替换所选版本。测试编号幂等绑定模型，查询与恢复保留原模型，结果和消息显示实际模型/路径，不将一次成功扩大为全系列可用；切换选择不请求供应商。
+- AI 功能配置检查和消息改为显示“已匹配「阿里云百炼 · 普通调用（系统通用）」”等真实规则名称；专用和系统规则均为正常匹配，仍明确只是配置检查。Agent、内容创作、素材及模型校验继续通过共用服务解析，不新增页面私有匹配逻辑或模型授权假设。
+- 新增文件：`server/src/model-endpoints/model-endpoint.builtins.ts`、`server/src/model-endpoints/model-endpoint.builtins.spec.ts`。
+- 修改文件（后端）：`server/src/model-endpoints/model-endpoint.presets.ts`、`server/src/model-endpoints/model-endpoints.service.ts`、`server/src/model-endpoints/model-endpoints.service.spec.ts`、`server/src/model-endpoints/dto/model-endpoint.dto.ts`、`server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`、`server/src/knowledge-ai-providers/dto/model-endpoint-test.dto.ts`、`server/src/knowledge-ai-providers/model-endpoint-tests.service.ts`、`server/src/ai-feature-configs/ai-feature-configs.service.ts`、`server/src/ai-feature-configs/ai-feature-configs.service.spec.ts`。
+- 修改文件（前端及文档）：`web/src/api/modelEndpoint.ts`、`web/src/api/aiFeatureConfig.ts`、`web/src/views/model-endpoint/Index.vue`、`web/src/views/model-endpoint/Test.vue`、`web/src/views/model-endpoint/View.vue`、`web/src/views/ai-feature-config/Edit.vue`、`.design-spec.md`、本文件。删除文件：无。用户已有 `web/auto-imports.d.ts`、`web/src/api/hotTopic.ts` 改动保留且不纳入提交。
+- 验证：相关 15 套件 258 项模拟测试通过，涵盖版本不锁定、专用覆盖/停用、目录隔离、系统只读保护、实际模型提交/幂等恢复、地域/业务空间以及 Agent、内容生成、封面和素材链路。前后端业务类型检查、定向 ESLint/格式、TypeORM 实体列检查、组件复用扫描及生产构建通过；前端保留既有 PURE 注释及大分块提示。未启动/重启服务、未改数据库或调用真实付费模型。更新前后端后即可查看新页签；系统卡片无需补充入库。
+- 官方路径依据：[百炼 Chat](https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions/)、[百炼 Embeddings](https://help.aliyun.com/zh/model-studio/embedding-interfaces-compatible-with-openai)、[百炼地域与专用端点](https://help.aliyun.com/en/model-studio/base-url)、[腾讯 Chat](https://cloud.tencent.com/document/product/1823/130079)、[腾讯识图](https://cloud.tencent.com/document/product/1823/136956)、[腾讯文本向量](https://cloud.tencent.com/document/product/1823/133515)。
+
 ### 2026-10-25 按腾讯官方调用指南补全模型接口目录
 
 - 联网核对 TokenHub 总模型表及图像/视频/3D/语音音乐/多模态/向量/联网搜索详细调用指南，预设现覆盖 126 个腾讯模型编码、253 个模型功能场景；保留原有 2 条百炼卡片后共 255 条。腾讯分类数量：语言 40、图像 26、视频 75、3D 与世界模型 40、语音音乐 21、多模态理解 42、向量 4、联网搜索 5。继续使用“平台 + 模型 + 功能”唯一配置，不新增实体列、草稿或备注字段。

@@ -67,6 +67,9 @@ export class UpdateModelEndpointDto extends PartialType(
 ) {}
 
 export class QueryModelEndpointDto {
+  @IsIn(['builtin', 'configured'])
+  @IsOptional()
+  source?: 'builtin' | 'configured';
   @IsIn(Object.keys(CATEGORY_LABELS))
   @IsOptional()
   category?: ModelCategory;

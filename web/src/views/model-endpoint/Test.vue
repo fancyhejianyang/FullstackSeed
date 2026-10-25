@@ -27,7 +27,17 @@ const result = ref<ModelEndpointTestResult | null>(null);
 const requestId = ref("");
 const testedAccountName = ref("");
 let lastNotifiedResult = "";
-const form = reactive({ providerId: "" as number | "", requestBody: "" });
+const form = reactive({
+  providerId: "" as number | "",
+  model: "",
+  requestBody: "",
+});
+const isBuiltin = computed(() => options.value?.card.source === "builtin");
+const availableModels = computed(
+  () =>
+    options.value?.accounts.find((item) => item.id === form.providerId)
+      ?.models ?? [],
+);
 let session = 0;
 let timer: ReturnType<typeof setTimeout> | undefined;
 const pending = computed(
@@ -46,28 +56,79 @@ const fields = computed<FormField[]>(() => [
       value: item.id,
     })),
     componentProps: { disabled: pending.value },
-    hint:
-      options.value?.accountCatalogRequired === false
+    hint: isBuiltin.value
+      ? "只显示同平台、已启用且对应目录有可用模型的账号；已配置专用卡片的模型请到专用卡片测试。"
+      : options.value?.accountCatalogRequired === false
         ? "此类新能力仅在卡片页调试，账号尚无专用模型目录；按同平台、启用与密钥选择账号，模型是否开通由明确测试核实。"
         : "只显示同平台、已启用且已登记当前模型的账号；未显示时请先补充账号对应模型目录和密钥。",
   },
+  ...(isBuiltin.value
+    ? [
+        {
+          prop: "model",
+          label: "测试模型",
+          type: "select" as const,
+          options: availableModels.value.map((item) => ({
+            label:
+              item.name === item.code
+                ? item.code
+                : `${item.name}（${item.code}）`,
+            value: item.code,
+          })),
+          componentProps: { disabled: pending.value, clearable: false },
+          hint: "从账号对应功能目录选择具体版本；结果仅代表本次账号和模型，不代表整个系列均可用。",
+        },
+      ]
+    : []),
   {
     prop: "requestBody",
     label: "请求参数",
     type: "textarea",
     rows: 14,
     componentProps: { disabled: pending.value },
-    hint: "可修改测试内容和原生参数。请按官方文档替换全部 REPLACE_WITH_ 占位符（图片、音视频、模型文件或音色等）；模型编码以当前卡片为准。",
+    hint: `可修改测试内容和原生参数。请按官方文档替换全部 REPLACE_WITH_ 占位符（图片、音视频、模型文件或音色等）；模型编码以${isBuiltin.value ? "所选具体版本" : "当前卡片"}为准。`,
   },
 ]);
-const rules: FormRules = {
+const rules = computed<FormRules>(() => ({
   providerId: [
     { required: true, message: "请选择测试账号", trigger: "change" },
   ],
   requestBody: [
     { required: true, message: "请输入请求参数 JSON", trigger: "blur" },
   ],
-};
+  ...(isBuiltin.value
+    ? {
+        model: [
+          { required: true, message: "请选择具体测试模型", trigger: "change" },
+        ],
+      }
+    : {}),
+}));
+watch(
+  () => form.providerId,
+  () => {
+    if (!isBuiltin.value) return;
+    if (!availableModels.value.some((item) => item.code === form.model))
+      form.model = availableModels.value[0]?.code ?? "";
+  },
+);
+watch(
+  () => form.model,
+  (model) => {
+    if (!isBuiltin.value || !form.requestBody) return;
+    try {
+      const body: unknown = JSON.parse(form.requestBody);
+      if (body && typeof body === "object" && !Array.isArray(body))
+        form.requestBody = JSON.stringify(
+          { ...body, model: model || "REPLACE_WITH_MODEL_CODE" },
+          null,
+          2,
+        );
+    } catch {
+      /* 保留用户正在编辑的 JSON，不自动清空或覆盖。 */
+    }
+  },
+);
 const statusLabels = {
   running: "调用中",
   accepted: "已受理，生成中",
@@ -106,7 +167,13 @@ function notifyResult(data: ModelEndpointTestResult, explicit = false) {
   )
     return;
   lastNotifiedResult = key;
-  const text = `${options.value?.card.modelCode ?? props.row?.modelCode ?? "模型"}：${statusLabels[data.status]}。${data.message}`;
+  const model =
+    data.model ||
+    (isBuiltin.value
+      ? form.model
+      : (options.value?.card.modelCode ?? props.row?.modelCode)) ||
+    "模型";
+  const text = `${model}：${statusLabels[data.status]}。${data.message}`;
   if (data.status === "succeeded") ElMessage.success(text);
   else if (data.status === "failed") ElMessage.error(text);
   else if (data.status === "unknown") ElMessage.warning(text);
@@ -148,6 +215,7 @@ watch(
     errorMessage.value = "";
     requestId.value = "";
     form.providerId = "";
+    form.model = "";
     form.requestBody = "";
     loading.value = true;
     try {
@@ -167,6 +235,12 @@ watch(
             ? data.accounts[0]!.id
             : "";
       form.requestBody = JSON.stringify(data.requestBody, null, 2);
+      form.model = previous?.result.model ?? "";
+      if (
+        data.card.source === "builtin" &&
+        !availableModels.value.some((item) => item.code === form.model)
+      )
+        form.model = availableModels.value[0]?.code ?? "";
       result.value = previous?.result ?? null;
       lastNotifiedResult = previous
         ? `${previous.result.requestId}:${previous.result.status}:${previous.result.message}`
@@ -198,7 +272,8 @@ async function startTest() {
       Array.isArray(requestBody)
     )
       throw new Error("请求参数必须是 JSON 对象");
-    if (form.requestBody.includes("REPLACE_WITH_"))
+    if (isBuiltin.value) requestBody = { ...requestBody, model: form.model };
+    if (JSON.stringify(requestBody).includes("REPLACE_WITH_"))
       throw new Error("请按官方文档替换全部 REPLACE_WITH_ 占位符后再测试");
   } catch (error) {
     ElMessage.warning(
@@ -218,6 +293,7 @@ async function startTest() {
   try {
     const data = await testModelEndpoint(props.row.id, {
       providerId: Number(form.providerId),
+      ...(isBuiltin.value ? { model: form.model } : {}),
       requestId: requestId.value,
       requestBody: requestBody as Record<string, unknown>,
     });
@@ -280,7 +356,11 @@ async function refreshResult(explicit = false) {
         :closable="false"
       />
       <div v-if="options" class="endpoint-test__path">
-        POST {{ options.card.apiPath }}
+        POST
+        {{
+          options.accounts.find((item) => item.id === form.providerId)
+            ?.apiPath ?? options.card.apiPath
+        }}
         <div v-if="options.card.executionMode === 'async'">
           {{ options.card.taskMethod ?? "GET" }} {{ options.card.taskApiPath }}
         </div>
@@ -316,6 +396,12 @@ async function refreshResult(explicit = false) {
         <p>{{ result.message }}</p>
         <div>测试账号：{{ testedAccountName }}</div>
         <div>
+          测试模型：{{
+            result.model || (isBuiltin ? "未记录" : row?.modelCode)
+          }}
+        </div>
+        <div v-if="result.apiPath">调用路径：POST {{ result.apiPath }}</div>
+        <div>
           HTTP：{{ result.httpStatus ?? "暂无响应" }} · 耗时：{{
             (result.elapsedMilliseconds / 1000).toFixed(2)
           }}
@@ -348,7 +434,8 @@ async function refreshResult(explicit = false) {
           pending ||
           querying ||
           !options?.card.isActive ||
-          !form.providerId
+          !form.providerId ||
+          (isBuiltin && !form.model)
         "
         @click="startTest"
         >{{
