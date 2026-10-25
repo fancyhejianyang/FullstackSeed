@@ -1,5 +1,12 @@
 # CHANGELOG
 
+### 2026-10-25 免费额度不可用且未开通付费的错误提示
+
+- 将用户确认的完整供应商报错 `No free trial quota is available for the service and postpaid billing is not enabled` 映射为“该服务暂无免费额度，且未开启按量付费，请开通后重试。”，功能配置与厂商卡片真实测试不再只提示通用 HTTP 402。公共解析返回对应中文原因，保持原欠费映射；识别已归一化中文，避免 Agent、媒体和内容创建的上层错误处理覆盖具体原因。
+- 保留完整报错匹配、大小写/空白容错、深度/长度/循环保护及错误字段白名单，不根据通用 HTTP 402、quota 或 postpaid 片段推断。查询原任务的提示改为处理账号计费问题后继续查询，保留待核实状态和原任务编号，不重新生成。前端沿用既有 message 字段，无 API、DTO、数据库或配置字段变更。
+- 新增文件：无。修改文件：`server/src/common/ai/model-provider-error.ts`、`server/src/knowledge-ai-providers/model-endpoint-tests.service.ts`、`.design-spec.md`、本文件。删除文件：无。用户已有 `web/auto-imports.d.ts`、`web/src/api/hotTopic.ts` 改动保留且不纳入提交。
+- 验证：后端业务类型检查、定向 ESLint、修改代码格式检查与 diff 检查通过；静态核对测试结果到前端消息提示、二次错误归一化及查询原任务文案。按修复类约定未执行测试、构建、启动/重启服务或真实付费调用。
+
 ### 2026-10-25 切换模型直接测试，移除额外开关
 
 - AI 功能配置移除“真实测试”配置行、自动测试开关及仅检查配置的切换分支。用户切换有效账号、模型、功能场景、OCR 引擎或联网协议时，直接按厂商接口规则匹配并发起真实测试，结果继续通过 ElMessage 与字段说明反馈；欠费提示保持原有中文信息。

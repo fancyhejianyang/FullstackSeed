@@ -453,7 +453,7 @@ export class ModelEndpointTestsService {
         entry,
         querying ? 'unknown' : 'failed',
         querying
-          ? `${billingMessage} 原任务状态尚未确认，可在充值后继续查询；不会重新生成。`
+          ? `${billingMessage} 原任务状态尚未确认，处理账号计费问题后可继续查询；不会重新生成。`
           : billingMessage,
       );
       return;
