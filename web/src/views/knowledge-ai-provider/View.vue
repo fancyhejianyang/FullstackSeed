@@ -2,6 +2,7 @@
 import { computed, ref, watch } from "vue";
 import Dialog from "@/components/Dialog.vue";
 import { formatDateTime } from "@/utils/format";
+import { modelPlatformLabels } from "@/utils/modelPlatform";
 import {
   getKnowledgeAiProvider,
   type KnowledgeAiProvider,
@@ -70,6 +71,9 @@ function shouldShowModelGroup(value?: string | null) {
         <el-descriptions-item label="API 地址">
           {{ rowData?.apiUrl || "-" }}
         </el-descriptions-item>
+        <el-descriptions-item label="平台类型">{{
+          modelPlatformLabels[rowData?.platformType ?? "custom"]
+        }}</el-descriptions-item>
         <el-descriptions-item label="业务空间">
           {{ rowData?.workspaceId || "-" }}
         </el-descriptions-item>

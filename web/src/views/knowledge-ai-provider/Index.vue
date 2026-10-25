@@ -9,6 +9,7 @@ import Table, { type TableColumn } from '@/components/Table.vue';
 import Dialog from '@/components/Dialog.vue';
 import Form, { type FormField } from '@/components/Form.vue';
 import { formatDateTime } from '@/utils/format';
+import { modelPlatformLabels } from '@/utils/modelPlatform';
 import {
   batchDeleteKnowledgeAiProviders,
   deleteKnowledgeAiProvider,
@@ -25,9 +26,13 @@ const tableRef = ref<{
   refresh: () => Promise<void>;
   runBatchDelete: () => Promise<void>;
 }>();
+function platformLabel(row: KnowledgeAiProvider) {
+  return modelPlatformLabels[row.platformType ?? 'custom'];
+}
 
 const columns: TableColumn[] = [
   { prop: 'name', label: '名称', minWidth: 180 },
+  { prop: 'platformType', label: '平台类型', minWidth: 150, slot: true },
   { prop: 'secretKeySet', label: '密钥', width: 90, slot: true },
   { prop: 'isEnabled', label: '状态', width: 90, slot: true },
   { prop: 'updatedAt', label: '更新时间', width: 180, slot: true },
@@ -205,6 +210,9 @@ async function handleTest() {
           {{ row.secretKeySet ? '已配置' : '未配置' }}
         </el-tag>
       </template>
+      <template #column-platformType="{ row }">{{
+        platformLabel(row)
+      }}</template>
 
       <template #column-isEnabled="{ row }">
         <el-tag :type="row.isEnabled ? 'success' : 'info'">

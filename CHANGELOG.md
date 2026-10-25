@@ -1,5 +1,19 @@
 # CHANGELOG
 
+### 2026-10-25 大模型账号自动识别平台与模型功能接口卡片
+
+- 大模型账号根据 API URL 的真实 hostname 自动识别腾讯 TokenHub（国内/国际）、阿里云百炼（共享域名/业务空间域名）或自定义平台；编辑时即时预览，列表与详情以后端判定为准，不依赖模型名或 URL 关键词，不暴露真实密钥。账号表单移除“描述”输入，保留历史数据。
+- 第三方配置新增“模型厂商调用接口”：每张卡片唯一对应 `platformType + modelCode + functionType`，支持普通调用、识别图片、文本向量、文生图、参考生图、文生视频、图生视频、参考生视频、首尾帧生视频的路径登记；维护模型名称、协议、同步/异步、任务查询路径和 `isActive`，无草稿/发布、备注/说明字段。提供搜索、平台/场景/状态筛选、分页、查看、编辑、软删除与批量删除，权限统一为 `ModelEndpoint.read/create/update/delete/batchDelete`。
+- 基于 demo 的 Entity/DTO/Service/Controller/Module 与 Index/Edit/View/API 结构扩展，公共 Table 新增 cards 模式，页面继续复用搜索、分页、勾选、权限按钮和删除确认；同步更新组件契约与设计规范。补齐根模块、第三方概览、菜单/权限及操作日志注册。
+- 初始化补充 16 条可编辑预设，覆盖混元 3.0/3.5、Seedream 5.0 Pro、Vidu 图片、混元视频、Vidu Q2/Q2 Pro 的已知功能和百炼普通调用/识图示例。预设重启时只补缺，不覆盖编辑、停用或软删除。接口配置不代表账号已开通相应模型，调用仍校验账号启用、密钥和对应能力目录。
+- 实际调用按平台/模型/功能精确解析卡片；停用卡片明确阻止调用，没有匹配卡片时兼容账号原有地址。路径基于账号同域名构建，不重复拼接 Chat 路径或 /v1；拒绝跨域路径、凭据、查询参数与路径穿越。聊天、识图、向量化、Agent、素材生成和文章封面接入解析；增加混元 messages、Seedream、Vidu 异步生图及腾讯视频协议适配，仅轮询已受理任务，不自动重新提交可能计费的请求。首尾帧接口可独立登记，本次不新增素材创作页的首尾帧输入模式。
+- 新增文件（后端）：`server/src/model-endpoints/model-endpoint.constants.ts`、`server/src/model-endpoints/model-endpoint.presets.ts`、`server/src/model-endpoints/entities/model-endpoint.entity.ts`、`server/src/model-endpoints/dto/model-endpoint.dto.ts`、`server/src/model-endpoints/model-endpoints.service.ts`、`server/src/model-endpoints/model-endpoints.controller.ts`、`server/src/model-endpoints/model-endpoints.module.ts`、`server/src/model-endpoints/model-endpoints.service.spec.ts`、`server/src/model-endpoints/model-endpoint-routing.spec.ts`、`server/src/common/ai/tokenhub-generation.spec.ts`、`server/src/migrations/1793232000000-AddModelEndpoints.ts`。
+- 新增文件（前端）：`web/src/api/modelEndpoint.ts`、`web/src/utils/modelPlatform.ts`、`web/src/utils/modelPlatform.test.mjs`、`web/src/views/model-endpoint/Index.vue`、`web/src/views/model-endpoint/Edit.vue`、`web/src/views/model-endpoint/View.vue`。
+- 修改文件（后端）：`server/src/app.module.ts`、`server/src/knowledge-ai-providers/knowledge-ai-providers.module.ts`、`server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`、`server/src/agent-apps/agent-apps.service.ts`、`server/src/agent-apps/agent-media.service.ts`、`server/src/agent-apps/agent-media-probe.service.ts`、`server/src/ai-materials/ai-materials.service.ts`、`server/src/common/ai/image-generation.ts`、`server/src/common/ai/video-generation.ts`、`server/src/content-articles/content-cover.service.ts`、`server/src/menus/menu-structure.ts`、`server/src/users/users.service.ts`、`server/src/third-party-config/third-party-config.service.ts`、`server/src/log-records/log-api-scanner.ts`。
+- 修改文件（前端及文档）：`web/src/api/knowledgeAiProvider.ts`、`web/src/components/Table.vue`、`web/src/router/index.ts`、`web/src/views/knowledge-ai-provider/Index.vue`、`web/src/views/knowledge-ai-provider/Edit.vue`、`web/src/views/knowledge-ai-provider/View.vue`、`AGENTS-COMPONENTS.md`、`.design-spec.md`、本文件。删除文件：无。用户已有的 `web/auto-imports.d.ts`、`web/src/api/hotTopic.ts` 改动保留且不纳入提交。
+- 验证：后端相关 13 套件 131 项测试通过；前端域名识别 2 项测试通过；前后端业务类型检查、TypeORM 实体列校验、生产构建、组件复用扫描和 diff 检查通过。修改文件定向 ESLint 无新增问题；`app.module.ts` 原有数据库初始化代码仍有 10 条 require/any 规则错误，未扩大修复。前端构建保留既有 PURE 注释与大分块提示。Node 测试与 Vite 构建的子进程在沙箱内被 EPERM 阻止后，经批准在沙箱外验证通过。未启动/重启服务、未执行数据库迁移、未调用真实付费模型。
+- 生效：开发环境重启后自动建表并补齐预设/菜单；生产环境需先运行新增迁移，再重启服务。官方接口依据：https://cloud.tencent.com/document/product/1823/135745 、https://cloud.tencent.com/document/product/1823/135746 、https://cloud.tencent.com/document/product/1823/136609 、https://cloud.tencent.com/document/product/1823/137202 、https://cloud.tencent.com/document/product/1823/135756 、https://help.aliyun.com/zh/model-studio/base-url 。
+
 ### 2026-10-23 热点选题默认隐藏已忽略内容
 - 点击忽略仍保存 `decision=ignored`，不删除记录；列表默认在数据库分页前排除已忽略，关键词搜索、推荐程度筛选和总数沿用相同条件，保留当前用户隔离。现有操作成功后的 Table 刷新立即应用过滤；重新采集不会清除既有忽略标记。
 - “我的状态”默认提示隐藏已忽略，支持“已忽略”查看与恢复、“全部（含已忽略）”显式查看全部；清空或重置筛选后继续默认隐藏。前后端查询契约增加 `all`，不改变实体状态或忽略/恢复接口。

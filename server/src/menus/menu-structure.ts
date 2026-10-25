@@ -9,6 +9,11 @@ export type StructuredMenuSeed = Partial<Menu> & {
 };
 export const THIRD_PARTY_MENUS = [
   { key: 'ai', name: 'AI 大模型账号', permission: 'KnowledgeAiProvider' },
+  {
+    key: 'model-endpoints',
+    name: '模型厂商调用接口',
+    permission: 'ModelEndpoint',
+  },
   { key: 'wechat', name: '微信 / 小程序', permission: 'WechatConfig' },
   { key: 'storage', name: 'OSS / CDN', permission: 'StorageConfig' },
   { key: 'mineru', name: 'MinerU 解析服务', permission: 'MineruConfig' },
@@ -138,6 +143,15 @@ export function reorganizeSystemMenus(
     access,
     third,
     ...next,
+    {
+      name: '模型厂商调用接口',
+      path: '/third-party-config/model-endpoints',
+      icon: 'Connection',
+      sort: 21,
+      permissionCode: 'ModelEndpoint.read',
+      isSystem: false,
+      parentPath: '/third-party-config',
+    },
     {
       name: '首页配置',
       path: '/system-config/home',

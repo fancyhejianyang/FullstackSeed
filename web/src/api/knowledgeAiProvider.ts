@@ -1,9 +1,12 @@
 import request from "@/utils/request";
+import type { ModelPlatform } from "@/utils/modelPlatform";
 
 export interface KnowledgeAiProvider {
   id: number;
   name: string;
   apiUrl: string;
+  platformType?: ModelPlatform;
+  imageEndpointModels?: string[];
   workspaceId: string;
   chatApiPath: string;
   models: string;

@@ -1,8 +1,12 @@
 <script setup lang="ts">
-import { reactive, ref, watch } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import { ElMessage, type FormRules } from "element-plus";
 import Dialog from "@/components/Dialog.vue";
 import Form, { type FormField } from "@/components/Form.vue";
+import {
+  detectModelPlatform,
+  modelPlatformLabels,
+} from "@/utils/modelPlatform";
 import {
   createKnowledgeAiProvider,
   getKnowledgeAiProvider,
@@ -55,6 +59,7 @@ const fields: FormField[] = [
     type: "input",
     placeholder: "如 https://api.openai.com",
   },
+  { prop: "platformType", label: "平台类型", slot: true },
   {
     prop: "workspaceId",
     label: "业务空间",
@@ -124,7 +129,7 @@ const fields: FormField[] = [
     label: "生图接口地址",
     type: "input",
     placeholder: "完整 HTTPS 地址（不是 Chat 路径）",
-    hint: "OpenAI：完整 /v1/images/generations 地址；百炼：完整 /api/v1/services/aigc/multimodal-generation/generation 地址。使用本账号密钥，需填写正确地域/业务空间。留空则不开放 Agent 生图引用。",
+    hint: "兼容旧配置；平台与模型有对应功能卡片时使用卡片中的路径和协议。没有匹配卡片时才使用此完整地址。",
   },
   {
     prop: "videoGenerationModels",
@@ -139,7 +144,7 @@ const fields: FormField[] = [
     label: "视频生成接口",
     type: "input",
     placeholder: "完整 DashScope 视频生成 HTTPS 地址",
-    hint: "填写 /api/v1/services/aigc/video-generation/video-synthesis 完整地址；系统会异步提交并轮询同域任务接口。",
+    hint: "兼容原 DashScope 视频配置；模型功能卡片可独立配置各场景的生成与查询路径。",
   },
   {
     prop: "embeddingModels",
@@ -154,8 +159,12 @@ const fields: FormField[] = [
     component: "Switch",
     componentProps: { activeText: "启用", inactiveText: "停用" },
   },
-  { prop: "description", label: "描述", type: "textarea", rows: 3 },
 ];
+const platformLabel = computed(() =>
+  form.apiUrl.trim()
+    ? modelPlatformLabels[detectModelPlatform(form.apiUrl)]
+    : "等待填写 API 地址",
+);
 
 const rules: FormRules = {
   name: [{ required: true, message: "请输入名称", trigger: "blur" }],
@@ -259,7 +268,11 @@ async function handleSubmit() {
         :fields="fields"
         :rules="rules"
         label-width="100px"
-      />
+      >
+        <template #field-platformType
+          ><span>{{ platformLabel }}</span></template
+        >
+      </Form>
     </div>
   </Dialog>
 </template>

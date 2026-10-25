@@ -20,7 +20,7 @@ import {
 import { AiFeatureConfig } from '../ai-feature-configs/entities/ai-feature-config.entity';
 import { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-configs.service';
 import {
-  generationResult,
+  imageGenerationResult,
   imageGenerationRequest,
 } from '../common/ai/image-generation';
 import {
@@ -36,6 +36,7 @@ import {
   videoTaskResult,
 } from '../common/ai/video-generation';
 import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
+import type { MediaProtocol } from '../model-endpoints/model-endpoint.constants';
 import { ManagedFilesService } from '../managed-files/managed-files.service';
 import type { UploadedStorageFile } from '../uploads/uploads.service';
 import {
@@ -607,6 +608,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
         task.snapshot.config.providerId,
         task.snapshot.config.model,
         mediaType === 'video' ? 'videoGeneration' : 'imageGeneration',
+        task.snapshot.generationMode ?? 'textToImage',
       );
       const generationMode = task.snapshot.generationMode ?? 'textToImage';
       phase = 'readingReference';
@@ -662,9 +664,17 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
         });
         await this.assertProviderResponse(response);
         phase = 'parsingResponse';
-        const generated = generationResult(
+        const generated = await imageGenerationResult(
           await readMediaJson(response),
-          target.protocol,
+          target,
+          signal,
+          async (providerTaskId) => {
+            phase = 'pollingProvider';
+            await this.tasks.update(
+              { id: task.id, status: 'running', workerId: this.workerId },
+              { providerTaskId },
+            );
+          },
         );
         phase = 'downloadingImage';
         buffer =
@@ -795,7 +805,7 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
       taskUrlTemplate: string | null;
       secretKey: string;
       model: string;
-      protocol: 'openai' | 'dashscope';
+      protocol: MediaProtocol;
     },
     generationMode: AiMaterialGenerationMode,
     referenceImageDataUrl: string | undefined,
@@ -803,10 +813,13 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
     signal: AbortSignal,
     setPhase: (phase: MaterialGenerationPhase) => void,
   ) {
-    if (target.protocol !== 'dashscope' || !target.taskUrlTemplate)
-      throw new BadRequestException(
-        '视频生成配置不是有效的 DashScope 异步协议',
-      );
+    if (
+      !['dashscope', 'tokenhubHunyuanVideo', 'tokenhubViduVideo'].includes(
+        target.protocol,
+      ) ||
+      !target.taskUrlTemplate
+    )
+      throw new BadRequestException('视频生成配置缺少有效的异步协议或查询路径');
     setPhase('requestingProvider');
     const response = await fetch(target.url, {
       method: 'POST',
@@ -815,24 +828,32 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
       headers: {
         Authorization: `Bearer ${target.secretKey}`,
         'Content-Type': 'application/json',
-        'X-DashScope-Async': 'enable',
+        ...(target.protocol === 'dashscope'
+          ? { 'X-DashScope-Async': 'enable' }
+          : {}),
       },
       body: JSON.stringify(
-        videoGenerationRequest({
-          model: target.model,
-          prompt: task.snapshot.finalPrompt,
-          generationMode,
-          referenceImageDataUrl,
-          referenceMedia,
-          resolution: task.snapshot.videoResolution ?? '720P',
-          ratio: task.snapshot.videoRatio ?? 'adaptive',
-          duration: task.snapshot.videoDuration ?? 5,
-        }),
+        videoGenerationRequest(
+          {
+            model: target.model,
+            prompt: task.snapshot.finalPrompt,
+            generationMode,
+            referenceImageDataUrl,
+            referenceMedia,
+            resolution: task.snapshot.videoResolution ?? '720P',
+            ratio: task.snapshot.videoRatio ?? 'adaptive',
+            duration: task.snapshot.videoDuration ?? 5,
+          },
+          target.protocol,
+        ),
       ),
     });
     await this.assertProviderResponse(response);
     setPhase('parsingResponse');
-    const providerTaskId = videoTaskId(await readMediaJson(response));
+    const providerTaskId = videoTaskId(
+      await readMediaJson(response),
+      target.protocol,
+    );
     await this.tasks.update(
       { id: task.id, status: 'running', workerId: this.workerId },
       { providerTaskId },
@@ -843,7 +864,10 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
     );
     setPhase('pollingProvider');
     for (;;) {
-      await this.waitForPoll(signal);
+      await this.waitForPoll(
+        signal,
+        target.protocol === 'tokenhubViduVideo' ? 5000 : 3000,
+      );
       const statusResponse = await fetch(taskUrl, {
         method: 'GET',
         redirect: 'error',
@@ -851,7 +875,10 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
         headers: { Authorization: `Bearer ${target.secretKey}` },
       });
       await this.assertProviderResponse(statusResponse);
-      const result = videoTaskResult(await readMediaJson(statusResponse));
+      const result = videoTaskResult(
+        await readMediaJson(statusResponse),
+        target.protocol,
+      );
       if (result.status === 'pending') continue;
       if (result.status === 'succeeded') return result.videoUrl!;
       throw new BadRequestException(
@@ -872,13 +899,13 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
     throw new MaterialProviderHttpError(statusCode, providerResponse);
   }
 
-  private waitForPoll(signal: AbortSignal) {
+  private waitForPoll(signal: AbortSignal, milliseconds = 3000) {
     signal.throwIfAborted();
     return new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
         signal.removeEventListener('abort', onAbort);
         resolve();
-      }, 3000);
+      }, milliseconds);
       const onAbort = () => {
         clearTimeout(timer);
         reject(
@@ -949,15 +976,22 @@ export class AiMaterialsService implements OnModuleInit, OnModuleDestroy {
       config.providerId!,
       config.model!,
       mediaType === 'video' ? 'videoGeneration' : 'imageGeneration',
+      generationMode,
     );
     if (
       (materialNeedsReferenceImage(generationMode) ||
         materialNeedsReferenceMedia(generationMode)) &&
-      target.protocol !== 'dashscope'
+      ![
+        'dashscope',
+        'tokenhubHunyuanImage',
+        'tokenhubHunyuanImageChat',
+        'tokenhubSeedreamImage',
+        'tokenhubViduImage',
+        'tokenhubHunyuanVideo',
+        'tokenhubViduVideo',
+      ].includes(target.protocol)
     )
-      throw new BadRequestException(
-        '参考素材生成当前仅支持 DashScope 多模态协议',
-      );
+      throw new BadRequestException('所选模型协议不支持当前参考素材生成场景');
     return config;
   }
 

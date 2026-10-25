@@ -166,6 +166,12 @@ const ROUTE_FALLBACK_META_MAP: Record<
     moduleName: 'AI 大模型账号',
     isSystem: true,
   },
+  '/model-endpoints': {
+    moduleId: 'model-endpoints',
+    moduleName: '模型厂商调用接口',
+    tableName: 'model_endpoints',
+    isSystem: true,
+  },
   '/knowledge-bases': { moduleId: 'knowledge-bases', moduleName: '知识库管理' },
   '/knowledge-retrieval-configs': {
     moduleId: 'knowledge-retrieval-configs',

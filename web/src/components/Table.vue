@@ -16,6 +16,8 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import type { TableInstance } from 'element-plus';
 import type { FormField } from './Form.vue';
 import Form from './Form.vue';
+import Button from './Button.vue';
+import Checkbox from './Checkbox.vue';
 import { useUserStore } from '@/stores/user';
 
 export interface TableColumn {
@@ -40,6 +42,7 @@ type RowId = string | number;
 const props = withDefaults(
   defineProps<{
     columns: TableColumn[];
+    displayMode?: 'table' | 'cards';
     // 数据请求函数：接收分页与搜索参数，返回 { list, total }
     request: (params: Record<string, any>) => Promise<TableResult<T>>;
     // 搜索栏字段配置（不传则不显示搜索栏）
@@ -63,7 +66,10 @@ const props = withDefaults(
     // 组件内置删除 API（传入时由组件负责执行并自动刷新）
     deleteRequest?: (row: T) => Promise<unknown>;
     // 组件内置批量删除 API（传入时由组件负责执行并自动刷新）
-    batchDeleteRequest?: (payload: { ids: RowId[]; rows: T[] }) => Promise<unknown>;
+    batchDeleteRequest?: (payload: {
+      ids: RowId[];
+      rows: T[];
+    }) => Promise<unknown>;
     // 内置删除成功后是否自动刷新
     autoRefreshOnDelete?: boolean;
     // 内置批量删除成功后是否自动刷新
@@ -75,6 +81,7 @@ const props = withDefaults(
   }>(),
   {
     searchFields: () => [],
+    displayMode: 'table',
     pageSizes: () => [10, 20, 50],
     permModule: '',
     showActions: true,
@@ -114,13 +121,20 @@ const userStore = useUserStore();
 
 // 按权限模块拼权限码并校验（无 permModule 时不做限制）
 // 格式：模块名首字母大写 + 点号 + 动作，如 demo → Demo.batchDelete
-function canDo(action: 'read' | 'create' | 'update' | 'delete' | 'batchDelete') {
+function canDo(
+  action: 'read' | 'create' | 'update' | 'delete' | 'batchDelete',
+) {
   if (!props.permModule) return true;
-  const mod = props.permModule.charAt(0).toUpperCase() + props.permModule.slice(1);
+  const mod =
+    props.permModule.charAt(0).toUpperCase() + props.permModule.slice(1);
   return userStore.hasPermission(`${mod}.${action}`);
 }
-const canView = computed(() => props.showActions && props.showView && canDo('read'));
-const canEdit = computed(() => props.showActions && props.showEdit && canDo('update'));
+const canView = computed(
+  () => props.showActions && props.showView && canDo('read'),
+);
+const canEdit = computed(
+  () => props.showActions && props.showEdit && canDo('update'),
+);
 const canDelete = computed(
   () => props.showActions && props.showDelete && canDo('delete'),
 );
@@ -136,7 +150,7 @@ const batchDeleting = ref(false);
 const list = shallowRef<T[]>([]);
 const total = ref(0);
 const page = ref(1);
-const pageSize = ref(10);
+const pageSize = ref(props.pageSizes[0] ?? 10);
 const searchModel = reactive<Record<string, any>>({});
 // 搜索表单允许先编辑，只有点击查询后才成为列表实际使用的条件。
 // 刷新列表时复用这份快照，避免弹窗关闭后丢失最近一次查询条件。
@@ -152,7 +166,9 @@ function isCancelError(error: unknown) {
 
 function getRowId(row: T): RowId | undefined {
   const value = row[props.rowKey];
-  return typeof value === 'string' || typeof value === 'number' ? value : undefined;
+  return typeof value === 'string' || typeof value === 'number'
+    ? value
+    : undefined;
 }
 
 function getSelectedRows() {
@@ -160,7 +176,9 @@ function getSelectedRows() {
 }
 
 function getSelectedIds() {
-  return selectedRows.value.map((row) => getRowId(row)).filter((id): id is RowId => id !== undefined);
+  return selectedRows.value
+    .map((row) => getRowId(row))
+    .filter((id): id is RowId => id !== undefined);
 }
 
 function emitSelection(rows: T[]) {
@@ -207,6 +225,18 @@ function handleRowClick(row: T) {
   emitSelection([...selectedRows.value]);
 }
 
+function toggleCardSelection(row: T, checked: boolean) {
+  const remaining = selectedRows.value.filter(
+    (item) => getRowId(item) !== getRowId(row),
+  );
+  selectedRows.value = checked
+    ? props.checkMode === 'single'
+      ? [row]
+      : [...remaining, row]
+    : remaining;
+  emitSelection([...selectedRows.value]);
+}
+
 async function fetchData() {
   loading.value = true;
   try {
@@ -222,12 +252,14 @@ async function fetchData() {
     });
     list.value = res.list;
     total.value = res.total;
+    if (props.displayMode === 'cards') clearSelection();
   } finally {
     loading.value = false;
   }
 }
 
 async function handleSearch() {
+  if (props.displayMode === 'cards') page.value = 1;
   appliedSearchModel.value = { ...searchModel };
   await fetchData();
 }
@@ -273,9 +305,13 @@ async function runBatchDelete() {
   }
 
   try {
-    await ElMessageBox.confirm(`确认删除选中的 ${rows.length} 条记录？`, '提示', {
-      type: 'warning',
-    });
+    await ElMessageBox.confirm(
+      `确认删除选中的 ${rows.length} 条记录？`,
+      '提示',
+      {
+        type: 'warning',
+      },
+    );
 
     if (props.batchDeleteRequest) {
       batchDeleting.value = true;
@@ -348,7 +384,81 @@ onMounted(fetchData);
     </div>
 
     <!-- 表格 -->
+    <div
+      v-if="props.displayMode === 'cards'"
+      v-loading="loading"
+      class="pro-table__cards"
+    >
+      <el-empty
+        v-if="!loading && !list.length"
+        description="暂无配置"
+        class="pro-table__cards-empty"
+      />
+      <article
+        v-for="(row, index) in list"
+        :key="getRowId(row) ?? index"
+        class="pro-table__card"
+      >
+        <Checkbox
+          v-if="props.checkAble"
+          class="pro-table__card-check"
+          :model-value="
+            selectedRows.some((item) => getRowId(item) === getRowId(row))
+          "
+          label="选择"
+          @update:model-value="toggleCardSelection(row, $event)"
+        />
+        <div class="pro-table__card-content">
+          <slot name="card" :row="row" :index="index" />
+        </div>
+        <div
+          v-if="hasActionColumn || $slots.actions"
+          class="pro-table__card-actions"
+        >
+          <Button
+            v-if="canView"
+            link
+            :perm="
+              permModule
+                ? `${permModule.charAt(0).toUpperCase() + permModule.slice(1)}.read`
+                : ''
+            "
+            :auto-icon="false"
+            @click="emit('view', row)"
+            >查看</Button
+          >
+          <Button
+            v-if="canEdit"
+            link
+            :perm="
+              permModule
+                ? `${permModule.charAt(0).toUpperCase() + permModule.slice(1)}.update`
+                : ''
+            "
+            :auto-icon="false"
+            @click="emit('edit', row)"
+            >编辑</Button
+          >
+          <Button
+            v-if="canDelete"
+            link
+            :perm="
+              permModule
+                ? `${permModule.charAt(0).toUpperCase() + permModule.slice(1)}.delete`
+                : ''
+            "
+            :auto-icon="false"
+            :confirm="false"
+            :loading="deleting"
+            @click="handleDelete(row)"
+            >删除</Button
+          >
+          <slot name="actions" :row="row" :$index="index" />
+        </div>
+      </article>
+    </div>
     <el-table
+      v-else
       ref="tableRef"
       v-loading="loading"
       :data="list"
@@ -444,5 +554,51 @@ onMounted(fetchData);
   display: flex;
   justify-content: flex-end;
   margin-top: 16px;
+}
+.pro-table__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 16px;
+  min-height: 160px;
+}
+.pro-table__card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 10px;
+  background: var(--el-bg-color);
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+.pro-table__card:hover {
+  border-color: var(--el-color-primary-light-5);
+  box-shadow: 0 4px 14px rgba(48, 65, 86, 0.06);
+}
+.pro-table__card-check {
+  align-self: flex-start;
+  margin-bottom: 8px;
+}
+.pro-table__card-content {
+  flex: 1;
+  min-width: 0;
+}
+.pro-table__card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+.pro-table__cards-empty {
+  grid-column: 1 / -1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pro-table__card {
+    transition: none;
+  }
 }
 </style>

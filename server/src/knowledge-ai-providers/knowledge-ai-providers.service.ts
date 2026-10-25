@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -10,6 +11,13 @@ import { KnowledgeAiProvider } from './entities/knowledge-ai-provider.entity';
 import { AiFeatureConfig } from '../ai-feature-configs/entities/ai-feature-config.entity';
 import type { AiModelFeatureType } from '../ai-feature-configs/ai-feature-config.constants';
 import { LogRecordsService } from '../log-records/log-records.service';
+import { ModelEndpointsService } from '../model-endpoints/model-endpoints.service';
+import {
+  detectModelPlatform,
+  mediaProtocol,
+  type ModelFunction,
+} from '../model-endpoints/model-endpoint.constants';
+import type { ModelEndpoint } from '../model-endpoints/entities/model-endpoint.entity';
 import {
   CreateKnowledgeAiProviderDto,
   QueryKnowledgeAiProviderDto,
@@ -176,6 +184,7 @@ export class KnowledgeAiProvidersService {
     @InjectRepository(AiFeatureConfig)
     private readonly featureConfigRepository: Repository<AiFeatureConfig>,
     private readonly logRecordsService: LogRecordsService,
+    @Optional() private readonly endpoints?: ModelEndpointsService,
   ) {}
 
   async findAll(query: QueryKnowledgeAiProviderDto) {
@@ -198,8 +207,9 @@ export class KnowledgeAiProvidersService {
       skip: (page - 1) * pageSize,
       take: pageSize,
     });
+    const imageRoutes = (await this.endpoints?.imageRoutes()) ?? [];
     return {
-      list: list.map((item) => this.toView(item)),
+      list: list.map((item) => this.toView(item, imageRoutes)),
       total,
     };
   }
@@ -209,7 +219,7 @@ export class KnowledgeAiProvidersService {
     if (!provider) {
       throw new NotFoundException('大模型账号不存在');
     }
-    return this.toView(provider);
+    return this.toView(provider, (await this.endpoints?.imageRoutes()) ?? []);
   }
 
   create(dto: CreateKnowledgeAiProviderDto) {
@@ -375,15 +385,18 @@ export class KnowledgeAiProvidersService {
       throw new BadRequestException('该大模型账号未配置密钥');
     }
 
+    const model = this.resolveModel(
+      this.joinModelTexts(provider.models, provider.textModels),
+      payload.model,
+    );
     return {
       providerId: provider.id,
       providerName: provider.name,
       workspaceId: provider.workspaceId ?? null,
-      model: this.resolveModel(
-        this.joinModelTexts(provider.models, provider.textModels),
-        payload.model,
-      ),
-      url: this.buildChatUrl(provider),
+      model,
+      url:
+        (await this.resolveConfiguredUrl(provider, model, 'chat')) ??
+        this.buildChatUrl(provider),
       secretKey: this.normalizeSecretKey(provider.secretKey),
     };
   }
@@ -401,15 +414,18 @@ export class KnowledgeAiProvidersService {
       throw new BadRequestException('该大模型账号未配置密钥');
     }
 
+    const model = this.resolveModel(
+      this.joinModelTexts(provider.visionModels, provider.models),
+      payload.model,
+    );
     return {
       providerId: provider.id,
       providerName: provider.name,
       workspaceId: provider.workspaceId ?? null,
-      model: this.resolveModel(
-        this.joinModelTexts(provider.visionModels, provider.models),
-        payload.model,
-      ),
-      url: this.buildChatUrl(provider),
+      model,
+      url:
+        (await this.resolveConfiguredUrl(provider, model, 'vision')) ??
+        this.buildChatUrl(provider),
       secretKey: this.normalizeSecretKey(provider.secretKey),
     };
   }
@@ -417,13 +433,18 @@ export class KnowledgeAiProvidersService {
   /** 内容封面只使用同账号的生图目录；无配置时不发起任何计费调用。 */
   async resolveContentCoverTarget(providerId: number) {
     const provider = await this.findEntity(providerId);
-    if (
-      !provider.imageGenerationModels?.trim() ||
-      !provider.imageGenerationApiUrl?.trim()
-    )
-      return null;
+    if (!provider.imageGenerationModels?.trim()) return null;
     const model = this.parseModels(provider.imageGenerationModels)[0]?.code;
     if (!model) return null;
+    if (
+      !provider.imageGenerationApiUrl?.trim() &&
+      !(await this.endpoints?.resolve(
+        detectModelPlatform(provider.apiUrl),
+        model,
+        'textToImage',
+      ))
+    )
+      return null;
     return this.resolveMediaTarget(providerId, model, 'imageGeneration');
   }
 
@@ -440,6 +461,7 @@ export class KnowledgeAiProvidersService {
     providerId: number,
     model: string,
     kind: 'vision' | 'imageGeneration' | 'videoGeneration',
+    functionType?: ModelFunction,
   ) {
     const provider = await this.findEntity(providerId);
     if (!provider.isEnabled || !provider.secretKey) {
@@ -458,6 +480,50 @@ export class KnowledgeAiProvidersService {
       throw new BadRequestException('调用模型不在该账号媒体模型列表中');
     }
     const selected = model;
+    const operation =
+      functionType ??
+      (kind === 'vision'
+        ? 'vision'
+        : kind === 'imageGeneration'
+          ? 'textToImage'
+          : 'textToVideo');
+    const allowed =
+      kind === 'vision'
+        ? ['vision']
+        : kind === 'imageGeneration'
+          ? ['textToImage', 'imageToImage']
+          : [
+              'textToVideo',
+              'imageToVideo',
+              'referenceToVideo',
+              'startEndToVideo',
+            ];
+    if (!allowed.includes(operation))
+      throw new BadRequestException('模型功能场景与能力目录不匹配');
+    const endpoint = await this.endpoints?.resolve(
+      detectModelPlatform(provider.apiUrl),
+      selected,
+      operation,
+    );
+    if (endpoint && this.endpoints)
+      return {
+        providerId: provider.id,
+        providerName: provider.name,
+        model: selected,
+        url: this.endpoints.buildUrl(
+          this.applyWorkspaceId(provider),
+          endpoint.apiPath,
+        ),
+        secretKey: this.normalizeSecretKey(provider.secretKey),
+        protocol: mediaProtocol(endpoint.protocol),
+        executionMode: endpoint.executionMode,
+        taskUrlTemplate: endpoint.taskApiPath
+          ? this.endpoints.buildUrl(
+              this.applyWorkspaceId(provider),
+              endpoint.taskApiPath,
+            )
+          : null,
+      };
     let url = this.buildChatUrl(provider);
     let taskUrlTemplate: string | null = null;
     if (kind === 'imageGeneration') {
@@ -515,6 +581,24 @@ export class KnowledgeAiProvidersService {
     );
   }
 
+  private async resolveConfiguredUrl(
+    provider: KnowledgeAiProvider,
+    model: string,
+    functionType: ModelFunction,
+  ) {
+    const endpoint = await this.endpoints?.resolve(
+      detectModelPlatform(provider.apiUrl),
+      model,
+      functionType,
+    );
+    return endpoint && this.endpoints
+      ? this.endpoints.buildUrl(
+          this.applyWorkspaceId(provider),
+          endpoint.apiPath,
+        )
+      : null;
+  }
+
   private assertVideoGenerationUrl(value: string) {
     try {
       const url = new URL(value);
@@ -567,12 +651,15 @@ export class KnowledgeAiProvidersService {
       throw new BadRequestException('该大模型账号未配置向量模型列表');
     }
 
+    const model = this.resolveModel(embeddingModels, payload.model);
     return {
       providerId: provider.id,
       providerName: provider.name,
       workspaceId: provider.workspaceId ?? null,
-      model: this.resolveModel(embeddingModels, payload.model),
-      url: this.buildEmbeddingUrl(provider),
+      model,
+      url:
+        (await this.resolveConfiguredUrl(provider, model, 'embedding')) ??
+        this.buildEmbeddingUrl(provider),
       secretKey: this.normalizeSecretKey(provider.secretKey),
     };
   }
@@ -1139,11 +1226,26 @@ export class KnowledgeAiProvidersService {
     return payload;
   }
 
-  private toView(provider: KnowledgeAiProvider) {
+  private toView(
+    provider: KnowledgeAiProvider,
+    imageRoutes: ModelEndpoint[] = [],
+  ) {
+    const platformType = detectModelPlatform(provider.apiUrl);
+    const imageEndpointModels = this.parseModels(provider.imageGenerationModels)
+      .filter(({ code }) => {
+        const route = imageRoutes.find(
+          (item) =>
+            item.platformType === platformType && item.modelCode === code,
+        );
+        return route ? route.isActive : !!provider.imageGenerationApiUrl;
+      })
+      .map(({ code }) => code);
     return {
       id: provider.id,
       name: provider.name,
       apiUrl: provider.apiUrl,
+      platformType,
+      imageEndpointModels,
       workspaceId: provider.workspaceId ?? '',
       chatApiPath: provider.chatApiPath,
       models: provider.models ?? '',

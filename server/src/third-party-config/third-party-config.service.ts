@@ -8,6 +8,7 @@ import { StorageConfigService } from '../storage-config/storage-config.service';
 import { THIRD_PARTY_MENUS } from '../menus/menu-structure';
 import { ComfyConnection } from '../comfyui/entities/comfy-connection.entity';
 import { HotTopicSource } from '../hot-topics/entities/hot-topic.entity';
+import { ModelEndpoint } from '../model-endpoints/entities/model-endpoint.entity';
 
 export interface ThirdPartySummary {
   key: string;
@@ -100,13 +101,19 @@ export class ThirdPartyConfigService {
             vector: VectorConfig,
             comfyui: ComfyConnection,
             'hot-topics': HotTopicSource,
+            'model-endpoints': ModelEndpoint,
           };
           // 只查询聚合元信息，密钥、地址及模型参数不进入概览响应。
           const row = await this.db
             .getRepository(entities[service.key])
             .createQueryBuilder('c')
             .select('COUNT(*)', 'total')
-            .addSelect('SUM(c.isEnabled = 1)', 'enabled')
+            .addSelect(
+              service.key === 'model-endpoints'
+                ? 'SUM(c.isActive = 1)'
+                : 'SUM(c.isEnabled = 1)',
+              'enabled',
+            )
             .addSelect('MAX(c.updatedAt)', 'updatedAt')
             .getRawOne<{
               total: string;

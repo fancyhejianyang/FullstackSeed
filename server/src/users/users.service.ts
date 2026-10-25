@@ -54,6 +54,7 @@ const ADMIN_PERMISSION_MODULES = [
   'LogRecord',
   'DataImport',
   'KnowledgeAiProvider',
+  'ModelEndpoint',
   'WechatConfig',
   'StorageConfig',
   'MineruConfig',

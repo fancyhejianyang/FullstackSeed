@@ -7,7 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
   imageGenerationRequest,
-  generationResult,
+  imageGenerationResult,
 } from '../common/ai/image-generation';
 import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
 import { AgentApp } from './entities/agent-app.entity';
@@ -207,7 +207,11 @@ export class AgentMediaService {
           throw new BadRequestException('识图模型未返回有效文字');
         return { content, images: [], ...metadata };
       }
-      const result = generationResult(value, target.protocol);
+      const result = await imageGenerationResult(
+        value,
+        target,
+        controller.signal,
+      );
       const data =
         result.data ??
         (await downloadGeneratedImage(result.url, controller.signal));

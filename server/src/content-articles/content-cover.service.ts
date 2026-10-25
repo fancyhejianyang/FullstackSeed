@@ -7,7 +7,7 @@ import {
   readMediaJson,
 } from '../common/ai/image-utils';
 import {
-  generationResult,
+  imageGenerationResult,
   imageGenerationRequest,
 } from '../common/ai/image-generation';
 import {
@@ -105,9 +105,10 @@ export class ContentCoverService {
         await response.body?.cancel();
         throw new Error('生图失败');
       }
-      const image = generationResult(
+      const image = await imageGenerationResult(
         await readMediaJson(response),
-        target.protocol,
+        target,
+        signal,
       );
       const buffer =
         image.data ?? (await downloadGeneratedImage(image.url, signal));

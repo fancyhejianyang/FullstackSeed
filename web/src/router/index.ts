@@ -237,6 +237,12 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
+        path: "third-party-config/model-endpoints",
+        name: "model-endpoints",
+        component: () => import("@/views/model-endpoint/Index.vue"),
+        meta: { title: "模型厂商调用接口", permission: "ModelEndpoint.read" },
+      },
+      {
         path: "third-party-config/comfyui",
         name: "third-party-config-comfyui",
         component: () => import("@/views/comfy-connection/Index.vue"),

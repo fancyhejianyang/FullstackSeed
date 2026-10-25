@@ -168,14 +168,20 @@ export class AgentAppsService {
             })),
           ),
         imageGeneration: providers.list
-          .filter((item) => item.secretKeySet && item.imageGenerationApiUrl)
+          .filter((item) => item.secretKeySet)
           .flatMap((item) =>
-            this.parseModelOptions(item.imageGenerationModels).map((model) => ({
-              providerId: item.id,
-              providerName: item.name,
-              model: model.value,
-              text: model.text,
-            })),
+            this.parseModelOptions(item.imageGenerationModels)
+              .filter(
+                (model) =>
+                  item.imageEndpointModels?.includes(model.value) ??
+                  !!item.imageGenerationApiUrl,
+              )
+              .map((model) => ({
+                providerId: item.id,
+                providerName: item.name,
+                model: model.value,
+                text: model.text,
+              })),
           ),
       },
     };
@@ -385,8 +391,16 @@ export class AgentAppsService {
       );
       if (!provider.isEnabled || !provider.secretKeySet)
         throw new BadRequestException(`${label}模型账号未启用或未配置密钥`);
-      if (key === 'imageGeneration' && !provider.imageGenerationApiUrl)
-        throw new BadRequestException('请先在模型账号配置生图接口地址和协议');
+      if (
+        key === 'imageGeneration' &&
+        !(
+          provider.imageEndpointModels?.includes(reference.model.trim()) ??
+          !!provider.imageGenerationApiUrl
+        )
+      )
+        throw new BadRequestException(
+          '请先在模型厂商调用接口中配置文生图场景，或补充账号兼容生图接口地址',
+        );
       const models = this.parseModelOptions(
         key === 'vision'
           ? provider.visionModels

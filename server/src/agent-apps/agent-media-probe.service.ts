@@ -7,11 +7,8 @@ import {
   imageMime,
   readMediaJson,
 } from './agent-image-utils';
-import {
-  generationResult,
-  imageGenerationRequest,
-  visionRequest,
-} from './agent-media.service';
+import { imageGenerationRequest, visionRequest } from './agent-media.service';
+import { imageGenerationResult } from '../common/ai/image-generation';
 import {
   classifyMediaProbeError,
   createVisionChallenge,
@@ -166,7 +163,11 @@ export class AgentMediaProbeService {
               '图片测试未得到正确可核验结果，暂不能确认视觉能力；这不等于已证明是非图片模型，候选保留，可检查配置后重试。',
             );
       } else {
-        const generated = generationResult(value, target.protocol);
+        const generated = await imageGenerationResult(
+          value,
+          target,
+          controller.signal,
+        );
         const data =
           generated.data ??
           (await downloadGeneratedImage(generated.url, controller.signal));

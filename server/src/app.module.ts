@@ -44,9 +44,11 @@ import { AiMaterialsModule } from './ai-materials/ai-materials.module';
 import { ComfyUiModule } from './comfyui/comfyui.module';
 import { VisualPromptTemplatesModule } from './visual-prompt-templates/visual-prompt-templates.module';
 import { HotTopicsModule } from './hot-topics/hot-topics.module';
+import { ModelEndpointsModule } from './model-endpoints/model-endpoints.module';
 
 @Module({
   imports: [
+    ModelEndpointsModule,
     // 配置模块（全局），含 env 校验
     ConfigModule.forRoot({
       isGlobal: true,

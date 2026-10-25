@@ -6,9 +6,11 @@ import { AiFeatureConfig } from '../ai-feature-configs/entities/ai-feature-confi
 import { KnowledgeAiProvidersController } from './knowledge-ai-providers.controller';
 import { KnowledgeAiProvidersService } from './knowledge-ai-providers.service';
 import { KnowledgeWebSearchService } from './knowledge-web-search.service';
+import { ModelEndpointsModule } from '../model-endpoints/model-endpoints.module';
 
 @Module({
   imports: [
+    ModelEndpointsModule,
     LogRecordsModule,
     TypeOrmModule.forFeature([KnowledgeAiProvider, AiFeatureConfig]),
   ],

@@ -62,6 +62,7 @@
 | Prop | 类型 | 默认 | 说明 |
 | --- | --- | --- | --- |
 | `columns` | `TableColumn[]` | 必填 | 列配置（`prop/label/width/minWidth/fixed/slot/showOverflowTooltip`），特殊列用 `slot:true` 后写 `#column-<prop>` 插槽；单列可用 `showOverflowTooltip:false` 关闭省略提示 |
+| `displayMode` | `'table' \| 'cards'` | `'table'` | 卡片模式复用搜索、分页、勾选、权限和删除流程，卡片正文通过 `#card="{row,index}"` 提供；不需要数据列时传 `columns=[]` |
 | `request` | `(params) => Promise<{list,total}>` | 必填 | 数据请求函数，接收分页与搜索参数 |
 | `searchFields` | `FormField[]` | `[]` | 搜索栏字段配置（不传则不显示搜索栏） |
 | `pageSizes` | `number[]` | `[10,20,50]` | 分页大小选项 |
@@ -87,6 +88,7 @@
 ### 插槽
 
 - `#toolbar` — 表格上方工具栏（常放"新增"按钮）
+- `#card="{row,index}"` — `displayMode="cards"` 时的卡片业务内容；组件托管选择控件和查看/编辑/删除操作，页面无需复制分页或删除确认逻辑
 - `#column-<prop>` — 单元格自定义（列配置需 `slot: true`）
 - `#actions` — 操作列末尾追加自定义按钮
 
