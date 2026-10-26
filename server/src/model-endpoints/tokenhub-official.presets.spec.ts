@@ -15,9 +15,9 @@ import {
 import { endpointTestTemplate } from '../knowledge-ai-providers/model-endpoint-test.utils';
 
 describe('腾讯官方目录快照 2026-10-25', () => {
-  it('覆盖八类且每个模型场景唯一，全部 DTO 和测试模板有效', async () => {
+  it('覆盖七类且每个模型场景唯一，不再创建联网搜索卡片', async () => {
     const cards = TOKENHUB_OFFICIAL_PRESETS;
-    expect(cards).toHaveLength(253);
+    expect(cards).toHaveLength(248);
     expect(new Set(cards.map((card) => card.modelCode)).size).toBe(126);
     expect(
       new Set(cards.map((card) => `${card.modelCode}:${card.functionType}`))
@@ -43,7 +43,8 @@ describe('腾讯官方目录快照 2026-10-25', () => {
           protocolTaskMethod(card.protocol) === 'GET',
         );
     }
-    expect(MODEL_ENDPOINT_PRESETS).toHaveLength(255);
+    expect(MODEL_ENDPOINT_PRESETS).toHaveLength(250);
+    expect(cards.some((card) => card.functionType === 'webSearch')).toBe(false);
   });
 
   it('同步/异步语音与 TTS 路径以详细指南为准', () => {

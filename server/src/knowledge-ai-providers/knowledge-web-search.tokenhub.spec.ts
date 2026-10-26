@@ -200,6 +200,7 @@ describe('腾讯联网搜索请求与真实来源', () => {
     '业务按共享解析的真实地址和协议只提交一次：%s',
     async (protocol) => {
       const target = {
+        webSearchMode: 'tokenhubSearch',
         model: protocol === 'openaiResponses' ? 'hy3' : config.model,
         protocol,
         url:
@@ -229,7 +230,6 @@ describe('腾讯联网搜索请求与真实来源', () => {
       expect(resolveWebSearchTarget).toHaveBeenCalledWith({
         id: 1,
         model: target.model,
-        webSearchMode: 'tokenhubSearch',
       });
       expect(fetchMock).toHaveBeenCalledTimes(1);
       const [url, init] = fetchMock.mock.calls[0];
@@ -240,17 +240,19 @@ describe('腾讯联网搜索请求与真实来源', () => {
       expect(init?.redirect).toBe('error');
     },
   );
-  it('无联网卡片等配置错误在发送前拒绝，保留清楚原因', async () => {
+  it('不支持的自动联网平台在发送前拒绝，保留清楚原因', async () => {
     const resolveWebSearchTarget = jest
       .fn()
-      .mockRejectedValue(new BadRequestException('该模型缺少联网搜索卡片'));
+      .mockRejectedValue(
+        new BadRequestException('当前账号不支持系统自动联网补充'),
+      );
     const service = new KnowledgeWebSearchService({
       resolveWebSearchTarget,
     } as unknown as KnowledgeAiProvidersService);
     const fetchMock = jest.spyOn(globalThis, 'fetch');
     await expect(
       service.search(config, '新闻', new AbortController().signal),
-    ).rejects.toThrow('缺少联网搜索卡片');
+    ).rejects.toThrow('不支持系统自动联网补充');
     expect(fetchMock).not.toHaveBeenCalled();
   });
   it('已取消的任务不解析账号，也不发出新调用', async () => {
@@ -270,6 +272,7 @@ describe('腾讯联网搜索请求与真实来源', () => {
   it('免费额度错误显示专用中文且不自动重投，不输出供应商原文', async () => {
     const resolveWebSearchTarget = jest.fn().mockResolvedValue({
       model: config.model,
+      webSearchMode: 'tokenhubSearch',
       protocol: 'openaiChatSearch',
       url: 'https://tokenhub.tencentmaas.com/v1/chat/completions',
       secretKey: 'fixture-search-key',

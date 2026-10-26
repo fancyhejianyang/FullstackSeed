@@ -24,12 +24,6 @@ import {
 } from '../common/ai/model-provider-error';
 import type { TestAiFeatureModelDto } from '../ai-feature-configs/dto/ai-feature-config.dto';
 import { createVisionChallenge } from '../agent-apps/agent-media-probe';
-import {
-  buildVerifiedSearchRequest,
-  parseVerifiedSearchResponse,
-  parseTokenhubSearchResponse,
-} from './knowledge-web-search.utils';
-import { HotTopicFetchError } from '../hot-topics/hot-topic-network';
 import { isRetiredModelError } from '../common/ai/model-retirement';
 import { detectModelPlatform } from '../model-endpoints/model-endpoint.constants';
 
@@ -152,7 +146,8 @@ export class ModelEndpointTestsService {
       model: dto.model.trim(),
       featureType: dto.featureType,
       useMineru: !!dto.useMineru,
-      webSearchMode: dto.webSearchMode ?? 'disabled',
+      // 忽略历史手动联网设置；功能切换仅测试对应模型能力。
+      webSearchMode: 'disabled',
     };
     // 指纹只绑定稳定选择；随机测试图只在真正创建新请求时生成。
     const fingerprint = createHash('sha256')
@@ -167,14 +162,6 @@ export class ModelEndpointTestsService {
       userId,
       () => this.resolveFeatureTarget(selection),
       (target, entry) => {
-        if (target.functionType === 'webSearch')
-          return buildVerifiedSearchRequest({
-            webSearchMode: selection.webSearchMode ?? 'disabled',
-            protocol: target.protocol,
-            model: target.model,
-            query: '请搜索今天的公开科技新闻，返回真实搜索来源。',
-            enableThinking: false,
-          });
         if (target.functionType === 'vision') {
           const challenge = createVisionChallenge();
           entry.visionMatches = (answer) => challenge.matches(answer);
@@ -223,16 +210,6 @@ export class ModelEndpointTestsService {
   private async resolveFeatureTarget(
     selection: FeatureSelection,
   ): Promise<TestTarget> {
-    if (
-      selection.featureType === 'topicDiscovery' &&
-      selection.webSearchMode &&
-      selection.webSearchMode !== 'disabled'
-    )
-      return this.providers.resolveWebSearchTarget({
-        id: selection.providerId,
-        model: selection.model,
-        webSearchMode: selection.webSearchMode,
-      });
     return this.providers.resolveFeatureTestTarget({
       id: selection.providerId,
       model: selection.model,
@@ -280,6 +257,10 @@ export class ModelEndpointTestsService {
     this.activeUsers.add(userId);
     try {
       const target = await resolveTarget();
+      if (target.functionType === 'webSearch')
+        throw new BadRequestException(
+          '联网搜索接口卡片已移除；热点由系统自动获取',
+        );
       const entry: TestRecord = {
         origin,
         feature,
@@ -493,10 +474,9 @@ export class ModelEndpointTestsService {
       );
       return;
     }
-    const extended =
-      response.ok && target.functionType !== 'webSearch'
-        ? extendedTokenhubResult(value, target.protocol, !querying)
-        : null;
+    const extended = response.ok
+      ? extendedTokenhubResult(value, target.protocol, !querying)
+      : null;
     if (extended) {
       if (extended.taskId) entry.result.taskId = extended.taskId;
       if (extended.status === 'pending') {
@@ -540,23 +520,6 @@ export class ModelEndpointTestsService {
       return;
     }
     const scene = target.functionType;
-    if (scene === 'webSearch') {
-      try {
-        if (detectModelPlatform(target.url) === 'tencentTokenhub')
-          parseTokenhubSearchResponse(value, target.protocol);
-        else parseVerifiedSearchResponse(value);
-        this.finish(entry, 'succeeded', '接口已完成联网搜索并返回可核验来源。');
-      } catch (error) {
-        this.finish(
-          entry,
-          'unknown',
-          error instanceof HotTopicFetchError
-            ? error.message
-            : '联网结果无法核验，未将回答或链接文本当作搜索证据。',
-        );
-      }
-      return;
-    }
     if (
       scene === 'chat' ||
       scene === 'vision' ||
@@ -710,8 +673,16 @@ export class ModelEndpointTestsService {
 
   private prune() {
     const now = Date.now();
-    for (const [key, entry] of this.records)
-      if (entry.expiresAt <= now) this.records.delete(key);
+    for (const [key, entry] of this.records) {
+      let retiredSearch = false;
+      try {
+        const route: unknown = JSON.parse(entry.route);
+        retiredSearch = Array.isArray(route) && route[4] === 'webSearch';
+      } catch {
+        // 历史内存记录不是可执行输入，不能因为其格式影响其它测试记录。
+      }
+      if (entry.expiresAt <= now || retiredSearch) this.records.delete(key);
+    }
     for (const [key, times] of this.attempts)
       if (!times.some((time) => time > now - 60000)) this.attempts.delete(key);
   }

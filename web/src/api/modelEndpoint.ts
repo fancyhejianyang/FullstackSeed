@@ -18,7 +18,6 @@ export type ExtendedModelFunction =
   | "avatarVideo"
   | "videoUnderstanding"
   | "multimodalEmbedding"
-  | "webSearch"
   | "textTo3d"
   | "imageTo3d"
   | "multiViewTo3d"
@@ -73,9 +72,7 @@ export type ModelProtocol =
   | "tokenhubDubbing"
   | "tokenhubMusic"
   | "tokenhubMurekaMusic"
-  | "tokenhubMultimodalEmbedding"
-  | "openaiChatSearch"
-  | "openaiResponses";
+  | "tokenhubMultimodalEmbedding";
 export type ModelCategory =
   | "language"
   | "image"
@@ -83,8 +80,7 @@ export type ModelCategory =
   | "threeD"
   | "audio"
   | "understanding"
-  | "embedding"
-  | "search";
+  | "embedding";
 export interface ModelEndpointForm {
   platformType: ModelPlatform;
   modelCode: string;

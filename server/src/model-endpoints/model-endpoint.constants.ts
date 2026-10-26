@@ -62,7 +62,6 @@ export const FUNCTION_LABELS = {
   avatarVideo: '人像驱动',
   videoUnderstanding: '视频理解',
   multimodalEmbedding: '多模态向量',
-  webSearch: '联网搜索',
   textTo3d: '文生 3D',
   imageTo3d: '图生 3D',
   multiViewTo3d: '多视图生 3D',
@@ -87,8 +86,12 @@ export const FUNCTION_LABELS = {
   musicEasyGeneration: '提示词生成歌曲',
   instrumentalGeneration: '纯音乐生成',
 } as const;
-export type ModelFunction = keyof typeof FUNCTION_LABELS;
-export const MODEL_FUNCTIONS = Object.keys(FUNCTION_LABELS) as ModelFunction[];
+/** 仅用于识别历史记录；不再作为可配置卡片功能公开。 */
+export type RetiredModelFunction = 'webSearch';
+export type ModelFunction = keyof typeof FUNCTION_LABELS | RetiredModelFunction;
+export const MODEL_FUNCTIONS = Object.keys(FUNCTION_LABELS) as Array<
+  keyof typeof FUNCTION_LABELS
+>;
 
 export const CATEGORY_FUNCTIONS = {
   language: ['chat'],
@@ -131,20 +134,21 @@ export const CATEGORY_FUNCTIONS = {
   ],
   understanding: ['vision', 'videoUnderstanding'],
   embedding: ['embedding', 'multimodalEmbedding'],
-  search: ['webSearch'],
 } as const satisfies Record<string, readonly ModelFunction[]>;
-export type ModelCategory = keyof typeof CATEGORY_FUNCTIONS;
-export const CATEGORY_LABELS: Record<ModelCategory, string> = {
-  language: '语言模型',
-  image: '图像生成',
-  video: '视频生成',
-  threeD: '3D 与世界模型',
-  audio: '语音与音乐',
-  understanding: '多模态理解',
-  embedding: '向量模型',
-  search: '联网搜索',
-};
+/** search 仅兼容历史记录，公开分类和 DTO 不再接受。 */
+export type ModelCategory = keyof typeof CATEGORY_FUNCTIONS | 'search';
+export const CATEGORY_LABELS: Record<keyof typeof CATEGORY_FUNCTIONS, string> =
+  {
+    language: '语言模型',
+    image: '图像生成',
+    video: '视频生成',
+    threeD: '3D 与世界模型',
+    audio: '语音与音乐',
+    understanding: '多模态理解',
+    embedding: '向量模型',
+  };
 export function modelCategory(scene: ModelFunction): ModelCategory {
+  if (scene === 'webSearch') return 'search';
   return (Object.entries(CATEGORY_FUNCTIONS).find(([, scenes]) =>
     (scenes as readonly ModelFunction[]).includes(scene),
   )?.[0] ?? 'language') as ModelCategory;
@@ -351,7 +355,12 @@ export const PROTOCOLS = {
   },
 } as const;
 export type ModelProtocol = keyof typeof PROTOCOLS;
-export const MODEL_PROTOCOLS = Object.keys(PROTOCOLS) as ModelProtocol[];
+/** 搜索协议保留给内部适配器和旧记录，不再允许配置成接口卡片。 */
+export const MODEL_PROTOCOLS = (
+  Object.keys(PROTOCOLS) as ModelProtocol[]
+).filter(
+  (protocol) => !['openaiChatSearch', 'openaiResponses'].includes(protocol),
+);
 export function protocolTaskMethod(protocol: ModelProtocol): 'GET' | 'POST' {
   return protocol === 'tokenhub3d' || protocol === 'tokenhubYoutuVideo'
     ? 'POST'

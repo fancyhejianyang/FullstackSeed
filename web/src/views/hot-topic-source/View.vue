@@ -8,7 +8,7 @@ import {
   safeSourceUrl,
   type HotSource,
 } from '@/api/hotTopic';
-import { fixedHotSourceUrl, hotSourceAccessLabel } from '@/api/hotTopicSources';
+import { fixedHotSourceUrl } from '@/api/hotTopicSources';
 const props = defineProps<{ row: HotSource | null }>();
 const visible = defineModel<boolean>('visible', { required: true });
 const detail = ref<HotSource | null>(null);
@@ -27,7 +27,7 @@ async function load() {
       const url = fixedHotSourceUrl(result.kind);
       detail.value = {
         ...result,
-        ...(url ? { url, accessMode: 'page' as const } : {}),
+        ...(url ? { url } : {}),
       };
     }
   } catch {
@@ -65,9 +65,6 @@ onBeforeUnmount(() => ++epoch);
         }}</el-descriptions-item>
         <el-descriptions-item label="类型">{{
           sourceKindLabels[detail.kind]
-        }}</el-descriptions-item>
-        <el-descriptions-item label="获取方式">{{
-          hotSourceAccessLabel(detail)
         }}</el-descriptions-item>
         <el-descriptions-item label="地址"
           ><a

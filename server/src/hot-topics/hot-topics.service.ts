@@ -42,7 +42,6 @@ import {
 import { HotTopicFetchService } from './hot-topic-fetch.service';
 import { HotTopicSourcesService } from './hot-topic-sources.service';
 import { hotSearchResponseForSource } from './hot-topic-search-response';
-import { fixedHotSourceUrl } from './hot-topic.types';
 import type {
   HotPreferenceInput,
   HotSourceOutcome,
@@ -76,6 +75,13 @@ const RUN_SELECT = {
   createdAt: true,
   updatedAt: true,
 } as const;
+
+/** 模式列仅保留历史数据，不能继续作为用户配置返回。 */
+function preferenceView(row: HotTopicPreference) {
+  const { mode, ...safe } = row;
+  void mode;
+  return safe;
+}
 
 @Injectable()
 export class HotTopicsService implements OnModuleInit, OnModuleDestroy {
@@ -158,11 +164,14 @@ export class HotTopicsService implements OnModuleInit, OnModuleDestroy {
     return row;
   }
   async getPreferences(userId: number) {
+    return preferenceView(await this.preferenceRecord(userId));
+  }
+  private async preferenceRecord(userId: number) {
     const existing = await this.preferences.findOne({ where: { userId } });
     if (existing) return existing;
     const row = this.preferences.create({
       userId,
-      mode: 'aiSearch',
+      mode: 'platform',
       aiConfigId: null,
       sourceIds: [],
       interests: '',
@@ -185,12 +194,12 @@ export class HotTopicsService implements OnModuleInit, OnModuleDestroy {
     }
   }
   async savePreferences(dto: SaveHotTopicPreferenceDto, userId: number) {
-    const current = await this.getPreferences(userId);
-    const values: HotPreferenceInput = {
+    const current = await this.preferenceRecord(userId);
+    const values = this.snapshot({
       ...dto,
       aiConfigId: dto.aiConfigId ?? null,
       sourceIds: [...new Set(dto.sourceIds)],
-    };
+    });
     if (values.scheduleEnabled) {
       await this.assertUser(userId);
       await this.validateExecution(values, 'discover');
@@ -201,15 +210,17 @@ export class HotTopicsService implements OnModuleInit, OnModuleDestroy {
         ? nextScheduledAt(values.scheduleTime)
         : null,
     });
-    return this.preferences.save(current);
+    return preferenceView(await this.preferences.save(current));
   }
   async options() {
     return {
-      aiConfigs: await this.aiConfigs.find({
-        where: { featureType: 'topicDiscovery', isEnabled: true },
-        select: { id: true, name: true, model: true, webSearchMode: true },
-        order: { id: 'DESC' },
-      }),
+      aiConfigs: (
+        await this.aiConfigs.find({
+          where: { featureType: 'topicDiscovery', isEnabled: true },
+          select: { id: true, name: true, model: true },
+          order: { id: 'DESC' },
+        })
+      ).map(({ id, name, model }) => ({ id, name, model })),
       sources: await this.sources.options(),
     };
   }
@@ -263,6 +274,9 @@ export class HotTopicsService implements OnModuleInit, OnModuleDestroy {
   private runSummary(row: HotTopicRun) {
     return {
       ...row,
+      ...(row.preferences
+        ? { preferences: this.snapshot(row.preferences) }
+        : {}),
       sources:
         row.sources?.map((source, index) => ({
           sourceId: source.sourceId,
@@ -416,7 +430,6 @@ export class HotTopicsService implements OnModuleInit, OnModuleDestroy {
 
   private snapshot(pref: HotPreferenceInput): HotPreferenceInput {
     return {
-      mode: pref.mode,
       aiConfigId: pref.aiConfigId,
       sourceIds: [...pref.sourceIds],
       interests: pref.interests,
@@ -442,43 +455,6 @@ export class HotTopicsService implements OnModuleInit, OnModuleDestroy {
     if (action === 'discover') {
       if (selected.length !== new Set(pref.sourceIds).size)
         throw new BadRequestException('所选来源已停用或删除，请重新选择');
-      if (pref.mode !== 'aiSearch' && !selected.length)
-        throw new BadRequestException('请至少选择一个启用的热点来源');
-      if (
-        pref.mode === 'platform' &&
-        selected.some(
-          (source) =>
-            !fixedHotSourceUrl(source.kind) && source.accessMode === 'search',
-        )
-      )
-        throw new BadRequestException(
-          '所选来源采用 AI 搜索，请切换为 AI 联网或混合模式',
-        );
-      const hasDirectSource = selected.some(
-        (source) =>
-          Boolean(fixedHotSourceUrl(source.kind)) ||
-          source.accessMode === 'page',
-      );
-      const requiresSearch =
-        (pref.mode === 'aiSearch' &&
-          selected.some((source) => !fixedHotSourceUrl(source.kind))) ||
-        (pref.mode === 'hybrid' && !hasDirectSource);
-      if (
-        requiresSearch &&
-        (!config ||
-          !['bailianResponses', 'tokenhubSearch'].includes(
-            config.webSearchMode,
-          ))
-      )
-        throw new BadRequestException(
-          '当前获取方式需要 AI 联网搜索，请在“偏好与计划”中选择已启用原生联网搜索的热点 AI 配置；如需直接采集并由普通模型推荐，请将获取模式改为“平台来源”。',
-        );
-      if (requiresSearch && config)
-        await this.providers.resolveWebSearchTarget({
-          id: config.providerId!,
-          model: config.model!,
-          webSearchMode: config.webSearchMode,
-        });
     }
     return config;
   }
@@ -661,7 +637,6 @@ export class HotTopicsService implements OnModuleInit, OnModuleDestroy {
         const fetched = await this.withAbort(
           this.collector.collect({
             sources: selected,
-            mode: run.preferences.mode,
             config,
             preferences: run.preferences,
             signal: abort.signal,

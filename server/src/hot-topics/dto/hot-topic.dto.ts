@@ -19,9 +19,7 @@ import {
 } from 'class-validator';
 import type {
   ConfigurableHotSourceKind,
-  HotSourceAccess,
   HotTopicDecision,
-  HotTopicMode,
 } from '../hot-topic.types';
 
 function normalizeBoolean(value: unknown): unknown {
@@ -56,7 +54,6 @@ export class SaveHotTopicSourceDto {
   @IsString() @IsNotEmpty() @MaxLength(120) name: string;
   @IsIn(['douyinHot', 'weiboHot', 'neteaseNews'])
   kind: ConfigurableHotSourceKind;
-  @IsIn(['page', 'search']) accessMode: HotSourceAccess;
   @IsUrl({ protocols: ['https'], require_protocol: true })
   @MaxLength(2048)
   url: string;
@@ -77,7 +74,6 @@ export class HotTopicSourceQueryDto extends HotTopicQueryDto {
   isEnabled?: boolean;
 }
 export class SaveHotTopicPreferenceDto {
-  @IsIn(['aiSearch', 'platform', 'hybrid']) mode: HotTopicMode;
   @IsOptional() @IsInt() @Min(1) aiConfigId?: number | null;
   @IsArray()
   @ArrayMaxSize(5)

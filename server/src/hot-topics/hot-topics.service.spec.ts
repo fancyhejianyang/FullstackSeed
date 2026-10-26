@@ -46,7 +46,7 @@ function setup() {
     save: jest.fn().mockResolvedValue({ id: 7 }),
   };
   const users = { findOne: jest.fn() };
-  const ai = {};
+  const ai = { find: jest.fn().mockResolvedValue([]) };
   const sources = {
     selected: jest
       .fn()
@@ -64,7 +64,7 @@ function setup() {
     preferences as unknown as Repository<HotTopicPreference>,
     runs as unknown as Repository<HotTopicRun>,
     users as unknown as Repository<User>,
-    ai as Repository<AiFeatureConfig>,
+    ai as unknown as Repository<AiFeatureConfig>,
     sources as unknown as HotTopicSourcesService,
     configs as unknown as AiFeatureConfigsService,
     providers as unknown as KnowledgeAiProvidersService,
@@ -79,6 +79,7 @@ function setup() {
     users,
     sources,
     configs,
+    ai,
     providers,
     articles,
   };
@@ -214,12 +215,12 @@ describe('热点选题核心', () => {
     expect(result).toMatchObject({
       userId: 8,
       aiConfigId: null,
-      mode: 'aiSearch',
       sourceIds: [],
       scheduleEnabled: false,
       nextRunAt: null,
       timeZone: 'Asia/Shanghai',
     });
+    expect(result).not.toHaveProperty('mode');
     expect(preferences.save).toHaveBeenCalledTimes(1);
   });
   it('关闭每日计划不依赖原 AI 仍然可用，开启计划需当前执行权限', async () => {
@@ -295,224 +296,131 @@ describe('热点选题核心', () => {
     ).rejects.toThrow('停用或删除');
     expect(runs.save).not.toHaveBeenCalled();
   });
-  it('AI 搜索在提交前拒绝无法核验来源的 Chat 协议', async () => {
-    const { service, preferences, configs, runs } = setup();
-    preferences.findOne.mockResolvedValue({
-      ...preference(),
-      mode: 'aiSearch',
-      aiConfigId: 1,
-    });
-    configs.findUsableTopicDiscoveryConfig.mockResolvedValue({
-      id: 1,
-      webSearchMode: 'bailianChat',
-    });
-    await expect(
-      service.submit({ requestId: 'first', action: 'discover' }, 9),
-    ).rejects.toThrow('原生联网搜索');
-    expect(runs.save).not.toHaveBeenCalled();
-  });
   it.each(['platform', 'hybrid', 'aiSearch'] as const)(
-    '仅选择抖音与网易时 %s 模式和每日计划无需联网配置',
+    '历史 %s 模式和 search 来源不再阻断普通配置或直读任务',
     async (mode) => {
-      const { service, sources, configs, providers, preferences, users } =
+      const { service, preferences, configs, providers, sources, runs } =
         setup();
-      sources.selected.mockResolvedValue([
-        { id: 1, kind: 'douyinHot', accessMode: 'search', isEnabled: true },
-        { id: 2, kind: 'neteaseNews', accessMode: 'search', isEnabled: true },
-      ]);
       preferences.findOne.mockResolvedValue({
         ...preference(),
-        id: 1,
-        userId: 9,
-      });
-      users.findOne.mockResolvedValue({ isAdmin: true, roles: [] });
-      const saved = await service.savePreferences(
-        {
-          ...preference(),
-          mode,
-          sourceIds: [1, 2],
-          scheduleEnabled: true,
-        },
-        9,
-      );
-      expect(saved).toMatchObject({
         mode,
-        sourceIds: [1, 2],
-        aiConfigId: null,
-        scheduleEnabled: true,
+        aiConfigId: 1,
       });
-      expect(saved.nextRunAt).toBeInstanceOf(Date);
-      expect(configs.findUsableTopicDiscoveryConfig).not.toHaveBeenCalled();
+      sources.selected.mockResolvedValue([
+        { id: 1, kind: 'weiboHot', accessMode: 'search', isEnabled: true },
+      ]);
+      const config = { id: 1, webSearchMode: 'bailianChat' };
+      configs.findUsableTopicDiscoveryConfig.mockResolvedValue(config);
+      runs.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue({ id: 7, userId: 9, status: 'pending' });
+      await expect(
+        service.submit(
+          {
+            requestId: `legacy-${mode}`,
+            action: 'discover',
+          },
+          9,
+        ),
+      ).resolves.toMatchObject({ id: 7 });
       expect(providers.resolveWebSearchTarget).not.toHaveBeenCalled();
+      const created = runs.create.mock.calls[0][0] as {
+        preferences: HotPreferenceInput;
+      };
+      expect(created.preferences).not.toHaveProperty('mode');
     },
   );
-  it('未选来源的 AI 模式采用默认抖音固定来源，不要求联网配置', async () => {
-    const { service, preferences, sources, configs, providers, runs } = setup();
-    preferences.findOne.mockResolvedValue({
-      ...preference(),
-      mode: 'aiSearch',
-      sourceIds: [],
-    });
-    sources.selected.mockResolvedValue([]);
-    runs.findOne
-      .mockResolvedValueOnce(null)
-      .mockResolvedValue({ id: 7, userId: 9, status: 'pending' });
-    await expect(
-      service.submit(
-        {
-          requestId: 'default-douyin',
-          action: 'discover',
-        },
-        9,
-      ),
-    ).resolves.toMatchObject({ id: 7 });
-    expect(configs.findUsableTopicDiscoveryConfig).not.toHaveBeenCalled();
-    expect(providers.resolveWebSearchTarget).not.toHaveBeenCalled();
-  });
-  it.each(['platform', 'hybrid'] as const)(
-    '%s 模式仍要求至少选择一个启用来源',
+  it.each(['platform', 'hybrid', 'aiSearch'] as const)(
+    '历史 %s 模式在未选来源时统一使用默认抖音，不要求联网配置',
     async (mode) => {
-      const { service, preferences, sources, runs } = setup();
+      const { service, preferences, sources, configs, providers, runs } =
+        setup();
       preferences.findOne.mockResolvedValue({
         ...preference(),
         mode,
         sourceIds: [],
       });
       sources.selected.mockResolvedValue([]);
+      runs.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue({ id: 7, userId: 9, status: 'pending' });
       await expect(
         service.submit(
           {
-            requestId: `no-source-${mode}`,
+            requestId: `default-${mode}`,
             action: 'discover',
           },
           9,
         ),
-      ).rejects.toThrow('至少选择一个');
-      expect(runs.save).not.toHaveBeenCalled();
+      ).resolves.toMatchObject({ id: 7 });
+      expect(configs.findUsableTopicDiscoveryConfig).not.toHaveBeenCalled();
+      expect(providers.resolveWebSearchTarget).not.toHaveBeenCalled();
     },
   );
-  it('固定来源在 AI 模式可搭配普通推荐配置，不解析联网卡片', async () => {
-    const { service, sources, configs, providers } = setup();
-    const config = { id: 1, webSearchMode: 'disabled' };
-    configs.findUsableTopicDiscoveryConfig.mockResolvedValue(config);
+  it('固定和微博来源均可不选联网配置开启每日计划，旧模式列仅保留历史值', async () => {
+    const { service, sources, configs, providers, preferences, users } =
+      setup();
+    const row = { ...preference(), mode: 'aiSearch', id: 1, userId: 9 };
+    preferences.findOne.mockResolvedValue(row);
     sources.selected.mockResolvedValue([
       { id: 1, kind: 'douyinHot', accessMode: 'search', isEnabled: true },
+      { id: 2, kind: 'weiboHot', accessMode: 'search', isEnabled: true },
     ]);
-    const internal = service as unknown as {
-      validateExecution(
-        pref: HotPreferenceInput,
-        action: 'discover',
-      ): Promise<unknown>;
-    };
-    await expect(
-      internal.validateExecution(
-        {
-          ...preference(),
-          mode: 'aiSearch',
-          aiConfigId: 1,
-        },
-        'discover',
-      ),
-    ).resolves.toBe(config);
+    users.findOne.mockResolvedValue({ isAdmin: true, roles: [] });
+    const saved = await service.savePreferences(
+      {
+        ...preference(),
+        sourceIds: [1, 2],
+        scheduleEnabled: true,
+      },
+      9,
+    );
+    expect(saved).toMatchObject({
+      id: 1,
+      userId: 9,
+      sourceIds: [1, 2],
+      aiConfigId: null,
+      scheduleEnabled: true,
+    });
+    expect(saved).not.toHaveProperty('mode');
+    expect(saved.nextRunAt).toBeInstanceOf(Date);
+    expect(row.mode).toBe('aiSearch');
+    expect(configs.findUsableTopicDiscoveryConfig).not.toHaveBeenCalled();
     expect(providers.resolveWebSearchTarget).not.toHaveBeenCalled();
   });
-  it('AI 模式混入微博来源仍要求启用联网配置', async () => {
-    const { service, sources, preferences, runs } = setup();
-    sources.selected.mockResolvedValue([
-      { id: 1, kind: 'douyinHot', accessMode: 'search', isEnabled: true },
-      { id: 2, kind: 'weiboHot', accessMode: 'page', isEnabled: true },
-    ]);
-    preferences.findOne.mockResolvedValue({
-      ...preference(),
-      mode: 'aiSearch',
-      sourceIds: [1, 2],
-    });
-    await expect(
-      service.submit(
-        {
-          requestId: 'mixed-search',
-          action: 'discover',
-        },
-        9,
-      ),
-    ).rejects.toThrow('原生联网搜索');
-    expect(runs.save).not.toHaveBeenCalled();
-  });
-  it.each(['disabled', 'bailianChat'] as const)(
-    '混合模式有直读来源时保留平台采集与普通推荐：%s',
-    async (webSearchMode) => {
-      const { service, sources, configs } = setup();
-      const config = { id: 1, webSearchMode };
-      configs.findUsableTopicDiscoveryConfig.mockResolvedValue(config);
-      sources.selected.mockResolvedValue([
-        { id: 1, kind: 'weiboHot', accessMode: 'page', isEnabled: true },
-      ]);
-      const internal = service as unknown as {
-        validateExecution(
-          pref: HotPreferenceInput,
-          action: 'discover',
-        ): Promise<unknown>;
-      };
-      await expect(
-        internal.validateExecution(
-          { ...preference(), mode: 'hybrid', aiConfigId: 1 },
-          'discover',
-        ),
-      ).resolves.toBe(config);
-    },
-  );
-  it('混合模式仅有搜索来源时仍拒绝未开启的联网配置', async () => {
-    const { service, preferences, configs, sources, runs } = setup();
+  it('偏好读取和新任务快照不返回旧模式，AI 选项不包含联网协议', async () => {
+    const { service, preferences, ai, sources } = setup();
     preferences.findOne.mockResolvedValue({
       ...preference(),
       mode: 'hybrid',
-      aiConfigId: 1,
+      id: 3,
+      userId: 9,
+      createdAt: new Date(),
     });
-    configs.findUsableTopicDiscoveryConfig.mockResolvedValue({
-      id: 1,
-      webSearchMode: 'disabled',
-    });
-    sources.selected.mockResolvedValue([
-      { id: 1, kind: 'weiboHot', accessMode: 'search', isEnabled: true },
+    const view = await service.getPreferences(9);
+    expect(view).not.toHaveProperty('mode');
+    expect(view).toMatchObject({ id: 3, userId: 9 });
+    ai.find.mockResolvedValue([
+      {
+        id: 1,
+        name: '热点配置',
+        model: 'hy3',
+        webSearchMode: 'tokenhubSearch',
+      },
     ]);
-    await expect(
-      service.submit({ requestId: 'search-only', action: 'discover' }, 9),
-    ).rejects.toThrow('原生联网搜索');
-    expect(runs.save).not.toHaveBeenCalled();
-  });
-  it('纯 AI 模式支持腾讯搜索，并在提交前使用共用模型卡片解析', async () => {
-    const { service, preferences, configs, providers, runs } = setup();
-    preferences.findOne.mockResolvedValue({
-      ...preference(),
-      mode: 'aiSearch',
-      aiConfigId: 1,
-    });
-    const config = {
-      id: 1,
-      providerId: 2,
-      model: 'hy3',
-      webSearchMode: 'tokenhubSearch',
-    };
-    configs.findUsableTopicDiscoveryConfig.mockResolvedValue(config);
-    runs.findOne
-      .mockResolvedValueOnce(null)
-      .mockResolvedValue({ id: 7, userId: 9, status: 'pending' });
-    await expect(
-      service.submit({ requestId: 'tencent-search', action: 'discover' }, 9),
-    ).resolves.toMatchObject({ id: 7 });
-    expect(providers.resolveWebSearchTarget).toHaveBeenCalledWith({
-      id: 2,
-      model: 'hy3',
-      webSearchMode: 'tokenhubSearch',
-    });
-    providers.resolveWebSearchTarget.mockRejectedValueOnce(
-      new Error('当前模型缺少联网搜索卡片'),
+    sources.selected.mockResolvedValue([]);
+    (sources as unknown as { options: jest.Mock }).options = jest
+      .fn()
+      .mockResolvedValue([]);
+    const options = await service.options();
+    expect(options.aiConfigs).toEqual([
+      { id: 1, name: '热点配置', model: 'hy3' },
+    ]);
+    expect(ai.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: { id: true, name: true, model: true },
+      }),
     );
-    runs.findOne.mockResolvedValue(null);
-    await expect(
-      service.submit({ requestId: 'missing-card', action: 'discover' }, 9),
-    ).rejects.toThrow('缺少联网搜索卡片');
-    expect(runs.save).toHaveBeenCalledTimes(1);
   });
 
   it('文章生成权限单独校验，不因拥有热点权限放行', async () => {

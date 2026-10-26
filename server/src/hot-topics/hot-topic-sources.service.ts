@@ -21,10 +21,11 @@ import {
 } from './hot-topic.types';
 
 export function sourceView(row: HotTopicSource) {
-  const { apiToken, accountName, accountId, ...safe } = row;
+  const { apiToken, accountName, accountId, accessMode, ...safe } = row;
   void apiToken;
   void accountName;
   void accountId;
+  void accessMode;
   const supported = isConfigurableHotSourceKind(row.kind);
   const fixedUrl = supported ? fixedHotSourceUrl(row.kind) : null;
   return {
@@ -32,7 +33,7 @@ export function sourceView(row: HotTopicSource) {
     // Legacy account, RSS and JSON Feed records are kept only in the database
     // audit trail. They cannot be returned as executable source configurations.
     kind: supported ? row.kind : ('douyinHot' as const),
-    ...(fixedUrl ? { url: fixedUrl, accessMode: 'page' as const } : {}),
+    ...(fixedUrl ? { url: fixedUrl } : {}),
     isEnabled: supported ? row.isEnabled : false,
   };
 }
@@ -82,25 +83,20 @@ export function validateSource(
     const label = row.kind === 'douyinHot' ? '抖音热搜' : '网易国内新闻';
     const endpointLabel =
       row.kind === 'douyinHot' ? '固定热搜接口' : '固定新闻接口';
-    if (row.accessMode !== 'page')
-      throw new BadRequestException(`${label}仅支持${endpointLabel}读取`);
     if (url.href !== fixedUrl)
       throw new BadRequestException(`${label}使用系统${endpointLabel}地址`);
     return;
   }
   const platform = platformSource(row.kind);
-  if (!platform || !['page', 'search'].includes(row.accessMode))
-    throw new BadRequestException('热点来源请选择公开页面或 AI 搜索');
+  if (!platform) throw new BadRequestException('热点来源类型不受支持');
 }
 
 function applyFixedSourceDefaults(
   row: Pick<HotTopicSource, 'kind' | 'accessMode' | 'url'>,
 ) {
   const fixedUrl = fixedHotSourceUrl(row.kind);
-  if (fixedUrl) {
-    row.accessMode = 'page';
-    row.url = fixedUrl;
-  }
+  row.accessMode = 'page';
+  if (fixedUrl) row.url = fixedUrl;
 }
 
 @Injectable()
@@ -116,7 +112,6 @@ export class HotTopicSourcesService {
         id: true,
         name: true,
         kind: true,
-        accessMode: true,
         url: true,
         isEnabled: true,
         description: true,
@@ -149,7 +144,6 @@ export class HotTopicSourcesService {
         id: true,
         name: true,
         kind: true,
-        accessMode: true,
         url: true,
         isEnabled: true,
         description: true,
@@ -169,7 +163,7 @@ export class HotTopicSourcesService {
     const row = this.repository.create({
       name: dto.name.trim(),
       kind: dto.kind,
-      accessMode: dto.accessMode,
+      accessMode: 'page',
       url: dto.url.trim(),
       accountName: '',
       accountId: '',

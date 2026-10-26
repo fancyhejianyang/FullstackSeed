@@ -42,10 +42,46 @@ const source: HotSourceInput = {
 const config = {} as AiFeatureConfig;
 describe('HotTopicFetchService orchestration', () => {
   beforeEach(() => fetchText.mockReset());
-  it('即使联网解析失败，也为各搜索来源保存同一次响应；平台直读结果保留', async () => {
-    fetchText.mockResolvedValue(
-      '<table><tr><td>1</td><td><a href="https://weibo.com/post/123">平台读取的新闻</a></td><td>123</td></tr></table>',
-    );
+  it.each(['platform', 'hybrid', 'aiSearch'] as const)(
+    'successful Weibo lists never trigger additional search regardless of legacy mode %s',
+    async (mode) => {
+      fetchText.mockResolvedValue(
+        '{"data":{"band_list":[{"word":"真实微博榜单","realpos":1}]}}',
+      );
+      const search = jest.fn();
+      const result = await new HotTopicFetchService({
+        search,
+      } as unknown as KnowledgeWebSearchService).collect({
+        sources: [{ ...source, accessMode: 'search' }],
+        mode,
+        config,
+        preferences,
+        signal: new AbortController().signal,
+      });
+      expect(fetchText).toHaveBeenCalledTimes(1);
+      expect(search).not.toHaveBeenCalled();
+      expect(result.candidates[0].title).toBe('真实微博榜单');
+      expect(result.searchExecuted).toBe(false);
+    },
+  );
+  it('reports direct failures without selecting a paid model when no AI config is chosen', async () => {
+    fetchText.mockRejectedValue(new HotTopicFetchError('http', '来源拒绝访问'));
+    const search = jest.fn();
+    const result = await new HotTopicFetchService({
+      search,
+    } as unknown as KnowledgeWebSearchService).collect({
+      sources: [{ ...source, accessMode: 'search' }],
+      mode: 'aiSearch',
+      config: null,
+      preferences,
+      signal: new AbortController().signal,
+    });
+    expect(fetchText).toHaveBeenCalledTimes(3);
+    expect(search).not.toHaveBeenCalled();
+    expect(result.sources[0].status).toBe('failed');
+  });
+  it('微博全部直读失败后仅搜索一次，并为各来源保存同一次失败诊断', async () => {
+    fetchText.mockRejectedValue(new HotTopicFetchError('http', '来源拒绝访问'));
     const diagnostic: HotSearchDiagnostics = {
       version: 1,
       providerId: 2,
@@ -104,7 +140,7 @@ describe('HotTopicFetchService orchestration', () => {
     expect(result.sources[1]).not.toHaveProperty('searchDiagnostics');
     expect(result.searchExecuted).toBe(false);
   });
-  it('merges page and AI outcomes and keeps the successful acquisition', async () => {
+  it('automatically supplements failed Weibo acquisition with verified search results', async () => {
     fetchText.mockResolvedValue('<html>动态页面</html>');
     const search = jest.fn().mockResolvedValue({
       searchExecuted: true,
@@ -456,13 +492,19 @@ describe('HotTopicFetchService orchestration', () => {
     expect(search).not.toHaveBeenCalled();
   });
   it('excludes fixed Douyin from the search query when mixed with Weibo', async () => {
-    fetchText.mockResolvedValue(
-      JSON.stringify({
-        status_code: 0,
-        data: {
-          word_list: [{ word: '固定抖音新闻', position: 1, hot_value: 123 }],
-        },
-      }),
+    fetchText.mockImplementation((url: string) =>
+      url === DOUYIN_HOT_URL
+        ? Promise.resolve(
+            JSON.stringify({
+              status_code: 0,
+              data: {
+                word_list: [
+                  { word: '固定抖音新闻', position: 1, hot_value: 123 },
+                ],
+              },
+            }),
+          )
+        : Promise.reject(new HotTopicFetchError('http', '微博直读失败')),
     );
     const search = jest.fn().mockResolvedValue({
       searchExecuted: true,
@@ -496,7 +538,7 @@ describe('HotTopicFetchService orchestration', () => {
       preferences,
       signal,
     });
-    expect(fetchText).toHaveBeenCalledTimes(1);
+    expect(fetchText).toHaveBeenCalledTimes(4);
     expect(fetchText).toHaveBeenCalledWith(DOUYIN_HOT_URL, { signal });
     expect(search).toHaveBeenCalledTimes(1);
     const requests = search.mock.calls as unknown as Array<
@@ -555,6 +597,7 @@ describe('HotTopicFetchService orchestration', () => {
     },
   );
   it('reports absent verified web results without falling back to AI memory', async () => {
+    fetchText.mockRejectedValue(new HotTopicFetchError('http', '来源拒绝访问'));
     const search = jest
       .fn()
       .mockRejectedValue(
@@ -576,6 +619,6 @@ describe('HotTopicFetchService orchestration', () => {
       status: 'failed',
     });
     expect(result.sources[0].message).toContain('未返回真实搜索来源');
-    expect(fetchText).not.toHaveBeenCalled();
+    expect(fetchText).toHaveBeenCalledTimes(3);
   });
 });

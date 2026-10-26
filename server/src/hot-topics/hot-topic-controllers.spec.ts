@@ -1,7 +1,10 @@
 import { scanLogApiModules } from '../log-records/log-api-scanner';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { SaveHotTopicPreferenceDto } from './dto/hot-topic.dto';
+import {
+  SaveHotTopicPreferenceDto,
+  SaveHotTopicSourceDto,
+} from './dto/hot-topic.dto';
 
 const preferencePayload = (scheduleEnabled: unknown) => ({
   mode: 'aiSearch',
@@ -18,6 +21,22 @@ const preferencePayload = (scheduleEnabled: unknown) => ({
 });
 
 describe('热点模块日志路由归属', () => {
+  it('公开偏好与来源 DTO 不再接受旧获取模式或获取方式', async () => {
+    const preference = plainToInstance(
+      SaveHotTopicPreferenceDto,
+      preferencePayload(false),
+    );
+    expect(await validate(preference, { whitelist: true })).toEqual([]);
+    expect(preference).not.toHaveProperty('mode');
+    const source = plainToInstance(SaveHotTopicSourceDto, {
+      name: '微博热搜',
+      kind: 'weiboHot',
+      accessMode: 'search',
+      url: 'https://weibo.com/ajax/side/hotSearch',
+    });
+    expect(await validate(source, { whitelist: true })).toEqual([]);
+    expect(source).not.toHaveProperty('accessMode');
+  });
   it.each([
     [true, true],
     [false, false],

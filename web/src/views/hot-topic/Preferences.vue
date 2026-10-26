@@ -6,20 +6,14 @@ import Dialog from "@/components/Dialog.vue";
 import Form, { type FormField } from "@/components/Form.vue";
 import Button from "@/components/Button.vue";
 import { useUserStore } from "@/stores/user";
-import {
-  preferenceRequiresSearch,
-  scheduleValidationError,
-  supportsHotSearchMode,
-} from "./preferenceValidation";
+import { scheduleValidationError } from "./preferenceValidation";
 import {
   getHotPreference,
   saveHotPreference,
   getHotOptions,
-  modeLabels,
   type HotPreference,
   type HotOptions,
 } from "@/api/hotTopic";
-import { fixedHotSourceUrl, hotSourceAccessLabel } from "@/api/hotTopicSources";
 const visible = defineModel<boolean>("visible", { required: true });
 const emit = defineEmits<{ success: [] }>();
 const formRef = ref<InstanceType<typeof Form>>();
@@ -27,7 +21,6 @@ const user = useUserStore();
 const form = reactive<
   Omit<HotPreference, "sourceIds"> & { sourceIds: string[] }
 >({
-  mode: "aiSearch",
   aiConfigId: null,
   sourceIds: [],
   interests: "",
@@ -48,47 +41,17 @@ let wasScheduled = false;
 const sourceOptions = computed(() => {
   const rows = options.value.sources.map((source) => ({
     value: String(source.id),
-    label: `${source.name} · ${hotSourceAccessLabel(source)}`,
+    label: source.name,
   }));
   for (const id of form.sourceIds)
     if (!rows.some((item) => item.value === id))
       rows.push({ value: id, label: `来源 #${id}（已失效，请移除）` });
   return rows;
 });
-const directSourcesIgnored = computed(
-  () =>
-    form.mode === "aiSearch" &&
-    options.value.sources.some(
-      (source) =>
-        form.sourceIds.includes(String(source.id)) &&
-        !fixedHotSourceUrl(source.kind) &&
-        source.accessMode !== "search",
-    ),
-);
-const selectedSources = computed(() =>
-  options.value.sources.filter((source) =>
-    form.sourceIds.includes(String(source.id)),
-  ),
-);
-const searchProtocolHint = computed(() => {
-  if (loading.value) return "";
-  const config = options.value.aiConfigs.find(
-    (item) => item.id === form.aiConfigId,
-  );
-  if (supportsHotSearchMode(config?.webSearchMode)) return "";
-  if (preferenceRequiresSearch(form.mode, selectedSources.value))
-    return "当前获取方式依赖 AI 联网搜索，但尚未选用已启用原生联网的热点 AI 配置。仅需平台采集并用普通 AI 推荐时，请将获取模式改为“平台来源”；需要 AI 联网搜索时，请选择已启用百炼 Responses 或腾讯 TokenHub 原生搜索的热点 AI 配置。";
-  if (
-    form.mode === "hybrid" &&
-    selectedSources.value.some((source) => !fixedHotSourceUrl(source.kind))
-  )
-    return "当前未选用已启用原生联网的热点 AI 配置，混合模式仍可先采集能直接读取的来源，AI 搜索不可用的原因会记录在任务来源结果中。仅需平台采集并用普通 AI 推荐可选“平台来源”；需要 AI 联网搜索时，请选择已启用百炼 Responses 或腾讯 TokenHub 原生搜索的热点 AI 配置。";
-  return "";
-});
 const configOptions = computed(() => {
   const rows = options.value.aiConfigs.map((item) => ({
     value: item.id,
-    label: `${item.name} · ${item.model || "未设置模型"} · ${item.webSearchMode === "bailianResponses" ? "百炼 Responses 联网搜索" : item.webSearchMode === "tokenhubSearch" ? "腾讯 TokenHub 原生搜索" : item.webSearchMode === "bailianChat" ? "仅分析已采集资料（旧联网不支持搜索）" : "仅分析已采集资料"}`,
+    label: `${item.name} · ${item.model || "未设置模型"}`,
   }));
   if (form.aiConfigId && !rows.some((item) => item.value === form.aiConfigId))
     rows.push({
@@ -99,23 +62,12 @@ const configOptions = computed(() => {
 });
 const fields = computed<FormField[]>(() => [
   {
-    prop: "mode",
-    label: "获取模式",
-    type: "select",
-    options: Object.entries(modeLabels).map(([value, label]) => ({
-      value,
-      label,
-    })),
-    span: 2,
-    hint: "抖音热搜与网易国内新闻在所有模式下均直接读取固定接口，不走 AI 搜索。微博按模式搜索或直读；AI 联网模式未选择来源时默认读取抖音固定榜单。",
-  },
-  {
     prop: "aiConfigId",
     label: "热点发现 AI 配置",
     type: "select",
     options: configOptions,
     span: 2,
-    hint: "使用独立“热点发现”功能配置。固定接口或平台采集可选普通 AI 配置进行推荐；微博 AI 联网搜索需选择已启用百炼 Responses 或腾讯 TokenHub 原生搜索的配置，并核验模型联网能力。仅采集抖音、网易无需联网协议。",
+    hint: "可选，用于分析热点并按偏好推荐；未选择时仍可获取榜单。采集方式由系统按来源自动安排。",
   },
   {
     prop: "sourceIds",
@@ -123,7 +75,7 @@ const fields = computed<FormField[]>(() => [
     type: "selectMultiple",
     options: sourceOptions,
     span: 2,
-    hint: "最多选择 5 个；抖音、网易使用固定接口，微博保留官方热点页或合规聚合页，选项后的标记表示获取方式。",
+    hint: "最多选择 5 个；留空时默认获取抖音热点。系统自动使用各来源适合的接口与补充策略。",
   },
   {
     prop: "interests",
@@ -182,7 +134,6 @@ const rules: FormRules = {
   writingStyle: [
     { max: 1000, message: "创作方向最多 1000 字", trigger: "blur" },
   ],
-  mode: [{ required: true, message: "请选择获取模式", trigger: "change" }],
   scheduleTime: [
     {
       pattern: /^(?:[01]\d|2[0-3]):[0-5]\d$/,
@@ -209,7 +160,6 @@ async function load() {
     ]);
     if (!visible.value || sequence !== epoch) return;
     Object.assign(form, {
-      mode: saved.mode,
       aiConfigId: saved.aiConfigId,
       sourceIds: saved.sourceIds.map(String),
       interests: saved.interests,
@@ -242,9 +192,16 @@ async function submit() {
   if (submitting.value || loading.value || failed.value) return;
   await formRef.value?.validate();
   const payload: HotPreference = {
-    ...form,
+    aiConfigId: form.aiConfigId,
     sourceIds: form.sourceIds.map(Number),
+    interests: form.interests,
+    exclusions: form.exclusions,
+    audience: form.audience,
+    writingStyle: form.writingStyle,
+    lookbackHours: form.lookbackHours,
+    maxResults: form.maxResults,
     scheduleEnabled: Boolean(form.scheduleEnabled),
+    scheduleTime: form.scheduleTime,
   };
   const validationError = scheduleValidationError(
     payload,
@@ -289,15 +246,6 @@ async function submit() {
       ><Button @click="load">重新读取</Button></el-empty
     >
     <template v-else>
-      <p v-if="searchProtocolHint" class="mode-warning">
-        {{ searchProtocolHint }}
-      </p>
-      <p v-else-if="directSourcesIgnored" class="mode-warning">
-        当前为“仅 AI
-        联网搜索”，所选平台页面不会被直接读取。按来源地址采集并用普通 AI
-        推荐请选择“平台来源”；需要同时采集和联网搜索补充，请选择“平台 + AI
-        联网搜索”。抖音热搜与网易国内新闻始终通过固定接口获取，不参与 AI 搜索。
-      </p>
       <Form
         ref="formRef"
         v-model="form"
@@ -321,15 +269,3 @@ async function submit() {
     >
   </Dialog>
 </template>
-<style scoped>
-.mode-warning {
-  padding: 10px 12px;
-  margin: 0 0 16px;
-  border: 1px solid var(--el-color-warning-light-5);
-  border-radius: var(--el-border-radius-base);
-  color: var(--el-color-warning-dark-2);
-  background: var(--el-color-warning-light-9);
-  font-size: 13px;
-  line-height: 1.6;
-}
-</style>

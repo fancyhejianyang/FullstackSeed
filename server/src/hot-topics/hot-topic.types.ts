@@ -28,8 +28,8 @@ export function isConfigurableHotSourceKind(
   return (CONFIGURABLE_HOT_SOURCE_KINDS as readonly string[]).includes(value);
 }
 /**
- * 平台类来源（公开页面 / AI 搜索）的展示名称与域名归属：
- * - 抖音与网易只读取系统固定接口；微博保留公开页面 / AI 搜索，允许合规聚合页；
+ * 平台类来源的展示名称与域名归属；采集策略由后端统一选择：
+ * - 抖音与网易只读取系统固定接口；微博优先直读，必要时自动联网补充；
  * 历史账号来源不再参与配置或任务执行。
  */
 export const PLATFORM_SOURCES: Record<
@@ -53,7 +53,9 @@ export function isHostOf(host: string, base: string) {
 }
 /** 热榜类来源；抖音固定接口，微博允许公网 HTTPS 聚合页。 */
 export const HOT_LIST_KINDS = ['douyinHot', 'weiboHot'];
+/** @deprecated 仅保留历史列/任务 JSON 的读取类型，不能控制当前采集策略。 */
 export type HotSourceAccess = 'page' | 'search';
+/** @deprecated 仅保留历史列/任务 JSON 的读取类型，不再公开配置或参与执行。 */
 export type HotTopicMode = 'aiSearch' | 'platform' | 'hybrid';
 export type HotRunStatus =
   | 'pending'
@@ -67,13 +69,15 @@ export interface HotSourceInput {
   id: number;
   name: string;
   kind: ConfigurableHotSourceKind;
-  accessMode: HotSourceAccess;
+  /** @deprecated 兼容旧来源对象；当前执行忽略此值，公开响应中不返回。 */
+  accessMode?: HotSourceAccess;
   url: string;
   isEnabled: boolean;
   description: string;
 }
 export interface HotPreferenceInput {
-  mode: HotTopicMode;
+  /** @deprecated 兼容旧任务 JSON；新偏好和快照不包含，当前执行忽略此值。 */
+  mode?: HotTopicMode;
   aiConfigId: number | null;
   sourceIds: number[];
   interests: string;

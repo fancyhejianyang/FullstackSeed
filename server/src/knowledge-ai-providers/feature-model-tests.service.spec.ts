@@ -356,139 +356,68 @@ describe('AI 功能配置真实模型接口测试', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('联网功能实际调用 Responses+web_search，普通回答无搜索证据不能算成功', async () => {
-    const { service } = harness();
-    const fetchSpy = jest
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(json({ output_text: '普通回答' }))
-      .mockResolvedValueOnce(
-        json({
-          status: 'completed',
-          output: [
-            {
-              type: 'web_search_call',
-              status: 'completed',
-              action: {
-                sources: [
-                  {
-                    url: 'https://news.example.com/real',
-                    title: '真实检索结果',
-                  },
-                ],
-              },
-            },
-            {
-              type: 'message',
-              content: [{ type: 'output_text', text: '检索答案' }],
-            },
-          ],
-        }),
-      );
-    const request = dto({
-      featureType: 'topicDiscovery',
-      webSearchMode: 'bailianResponses',
-    });
-    await expect(service.startFeature(request, 7)).resolves.toMatchObject({
-      status: 'unknown',
-      functionLabel: '联网搜索',
-    });
-    expect(fetchSpy.mock.calls[0][0]).toBe(
-      'https://dashscope.aliyuncs.com/compatible-mode/v1/responses',
-    );
-    expect(JSON.parse(fetchSpy.mock.calls[0][1]?.body as string)).toMatchObject(
-      { model: request.model, tools: [{ type: 'web_search' }], stream: false },
-    );
-    await expect(
-      service.startFeature({ ...request, requestId: randomUUID() }, 7),
-    ).resolves.toMatchObject({ status: 'succeeded' });
-    await expect(
-      service.startFeature(
-        dto({ featureType: 'topicDiscovery', webSearchMode: 'bailianChat' }),
-        7,
-      ),
-    ).rejects.toThrow('原生联网搜索方式');
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
-  });
-
-  it.each(['openaiResponses', 'openaiChatSearch'] as const)(
-    '腾讯联网测试使用实际 %s 卡片与结构化来源，不发送业务提示词',
-    async (protocol) => {
-      const { service, target, providers } = harness('webSearch', protocol);
-      target.url =
-        protocol === 'openaiResponses'
-          ? 'https://tokenhub.tencentmaas.com/v1/responses'
-          : 'https://tokenhub.tencentmaas.com/v1/chat/completions';
-      const source = {
-        url: 'https://news.example.com/result',
-        title: '真实搜索来源',
-      };
-      const body =
-        protocol === 'openaiResponses'
-          ? {
-              output: [
-                { type: 'web_search_call', status: 'completed' },
-                {
-                  type: 'message',
-                  content: [
-                    {
-                      type: 'output_text',
-                      text: '带引用的回答',
-                      annotations: [{ type: 'url_citation', ...source }],
-                    },
-                  ],
-                },
-              ],
-            }
-          : {
-              choices: [
-                {
-                  finish_reason: 'stop',
-                  message: {
-                    content: '带引用的回答',
-                    search_results: [
-                      {
-                        url: source.url,
-                        name: source.title,
-                        snippet: '真实摘要',
-                      },
-                    ],
-                  },
-                },
-              ],
-            };
+  it.each([
+    'disabled',
+    'bailianResponses',
+    'tokenhubSearch',
+    'bailianChat',
+  ] as const)(
+    '热点切换模型忽略旧联网标记 %s，只发送普通连通性测试',
+    async (webSearchMode) => {
+      const { service, providers } = harness();
       const fetchSpy = jest
         .spyOn(globalThis, 'fetch')
-        .mockResolvedValue(json(body));
-      const input = dto({
-        featureType: 'topicDiscovery',
-        webSearchMode: 'tokenhubSearch',
-        model: protocol === 'openaiResponses' ? 'hy3' : 'deepseek-v4-flash',
+        .mockResolvedValue(
+          json({ choices: [{ message: { content: '连接正常' } }] }),
+        );
+      const request = dto({ featureType: 'topicDiscovery', webSearchMode });
+      await expect(service.startFeature(request, 7)).resolves.toMatchObject({
+        status: 'succeeded',
       });
-      const result = await service.startFeature(input, 7);
-      expect(result.status).toBe('succeeded');
-      expect(providers.resolveWebSearchTarget).toHaveBeenCalledWith({
-        id: 2,
-        model: input.model,
-        webSearchMode: 'tokenhubSearch',
-      });
+      expect(providers.resolveWebSearchTarget).not.toHaveBeenCalled();
       expect(fetchSpy).toHaveBeenCalledTimes(1);
-      expect(fetchSpy.mock.calls[0][0]).toBe(target.url);
-      const requestBody = JSON.parse(
+      const body = JSON.parse(
         fetchSpy.mock.calls[0][1]?.body as string,
       ) as Record<string, unknown>;
-      expect(requestBody.model).toBe(input.model);
-      if (protocol === 'openaiResponses')
-        expect(requestBody.tools).toEqual([
-          { type: 'web_search', search_source: 'lite' },
-        ]);
-      else
-        expect(requestBody.web_search_options).toEqual({
-          enable: true,
-          search_source: 'lite',
-        });
-      expect(requestBody).not.toHaveProperty('enable_thinking');
+      expect(body.tools).toBeUndefined();
+      expect(body.web_search_options).toBeUndefined();
+      expect(body.model).toBe(request.model);
     },
   );
+  it('防御性拒绝退役的联网卡片目标，不发送供应商请求', async () => {
+    const { service } = harness('webSearch', 'openaiResponses');
+    const fetchSpy = jest.spyOn(globalThis, 'fetch');
+    await expect(
+      service.startFeature(dto({ featureType: 'topicDiscovery' }), 7),
+    ).rejects.toThrow('联网搜索接口卡片已移除');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('旧联网内存记录不再出现在最近列表或历史查询中', async () => {
+    const { service } = harness();
+    jest
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        json({ choices: [{ message: { content: '正常结果' } }] }),
+      );
+    const request = dto();
+    await service.startFeature(request, 7);
+    const records = (
+      service as unknown as { records: Map<string, { route: string }> }
+    ).records;
+    for (const record of records.values())
+      record.route = JSON.stringify([
+        'old',
+        'https://example.com',
+        null,
+        'openaiResponses',
+        'webSearch',
+      ]);
+    expect(service.recentFeatures(7)).toEqual([]);
+    await expect(service.queryFeature(request.requestId, 7)).rejects.toThrow(
+      '测试记录不存在',
+    );
+  });
 
   it('所有入口共享并发限制，最近列表最多十条且不暴露请求体和凭据', async () => {
     const { service } = harness();

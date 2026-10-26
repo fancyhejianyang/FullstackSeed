@@ -145,20 +145,6 @@ add(
   '/v1/embeddings/multimodal',
   133515,
 );
-add(['hy3'], ['webSearch'], 'openaiResponses', '/v1/responses', 132358);
-add(
-  [
-    'deepseek-v4-flash-0731',
-    'deepseek-v4-pro-0813',
-    'deepseek-v4-pro',
-    'deepseek-v4-flash',
-  ],
-  ['webSearch'],
-  'openaiChatSearch',
-  '/v1/chat/completions',
-  132358,
-);
-
 add(
   ['hy-image-v3'],
   ['textToImage', 'imageToImage'],

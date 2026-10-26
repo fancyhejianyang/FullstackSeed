@@ -15,6 +15,7 @@ import type {
 export class HotTopicSource extends BaseEntity {
   @Column({ length: 120 }) name: string;
   @Column({ type: 'varchar', length: 30 }) kind: HotSourceKind;
+  /** 历史列保留以避免同步删列；当前采集忽略，公开接口不再读写。 */
   @Column({ type: 'varchar', length: 20 }) accessMode: HotSourceAccess;
   @Column({ length: 2048 }) url: string;
   @Column({ length: 120, default: '' }) accountName: string;
@@ -33,6 +34,7 @@ export class HotTopicPreference
   implements HotPreferenceInput
 {
   @Index({ unique: true }) @Column({ type: 'int' }) userId: number;
+  /** 历史列保留；用户不再选择模式，执行与任务快照均不依赖此值。 */
   @Column({ type: 'varchar', length: 20, default: 'aiSearch' })
   mode: HotTopicMode;
   @Column({ type: 'int', nullable: true }) aiConfigId: number | null;

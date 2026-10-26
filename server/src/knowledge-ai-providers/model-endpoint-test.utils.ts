@@ -1,10 +1,10 @@
+import { BadRequestException } from '@nestjs/common';
 import { imageGenerationRequest } from '../common/ai/image-generation';
 import { videoGenerationRequest } from '../common/ai/video-generation';
 import { mediaProtocol } from '../model-endpoints/model-endpoint.constants';
 import type { ModelEndpoint } from '../model-endpoints/entities/model-endpoint.entity';
 import { extendedTokenhubRequest } from '../common/ai/tokenhub-adapters';
 import type { AiMaterialGenerationMode } from '../ai-materials/ai-material.constants';
-import { buildVerifiedSearchRequest } from './knowledge-web-search.utils';
 
 export const record = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' && !Array.isArray(value)
@@ -19,16 +19,7 @@ export function endpointTestTemplate(
   const scene = card.functionType;
   const image = 'REPLACE_WITH_IMAGE_URL';
   if (scene === 'webSearch')
-    return buildVerifiedSearchRequest({
-      webSearchMode:
-        card.platformType === 'aliyunBailian'
-          ? 'bailianResponses'
-          : 'tokenhubSearch',
-      protocol: card.protocol,
-      model,
-      query: '请实际联网搜索当前公开科技新闻，返回真实搜索来源。',
-      enableThinking: false,
-    });
+    throw new BadRequestException('联网搜索接口卡片已移除');
   const extended = extendedTokenhubRequest({
     model,
     functionType: scene,

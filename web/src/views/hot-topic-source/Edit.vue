@@ -11,7 +11,6 @@ import {
   getHotSource,
   safeSourceUrl,
   sourceKindLabels,
-  sourceAccessLabels,
   type HotSource,
   type HotSourceForm,
 } from "@/api/hotTopic";
@@ -26,7 +25,6 @@ const formRef = ref<InstanceType<typeof Form>>();
 const initial = (): HotSourceForm => ({
   name: "",
   kind: "douyinHot",
-  accessMode: "page",
   url: DOUYIN_HOT_API_URL,
   isEnabled: false,
   description: "",
@@ -46,19 +44,6 @@ const fields = computed<FormField[]>(() => [
       label,
     })),
   },
-  ...(fixedSourceUrl.value
-    ? []
-    : [
-        {
-          prop: "accessMode",
-          label: "获取方式",
-          type: "select" as const,
-          options: Object.entries(sourceAccessLabels).map(([value, label]) => ({
-            value,
-            label,
-          })),
-        },
-      ]),
   {
     prop: "url",
     label: fixedSourceUrl.value ? "来源接口（固定）" : "来源地址",
@@ -67,10 +52,10 @@ const fields = computed<FormField[]>(() => [
     componentProps: fixedSourceUrl.value ? { readonly: true } : undefined,
     hint:
       form.kind === "douyinHot"
-        ? "系统仅从固定抖音热搜接口读取 data.word_list 榜单；所有获取模式均直接读取，不回退网页或 AI 搜索。"
+        ? "系统从固定抖音热搜接口读取 data.word_list 榜单，无需选择获取方式。"
         : form.kind === "neteaseNews"
           ? "系统固定读取网易国内新闻接口，仅解析“国内”分类的标题、原文链接与发布时间。"
-          : "可填写微博官方热榜或合规聚合页面的公开 HTTPS 地址；不绕过登录、验证码或访问限制。",
+          : "可填写微博官方热榜或合规聚合页面的公开 HTTPS 地址；系统自动采集，并按需要使用备用接口或联网补充。",
   },
   { prop: "isEnabled", label: "启用状态", component: "Switch" },
   { prop: "description", label: "说明", type: "textarea", rows: 3 },
@@ -90,7 +75,6 @@ const rules: FormRules = {
     },
   ],
   kind: [{ required: true, message: "请选择来源类型" }],
-  accessMode: [{ required: true, message: "请选择获取方式" }],
 };
 watch(
   () => form.kind,
@@ -98,13 +82,11 @@ watch(
     if (hydrating) return;
     const url = fixedHotSourceUrl(kind);
     if (url) {
-      form.accessMode = "page";
       form.url = url;
       if (!form.name.trim())
         form.name = kind === "douyinHot" ? "抖音热点" : "网易国内新闻";
     } else if (fixedHotSourceUrl(previousKind)) {
       form.url = "";
-      form.accessMode = "page";
     }
   },
   { flush: "sync" },
@@ -112,7 +94,7 @@ watch(
 function fillForm(values: HotSourceForm) {
   const url = fixedHotSourceUrl(values.kind);
   hydrating = true;
-  Object.assign(form, values, url ? { url, accessMode: "page" } : {});
+  Object.assign(form, values, url ? { url } : {});
   hydrating = false;
 }
 async function load() {
@@ -130,7 +112,6 @@ async function load() {
     fillForm({
       name: row.name,
       kind: row.kind,
-      accessMode: row.accessMode,
       url: row.url,
       isEnabled: Boolean(row.isEnabled),
       description: row.description,
@@ -157,9 +138,11 @@ async function submit() {
   try {
     const url = fixedHotSourceUrl(form.kind);
     const data = {
-      ...form,
-      ...(url ? { url, accessMode: "page" as const } : {}),
+      name: form.name,
+      kind: form.kind,
+      url: url || form.url,
       isEnabled: Boolean(form.isEnabled),
+      description: form.description,
     };
     if (props.row) await updateHotSource(props.row.id, data);
     else await createHotSource(data);

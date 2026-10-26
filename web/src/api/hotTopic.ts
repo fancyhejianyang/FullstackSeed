@@ -1,11 +1,8 @@
 import request from '@/utils/request';
-import type { AiWebSearchMode } from '@/api/aiFeatureConfig';
 
 export type HotSourceKind = 'douyinHot' | 'neteaseNews';
-export type HotSourceAccess = 'page' | 'search';
 export const NETEASE_NEWS_API_URL =
   'https://news.163.com/special/0001220O/new_json2021.js?0.20812515014162658';
-export type HotTopicMode = 'aiSearch' | 'platform' | 'hybrid';
 export type HotRunStatus =
   | 'pending'
   | 'running'
@@ -17,7 +14,6 @@ export type HotTopicDecision = 'new' | 'ignored' | 'selected';
 export interface HotSourceForm {
   name: string;
   kind: HotSourceKind;
-  accessMode: HotSourceAccess;
   url: string;
   isEnabled: boolean;
   description: string;
@@ -28,7 +24,6 @@ export interface HotSource extends HotSourceForm {
   updatedAt: string;
 }
 export interface HotPreference {
-  mode: HotTopicMode;
   aiConfigId: number | null;
   sourceIds: number[];
   interests: string;
@@ -109,33 +104,17 @@ export interface HotRun {
 export interface HotOptions {
   sources: Pick<
     HotSource,
-    | 'id'
-    | 'name'
-    | 'kind'
-    | 'accessMode'
-    | 'url'
-    | 'isEnabled'
-    | 'description'
+    'id' | 'name' | 'kind' | 'url' | 'isEnabled' | 'description'
   >[];
   aiConfigs: {
     id: number;
     name: string;
     model: string | null;
-    webSearchMode: AiWebSearchMode;
   }[];
 }
 export const sourceKindLabels: Record<HotSourceKind, string> = {
   douyinHot: '抖音热点',
   neteaseNews: '网易国内新闻',
-};
-export const sourceAccessLabels: Record<HotSourceAccess, string> = {
-  page: '公开页面',
-  search: '联网搜索线索',
-};
-export const modeLabels: Record<HotTopicMode, string> = {
-  aiSearch: 'AI 联网搜索',
-  platform: '平台来源',
-  hybrid: '平台 + AI 联网搜索',
 };
 export const decisionLabels: Record<HotTopicDecision, string> = {
   new: '未处理',

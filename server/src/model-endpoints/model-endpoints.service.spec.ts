@@ -9,6 +9,8 @@ import {
 import { ModelEndpoint } from './entities/model-endpoint.entity';
 import {
   CATEGORY_FUNCTIONS,
+  MODEL_FUNCTIONS,
+  MODEL_PROTOCOLS,
   detectModelPlatform,
 } from './model-endpoint.constants';
 import {
@@ -19,7 +21,15 @@ import { ModelEndpointsService } from './model-endpoints.service';
 
 function harness() {
   const rows: ModelEndpoint[] = [];
+  const retirement = {
+    update: jest.fn().mockReturnThis(),
+    set: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
+    andWhere: jest.fn().mockReturnThis(),
+    execute: jest.fn().mockResolvedValue({ affected: 1 }),
+  };
   const repository = {
+    createQueryBuilder: jest.fn(() => retirement),
     create: jest.fn((value: Partial<ModelEndpoint>) =>
       Object.assign(new ModelEndpoint(), value),
     ),
@@ -35,7 +45,7 @@ function harness() {
   const service = new ModelEndpointsService(
     repository as unknown as Repository<ModelEndpoint>,
   );
-  return { service, repository, rows };
+  return { service, repository, rows, retirement };
 }
 const preset = (): CreateModelEndpointDto => ({
   platformType: 'tencentTokenhub',
@@ -188,12 +198,14 @@ describe('模型调用接口配置', () => {
             isActive: false,
             platformType: 'tencentTokenhub',
             functionType: 'textToImage',
+            protocol: In(MODEL_PROTOCOLS),
             modelCode: Like('%seed%'),
           },
           {
             isActive: false,
             platformType: 'tencentTokenhub',
             functionType: 'textToImage',
+            protocol: In(MODEL_PROTOCOLS),
             modelName: Like('%seed%'),
           },
         ],
@@ -242,6 +254,7 @@ describe('模型调用接口配置', () => {
       expect.objectContaining({
         where: {
           functionType: In([...CATEGORY_FUNCTIONS.audio]),
+          protocol: In(MODEL_PROTOCOLS),
           isActive: false,
         },
       }),
@@ -276,6 +289,82 @@ describe('模型调用接口配置', () => {
       skipped: MODEL_SPECIFIC_PRESETS.length,
       total: MODEL_SPECIFIC_PRESETS.length,
     });
+    expect(repository.save).not.toHaveBeenCalled();
+  });
+  it('公开 DTO 拒绝已移除的联网功能、分类与搜索协议', async () => {
+    for (const dto of [
+      plainToInstance(CreateModelEndpointDto, {
+        ...preset(),
+        functionType: 'webSearch',
+        protocol: 'openaiResponses',
+      }),
+      plainToInstance(CreateModelEndpointDto, {
+        ...preset(),
+        protocol: 'openaiChatSearch',
+      }),
+      plainToInstance(QueryModelEndpointDto, { functionType: 'webSearch' }),
+      plainToInstance(QueryModelEndpointDto, { category: 'search' }),
+    ])
+      expect(await validate(dto)).not.toHaveLength(0);
+  });
+  it('启动和手动补接口精确、幂等软删除联网卡片，不触碰其它功能或恢复原记录', async () => {
+    const { service, repository, retirement } = harness();
+    repository.findOne.mockResolvedValue({ id: 1, deletedAt: new Date() });
+    await service.onModuleInit();
+    await service.importPresets();
+    expect(retirement.update).toHaveBeenCalledWith(ModelEndpoint);
+    expect(retirement.set).toHaveBeenCalledWith({
+      deletedAt: expect.any(Function) as unknown,
+      isActive: false,
+      routeKey: null,
+    });
+    expect(retirement.where).toHaveBeenCalledWith(
+      'functionType = :retiredFunction',
+      { retiredFunction: 'webSearch' },
+    );
+    expect(retirement.andWhere).toHaveBeenCalledWith('deletedAt IS NULL');
+    expect(retirement.execute).toHaveBeenCalledTimes(2);
+    expect(repository.save).not.toHaveBeenCalled();
+  });
+  it('查询在数据库阶段排除已退役的功能与协议，旧分类/功能参数不会误查全部', async () => {
+    const { service, repository } = harness();
+    await service.findAll({});
+    expect(repository.findAndCount).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          functionType: In(MODEL_FUNCTIONS),
+          protocol: In(MODEL_PROTOCOLS),
+        },
+      }),
+    );
+    repository.findAndCount.mockClear();
+    await expect(
+      service.findAll({ functionType: 'webSearch' }),
+    ).resolves.toEqual({
+      list: [],
+      total: 0,
+    });
+    await expect(service.findAll({ category: 'search' })).resolves.toEqual({
+      list: [],
+      total: 0,
+    });
+    expect(repository.findAndCount).not.toHaveBeenCalled();
+  });
+  it('旧联网卡片即使尚未清理，也不能读取、修改或重新解析', async () => {
+    const { service, repository } = harness();
+    repository.findOne.mockResolvedValue({
+      ...preset(),
+      id: 42,
+      functionType: 'webSearch',
+      protocol: 'openaiResponses',
+    });
+    await expect(service.findOne(42)).rejects.toThrow('已移除');
+    await expect(service.update(42, { functionType: 'chat' })).rejects.toThrow(
+      '已移除',
+    );
+    await expect(
+      service.resolve('aliyunBailian', 'qwen-plus', 'webSearch'),
+    ).rejects.toThrow('不再使用');
     expect(repository.save).not.toHaveBeenCalled();
   });
 });

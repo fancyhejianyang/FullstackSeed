@@ -43,19 +43,6 @@ export class AiFeatureConfigsService {
           ? 'documentParse'
           : dto.featureType,
     });
-    let searchApiPath: string | null = null;
-    if (
-      dto.featureType === 'topicDiscovery' &&
-      dto.webSearchMode &&
-      dto.webSearchMode !== 'disabled'
-    ) {
-      const search = await this.providersService.resolveWebSearchTarget({
-        id: dto.providerId,
-        model: dto.model,
-        webSearchMode: dto.webSearchMode,
-      });
-      searchApiPath = new URL(search.url).pathname;
-    }
     // 只返回匹配摘要，不向功能编辑器返回账号凭据或完整账号配置。
     return {
       functionType: target.functionType,
@@ -63,7 +50,7 @@ export class AiFeatureConfigsService {
       source: target.source,
       ruleName: target.ruleName,
       apiPath: new URL(target.url).pathname,
-      searchApiPath,
+      searchApiPath: null,
     };
   }
 
@@ -432,10 +419,9 @@ export class AiFeatureConfigsService {
   }
 
   private normalizeFeatureSpecificSettings(config: Partial<AiFeatureConfig>) {
-    if (config.featureType !== 'topicDiscovery')
-      config.webSearchMode = 'disabled';
+    // 历史列仅用于兼容，不再参与热点自动采集或模型连通性测试。
+    config.webSearchMode = 'disabled';
     if (config.featureType === 'topicDiscovery') {
-      config.webSearchMode ??= 'disabled';
       config.useMineru = false;
       config.mineruConfigId = null;
       config.mineruConfigName = null;
@@ -537,17 +523,6 @@ export class AiFeatureConfigsService {
         ? 'documentParse'
         : (config.featureType ?? 'chat'),
     });
-    if (
-      config.isEnabled !== false &&
-      config.featureType === 'topicDiscovery' &&
-      config.webSearchMode &&
-      config.webSearchMode !== 'disabled'
-    )
-      await this.providersService.resolveWebSearchTarget({
-        id: config.providerId,
-        model: config.model,
-        webSearchMode: config.webSearchMode,
-      });
   }
 
   private toNullableText(value?: string) {

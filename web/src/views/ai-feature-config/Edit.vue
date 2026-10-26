@@ -175,7 +175,6 @@ function currentTestSelection(): AiFeatureModelEndpointCheck {
     model: form.model?.trim() ?? "",
     featureType: form.featureType,
     useMineru: isMineruOcrFeature.value,
-    webSearchMode: isTopicFeature.value ? form.webSearchMode : "disabled",
   };
 }
 function selectionKey(selection: Partial<AiFeatureModelEndpointCheck>) {
@@ -422,7 +421,6 @@ const form = reactive<AiFeatureConfigEditForm>({
   systemPrompt: "",
   temperature: 0.2,
   responseFormat: "text",
-  webSearchMode: "disabled",
   supportsImageToImage: false,
   supportsImageToVideo: false,
   isEnabled: true,
@@ -468,66 +466,6 @@ const isMineruOcrFeature = computed(
 );
 const isWritingFeature = computed(() => form.featureType === "contentCreation");
 const isTopicFeature = computed(() => form.featureType === "topicDiscovery");
-const canUseBailianSearch = computed(
-  () => selectedProvider.value?.platformType === "aliyunBailian",
-);
-const canUseTokenhubSearch = computed(
-  () => selectedProvider.value?.platformType === "tencentTokenhub",
-);
-const platformSearchMode = computed(() =>
-  canUseBailianSearch.value
-    ? "bailianResponses"
-    : canUseTokenhubSearch.value
-      ? "tokenhubSearch"
-      : "disabled",
-);
-const webSearchOptions = computed(() => {
-  const options = [
-    { label: "不联网（仅分析已采集资料）", value: "disabled", disabled: false },
-  ];
-  if (canUseBailianSearch.value) {
-    options.push({
-      label: "百炼 Responses 原生搜索",
-      value: "bailianResponses",
-      disabled: false,
-    });
-  } else if (form.webSearchMode === "bailianResponses") {
-    options.push({
-      label: "百炼 Responses 原生搜索（当前账号不适用）",
-      value: "bailianResponses",
-      disabled: true,
-    });
-  }
-  if (canUseTokenhubSearch.value) {
-    options.push({
-      label: "腾讯 TokenHub 原生搜索（系统自动匹配）",
-      value: "tokenhubSearch",
-      disabled: false,
-    });
-  } else if (form.webSearchMode === "tokenhubSearch") {
-    options.push({
-      label: "腾讯 TokenHub 原生搜索（当前账号不适用）",
-      value: "tokenhubSearch",
-      disabled: true,
-    });
-  }
-  if (form.webSearchMode === "bailianChat") {
-    options.push({
-      label: "百炼 Chat 联网（旧协议不可用，请重新选择）",
-      value: "bailianChat",
-      disabled: true,
-    });
-  }
-  return options;
-});
-const webSearchHint = computed(() => {
-  if (!selectedProvider.value) return "请先选择大模型账号。";
-  if (canUseTokenhubSearch.value)
-    return "系统按当前模型自动选择联网接口，无需逐个配置卡片；已有专用卡片优先使用。是否支持联网，以真实测试返回的搜索来源为准；供应商不支持时直接提示，不自动更换模型或重复请求。选择“不联网”仍可分析已采集资料。";
-  if (canUseBailianSearch.value)
-    return "百炼官方端点使用 Responses 原生搜索，所选模型仍需支持 web_search；平台识别不等于模型能力验证。不联网时仅分析已采集资料。";
-  return "本项目尚未接入当前平台的原生联网搜索；可选择“不联网”分析和推荐已采集资料。AI 联网获取需选择已配置原生搜索的百炼或腾讯账号，并核对当前模型的联网能力。";
-});
 const isVisualPromptFeature = computed(
   () => form.featureType === "visualPrompt",
 );
@@ -584,7 +522,7 @@ const fields = computed<FormField[]>(() => {
         form.featureType === "chat"
           ? "当前为聊天：所选模型负责生成对话与知识库问答的最终回复。"
           : form.featureType === "topicDiscovery"
-            ? "发现近期热点并按个人偏好推荐；使用独立后台任务，可选原生联网，不调用 Agent。"
+            ? "分析热点并按个人偏好推荐；采集及联网补充由系统按来源自动安排，不调用 Agent。"
             : form.featureType === "contentCreation"
               ? "用于文章后台生成；可启用多个配置，生成时选择使用哪一个。"
               : form.featureType === "visualPrompt"
@@ -645,7 +583,7 @@ const fields = computed<FormField[]>(() => {
           : modelTestHint.value ||
             modelValidationHint.value ||
             (isTopicFeature.value
-              ? "切换模型或联网协议时按当前设置真实测试；实际内容效果仍以业务任务为准。"
+              ? "切换模型时测试普通文本调用，用于热点分析与推荐；不自动测试联网搜索。"
               : isMediaGenerationFeature.value
                 ? "切换模型会直接生成测试内容，可能计费；不会保存为业务素材。"
                 : isRerankFeature.value
@@ -669,16 +607,6 @@ const fields = computed<FormField[]>(() => {
     }
   }
 
-  if (isTopicFeature.value) {
-    baseFields.push({
-      prop: "webSearchMode",
-      label: "联网方式",
-      type: "select",
-      options: webSearchOptions,
-      componentProps: { clearable: false },
-      hint: webSearchHint,
-    });
-  }
   if (isTextFeature.value) {
     baseFields.push({
       prop: "enableThinking",
@@ -912,21 +840,6 @@ onBeforeUnmount(() => {
 });
 
 watch(
-  () => [form.providerId, form.featureType] as const,
-  () => {
-    // 只归一化用户主动切换；历史配置回填不改值，也不触发真实测试。
-    if (!formReadyForModelValidation.value) return;
-    if (
-      !isTopicFeature.value ||
-      (form.webSearchMode !== "disabled" &&
-        form.webSearchMode !== platformSearchMode.value)
-    )
-      form.webSearchMode = "disabled";
-  },
-  { flush: "sync" },
-);
-
-watch(
   () => form.featureType,
   (type, previousType) => {
     // 用户切换为内容创作时默认纯文本；编辑回显保留已有格式。
@@ -989,13 +902,7 @@ watch(
 
 watch(
   () =>
-    [
-      form.model,
-      form.providerId,
-      form.featureType,
-      form.useMineru,
-      form.webSearchMode,
-    ] as const,
+    [form.model, form.providerId, form.featureType, form.useMineru] as const,
   () => {
     const sequence = ++modelValidationSequence;
     retiredOptionsSequence += 1;
@@ -1034,7 +941,6 @@ function resetForm() {
   form.systemPrompt = "";
   form.temperature = 0.2;
   form.responseFormat = "text";
-  form.webSearchMode = "disabled";
   form.supportsImageToImage = false;
   form.supportsImageToVideo = false;
   form.isEnabled = true;
@@ -1055,7 +961,6 @@ function fillForm(data: AiFeatureConfig) {
   form.systemPrompt = data.systemPrompt ?? "";
   form.temperature = Number(data.temperature ?? 0.2);
   form.responseFormat = data.responseFormat ?? "text";
-  form.webSearchMode = data.webSearchMode ?? "disabled";
   form.supportsImageToImage = !!data.supportsImageToImage;
   form.supportsImageToVideo = !!data.supportsImageToVideo;
   form.isEnabled = !!data.isEnabled;
@@ -1089,7 +994,6 @@ function buildPayload(): AiFeatureConfigForm {
           : isMarkdownFeature.value
             ? "markdown"
             : form.responseFormat,
-    webSearchMode: isTopicFeature.value ? form.webSearchMode : "disabled",
     supportsImageToImage:
       isImageGenerationFeature.value && !!form.supportsImageToImage,
     supportsImageToVideo:
@@ -1197,17 +1101,6 @@ async function validateSelectedModel() {
     !model
   )
     return false;
-  if (
-    isTopicFeature.value &&
-    form.webSearchMode &&
-    form.webSearchMode !== "disabled" &&
-    form.webSearchMode !== platformSearchMode.value
-  ) {
-    checkedEndpoint.value = null;
-    modelValidationHint.value =
-      "当前账号与所选联网方式不匹配，请选择当前平台的原生搜索或“不联网”。未发起实际测试。";
-    return false;
-  }
   const requestSequence = ++modelValidationSequence;
   validatingModel.value = true;
   modelValidationHint.value = "";
@@ -1217,7 +1110,6 @@ async function validateSelectedModel() {
       model,
       featureType: form.featureType,
       useMineru: isMineruOcrFeature.value,
-      webSearchMode: isTopicFeature.value ? form.webSearchMode : "disabled",
     });
     if (requestSequence !== modelValidationSequence) return false;
     checkedEndpoint.value = result;
@@ -1225,10 +1117,7 @@ async function validateSelectedModel() {
       result.source === "standard"
         ? "使用自定义平台标准接口"
         : `已匹配「${result.ruleName}」`;
-    const search = result.searchApiPath
-      ? `；联网搜索：${result.searchApiPath}`
-      : "";
-    modelValidationHint.value = `${source}（${result.functionLabel}）：${result.apiPath}${search}。仅检查配置，未调用模型。`;
+    modelValidationHint.value = `${source}（${result.functionLabel}）：${result.apiPath}。仅检查配置，未调用模型。`;
     return true;
   } catch (error) {
     if (requestSequence === modelValidationSequence) {

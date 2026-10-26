@@ -34,6 +34,8 @@ const WEIBO_HOT_FALLBACKS = [
 ] as const;
 
 function sourceHost(source: HotSourceInput): string | null {
+  // 微博备用搜索面向真实微博站点，不把不可读聚合站当作唯一结果域名。
+  if (source.kind === 'weiboHot') return 'weibo.com';
   const platformHost = platformSource(source.kind)?.host;
   if (platformHost) return platformHost;
   const url = normalizeHotTopicLink(source.url);
@@ -72,7 +74,6 @@ export const DEFAULT_HOT_SOURCE: HotSourceInput = {
   id: 0,
   name: '抖音热点',
   kind: 'douyinHot',
-  accessMode: 'page',
   url: DOUYIN_HOT_URL,
   isEnabled: true,
   description:
@@ -89,9 +90,7 @@ export class HotTopicFetchService {
     signal: AbortSignal,
   ) {
     const fixedUrl = fixedHotSourceUrl(source.kind);
-    const fixedSource = fixedUrl
-      ? { ...source, accessMode: 'page' as const, url: fixedUrl }
-      : source;
+    const fixedSource = fixedUrl ? { ...source, url: fixedUrl } : source;
     const configured = normalizeHotTopicLink(fixedSource.url);
     const configuredWeiboEndpoint =
       source.kind === 'weiboHot'
@@ -160,7 +159,8 @@ export class HotTopicFetchService {
 
   async collect(input: {
     sources: HotSourceInput[];
-    mode: HotTopicMode;
+    /** @deprecated 旧调用兼容，当前执行完全忽略。 */
+    mode?: HotTopicMode;
     config: AiFeatureConfig | null;
     preferences: HotPreferenceInput;
     signal: AbortSignal;
@@ -176,13 +176,8 @@ export class HotTopicFetchService {
         : [DEFAULT_HOT_SOURCE]
     ).map((source) => {
       const fixedUrl = fixedHotSourceUrl(source.kind);
-      return fixedUrl
-        ? { ...source, url: fixedUrl, accessMode: 'page' as const }
-        : source;
+      return fixedUrl ? { ...source, url: fixedUrl } : source;
     });
-    const searchSources = sources.filter(
-      (source) => !fixedHotSourceUrl(source.kind),
-    );
     const result: HotTopicFetchResult = {
       candidates: [],
       sources: [],
@@ -192,27 +187,10 @@ export class HotTopicFetchService {
     const fetchedAt = new Date().toISOString();
     {
       for (const source of sources) {
-        if (input.mode === 'aiSearch' && !fixedHotSourceUrl(source.kind))
-          continue;
         input.signal.throwIfAborted();
-        if (source.accessMode === 'search') {
-          if (input.mode === 'platform')
-            result.sources.push({
-              sourceId: source.id || null,
-              sourceName: source.name,
-              status: 'skipped',
-              count: 0,
-              message: '该来源采用 AI 搜索，请切换为 AI 联网或混合模式',
-            });
-          continue;
-        }
         try {
           const platform = platformSource(source.kind);
-          if (
-            platform?.host &&
-            source.accessMode === 'page' &&
-            !matchesSource(source.url, source)
-          )
+          if (platform?.host && !matchesSource(source.url, source))
             throw new HotTopicFetchError(
               'invalid_platform',
               `${platform.label}来源页面采集仅支持 ${platform.host} 官方域名`,
@@ -253,19 +231,25 @@ export class HotTopicFetchService {
         }
       }
     }
-    if (input.mode !== 'platform' && searchSources.length) {
+    const searchSources = sources.filter(
+      (source) =>
+        source.kind === 'weiboHot' &&
+        result.sources.some(
+          (outcome) =>
+            outcome.sourceId === (source.id || null) &&
+            outcome.sourceName === source.name &&
+            outcome.status === 'failed',
+        ),
+    );
+    // 先取得真实榜单再推荐；只有微博全部直读失败时才尝试一次系统联网补充。
+    if (input.config && searchSources.length) {
       input.signal.throwIfAborted();
       let searchDiagnostics: HotSearchDiagnostics | undefined;
       try {
-        if (!input.config)
-          throw new HotTopicFetchError(
-            'missing_ai',
-            'AI 联网模式需要选择热点发现 AI 配置',
-          );
         const constraints = searchSources.map((source) => ({
           name: source.name,
           site: sourceHost(source),
-          url: source.url,
+          url: 'https://weibo.com/',
         }));
         const search = await this.webSearch.search(
           input.config,
@@ -293,7 +277,10 @@ export class HotTopicFetchService {
             sourceName: host.slice(0, 120),
             sourceId:
               matchedSources.length === 1 ? matchedSources[0].id || null : null,
-            platform: platformLabelForHost(host) ?? host.slice(0, 40),
+            platform:
+              platformSource(matchedSources[0].kind)?.label ??
+              platformLabelForHost(host) ??
+              host.slice(0, 40),
             accountName: null,
             accountId: null,
             accountMatched: false,
@@ -318,7 +305,7 @@ export class HotTopicFetchService {
               ...(searchDiagnostics ? { searchDiagnostics } : {}),
               message: matches.length
                 ? '仅收录供应商返回的真实搜索来源，时间和热度缺失时保持未知'
-                : `没有返回该来源的可核验结果；未用其它网站代替${input.mode === 'aiSearch' && source.accessMode !== 'search' ? '。当前为仅 AI 联网模式，未直接读取配置页面' : ''}`,
+                : '没有返回该来源的可核验结果；未用其它网站或模型记忆代替',
             },
             'AI 联网',
           );

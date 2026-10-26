@@ -42,6 +42,7 @@ const responseWithSources = () => ({
 
 function harness(response: Response | Error) {
   const resolveWebSearchTarget = jest.fn().mockResolvedValue({
+    webSearchMode: 'tokenhubSearch',
     model: 'hy3',
     url: 'https://tokenhub.tencentmaas.com/v1/responses',
     protocol: 'openaiResponses',

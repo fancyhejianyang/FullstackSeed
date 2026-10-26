@@ -7,7 +7,7 @@ import {
   type PlatformType,
 } from './model-endpoint.constants';
 
-/** 负数 ID 是稳定的系统规则标识，不占数据库主键，也不保存可编辑的影子配置。 */
+/** 负数 ID 是稳定系统标识；已移除的 -7/-8/-9 永不复用，不保存可编辑影子配置。 */
 const definitions = [
   { id: -1, platformType: 'aliyunBailian', functionType: 'chat' },
   { id: -2, platformType: 'aliyunBailian', functionType: 'vision' },
@@ -15,18 +15,7 @@ const definitions = [
   { id: -4, platformType: 'tencentTokenhub', functionType: 'chat' },
   { id: -5, platformType: 'tencentTokenhub', functionType: 'vision' },
   { id: -6, platformType: 'tencentTokenhub', functionType: 'embedding' },
-  { id: -7, platformType: 'aliyunBailian', functionType: 'webSearch' },
-  { id: -8, platformType: 'tencentTokenhub', functionType: 'webSearch' },
-  { id: -9, platformType: 'tencentTokenhub', functionType: 'webSearch' },
 ] as const;
-
-/** 官方联网矩阵中的精确编码；其他编码按默认格式尝试，不改写原厂别名或版本。 */
-const tokenhubChatSearchModels = new Set([
-  'deepseek-v4-flash',
-  'deepseek-v4-pro',
-  'deepseek-v4-flash-0731',
-  'deepseek-v4-pro-0813',
-]);
 
 export const BUILTIN_MODEL_ENDPOINTS = definitions.map(
   ({ id, platformType, functionType }) => ({
@@ -34,20 +23,13 @@ export const BUILTIN_MODEL_ENDPOINTS = definitions.map(
     platformType,
     // 仅用于展示适用范围；实际请求必须另选账号目录中的具体模型。
     modelCode: '*',
-    modelName:
-      functionType === 'webSearch'
-        ? `${PLATFORM_LABELS[platformType]} · 联网搜索 ${id === -9 ? 'DeepSeek Chat' : 'Responses'}（系统通用）`
-        : `${PLATFORM_LABELS[platformType]} · ${FUNCTION_LABELS[functionType]}（系统通用）`,
+    modelName: `${PLATFORM_LABELS[platformType]} · ${FUNCTION_LABELS[functionType]}（系统通用）`,
     functionType,
     protocol:
-      functionType === 'webSearch'
-        ? id === -9
-          ? ('openaiChatSearch' as const)
-          : ('openaiResponses' as const)
-        : functionType === 'embedding'
-          ? ('openaiEmbedding' as const)
-          : ('openaiChat' as const),
-    apiPath: `${platformType === 'aliyunBailian' ? '/compatible-mode' : ''}/v1/${functionType === 'webSearch' && id !== -9 ? 'responses' : functionType === 'embedding' ? 'embeddings' : 'chat/completions'}`,
+      functionType === 'embedding'
+        ? ('openaiEmbedding' as const)
+        : ('openaiChat' as const),
+    apiPath: `${platformType === 'aliyunBailian' ? '/compatible-mode' : ''}/v1/${functionType === 'embedding' ? 'embeddings' : 'chat/completions'}`,
     taskApiPath: '',
     taskMethod: 'GET' as const,
     executionMode: 'sync' as const,
@@ -56,15 +38,11 @@ export const BUILTIN_MODEL_ENDPOINTS = definitions.map(
     isReadOnly: true,
     category: modelCategory(functionType),
     documentationUrl:
-      functionType === 'webSearch'
-        ? platformType === 'aliyunBailian'
-          ? 'https://help.aliyun.com/zh/model-studio/web-search'
-          : 'https://cloud.tencent.com/document/product/1823/132358'
-        : platformType === 'aliyunBailian'
-          ? functionType === 'embedding'
-            ? 'https://help.aliyun.com/zh/model-studio/embedding-interfaces-compatible-with-openai'
-            : 'https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions/'
-          : `https://cloud.tencent.com/document/product/1823/${functionType === 'embedding' ? '133515' : functionType === 'vision' ? '136956' : '130079'}`,
+      platformType === 'aliyunBailian'
+        ? functionType === 'embedding'
+          ? 'https://help.aliyun.com/zh/model-studio/embedding-interfaces-compatible-with-openai'
+          : 'https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions/'
+        : `https://cloud.tencent.com/document/product/1823/${functionType === 'embedding' ? '133515' : functionType === 'vision' ? '136956' : '130079'}`,
   }),
 );
 
@@ -73,17 +51,10 @@ export function builtinModelEndpoint(
   functionType: ModelFunction,
   modelCode?: string,
 ) {
-  const searchId =
-    platformType === 'tencentTokenhub' && functionType === 'webSearch'
-      ? tokenhubChatSearchModels.has(modelCode ?? '')
-        ? -9
-        : -8
-      : null;
+  void modelCode;
   const rule = BUILTIN_MODEL_ENDPOINTS.find(
     (item) =>
-      item.platformType === platformType &&
-      item.functionType === functionType &&
-      (searchId === null || item.id === searchId),
+      item.platformType === platformType && item.functionType === functionType,
   );
   return rule ? { ...rule } : null;
 }

@@ -13,7 +13,7 @@ const apiCode = ts.transpileModule(
 ).outputText;
 const api = new Function(
   "request",
-  `${apiCode}; return {safeSourceUrl, activeRun, NETEASE_NEWS_API_URL, sourceKindLabels, sourceAccessLabels, modeLabels};`,
+  `${apiCode}; return {safeSourceUrl, activeRun, NETEASE_NEWS_API_URL, sourceKindLabels};`,
 )({});
 const fixedSourcesCode = ts.transpileModule(
   (await read("../../api/hotTopicSources.ts"))
@@ -23,7 +23,7 @@ const fixedSourcesCode = ts.transpileModule(
 ).outputText;
 const fixedSources = new Function(
   ...Object.keys(api),
-  `${fixedSourcesCode}; return {DOUYIN_HOT_API_URL, fixedHotSourceUrl, hotSourceAccessLabel};`,
+  `${fixedSourcesCode}; return {DOUYIN_HOT_API_URL, fixedHotSourceUrl};`,
 )(...Object.values(api));
 const preferenceCode = ts.transpileModule(
   (await read("./preferenceValidation.ts"))
@@ -33,7 +33,7 @@ const preferenceCode = ts.transpileModule(
 ).outputText;
 const preferenceFunctions = new Function(
   ...Object.keys(fixedSources),
-  `${preferenceCode}; return {scheduleValidationError, preferenceRequiresSearch, supportsHotSearchMode};`,
+  `${preferenceCode}; return {scheduleValidationError};`,
 )(...Object.values(fixedSources));
 const validateSchedule = preferenceFunctions.scheduleValidationError;
 const files = [
@@ -121,7 +121,7 @@ test("手动发起、计划默认关闭、创建后是否生成须明确选择",
   );
 });
 
-test("抖音与网易固定接口契约及页面说明一致，微博仍保留来源配置", () => {
+test("固定接口保留且来源页面不再提供获取方式，所有来源自动采集", () => {
   const source = sources.get("../hot-topic-source/Edit.vue");
   assert.equal(
     fixedSources.DOUYIN_HOT_API_URL,
@@ -136,36 +136,24 @@ test("抖音与网易固定接口契约及页面说明一致，微博仍保留�
     api.NETEASE_NEWS_API_URL,
   );
   assert.equal(fixedSources.fixedHotSourceUrl("weiboHot"), null);
-  for (const kind of ["douyinHot", "neteaseNews"])
-    assert.equal(
-      fixedSources.hotSourceAccessLabel({ kind, accessMode: "search" }),
-      "固定接口",
-    );
-  assert.equal(
-    fixedSources.hotSourceAccessLabel({
-      kind: "weiboHot",
-      accessMode: "search",
-    }),
-    api.sourceAccessLabels.search,
-  );
-  assert.match(source, /DOUYIN_HOT_API_URL/);
   assert.match(source, /来源接口（固定）/);
   assert.match(source, /data\.word_list/);
-  assert.match(source, /form\.kind === ["']neteaseNews["']/);
-  assert.doesNotMatch(source, /央视新闻|央视网|钧正平/);
   assert.doesNotMatch(
     source,
     /douyinAccount|rss|jsonFeed|apiToken|clearApiToken/,
   );
-  assert.doesNotMatch(source, /field-accountName|稳定账号标识|清除密钥/);
   for (const filename of [
+    "../hot-topic-source/Edit.vue",
     "../hot-topic-source/Index.vue",
     "../hot-topic-source/View.vue",
   ])
-    assert.match(sources.get(filename), /hotSourceAccessLabel/);
-  assert.match(
-    sources.get("../hot-topic-source/Index.vue"),
-    /页面 \/ 固定接口/,
+    assert.doesNotMatch(
+      sources.get(filename),
+      /accessMode|sourceAccessLabels|hotSourceAccessLabel/,
+    );
+  assert.doesNotMatch(
+    apiSource,
+    /HotTopicMode|modeLabels|HotSourceAccess|sourceAccessLabels|webSearchMode/,
   );
 });
 
@@ -227,7 +215,7 @@ test("来源回填归一化抖音网易，微博正常回显，切换固定来�
   try {
     await h.load();
     assert.equal(h.form.url, api.NETEASE_NEWS_API_URL);
-    assert.equal(h.form.accessMode, "page");
+    assert.equal(h.form.accessMode, undefined);
     assert.equal(
       h.fields.value.find((field) => field.prop === "url").componentProps
         .readonly,
@@ -244,7 +232,7 @@ test("来源回填归一化抖音网易，微博正常回显，切换固定来�
     };
     await h.load();
     assert.equal(h.form.url, fixedSources.DOUYIN_HOT_API_URL);
-    assert.equal(h.form.accessMode, "page");
+    assert.equal(h.form.accessMode, undefined);
     assert.equal(
       h.fields.value.some((field) => field.prop === "accessMode"),
       false,
@@ -260,18 +248,17 @@ test("来源回填归一化抖音网易，微博正常回显，切换固定来�
     await h.load();
     await vue.nextTick();
     assert.equal(h.form.url, record.url);
-    assert.equal(h.form.accessMode, "search");
+    assert.equal(h.form.accessMode, undefined);
     h.form.kind = "neteaseNews";
     assert.equal(h.form.url, api.NETEASE_NEWS_API_URL);
     h.form.kind = "douyinHot";
     assert.equal(h.form.url, fixedSources.DOUYIN_HOT_API_URL);
-    assert.equal(h.form.accessMode, "page");
+    assert.equal(h.form.accessMode, undefined);
     h.form.url = "https://tampered.example.com/hot";
-    h.form.accessMode = "search";
     await h.submit();
     assert.equal(saved.length, 1);
     assert.equal(saved[0].url, fixedSources.DOUYIN_HOT_API_URL);
-    assert.equal(saved[0].accessMode, "page");
+    assert.equal("accessMode" in saved[0], false);
     h.form.kind = "weiboHot";
     assert.equal(h.form.url, "");
     assert.equal(
@@ -280,7 +267,7 @@ test("来源回填归一化抖音网易，微博正常回显，切换固定来�
     );
     assert.equal(
       h.fields.value.some((field) => field.prop === "accessMode"),
-      true,
+      false,
     );
     props.row = null;
     const previousReads = reads;
@@ -288,15 +275,16 @@ test("来源回填归一化抖音网易，微博正常回显，切换固定来�
     assert.equal(reads, previousReads);
     assert.equal(h.form.kind, "douyinHot");
     assert.equal(h.form.url, fixedSources.DOUYIN_HOT_API_URL);
-    assert.equal(h.form.accessMode, "page");
+    assert.equal(h.form.accessMode, undefined);
     assert.equal(saved.length, 1);
   } finally {
     scope.stop();
   }
 });
 
-test("偏好页仅选固定来源不显示联网警告，来源标签与微博混合提示准确", () => {
-  const visible = vue.ref(true);
+test("偏好只保留结果偏好，不展示或提交历史模式与联网协议", async () => {
+  const visible = vue.ref(true),
+    saved = [];
   let requests = 0;
   const raw = parse(
     sources.get("Preferences.vue"),
@@ -309,57 +297,81 @@ test("偏好页仅选固定来源不显示联网警告，来源标签与微博�
     reactive: vue.reactive,
     ref: vue.ref,
     watch: vue.watch,
-    onBeforeUnmount: () => {},
+    onBeforeUnmount() {},
     defineModel: () => visible,
     defineEmits: () => () => {},
-    useSubmissionGuard: () => {},
+    useSubmissionGuard() {},
     useUserStore: () => ({ hasPermission: () => true }),
-    modeLabels: api.modeLabels,
     getHotPreference: async () => {
       requests++;
+      return {
+        mode: "aiSearch",
+        aiConfigId: 9,
+        sourceIds: [1, 3],
+        interests: "",
+        exclusions: "",
+        audience: "",
+        writingStyle: "",
+        lookbackHours: 24,
+        maxResults: 10,
+        scheduleEnabled: false,
+        scheduleTime: "09:00",
+      };
     },
     getHotOptions: async () => {
       requests++;
+      return {
+        aiConfigs: [
+          {
+            id: 9,
+            name: "普通推荐",
+            model: "shared-text",
+            webSearchMode: "disabled",
+          },
+        ],
+        sources: [
+          { id: 1, name: "抖音热点", kind: "douyinHot", accessMode: "search" },
+          { id: 3, name: "微博热点", kind: "weiboHot", accessMode: "page" },
+        ],
+      };
     },
-    ...fixedSources,
+    saveHotPreference: async (payload) => saved.push(payload),
+    ElMessage: { success() {}, warning() {} },
+    ElMessageBox: { confirm: async () => {} },
     ...preferenceFunctions,
   };
   const scope = vue.effectScope();
   const h = scope.run(() =>
     new Function(
       ...Object.keys(context),
-      `${script}; return {form, options, sourceOptions, directSourcesIgnored, searchProtocolHint, fields};`,
+      script + "; return {form, options, sourceOptions, fields, load, submit};",
     )(...Object.values(context)),
   );
   try {
-    h.options.value.sources = [
-      { id: 1, name: "抖音热点", kind: "douyinHot", accessMode: "search" },
-      { id: 2, name: "网易国内新闻", kind: "neteaseNews", accessMode: "page" },
-      { id: 3, name: "微博热点", kind: "weiboHot", accessMode: "page" },
-    ];
-    h.form.sourceIds = ["1", "2"];
-    for (const mode of ["aiSearch", "platform", "hybrid"]) {
-      h.form.mode = mode;
-      assert.equal(h.searchProtocolHint.value, "");
-      assert.equal(h.directSourcesIgnored.value, false);
-    }
+    await h.load();
+    assert.equal(requests, 2);
+    assert.equal("mode" in h.form, false);
     assert.deepEqual(
-      h.sourceOptions.value.slice(0, 2).map((row) => row.label),
-      ["抖音热点 · 固定接口", "网易国内新闻 · 固定接口"],
+      h.sourceOptions.value.map((item) => item.label),
+      ["抖音热点", "微博热点"],
     );
-    h.form.mode = "aiSearch";
-    h.form.sourceIds = [];
-    assert.equal(h.searchProtocolHint.value, "");
-    assert.match(
-      h.fields.value.find((field) => field.prop === "mode").hint,
-      /默认读取抖音固定榜单/,
+    assert.equal(
+      h.fields.value.some((field) => field.prop === "mode"),
+      false,
     );
-    h.form.sourceIds = ["1", "3"];
-    assert.match(h.searchProtocolHint.value, /依赖 AI 联网搜索/);
-    assert.equal(h.directSourcesIgnored.value, true);
+    assert.deepEqual(
+      vue
+        .unref(
+          h.fields.value.find((field) => field.prop === "aiConfigId").options,
+        )
+        .map((item) => item.label),
+      ["普通推荐 · shared-text"],
+    );
     h.form.mode = "hybrid";
-    assert.match(h.searchProtocolHint.value, /混合模式仍可先采集/);
-    assert.equal(requests, 0);
+    await h.submit();
+    assert.equal(saved.length, 1);
+    assert.equal("mode" in saved[0], false);
+    assert.equal("webSearchMode" in saved[0], false);
   } finally {
     scope.stop();
   }
@@ -472,20 +484,18 @@ test("任务读取失败清空旧详情，不自动重试收费执行接口", as
   h.dispose();
 });
 
-test("模型或来源失效时仍允许关闭每日计划，未填模型可保存偏好设置", () => {
-  const preference = {
-    mode: "aiSearch",
-    aiConfigId: 9,
-    sourceIds: [4],
-    scheduleEnabled: false,
-  };
+test("失效来源和模型仍允许关闭计划；默认来源与可选AI不要求采集模式", () => {
   assert.equal(
-    validateSchedule(preference, { aiConfigs: [], sources: [] }, false),
+    validateSchedule(
+      { aiConfigId: 9, sourceIds: [4], scheduleEnabled: false },
+      { aiConfigs: [], sources: [] },
+      false,
+    ),
     null,
   );
   assert.equal(
     validateSchedule(
-      { ...preference, aiConfigId: null, sourceIds: [] },
+      { aiConfigId: null, sourceIds: [], scheduleEnabled: true },
       { aiConfigs: [], sources: [] },
       true,
     ),
@@ -493,172 +503,57 @@ test("模型或来源失效时仍允许关闭每日计划，未填模型可保�
   );
 });
 
-test("每日计划启用前校验执行权限、可用来源与真正联网协议", () => {
-  const preference = {
-    mode: "aiSearch",
-    aiConfigId: 9,
-    sourceIds: [5],
-    scheduleEnabled: true,
-  };
+test("计划只校验执行权限、有效来源、有效可选AI与来源数量", () => {
+  const preference = { aiConfigId: 9, sourceIds: [5], scheduleEnabled: true };
   const choices = {
-    aiConfigs: [{ id: 9, webSearchMode: "disabled" }],
-    sources: [{ id: 5, kind: "weiboHot", accessMode: "page" }],
+    aiConfigs: [{ id: 9 }],
+    sources: [{ id: 5, kind: "weiboHot" }],
   };
   assert.match(
     validateSchedule(preference, choices, false),
     /缺少热点执行权限/,
   );
-  assert.match(validateSchedule(preference, choices, true), /联网协议/);
+  assert.equal(validateSchedule(preference, choices, true), null);
   assert.match(
-    validateSchedule(
-      preference,
-      { ...choices, aiConfigs: [{ id: 9, webSearchMode: "bailianChat" }] },
-      true,
-    ),
-    /原生联网协议/,
+    validateSchedule(preference, { ...choices, aiConfigs: [] }, true),
+    /AI 配置已失效/,
   );
-  for (const webSearchMode of ["bailianResponses", "tokenhubSearch"])
-    assert.equal(
-      validateSchedule(
-        preference,
-        { ...choices, aiConfigs: [{ id: 9, webSearchMode }] },
-        true,
-      ),
-      null,
-    );
   assert.match(
-    validateSchedule(
-      { ...preference, mode: "platform", sourceIds: [] },
-      choices,
-      true,
-    ),
-    /至少选择一个来源/,
+    validateSchedule(preference, { ...choices, sources: [] }, true),
+    /来源已失效/,
   );
   assert.match(
     validateSchedule(
-      { ...preference, mode: "platform", sourceIds: [4] },
-      { ...choices, sources: [{ id: 4, accessMode: "search" }] },
+      { ...preference, sourceIds: [1, 2, 3, 4, 5, 6] },
+      {
+        ...choices,
+        sources: Array.from({ length: 6 }, (_, index) => ({ id: index + 1 })),
+      },
       true,
     ),
-    /请切换/,
+    /最多选择 5 个/,
   );
 });
 
-test("抖音网易在全部模式始终直读，历史搜索标记也不要求模型联网", () => {
+test("三类来源与旧来源标记均不要求用户选择联网方式", () => {
   const choices = {
     aiConfigs: [{ id: 9, webSearchMode: "disabled" }],
     sources: [
-      { id: 4, kind: "neteaseNews", accessMode: "page" },
-      { id: 5, kind: "weiboHot", accessMode: "page" },
-      { id: 6, kind: "douyinHot", accessMode: "search" },
+      { id: 1, kind: "douyinHot", accessMode: "search" },
+      { id: 2, kind: "weiboHot", accessMode: "search" },
+      { id: 3, kind: "neteaseNews", accessMode: "page" },
     ],
   };
-  for (const mode of ["aiSearch", "platform", "hybrid"]) {
-    for (const aiConfigId of [null, 9]) {
-      for (const sourceIds of [[4], [6], [4, 6]])
-        assert.equal(
-          validateSchedule(
-            { mode, aiConfigId, sourceIds, scheduleEnabled: true },
-            choices,
-            true,
-          ),
-          null,
-        );
-    }
-  }
-  assert.match(
-    validateSchedule(
-      {
-        mode: "aiSearch",
-        aiConfigId: 9,
-        sourceIds: [4, 5],
-        scheduleEnabled: true,
-      },
-      choices,
-      true,
-    ),
-    /原生联网协议/,
-  );
-  for (const aiConfigId of [null, 9]) {
-    assert.equal(
-      validateSchedule(
-        {
-          mode: "hybrid",
-          aiConfigId,
-          sourceIds: [4, 5],
-          scheduleEnabled: true,
-        },
-        choices,
-        true,
-      ),
-      null,
-    );
-  }
-});
-
-test("AI 模式未选来源默认固定抖音榜单，不要求联网；其它模式仍要求来源", () => {
-  const preference = {
-    mode: "aiSearch",
-    aiConfigId: null,
-    sourceIds: [],
-    scheduleEnabled: true,
-  };
-  const choices = { aiConfigs: [], sources: [] };
-  assert.equal(validateSchedule(preference, choices, true), null);
-  assert.equal(
-    preferenceFunctions.preferenceRequiresSearch("aiSearch", []),
-    false,
-  );
-  for (const mode of ["platform", "hybrid"])
-    assert.match(
-      validateSchedule({ ...preference, mode }, choices, true),
-      /至少选择一个来源/,
-    );
-});
-
-test("搜索来源为主的混合模式要求已接入的原生搜索，直读来源允许普通 AI 推荐", () => {
-  const preference = {
-    mode: "hybrid",
-    aiConfigId: 9,
-    sourceIds: [5],
-    scheduleEnabled: true,
-  };
-  const searchSource = { id: 5, kind: "weiboHot", accessMode: "search" };
-  for (const webSearchMode of ["disabled", "bailianChat"]) {
-    const choices = {
-      aiConfigs: [{ id: 9, webSearchMode }],
-      sources: [searchSource],
-    };
-    assert.match(validateSchedule(preference, choices, true), /原生联网协议/);
-    assert.equal(
-      validateSchedule(
-        preference,
-        { ...choices, sources: [{ ...searchSource, accessMode: "page" }] },
-        true,
-      ),
-      null,
-    );
-    assert.equal(
-      validateSchedule(
-        preference,
-        { ...choices, sources: [{ ...searchSource, kind: "neteaseNews" }] },
-        true,
-      ),
-      null,
-    );
-  }
-  for (const webSearchMode of ["bailianResponses", "tokenhubSearch"])
-    assert.equal(
-      validateSchedule(
-        preference,
-        {
-          aiConfigs: [{ id: 9, webSearchMode }],
-          sources: [searchSource],
-        },
-        true,
-      ),
-      null,
-    );
+  for (const sourceIds of [[], [1], [2], [3], [1, 2, 3]])
+    for (const aiConfigId of [null, 9])
+      assert.equal(
+        validateSchedule(
+          { aiConfigId, sourceIds, scheduleEnabled: true },
+          choices,
+          true,
+        ),
+        null,
+      );
 });
 
 test("创建并生成权限与模型选项读取权限一致，成功文案依据实际任务回执", () => {

@@ -52,7 +52,7 @@ describe('热点来源配置', () => {
       }),
     ).not.toThrow();
   });
-  it('抖音热搜仅接受固定接口，拒绝旧网页和 AI 搜索方式', () => {
+  it('抖音热搜仅接受固定接口，忽略旧获取方式', () => {
     const douyin = {
       ...source(),
       kind: 'douyinHot' as const,
@@ -62,9 +62,9 @@ describe('热点来源配置', () => {
     expect(() =>
       validateSource({ ...douyin, url: 'https://www.douyin.com/hot' }),
     ).toThrow('固定热搜接口地址');
-    expect(() => validateSource({ ...douyin, accessMode: 'search' })).toThrow(
-      '仅支持固定热搜接口读取',
-    );
+    expect(() =>
+      validateSource({ ...douyin, accessMode: 'search' }),
+    ).not.toThrow();
   });
   it.each([
     ['douyinHot', DOUYIN_HOT_URL],
@@ -80,10 +80,10 @@ describe('热点来源配置', () => {
     expect(sourceView(row)).toMatchObject({
       kind,
       url,
-      accessMode: 'page',
       isEnabled: false,
     });
     expect(sourceView(row)).not.toHaveProperty('apiToken');
+    expect(sourceView(row)).not.toHaveProperty('accessMode');
     expect(row.url).toContain('private');
     expect(row.accessMode).toBe('search');
   });
@@ -109,25 +109,23 @@ describe('热点来源配置', () => {
     };
     await expect(service.create(dto)).resolves.toMatchObject({
       url,
-      accessMode: 'page',
       isEnabled: true,
     });
     await expect(service.update(1, dto)).resolves.toMatchObject({
       url,
-      accessMode: 'page',
       isEnabled: true,
     });
     expect(repository.save).toHaveBeenCalledTimes(2);
     for (const [row] of repository.save.mock.calls)
       expect(row).toMatchObject({ url, accessMode: 'page', isEnabled: true });
   });
-  it('网易国内新闻仅接受系统固定接口与页面读取方式', () => {
+  it('网易国内新闻仅接受系统固定接口，不依赖历史获取方式', () => {
     expect(() =>
       validateSource({ ...source(), url: 'https://news.163.com/domestic/' }),
     ).toThrow('固定新闻接口地址');
-    expect(() => validateSource({ ...source(), accessMode: 'search' })).toThrow(
-      '仅支持固定新闻接口读取',
-    );
+    expect(() =>
+      validateSource({ ...source(), accessMode: 'search' }),
+    ).not.toThrow();
   });
   it('拒绝新增历史账号类型并以停用的普通页面兼容旧记录', () => {
     const account = {

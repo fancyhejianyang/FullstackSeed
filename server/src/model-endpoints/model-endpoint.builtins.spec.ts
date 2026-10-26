@@ -97,10 +97,10 @@ function harness() {
 
 describe('系统通用规则与模型专用覆盖', () => {
   afterEach(() => jest.restoreAllMocks());
-  it('九张只读卡片无需数据库记录；筛选和分页不会混入专用配置', async () => {
+  it('六张只读卡片无需数据库记录；筛选和分页不会混入专用配置', async () => {
     const { endpoints, repository } = harness();
     expect(await endpoints.findAll({ source: 'builtin' })).toMatchObject({
-      total: 9,
+      total: 6,
     });
     const page = await endpoints.findAll({
       source: 'builtin',
@@ -363,159 +363,32 @@ describe('系统通用规则与模型专用覆盖', () => {
   it('后续补充目录不再创建与通用规则相同的逐版本记录', () => {
     expect(MODEL_SPECIFIC_PRESETS).toHaveLength(181);
     expect(MODEL_SPECIFIC_PRESETS.some(usesBuiltinModelEndpoint)).toBe(false);
-    expect(BUILTIN_MODEL_ENDPOINTS).toHaveLength(9);
+    expect(BUILTIN_MODEL_ENDPOINTS).toHaveLength(6);
   });
 
-  it('联网默认规则只为四个精确腾讯编码选择 Chat，其余原样尝试 Responses', async () => {
-    const { endpoints, providers, provider } = harness();
-    provider.apiUrl = 'https://tokenhub.tencentmaas.com/v1';
-    const chatModels = [
-      'deepseek-v4-flash',
-      'deepseek-v4-pro',
-      'deepseek-v4-flash-0731',
-      'deepseek-v4-pro-0813',
-    ];
-    const responsesModels = [
-      'hy3',
-      'glm-5.3',
-      'deepseek-v4-flash-202605',
-      'deepseek/deepseek-v4-flash',
-      'future-model',
-    ];
-    provider.models = [...chatModels, ...responsesModels].join('\n');
-    provider.textModels = '';
-    for (const model of provider.models.split('\n')) {
-      const chat = chatModels.includes(model);
-      const rule = await endpoints.resolve(
-        'tencentTokenhub',
-        model,
-        'webSearch',
-      );
-      expect(rule?.id).toBe(chat ? -9 : -8);
-      await expect(
-        providers.resolveWebSearchTarget({
-          id: 2,
-          model,
-          webSearchMode: 'tokenhubSearch',
-        }),
-      ).resolves.toMatchObject({
-        model,
-        protocol: chat ? 'openaiChatSearch' : 'openaiResponses',
-        url: `https://tokenhub.tencentmaas.com/v1/${chat ? 'chat/completions' : 'responses'}`,
-        source: 'builtin',
-        ruleName: rule?.modelName,
-      });
-    }
-    expect(builtinModelEndpoint('custom', 'webSearch', 'hy3')).toBeNull();
-  });
-
-  it('两张腾讯联网系统卡仅展示自己格式适用的目录模型，提交时不能跨卡片调用', async () => {
-    const { providers, provider, addOverride } = harness();
-    provider.apiUrl = 'https://tokenhub.tencentmaas.com/v1';
-    provider.models =
-      'deepseek-v4-flash\nhy3\nglm-5.3\ndeepseek-v4-flash-202605';
-    provider.textModels = '';
-    const row = addOverride(false);
-    Object.assign(row, {
-      platformType: 'tencentTokenhub',
-      functionType: 'webSearch',
-      modelCode: 'glm-5.3',
-    });
-    const responses = await providers.endpointTestAccounts(-8);
-    expect(responses[0]).toMatchObject({
-      apiPath: '/v1/responses',
-      models: [{ code: 'hy3' }, { code: 'deepseek-v4-flash-202605' }],
-    });
-    const chat = await providers.endpointTestAccounts(-9);
-    expect(chat[0]).toMatchObject({
-      apiPath: '/v1/chat/completions',
-      models: [{ code: 'deepseek-v4-flash' }],
-    });
-    await expect(
-      providers.resolveEndpointTestTarget(-8, 2, 'deepseek-v4-flash'),
-    ).rejects.toThrow('实际匹配规则');
-    await expect(
-      providers.resolveEndpointTestTarget(-9, 2, 'hy3'),
-    ).rejects.toThrow('实际匹配规则');
-    await expect(
-      providers.resolveEndpointTestTarget(-8, 2, 'glm-5.3'),
-    ).rejects.toThrow('停用');
-    for (const [id, model] of [
-      [-8, 'hy3'],
-      [-9, 'deepseek-v4-flash'],
-    ] as const) {
-      const target = await providers.resolveEndpointTestTarget(id, 2, model);
-      const business = await providers.resolveWebSearchTarget({
-        id: 2,
-        model,
-        webSearchMode: 'tokenhubSearch',
-      });
-      expect(target.url).toBe(business.url);
-      expect(target.protocol).toBe(business.protocol);
-    }
-  });
-
-  it('百炼联网卡片、配置和执行共用 Responses，coding 端点只保留普通调用', async () => {
-    const { providers, provider } = harness();
-    await expect(providers.endpointTestAccounts(-7)).resolves.toMatchObject([
-      {
-        apiPath: '/compatible-mode/v1/responses',
-        models: [
-          { code: 'qwen3.8-flash' },
-          { code: 'qwen-plus' },
-          { code: 'qwen-future' },
-        ],
-      },
-    ]);
-    const business = await providers.resolveWebSearchTarget({
-      id: 2,
-      model: 'qwen-future',
-      webSearchMode: 'bailianResponses',
-    });
-    await expect(
-      providers.resolveEndpointTestTarget(-7, 2, 'qwen-future'),
-    ).resolves.toMatchObject({
-      url: business.url,
-      protocol: 'openaiResponses',
-    });
-    provider.apiUrl = 'https://coding.dashscope.aliyuncs.com/v1';
-    await expect(providers.endpointTestAccounts(-7)).resolves.toEqual([]);
-    await expect(
-      providers.resolveEndpointTestTarget(-7, 2, 'qwen-future'),
-    ).rejects.toThrow('仅支持');
-    await expect(
-      providers.resolveEndpointTestTarget(-1, 2, 'qwen-future'),
-    ).resolves.toMatchObject({
-      url: 'https://coding.dashscope.aliyuncs.com/v1/chat/completions',
-    });
-  });
-
-  it('百炼联网专用覆盖不得被系统规则绕过，软删除后恢复默认格式', async () => {
-    const { providers, addOverride } = harness();
-    const row = addOverride(true);
-    Object.assign(row, {
-      functionType: 'webSearch',
-      protocol: 'openaiResponses',
-      apiPath: '/compatible-mode/v1/responses',
-    });
-    const request = {
-      id: 2,
-      model: 'qwen-plus',
-      webSearchMode: 'bailianResponses' as const,
-    };
-    await expect(
-      providers.resolveWebSearchTarget(request),
-    ).resolves.toMatchObject({ source: 'configured' });
-    await expect(
-      providers.resolveEndpointTestTarget(-7, 2, 'qwen-plus'),
-    ).rejects.toThrow('专用卡片');
-    row.isActive = false;
-    await expect(providers.resolveWebSearchTarget(request)).rejects.toThrow(
-      '停用',
+  it('联网搜索卡片、分类与协议不再公开，旧系统编号不可继续读取', async () => {
+    const { endpoints, repository } = harness();
+    const options = endpoints.options();
+    expect(options.functions.some((item) => item.value === 'webSearch')).toBe(
+      false,
     );
-    row.deletedAt = new Date();
+    expect(options.categories.some((item) => item.value === 'search')).toBe(
+      false,
+    );
+    expect(
+      options.protocols.some((item) =>
+        ['openaiChatSearch', 'openaiResponses'].includes(item.value),
+      ),
+    ).toBe(false);
+    for (const id of [-7, -8, -9])
+      await expect(endpoints.findOne(id)).rejects.toThrow('不存在');
     await expect(
-      providers.resolveWebSearchTarget(request),
-    ).resolves.toMatchObject({ source: 'builtin' });
+      endpoints.resolve('tencentTokenhub', 'hy3', 'webSearch'),
+    ).rejects.toThrow('不再使用');
+    expect(builtinModelEndpoint('aliyunBailian', 'webSearch')).toBeNull();
+    expect(
+      builtinModelEndpoint('tencentTokenhub', 'webSearch', 'hy3'),
+    ).toBeNull();
+    expect(repository.findOne).not.toHaveBeenCalled();
   });
 });

@@ -135,7 +135,7 @@ for (const preset of TOKENHUB_OFFICIAL_PRESETS) {
     MODEL_ENDPOINT_PRESETS.push(preset);
 }
 
-/** 通用协议交给系统规则；已有数据库卡片不删除，仍作为精确覆盖。 */
+/** 当前普通/媒体通用协议交给系统规则；历史联网卡片由导入入口单独退役。 */
 export const MODEL_SPECIFIC_PRESETS = MODEL_ENDPOINT_PRESETS.filter(
   (item) => !usesBuiltinModelEndpoint(item),
 );

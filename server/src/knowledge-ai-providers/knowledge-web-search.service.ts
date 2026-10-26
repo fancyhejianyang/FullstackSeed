@@ -101,23 +101,12 @@ export class KnowledgeWebSearchService {
         'search_config',
         '请选择已启用且配置完整的热点发现 AI 配置',
       );
-    if (config.webSearchMode === 'bailianChat')
-      throw new HotTopicFetchError(
-        'search_unsupported',
-        '旧百炼 Chat 联网不返回本项目所需的搜索来源，请选择百炼 Responses；腾讯账号请选择腾讯 TokenHub 原生搜索，本次未调用计费接口',
-      );
-    if (!['bailianResponses', 'tokenhubSearch'].includes(config.webSearchMode))
-      throw new HotTopicFetchError(
-        'search_disabled',
-        '该 AI 配置未开启受支持的联网搜索，请在 AI 功能配置中选择对应平台的原生搜索',
-      );
     signal.throwIfAborted();
     let target: KnowledgeAiWebSearchTarget;
     try {
       target = await this.providers.resolveWebSearchTarget({
         id: config.providerId,
         model: config.model,
-        webSearchMode: config.webSearchMode,
       });
     } catch (error) {
       if (error instanceof HotTopicFetchError) throw error;
@@ -125,7 +114,7 @@ export class KnowledgeWebSearchService {
         'search_config',
         error instanceof HttpException
           ? error.message
-          : '联网搜索配置解析失败，请检查账号、模型及厂商联网接口卡片',
+          : '系统自动联网补充不可用，请检查账号及模型服务',
       );
     }
     signal.throwIfAborted();
@@ -158,7 +147,7 @@ export class KnowledgeWebSearchService {
         },
         body: JSON.stringify(
           buildVerifiedSearchRequest({
-            webSearchMode: config.webSearchMode,
+            webSearchMode: target.webSearchMode,
             protocol: target.protocol,
             model: target.model,
             query,
@@ -202,7 +191,7 @@ export class KnowledgeWebSearchService {
       if (billing) throw new HotTopicFetchError('search_billing', billing);
       parsing.status = 'failed';
       const result =
-        config.webSearchMode === 'tokenhubSearch'
+        target.webSearchMode === 'tokenhubSearch'
           ? parseTokenhubSearchResponse(value, target.protocol)
           : parseVerifiedSearchResponse(value);
       parsing.status = 'succeeded';

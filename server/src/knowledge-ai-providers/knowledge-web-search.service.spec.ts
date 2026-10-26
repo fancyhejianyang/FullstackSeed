@@ -115,9 +115,19 @@ describe('verified Bailian web search', () => {
       }),
     ).toThrow('可核验');
   });
-  it('blocks unsupported Chat mode before a paid call', async () => {
-    const resolveWebSearchTarget = jest.fn();
-    const fetchMock = jest.spyOn(global, 'fetch');
+  it('系统自动联网忽略历史手动标记，协议由解析后的账号目标决定', async () => {
+    const resolveWebSearchTarget = jest.fn().mockResolvedValue({
+      model: config.model,
+      webSearchMode: 'bailianResponses',
+      url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/responses',
+      protocol: 'openaiResponses',
+      secretKey: 'fixture-key',
+    });
+    const fetchMock = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(
+        new Response(JSON.stringify(verified()), { status: 200 }),
+      );
     const service = new KnowledgeWebSearchService({
       resolveWebSearchTarget,
     } as unknown as KnowledgeAiProvidersService);
@@ -128,9 +138,12 @@ describe('verified Bailian web search', () => {
           '热点',
           new AbortController().signal,
         ),
-      ).rejects.toThrow('未调用计费接口');
-      expect(resolveWebSearchTarget).not.toHaveBeenCalled();
-      expect(fetchMock).not.toHaveBeenCalled();
+      ).resolves.toMatchObject({ searchExecuted: true });
+      expect(resolveWebSearchTarget).toHaveBeenCalledWith({
+        id: config.providerId,
+        model: config.model,
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
     } finally {
       fetchMock.mockRestore();
     }

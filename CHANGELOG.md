@@ -1,5 +1,20 @@
 # CHANGELOG
 
+### 2026-10-26 热点改为平台自动采集并退役联网搜索卡片
+
+- 按用户要求移除热点偏好的获取模式、来源获取方式和 AI 配置中的联网协议选择。前端公开类型、后端 DTO、选项、偏好响应、新任务快照均不再暴露 mode/accessMode；历史任务详情也过滤旧模式。历史数据库列及原定义保留，避免自动同步删列，执行完全忽略旧字段，不批量改写日程、来源启停和已有选题。
+- 后端按平台固定策略执行：抖音、网易走已有固定接口；微博先读取配置来源、hot_band、侧栏 realtime 备用接口。取得有效榜单后不额外搜索；仅微博全部直读失败且用户已选有效热点 AI 时，自动按账号平台尝试一次原生联网补充，搜索限定微博原站而非失败的聚合站。空来源默认抖音，AI 可不选，普通重新推荐仍需有效 AI；搜索/授权不可用不阻断其它已取得结果，不用模型记忆补造榜单。
+- 内部搜索不再读取厂商卡片或旧 webSearchMode，自动选择百炼 Responses、腾讯默认 Responses 或四个精确 DeepSeek Chat 请求格式，保持官方 HTTPS/同源、目录、凭据、Coding 排除及两家独立来源核验。配置检查、保存和模型切换只检查普通文本能力，不会因旧协议或退役卡片失败，也不在切换时执行联网搜索；自动搜索只可能由明确热点任务触发，不在本轮实际调用。
+- 厂商接口移除公开 webSearch 功能、search 分类、搜索协议选项、系统卡片 -7/-8/-9 及 5 条官方预设，编号不复用；其它六张通用卡、181 条专用预设及普通/媒体能力保留。更新后启动或补充官方接口时，以 functionType=webSearch AND deletedAt IS NULL 精确软删除、禁用并释放 routeKey，保留历史行而不硬删；不复活退役预设。清理前列表、详情、修改、解析、批量和测试也拒绝旧类型。测试模板和执行器拒绝退役目标，旧内存搜索记录从最近列表/查询中剔除；内部 deprecated 类型/协议仅用于兼容与系统适配，不进入公开配置白名单。
+- 偏好、来源、模型选择及页面提示沿用 Form/Dialog/Table/Button；计划只校验权限、有效来源及 AI 引用，不要求用户理解联网格式。昨天的联网专用卡片优化文档标记为历史方案，不再列为待开发计划；现行策略同步到设计规范。不保证受限平台必然能取到数据，空响应、限流和来源核验失败仍明确展示。
+- 修改文件（热点后端）：`server/src/hot-topics/dto/hot-topic.dto.ts`、`server/src/hot-topics/entities/hot-topic.entity.ts`、`server/src/hot-topics/hot-topic-controllers.spec.ts`、`server/src/hot-topics/hot-topic-fetch.service.spec.ts`、`server/src/hot-topics/hot-topic-fetch.service.ts`、`server/src/hot-topics/hot-topic-sources.service.spec.ts`、`server/src/hot-topics/hot-topic-sources.service.ts`、`server/src/hot-topics/hot-topic.types.ts`、`server/src/hot-topics/hot-topics.service.spec.ts`、`server/src/hot-topics/hot-topics.service.ts`。
+- 修改文件（模型厂商接口）：`server/src/model-endpoints/model-endpoint.builtins.spec.ts`、`server/src/model-endpoints/model-endpoint.builtins.ts`、`server/src/model-endpoints/model-endpoint.constants.ts`、`server/src/model-endpoints/model-endpoint.presets.ts`、`server/src/model-endpoints/model-endpoints.service.spec.ts`、`server/src/model-endpoints/model-endpoints.service.ts`、`server/src/model-endpoints/tokenhub-official.presets.spec.ts`、`server/src/model-endpoints/tokenhub-official.presets.ts`。
+- 修改文件（AI 配置与内部适配）：`server/src/ai-feature-configs/ai-feature-configs.service.spec.ts`、`server/src/ai-feature-configs/ai-feature-configs.service.ts`、`server/src/knowledge-ai-providers/feature-model-tests.service.spec.ts`、`server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`、`server/src/knowledge-ai-providers/knowledge-web-search-diagnostics.spec.ts`、`server/src/knowledge-ai-providers/knowledge-web-search-target.spec.ts`、`server/src/knowledge-ai-providers/knowledge-web-search.service.spec.ts`、`server/src/knowledge-ai-providers/knowledge-web-search.service.ts`、`server/src/knowledge-ai-providers/knowledge-web-search.tokenhub.spec.ts`、`server/src/knowledge-ai-providers/model-endpoint-test.utils.ts`、`server/src/knowledge-ai-providers/model-endpoint-tests.service.spec.ts`、`server/src/knowledge-ai-providers/model-endpoint-tests.service.ts`。
+- 修改文件（前端）：`web/src/api/hotTopic.ts`、`web/src/api/hotTopicSources.ts`、`web/src/api/modelEndpoint.ts`、`web/src/views/ai-feature-config/Edit.vue`、`web/src/views/ai-feature-config/topicProvider.test.mjs`、`web/src/views/hot-topic-source/Edit.vue`、`web/src/views/hot-topic-source/Index.vue`、`web/src/views/hot-topic-source/View.vue`、`web/src/views/hot-topic/Preferences.vue`、`web/src/views/hot-topic/hotTopic.test.mjs`、`web/src/views/hot-topic/preferenceValidation.ts`、`web/src/views/model-endpoint/Index.vue`。
+- 修改文件（文档）：`.design-spec.md`、`MD/联网搜索能力优化方案.md`、`CHANGELOG.md`。
+- 文件汇总：新增 0 个、修改 45 个、删除 0 个。已有 web/auto-imports.d.ts、web/components.d.ts 不手改、不暂存；hotTopic.ts 用户原有微博类型和标签改动保留，仅暂存本次字段移除及必要契约调整。
+- 验证：后端业务源码及本次 14 个修改 spec 的 TypeScript no-emit 检查、30 个后端文件定向 ESLint/Prettier、前端 Vue 类型、两份 mjs 语法及定向格式、组件复用（6 页）与 diff 检查通过。补充自动策略、字段过滤、来源失败/成功、原生平台隔离、卡片退役及软删除边界的回归断言，按重构约定未执行测试、build、启动/重启服务、实际数据库清理或付费模型请求；联网能力与线上榜单未作新的成功实测。旧卡片数据将在更新后启动/补接口时清理，本轮未直接修改运行库。
+
 ### 2026-10-26 微博增加侧栏 realtime 辅助热搜接口
 
 - 按用户提供的 GET 地址和字段，将 `https://weibo.com/ajax/side/hotSearch` 加入微博平台直读备用链路：先读配置来源，失败或没有可用条目时依次尝试已有 `hot_band`、新增侧栏辅助接口；任一来源返回有效榜单即停止。单个回退链跳过已请求的相同地址，已取消任务不再尝试后续接口。直接将该地址配置为微博公开来源时同样可用，不修改已有来源 URL。

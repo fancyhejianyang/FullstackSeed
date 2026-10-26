@@ -12,7 +12,7 @@ import {
   sourceKindLabels,
   type HotSource,
 } from '@/api/hotTopic';
-import { fixedHotSourceUrl, hotSourceAccessLabel } from '@/api/hotTopicSources';
+import { fixedHotSourceUrl } from '@/api/hotTopicSources';
 import Edit from './Edit.vue';
 import View from './View.vue';
 const tableRef = ref<{
@@ -26,7 +26,6 @@ const viewing = ref<HotSource | null>(null);
 const columns: TableColumn[] = [
   { prop: 'name', label: '来源名称', minWidth: 180 },
   { prop: 'kind', label: '来源类型', width: 140, slot: true },
-  { prop: 'accessMode', label: '获取方式', width: 150, slot: true },
   { prop: 'url', label: '页面 / 固定接口', minWidth: 260, slot: true },
   { prop: 'isEnabled', label: '状态', width: 90, slot: true },
   { prop: 'updatedAt', label: '更新时间', width: 180, slot: true },
@@ -42,7 +41,7 @@ function edit(row: HotSource | null = null) {
 <template>
   <PageContainer title="热点来源配置">
     <p class="source-hint">
-      抖音热搜与网易国内新闻使用系统固定接口；微博仍可配置官方热点页或合规聚合页。
+      系统按来源自动安排采集策略；抖音、网易使用固定接口，微博可配置官方热点页或合规聚合页。
       保存配置不会触发采集或 AI
       调用；遇到登录、验证码或访问限制时会如实报告失败。
     </p>
@@ -74,9 +73,6 @@ function edit(row: HotSource | null = null) {
       </template>
       <template #column-kind="{ row }">{{
         sourceKindLabels[row.kind as keyof typeof sourceKindLabels]
-      }}</template>
-      <template #column-accessMode="{ row }">{{
-        hotSourceAccessLabel(row)
       }}</template>
       <template #column-url="{ row }">{{
         fixedHotSourceUrl(row.kind) || row.url

@@ -19,6 +19,8 @@ import {
   PROTOCOLS,
   CATEGORY_LABELS,
   CATEGORY_FUNCTIONS,
+  MODEL_FUNCTIONS,
+  MODEL_PROTOCOLS,
   modelCategory,
   protocolTaskMethod,
   type ModelFunction,
@@ -47,6 +49,7 @@ export class ModelEndpointsService implements OnModuleInit {
   }
 
   async importPresets() {
+    await this.retireSearchEndpoints();
     let added = 0;
     let skipped = 0;
     // 仅补缺项；编辑、停用、软删除过的预设不会在重启时被覆盖或复活。
@@ -77,6 +80,33 @@ export class ModelEndpointsService implements OnModuleInit {
     };
   }
 
+  /** 精确软删除已移除的卡片类型，保留原始记录但释放其唯一键；重复执行无副作用。 */
+  private async retireSearchEndpoints() {
+    await this.repository
+      .createQueryBuilder()
+      .update(ModelEndpoint)
+      .set({
+        deletedAt: () => 'CURRENT_TIMESTAMP',
+        isActive: false,
+        routeKey: null,
+      })
+      .where('functionType = :retiredFunction', {
+        retiredFunction: 'webSearch',
+      })
+      .andWhere('deletedAt IS NULL')
+      .execute();
+  }
+
+  private assertCurrentEndpoint(row: ModelEndpoint) {
+    if (
+      row.functionType === 'webSearch' ||
+      ['openaiChatSearch', 'openaiResponses'].includes(row.protocol)
+    )
+      throw new NotFoundException(
+        '联网搜索接口卡片已移除，由系统自动处理采集策略',
+      );
+  }
+
   options() {
     return {
       platforms: Object.entries(PLATFORM_LABELS).map(([value, label]) => ({
@@ -91,19 +121,27 @@ export class ModelEndpointsService implements OnModuleInit {
         value,
         label,
       })),
-      protocols: Object.entries(PROTOCOLS).map(([value, item]) => ({
+      protocols: MODEL_PROTOCOLS.map((value) => ({
         value,
-        label: item.label,
-        functions: item.functions,
-        executionMode: item.mode,
-        taskMethod: protocolTaskMethod(value as keyof typeof PROTOCOLS),
+        label: PROTOCOLS[value].label,
+        functions: PROTOCOLS[value].functions,
+        executionMode: PROTOCOLS[value].mode,
+        taskMethod: protocolTaskMethod(value),
       })),
     };
   }
 
   async findAll(query: QueryModelEndpointDto) {
+    if (
+      (query.functionType &&
+        !(MODEL_FUNCTIONS as readonly string[]).includes(query.functionType)) ||
+      (query.category && !Object.hasOwn(CATEGORY_FUNCTIONS, query.category))
+    )
+      return { list: [], total: 0 };
     const scenes = query.category
-      ? (CATEGORY_FUNCTIONS[query.category] as readonly ModelFunction[])
+      ? (CATEGORY_FUNCTIONS[
+          query.category as keyof typeof CATEGORY_FUNCTIONS
+        ] as readonly ModelFunction[])
       : null;
     if (scenes && query.functionType && !scenes.includes(query.functionType))
       return { list: [], total: 0 };
@@ -134,7 +172,8 @@ export class ModelEndpointsService implements OnModuleInit {
         ? { functionType: query.functionType }
         : scenes
           ? { functionType: In([...scenes]) }
-          : {}),
+          : { functionType: In(MODEL_FUNCTIONS) }),
+      protocol: In(MODEL_PROTOCOLS),
       ...(query.isActive === undefined ? {} : { isActive: query.isActive }),
     };
     const keyword = query.keyword?.trim();
@@ -162,6 +201,7 @@ export class ModelEndpointsService implements OnModuleInit {
       throw new BadRequestException('系统通用规则只读，不能编辑、删除或停用');
     const row = await this.repository.findOne({ where: { id } });
     if (!row) throw new NotFoundException('模型调用接口不存在');
+    this.assertCurrentEndpoint(row);
     return row;
   }
 
@@ -220,6 +260,7 @@ export class ModelEndpointsService implements OnModuleInit {
       });
       if (rows.length !== uniqueIds.length)
         throw new NotFoundException('部分模型调用接口不存在');
+      for (const row of rows) this.assertCurrentEndpoint(row);
       await repository.update({ id: In(uniqueIds) }, { routeKey: null });
       await repository.softDelete(uniqueIds);
     });
@@ -232,9 +273,12 @@ export class ModelEndpointsService implements OnModuleInit {
     modelCode: string,
     functionType: ModelFunction,
   ) {
+    if (functionType === 'webSearch')
+      throw new BadRequestException('联网搜索不再使用模型接口卡片');
     const row = await this.repository.findOne({
       where: { platformType, modelCode, functionType },
     });
+    if (row) this.assertCurrentEndpoint(row);
     if (row && !row.isActive)
       throw new BadRequestException('当前模型功能的调用接口已停用');
     return row
@@ -243,6 +287,8 @@ export class ModelEndpointsService implements OnModuleInit {
   }
 
   overriddenModels(platformType: PlatformType, functionType: ModelFunction) {
+    if (functionType === 'webSearch')
+      throw new BadRequestException('联网搜索不再使用模型接口卡片');
     return this.repository.find({
       where: { platformType, functionType },
       select: { modelCode: true },
@@ -287,7 +333,7 @@ export class ModelEndpointsService implements OnModuleInit {
       ![row.modelCode, row.modelName, row.apiPath].every(
         (value) => typeof value === 'string',
       ) ||
-      !PROTOCOLS[row.protocol] ||
+      !MODEL_PROTOCOLS.includes(row.protocol) ||
       !Object.hasOwn(PLATFORM_LABELS, row.platformType) ||
       !Object.hasOwn(FUNCTION_LABELS, row.functionType) ||
       typeof row.isActive !== 'boolean'
@@ -327,6 +373,7 @@ export class ModelEndpointsService implements OnModuleInit {
   }
 
   private toView(row: ModelEndpoint) {
+    this.assertCurrentEndpoint(row);
     const official =
       row.platformType === 'tencentTokenhub'
         ? TOKENHUB_OFFICIAL_PRESETS.find(
