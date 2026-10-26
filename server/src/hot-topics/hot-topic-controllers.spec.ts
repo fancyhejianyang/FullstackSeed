@@ -56,7 +56,10 @@ describe('热点模块日志路由归属', () => {
     expect(sources?.sourceFile).toBe(
       'hot-topics/hot-topic-sources.controller.ts',
     );
-    expect(topics?.actions).toHaveLength(12);
+    expect(topics?.actions).toHaveLength(13);
+    expect(
+      topics?.actions.map((action) => `${action.method} ${action.path}`),
+    ).toContain('GET /hot-topics/runs/:id/search-response/:sourceIndex');
     expect(sources?.actions).toHaveLength(7);
     expect(
       topics?.actions.every(

@@ -6,6 +6,7 @@ import {
   type HotSourceInput,
 } from './hot-topic.types';
 import type { KnowledgeWebSearchService } from '../knowledge-ai-providers/knowledge-web-search.service';
+import type { HotSearchDiagnostics } from '../knowledge-ai-providers/knowledge-web-search-diagnostics';
 import type { AiFeatureConfig } from '../ai-feature-configs/entities/ai-feature-config.entity';
 
 jest.mock('./hot-topic-network', () => ({
@@ -40,6 +41,68 @@ const source: HotSourceInput = {
 const config = {} as AiFeatureConfig;
 describe('HotTopicFetchService orchestration', () => {
   beforeEach(() => fetchText.mockReset());
+  it('即使联网解析失败，也为各搜索来源保存同一次响应；平台直读结果保留', async () => {
+    fetchText.mockResolvedValue(
+      '<a href="https://www.douyin.com/video/123">平台读取的新闻</a>',
+    );
+    const diagnostic: HotSearchDiagnostics = {
+      version: 1,
+      providerId: 2,
+      model: 'hy3',
+      platformType: 'tencentTokenhub',
+      protocol: 'openaiResponses',
+      apiPath: '/v1/responses',
+      httpStatus: 200,
+      checkedAt: new Date().toISOString(),
+      elapsedMilliseconds: 100,
+      responseBody: '{"output":[{"type":"message"}]}',
+      truncated: false,
+      parsing: {
+        status: 'failed',
+        sourceCount: 0,
+        code: 'search_unverified',
+        message: '未返回搜索调用',
+      },
+    };
+    const search = jest.fn(
+      (...args: Parameters<KnowledgeWebSearchService['search']>) => {
+        args[3]?.(diagnostic);
+        return Promise.reject(
+          new HotTopicFetchError('search_unverified', '未返回真实搜索来源'),
+        );
+      },
+    );
+    const result = await new HotTopicFetchService({
+      search,
+    } as unknown as KnowledgeWebSearchService).collect({
+      sources: [
+        source,
+        {
+          ...source,
+          id: 2,
+          name: '微博热点',
+          kind: 'weiboHot',
+          accessMode: 'search',
+          url: 'https://weibo.com/hot',
+        },
+      ],
+      mode: 'hybrid',
+      config,
+      preferences,
+      signal: new AbortController().signal,
+    });
+    expect(search).toHaveBeenCalledTimes(1);
+    expect(result.sources).toHaveLength(2);
+    expect(result.sources[0].searchDiagnostics).toEqual(diagnostic);
+    expect(result.sources[0].message).toContain('平台读取');
+    expect(result.sources[0].message).toContain('AI 联网');
+    expect(result.sources[1]).toMatchObject({
+      status: 'failed',
+      searchResponseSourceIndex: 0,
+    });
+    expect(result.sources[1]).not.toHaveProperty('searchDiagnostics');
+    expect(result.searchExecuted).toBe(false);
+  });
   it('merges page and AI outcomes and keeps the successful acquisition', async () => {
     fetchText.mockResolvedValue('<html>动态页面</html>');
     const search = jest.fn().mockResolvedValue({

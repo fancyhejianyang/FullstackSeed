@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-10-26 热点执行记录增加联网响应查看
+
+- 热点获取与推荐记录为保存了诊断的 AI 联网来源增加“查看联网响应”。独立弹窗按需读取已保存的脱敏接口返回，展示平台、模型、账号编号、实际路径、HTTP 状态、耗时、来源解析状态、来源数及受控原因；响应仅以安全纯文本展示。一个请求同时检索多个来源时显示同一份响应，解析来源总数与任务中单来源实际收录数分别说明。关闭、切任务/来源及卸载后忽略迟到响应，不轮询诊断，不重新调用模型；历史任务缺少正文时明确无法补回。
+- `KnowledgeWebSearchService.search` 增加可选旁路回调，保留原有一次请求及解析语义。成功、HTTP 错误、200 无来源、非 JSON、空体、超限和读取失败可记录实际获得的信息；未取得正文时保持空串，不伪造返回。回调异常不改变业务成功/失败，缺少真实来源仍无法核验联网。响应递归处理凭据字段、认证头、实际密钥、请求回显及 URL 敏感部分，二进制大字段省略，并按 UTF-8 长度、深度和集合大小截断；本轮未调整厂商联网默认规则。
+- 复用任务 sources 的现有 simple-json/TEXT 列，不新增数据库列或迁移。相同请求的诊断只存一份，其余来源通过内部下标引用，诊断总预算按 JSON 实际存储字节限制为 24 KiB，保留来源状态及转义余量；截断明确标记。常规列表、详情及轮询通过字段白名单移除诊断正文与内部引用，仅返回可选的 `hasSearchResponse` 标记。
+- 新增只读 `GET /hot-topics/runs/:id/search-response/:sourceIndex`，沿用 `HotTopic.read`，按任务编号及当前 userId 查询，不能读取其它用户记录。前端诊断类型和 API 放独立文件，避免覆盖用户已有 `hotTopic.ts` 修改；查看只读保存记录，不接受客户端地址或认证信息，不重投模型请求。运行中的任务按现有结果保存点提供入口，旧任务不自动重跑。
+- 新增文件（后端）：`server/src/knowledge-ai-providers/knowledge-web-search-diagnostics.ts`、`server/src/knowledge-ai-providers/knowledge-web-search-diagnostics.spec.ts`、`server/src/hot-topics/hot-topic-search-response.ts`、`server/src/hot-topics/hot-topic-search-response.spec.ts`。
+- 新增文件（前端）：`web/src/api/hotTopicDiagnostics.ts`、`web/src/views/hot-topic/SearchResponse.vue`、`web/src/views/hot-topic/searchResponse.test.mjs`。
+- 修改文件（后端）：`server/src/knowledge-ai-providers/knowledge-web-search.service.ts`、`server/src/hot-topics/hot-topic.types.ts`、`server/src/hot-topics/hot-topic-fetch.service.ts`、`server/src/hot-topics/hot-topic-fetch.service.spec.ts`、`server/src/hot-topics/hot-topics.controller.ts`、`server/src/hot-topics/hot-topics.service.ts`、`server/src/hot-topics/hot-topics.service.spec.ts`、`server/src/hot-topics/hot-topic-controllers.spec.ts`。修改文件（前端及文档）：`web/src/views/hot-topic/Runs.vue`、`.design-spec.md`、本文件。合计新增 7 个、修改 11 个文件，删除文件无。
+- 验证：后端相关 7 套件 82 项及前端新 6 项、原热点 15 项模拟测试通过（合计 103 项），覆盖成功/失败诊断、凭据隐藏、截断、共享响应存储字节界限、本人记录隔离、普通查询不传正文、旧记录缺失和关闭/切换后的迟到响应。双端类型、定向 ESLint、格式、组件复用、实体列和 diff 检查通过。后端 build 通过；前端常规 build 在自动写入 `components.d.ts` 时遇 Windows UNKNOWN 文件访问错误，随后使用相同生产插件和别名配置、仅临时关闭声明输出的 Vite 构建通过，未改项目构建配置，保留既有 PURE 注释及大分块提示。未启动或重启服务、未修改运行中数据库、未发起真实模型请求。
+- 用户原有 `web/auto-imports.d.ts`、`web/src/api/hotTopic.ts` 改动保持，不纳入提交；构建生成的 `web/components.d.ts` 声明变化同样不手改、不纳入本次提交。
+
 ### 2026-10-25 记录联网搜索能力优化方案供次日整改
 
 - 新增 `MD/联网搜索能力优化方案.md`，计划于 2026-10-26 整改。明确腾讯混元、阿里百炼千问中已确认支持搜索的型号由后端能力清单和适配器提供默认规则；平台托管的 DeepSeek、GLM、Kimi 等第三方型号通过专用联网卡片接入，未命中默认范围且缺卡时不发送付费请求。区分账号平台与模型归属，不把默认协议或 HTTP 200 当作联网支持证明。

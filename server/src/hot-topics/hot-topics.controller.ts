@@ -87,6 +87,16 @@ export class HotTopicsController {
   ) {
     return this.service.findRun(id, userId);
   }
+  @Get('runs/:id/search-response/:sourceIndex')
+  @RequirePermissions('HotTopic.read')
+  @ApiOperation({ summary: '查看本人热点任务的脱敏联网响应及解析结果' })
+  searchResponse(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('sourceIndex', ParseIntPipe) sourceIndex: number,
+    @CurrentUser('userId') userId: number,
+  ) {
+    return this.service.findRunSearchResponse(id, sourceIndex, userId);
+  }
   @Post('batch-delete')
   @RequirePermissions('HotTopic.batchDelete')
   @ApiOperation({ summary: '批量删除我的热点' })

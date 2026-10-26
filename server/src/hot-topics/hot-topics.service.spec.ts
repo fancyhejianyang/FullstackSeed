@@ -41,6 +41,7 @@ function setup() {
   };
   const runs = {
     findOne: jest.fn().mockResolvedValue(null),
+    findAndCount: jest.fn().mockResolvedValue([[], 0]),
     create: jest.fn((value: unknown) => value),
     save: jest.fn().mockResolvedValue({ id: 7 }),
   };
@@ -84,6 +85,79 @@ function setup() {
 }
 
 describe('热点选题核心', () => {
+  it('任务详情和分页只返回诊断入口标记，正文仅通过独立接口读取', async () => {
+    const { service, runs } = setup();
+    const response = { responseBody: '{"output":[]}', version: 1 };
+    const firstSource = {
+      sourceId: 1,
+      sourceName: '抖音热点',
+      status: 'failed',
+      count: 0,
+      message: '未确认联网',
+      searchDiagnostics: response,
+    };
+    const row = {
+      id: 18,
+      userId: 9,
+      sources: [
+        firstSource,
+        {
+          ...firstSource,
+          searchDiagnostics: undefined,
+          searchResponseSourceIndex: 0,
+        },
+      ],
+    };
+    runs.findOne.mockResolvedValue(row);
+    runs.findAndCount.mockResolvedValue([[row], 1]);
+    const detail = await service.findRun(18, 9);
+    const page = await service.findRuns({}, 9);
+    for (const result of [detail, page.list[0]]) {
+      expect(result.sources?.map((source) => source.hasSearchResponse)).toEqual(
+        [true, true],
+      );
+      expect(JSON.stringify(result)).not.toContain('responseBody');
+      expect(JSON.stringify(result)).not.toContain('searchResponseSourceIndex');
+    }
+    expect(row.sources[0].searchDiagnostics).toBe(response);
+    await expect(service.findRunSearchResponse(18, 1, 9)).resolves.toBe(
+      response,
+    );
+    expect(runs.findOne).toHaveBeenLastCalledWith({
+      select: { id: true, userId: true, sources: true },
+      where: { id: 18, userId: 9 },
+    });
+  });
+  it('响应查看仅查询本人任务；历史缺失和不存在的来源不能补造数据', async () => {
+    const { service, runs } = setup();
+    const fetchSpy = jest.spyOn(globalThis, 'fetch');
+    try {
+      await expect(service.findRunSearchResponse(18, 0, 10)).rejects.toThrow(
+        '任务不存在',
+      );
+      expect(runs.findOne).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 18, userId: 10 } }),
+      );
+      runs.findOne.mockResolvedValue({ id: 18, userId: 9, sources: null });
+      await expect(service.findRunSearchResponse(18, 0, 9)).rejects.toThrow(
+        '历史任务无法补回',
+      );
+      await expect(service.findRunSearchResponse(18, 99, 9)).rejects.toThrow(
+        '未保存联网响应',
+      );
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+  it('响应来源下标须为有效非负整数，检查失败不查询数据库', async () => {
+    const { service, runs } = setup();
+    for (const index of [-1, 0.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1])
+      await expect(service.findRunSearchResponse(18, index, 9)).rejects.toThrow(
+        '来源编号无效',
+      );
+    expect(runs.findOne).not.toHaveBeenCalled();
+  });
   it('默认在数据库分页前排除当前用户已忽略的选题', async () => {
     const { service, topics } = setup();
     await service.findAll({ page: 2, pageSize: 10 }, 8);

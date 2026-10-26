@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { AiFeatureConfig } from '../ai-feature-configs/entities/ai-feature-config.entity';
 import { KnowledgeWebSearchService } from '../knowledge-ai-providers/knowledge-web-search.service';
+import type { HotSearchDiagnostics } from '../knowledge-ai-providers/knowledge-web-search-diagnostics';
 import {
   fetchHotSourceText,
   HotTopicFetchError,
@@ -8,6 +9,7 @@ import {
   safeHotTopicError,
 } from './hot-topic-network';
 import { parseHotTopicPayload } from './hot-topic-parsers';
+import { compactHotSearchResponses } from './hot-topic-search-response';
 import {
   platformLabelForHost,
   platformSource,
@@ -53,6 +55,8 @@ function mergeSourceOutcome(
   else if (current.status === 'skipped' && outcome.status === 'failed')
     current.status = 'failed';
   current.message = `${current.message}；${message}`.slice(0, 1000);
+  if (outcome.searchDiagnostics)
+    current.searchDiagnostics = outcome.searchDiagnostics;
 }
 export const DEFAULT_HOT_SOURCE: HotSourceInput = {
   id: 0,
@@ -205,6 +209,7 @@ export class HotTopicFetchService {
     }
     if (input.mode !== 'platform' && searchSources.length) {
       input.signal.throwIfAborted();
+      let searchDiagnostics: HotSearchDiagnostics | undefined;
       try {
         if (!input.config)
           throw new HotTopicFetchError(
@@ -223,6 +228,9 @@ export class HotTopicFetchService {
             `关注领域：${input.preferences.interests}；排除方向：${input.preferences.exclusions}。\n` +
             `最多 ${input.preferences.maxResults} 条。不得把搜索索引序号当热点排名。`,
           input.signal,
+          (diagnostic) => {
+            searchDiagnostics = diagnostic;
+          },
         );
         result.searchExecuted = search.searchExecuted;
         result.totalTokens = search.totalTokens;
@@ -261,6 +269,7 @@ export class HotTopicFetchService {
               sourceName: source.name,
               status: matches.length ? 'succeeded' : 'failed',
               count: matches.length,
+              ...(searchDiagnostics ? { searchDiagnostics } : {}),
               message: matches.length
                 ? '仅收录供应商返回的真实搜索来源，时间和热度缺失时保持未知'
                 : `没有返回该来源的可核验结果；未用其它网站代替${input.mode === 'aiSearch' && source.accessMode !== 'search' ? '。当前为仅 AI 联网模式，未直接读取配置页面' : ''}`,
@@ -279,6 +288,7 @@ export class HotTopicFetchService {
               status: 'failed',
               count: 0,
               message: safeHotTopicError(error),
+              ...(searchDiagnostics ? { searchDiagnostics } : {}),
             },
             'AI 联网',
           );
@@ -297,6 +307,7 @@ export class HotTopicFetchService {
         return true;
       })
       .slice(0, Math.max(1, Math.min(100, input.preferences.maxResults)));
+    compactHotSearchResponses(result.sources);
     return result;
   }
 }

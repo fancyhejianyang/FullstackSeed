@@ -41,6 +41,7 @@ import {
 } from './entities/hot-topic.entity';
 import { HotTopicFetchService } from './hot-topic-fetch.service';
 import { HotTopicSourcesService } from './hot-topic-sources.service';
+import { hotSearchResponseForSource } from './hot-topic-search-response';
 import type {
   HotPreferenceInput,
   HotSourceOutcome,
@@ -246,7 +247,7 @@ export class HotTopicsService implements OnModuleInit, OnModuleDestroy {
       skip: ((query.page ?? 1) - 1) * (query.pageSize ?? 10),
       take: query.pageSize ?? 10,
     });
-    return { list, total };
+    return { list: list.map((row) => this.runSummary(row)), total };
   }
   async findRun(id: number, userId: number) {
     const row = await this.runs.findOne({
@@ -254,7 +255,41 @@ export class HotTopicsService implements OnModuleInit, OnModuleDestroy {
       where: { id, userId },
     });
     if (!row) throw new NotFoundException('热点任务不存在');
-    return row;
+    return this.runSummary(row);
+  }
+
+  /** 日常详情和轮询不传原始响应；诊断仅通过本人任务的独立只读入口加载。 */
+  private runSummary(row: HotTopicRun) {
+    return {
+      ...row,
+      sources:
+        row.sources?.map((source, index) => ({
+          sourceId: source.sourceId,
+          sourceName: source.sourceName,
+          status: source.status,
+          count: source.count,
+          message: source.message,
+          hasSearchResponse: Boolean(
+            hotSearchResponseForSource(row.sources, index),
+          ),
+        })) ?? null,
+    };
+  }
+
+  async findRunSearchResponse(id: number, sourceIndex: number, userId: number) {
+    if (!Number.isSafeInteger(sourceIndex) || sourceIndex < 0)
+      throw new BadRequestException('来源编号无效');
+    const row = await this.runs.findOne({
+      select: { id: true, userId: true, sources: true },
+      where: { id, userId },
+    });
+    if (!row) throw new NotFoundException('热点任务不存在');
+    const diagnostic = hotSearchResponseForSource(row.sources, sourceIndex);
+    if (!diagnostic)
+      throw new NotFoundException(
+        '该来源未保存联网响应；历史任务无法补回原始返回数据',
+      );
+    return diagnostic;
   }
   async submit(dto: SubmitHotTopicRunDto, userId: number) {
     const existing = await this.runs.findOne({

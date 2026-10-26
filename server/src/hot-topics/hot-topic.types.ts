@@ -1,3 +1,5 @@
+import type { HotSearchDiagnostics } from '../knowledge-ai-providers/knowledge-web-search-diagnostics';
+
 /** 热点获取、推荐与前端 API 的公共契约；来源正文是资料，不是可执行指令。 */
 export type HotSourceKind =
   | 'douyinHot'
@@ -99,6 +101,12 @@ export interface HotSourceOutcome {
   status: 'succeeded' | 'failed' | 'skipped';
   count: number;
   message: string;
+  /** 仅在任务来源 JSON 内保存；常规查询移除正文，点击详情时单独读取。 */
+  searchDiagnostics?: HotSearchDiagnostics;
+  /** 同一请求覆盖多个来源时，引用 sources 中保存该响应的来源下标。 */
+  searchResponseSourceIndex?: number;
+  /** 常规任务查询只返回是否存在诊断记录，兼容未采集响应的历史任务。 */
+  hasSearchResponse?: boolean;
 }
 export interface HotTopicFetchResult {
   candidates: HotTopicCandidate[];

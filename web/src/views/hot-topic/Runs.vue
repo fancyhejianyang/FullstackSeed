@@ -4,6 +4,8 @@ import Dialog from '@/components/Dialog.vue';
 import Button from '@/components/Button.vue';
 import Table, { type TableColumn } from '@/components/Table.vue';
 import { formatDateTime } from '@/utils/format';
+import type { HotRunWithSearchResponses } from '@/api/hotTopicDiagnostics';
+import SearchResponse from './SearchResponse.vue';
 import {
   getHotRuns,
   getHotRun,
@@ -16,7 +18,13 @@ const props = defineProps<{ runId?: number | null }>();
 const emit = defineEmits<{ completed: [] }>();
 const tableRef = ref<{ refresh: () => Promise<void> }>();
 const selected = ref<number | null>(null),
-  detail = ref<HotRun | null>(null);
+  detail = ref<HotRunWithSearchResponses | null>(null);
+const responseVisible = ref(false);
+const responseSelection = ref<{
+  runId: number;
+  sourceIndex: number;
+  sourceName: string;
+} | null>(null);
 const detailFailed = ref(false),
   listFailed = ref(false);
 let epoch = 0,
@@ -52,6 +60,7 @@ async function fetchRuns(params: { page?: number; pageSize?: number }) {
 }
 async function loadDetail(id: number) {
   clearTimeout(detailTimer);
+  if (selected.value !== id) closeSearchResponse();
   const current = epoch,
     sequence = ++detailSequence;
   selected.value = id;
@@ -79,20 +88,38 @@ function view(row: HotRun) {
   detail.value = null;
   void loadDetail(row.id);
 }
+function showSearchResponse(sourceIndex: number) {
+  const source = detail.value?.sources?.[sourceIndex];
+  if (!visible.value || !detail.value || !source?.hasSearchResponse) return;
+  responseSelection.value = {
+    runId: detail.value.id,
+    sourceIndex,
+    sourceName: source.sourceName,
+  };
+  responseVisible.value = true;
+}
+function closeSearchResponse() {
+  responseVisible.value = false;
+  responseSelection.value = null;
+}
 function stop() {
   ++epoch;
   ++detailSequence;
   clearTimeout(listTimer);
   clearTimeout(detailTimer);
+  closeSearchResponse();
 }
-watch(visible, (open) => {
-  stop();
-  detail.value = null;
-  selected.value = null;
-  detailFailed.value = false;
-  listFailed.value = false;
-  if (open && props.runId) void loadDetail(props.runId);
-});
+watch(
+  () => [visible.value, props.runId] as const,
+  ([open]) => {
+    stop();
+    detail.value = null;
+    selected.value = null;
+    detailFailed.value = false;
+    listFailed.value = false;
+    if (open && props.runId) void loadDetail(props.runId);
+  },
+);
 onBeforeUnmount(stop);
 </script>
 <template>
@@ -141,8 +168,26 @@ onBeforeUnmount(stop);
                   : '失败'
             }}
             · {{ source.count }} 条 · {{ source.message }}
+            <Button
+              v-if="source.hasSearchResponse"
+              perm="HotTopic.read"
+              link
+              :confirm="false"
+              @click="showSearchResponse(index)"
+              >查看联网响应</Button
+            >
           </li>
         </ul>
+        <p
+          v-if="
+            detail.action === 'discover' &&
+            !activeRun(detail.status) &&
+            !detail.sources?.some((source) => source.hasSearchResponse)
+          "
+          class="hint"
+        >
+          此任务没有已保存的联网响应；历史任务或未发起联网请求的任务无法补看接口返回。
+        </p>
       </template>
       <p v-else>正在读取任务详情…</p>
     </section>
@@ -175,6 +220,13 @@ onBeforeUnmount(stop);
     </Table>
     <template #footer><Button @click="visible = false">关闭</Button></template>
   </Dialog>
+  <SearchResponse
+    v-if="visible && responseSelection"
+    v-model:visible="responseVisible"
+    :run-id="responseSelection.runId"
+    :source-index="responseSelection.sourceIndex"
+    :source-name="responseSelection.sourceName"
+  />
 </template>
 <style scoped>
 .hint {
