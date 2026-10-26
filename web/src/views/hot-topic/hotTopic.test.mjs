@@ -4,6 +4,11 @@ import { test } from "node:test";
 import * as vue from "vue";
 import { parse, compileTemplate } from "@vue/compiler-sfc";
 import ts from "typescript";
+import { formatDateTime } from "../../utils/format.ts";
+import {
+  readCookieFile,
+  validateCookieFile,
+} from "../hot-topic-source/cookieFile.ts";
 
 const read = (path) => readFile(new URL(path, import.meta.url), "utf8");
 const apiSource = await read("../../api/hotTopic.ts");
@@ -185,6 +190,7 @@ test("来源回填归一化抖音网易，微博正常回显，切换固定来�
     computed: vue.computed,
     reactive: vue.reactive,
     ref: vue.ref,
+    shallowRef: vue.shallowRef,
     watch: vue.watch,
     onBeforeUnmount: () => {},
     defineModel: () => visible,
@@ -201,7 +207,10 @@ test("来源回填归一化抖音网易，微博正常回显，切换固定来�
     updateHotSource: async (_id, data) => {
       saved.push(data);
     },
-    ElMessage: { success: () => {} },
+    ElMessage: { success: () => {}, error: () => {} },
+    formatDateTime,
+    readCookieFile,
+    validateCookieFile,
     ...api,
     ...fixedSources,
   };
@@ -279,6 +288,233 @@ test("来源回填归一化抖音网易，微博正常回显，切换固定来�
     assert.equal(saved.length, 1);
   } finally {
     scope.stop();
+  }
+});
+
+function sourceEditorHarness(overrides = {}) {
+  const visible = vue.ref(true);
+  const props = vue.reactive({ row: { id: 1 } });
+  const saved = [],
+    messages = [],
+    unmount = [];
+  const record = {
+    id: 1,
+    name: "抖音热点",
+    kind: "douyinHot",
+    url: fixedSources.DOUYIN_HOT_API_URL,
+    isEnabled: true,
+    description: "",
+    hasCookie: true,
+    cookieUpdatedAt: "2026-10-26T01:02:03Z",
+    ...overrides.record,
+  };
+  const raw = parse(
+    sources.get("../hot-topic-source/Edit.vue"),
+  ).descriptor.scriptSetup.content.replace(/^import[\s\S]*?;\r?\n/gm, "");
+  const script = ts.transpileModule(raw, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const context = {
+    computed: vue.computed,
+    reactive: vue.reactive,
+    ref: vue.ref,
+    shallowRef: vue.shallowRef,
+    watch: vue.watch,
+    onBeforeUnmount: (callback) => unmount.push(callback),
+    defineModel: () => visible,
+    defineProps: () => props,
+    defineEmits: () => () => {},
+    useSubmissionGuard: () => {},
+    getHotSource: async () => record,
+    createHotSource: async (data) => saved.push(structuredClone(data)),
+    updateHotSource: async (id, data) =>
+      saved.push({ id, ...structuredClone(data) }),
+    ElMessage: {
+      success: (message) => messages.push({ type: "success", message }),
+      error: (message) => messages.push({ type: "error", message }),
+    },
+    formatDateTime,
+    readCookieFile,
+    validateCookieFile,
+    ...api,
+    ...fixedSources,
+    ...overrides.context,
+  };
+  const scope = vue.effectScope();
+  const h = scope.run(() =>
+    new Function(
+      ...Object.keys(context),
+      `${script}; return {form, fields, load, submit, close, formRef, cookieFile, cookieError, cookieStatus, savedHasCookie, savedCookieUpdatedAt, clearCookie, chooseCookieFile, markCookieCleared, resetCookieSelection};`,
+    )(...Object.values(context)),
+  );
+  let disposed = false;
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    unmount.forEach((callback) => callback());
+    scope.stop();
+  };
+  return { ...h, visible, props, record, saved, messages, dispose };
+}
+
+function cookieFileFixture(
+  name = "cookies.txt",
+  content = "# Netscape HTTP Cookie File\n.douyin.com\tTRUE\t/\tTRUE\t0\tsession\ttest-only",
+) {
+  const bytes = new TextEncoder().encode(content);
+  let reads = 0;
+  return {
+    name,
+    size: bytes.byteLength,
+    arrayBuffer: async () => {
+      reads++;
+      return bytes.buffer;
+    },
+    reads: () => reads,
+    content,
+  };
+}
+const chooseCookie = (h, file) =>
+  h.chooseCookieFile({ target: { files: [file], value: "local-selection" } });
+
+test("抖音 Cookie 仅本地选择；取消、切来源和卸载释放文件且不提交", async () => {
+  const h = sourceEditorHarness();
+  try {
+    await h.load();
+    assert.ok(h.fields.value.some((field) => field.prop === "cookieFile"));
+    assert.match(h.cookieStatus.value, /已配置.*更新于/);
+    const file = cookieFileFixture();
+    chooseCookie(h, file);
+    assert.equal(h.cookieFile.value, file);
+    assert.equal(file.reads(), 0);
+    assert.equal(h.saved.length, 0);
+    h.close();
+    await vue.nextTick();
+    assert.equal(h.cookieFile.value, null);
+    assert.equal(h.savedHasCookie.value, false);
+    assert.equal(h.saved.length, 0);
+    h.visible.value = true;
+    await vue.nextTick();
+    await h.load();
+    chooseCookie(h, file);
+    h.form.kind = "weiboHot";
+    assert.equal(h.cookieFile.value, null);
+    assert.equal(
+      h.fields.value.some((field) => field.prop === "cookieFile"),
+      false,
+    );
+    h.form.kind = "douyinHot";
+    chooseCookie(h, file);
+    h.dispose();
+    assert.equal(h.cookieFile.value, null);
+    assert.equal(file.reads(), 0);
+    assert.equal(h.saved.length, 0);
+  } finally {
+    h.dispose();
+  }
+});
+
+test("替换文件只在保存时读取最新选择，清除须保存才提交且不携带旧内容", async () => {
+  const h = sourceEditorHarness();
+  try {
+    await h.load();
+    const oldFile = cookieFileFixture("old.txt");
+    const nextFile = cookieFileFixture(
+      "replacement.txt",
+      ".douyin.com\tTRUE\t/\tTRUE\t0\tsession\treplacement-test-only",
+    );
+    chooseCookie(h, oldFile);
+    chooseCookie(h, nextFile);
+    assert.equal(oldFile.reads(), 0);
+    assert.equal(nextFile.reads(), 0);
+    await h.submit();
+    assert.equal(h.saved.length, 1);
+    assert.equal(oldFile.reads(), 0);
+    assert.equal(nextFile.reads(), 1);
+    assert.equal(h.saved[0].cookieFileName, "replacement.txt");
+    assert.equal(h.saved[0].cookieFileContent, nextFile.content);
+    assert.equal("clearCookie" in h.saved[0], false);
+  } finally {
+    h.dispose();
+  }
+  const clear = sourceEditorHarness();
+  try {
+    await clear.load();
+    clear.markCookieCleared();
+    assert.equal(clear.clearCookie.value, true);
+    assert.match(clear.cookieStatus.value, /保存配置后生效/);
+    assert.equal(clear.saved.length, 0);
+    clear.resetCookieSelection();
+    assert.equal(clear.clearCookie.value, false);
+    assert.match(clear.cookieStatus.value, /已配置/);
+    clear.markCookieCleared();
+    await clear.submit();
+    assert.equal(clear.saved.length, 1);
+    assert.equal(clear.saved[0].clearCookie, true);
+    assert.equal("cookieFileName" in clear.saved[0], false);
+    assert.equal("cookieFileContent" in clear.saved[0], false);
+  } finally {
+    clear.dispose();
+  }
+});
+
+test("错误文件阻止保存，可撤销；其它来源不提交 Cookie 字段", async () => {
+  const h = sourceEditorHarness();
+  try {
+    await h.load();
+    chooseCookie(h, cookieFileFixture("invalid.json"));
+    await h.submit();
+    assert.equal(h.saved.length, 0);
+    assert.match(h.messages.at(-1).message, /\.txt/);
+    h.resetCookieSelection();
+    assert.equal(h.cookieError.value, "");
+    chooseCookie(h, cookieFileFixture());
+    h.form.kind = "neteaseNews";
+    await h.submit();
+    assert.equal(h.saved.length, 1);
+    assert.equal("cookieFileName" in h.saved[0], false);
+    assert.equal("cookieFileContent" in h.saved[0], false);
+    assert.equal("clearCookie" in h.saved[0], false);
+  } finally {
+    h.dispose();
+  }
+});
+
+test("保存中禁止普通关闭；强制关闭或卸载后迟到文件读取不发请求或提示", async () => {
+  for (const exit of ["close", "unmount"]) {
+    const h = sourceEditorHarness();
+    let resolveRead;
+    const bytes = new TextEncoder().encode(cookieFileFixture().content);
+    let started = false;
+    try {
+      await h.load();
+      chooseCookie(h, {
+        name: "cookies.txt",
+        size: bytes.byteLength,
+        arrayBuffer: () => {
+          started = true;
+          return new Promise((resolve) => {
+            resolveRead = resolve;
+          });
+        },
+      });
+      const submission = h.submit();
+      await Promise.resolve();
+      assert.equal(started, true);
+      h.close();
+      assert.equal(h.visible.value, true);
+      if (exit === "close") {
+        h.visible.value = false;
+        await vue.nextTick();
+      } else h.dispose();
+      assert.equal(h.cookieFile.value, null);
+      resolveRead(bytes.buffer);
+      await submission;
+      assert.equal(h.saved.length, 0);
+      assert.deepEqual(h.messages, []);
+    } finally {
+      h.dispose();
+    }
   }
 });
 

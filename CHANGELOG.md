@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-10-26 抖音热点来源支持私密 Cookie txt 文件配置
+
+- 热点来源编辑表单仅在“抖音热点”时显示 Cookie 文件选择，支持 UTF-8 Netscape `.txt`（最大 64 KiB）、替换、撤销及二次确认清除。选择文件只在浏览器保留 File 引用，点击保存才读取并与配置一起提交；取消、关闭、切来源、切记录及卸载会释放待保存文件，迟到读取不能提交。回显仅配置状态及更新时间，不展示 Cookie 内容、原文件或下载地址，不经过公开附件上传。不增加明文输入、草稿或备注字段，原有业务字段保留。
+- 写入契约新增 `cookieFileName/cookieFileContent/clearCookie`，返回新增 `hasCookie/cookieUpdatedAt`；写入字段不进入实体或返回类型。后端检查扩展名、UTF-8、Netscape 结构、大小、条数、域名、路径、有效期及请求头字符，过滤与固定抖音接口无关的 Cookie。明文只用于当次处理，AES-256-GCM 随机 IV 加密后单次保存来源；密文列 `select:false` 且公开视图再次显式剥离。未上传时保留，明确清除或改为其它平台才清除凭据；清除不需要解密，密钥失效时也可重新上传替换。
+- 采集器仅按有效抖音来源编号查询启用记录并解密，运行时再次过滤过期项，Cookie 仅作为局部请求头发送至完全一致的固定 HTTPS 地址；禁止变体 URL、其它平台、请求头注入和重定向转发，保留 DNS 公网校验、超时、取消及限流语义。凭据不进入来源对象、任务快照、日志、AI 输入、诊断或榜单结果。空榜单、授权失败和过期会提示在来源表单上传或更新文件；不以 HTTP 200 代替真实榜单，不改变微博、网易及百炼行为。
+- 部署准备：在服务端配置独立的 `HOT_SOURCE_COOKIE_ENCRYPTION_KEY`，值为随机 32 字节的 Base64，无默认密钥，不复用 JWT；示例见 `server/.env.example`，可用 Node `require('node:crypto').randomBytes(32).toString('base64')` 生成。各实例保持一致并单独备份，丢失或更换后须重新上传 Cookie。新增幂等迁移 `1793318400000-AddHotSourceCookie` 补充 mediumtext 密文与更新时间列，回滚不误删用户凭据；开发环境按原有自动同步机制更新。本轮没有执行迁移、重启服务或写入真实凭据。
+- 新增文件（6）：`server/src/hot-topics/hot-topic-cookie.service.ts`、`server/src/hot-topics/hot-topic-cookie.service.spec.ts`、`server/src/migrations/1793318400000-AddHotSourceCookie.ts`、`server/src/migrations/1793318400000-AddHotSourceCookie.spec.ts`、`web/src/views/hot-topic-source/cookieFile.ts`、`web/src/views/hot-topic-source/cookieFile.test.mjs`。
+- 修改文件（16）：`server/src/hot-topics/dto/hot-topic.dto.ts`、`server/src/hot-topics/entities/hot-topic.entity.ts`、`server/src/hot-topics/hot-topic-sources.service.ts`、`server/src/hot-topics/hot-topic-sources.service.spec.ts`、`server/src/hot-topics/hot-topic-sources.controller.ts`、`server/src/hot-topics/hot-topics.module.ts`、`server/src/hot-topics/hot-topic-fetch.service.ts`、`server/src/hot-topics/hot-topic-fetch.service.spec.ts`、`server/src/hot-topics/hot-topic-network.ts`、`server/src/hot-topics/hot-topic-network.spec.ts`、`server/.env.example`、`web/src/api/hotTopic.ts`、`web/src/views/hot-topic-source/Edit.vue`、`web/src/views/hot-topic/hotTopic.test.mjs`、`.design-spec.md`、本文件。删除文件：无。仅提交本次改动，原有 API 的 Weibo 类型/标签及自动声明不纳入提交。
+- 验证：8 套后端模拟测试 185 项、前端 28 项（含 Cookie 文件与表单生命周期）通过；业务源码及变更规格类型、Vue 类型、定向 ESLint/格式、实体列、组件复用与 diff 检查通过，前后端生产构建通过。前端首次构建遇子进程权限限制，经授权重试成功，保留原有 PURE 注释及大分块提示，未修改构建配置。用户提供文件仅在内存中做离线格式兼容检查，未输出内容、未保存原文件或密文、未发起真实网络请求；模拟成功不代表凭据永久有效或实时榜单必定可取。
+
 ### 2026-10-26 热点改为平台自动采集并退役联网搜索卡片
 
 - 按用户要求移除热点偏好的获取模式、来源获取方式和 AI 配置中的联网协议选择。前端公开类型、后端 DTO、选项、偏好响应、新任务快照均不再暴露 mode/accessMode；历史任务详情也过滤旧模式。历史数据库列及原定义保留，避免自动同步删列，执行完全忽略旧字段，不批量改写日程、来源启停和已有选题。

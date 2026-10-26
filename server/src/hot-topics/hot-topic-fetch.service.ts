@@ -10,6 +10,7 @@ import {
 } from './hot-topic-network';
 import { parseHotTopicPayload } from './hot-topic-parsers';
 import { compactHotSearchResponses } from './hot-topic-search-response';
+import { HotTopicSourcesService } from './hot-topic-sources.service';
 import {
   platformLabelForHost,
   platformSource,
@@ -82,7 +83,10 @@ export const DEFAULT_HOT_SOURCE: HotSourceInput = {
 
 @Injectable()
 export class HotTopicFetchService {
-  constructor(private readonly webSearch: KnowledgeWebSearchService) {}
+  constructor(
+    private readonly webSearch: KnowledgeWebSearchService,
+    private readonly sourceCredentials: HotTopicSourcesService,
+  ) {}
 
   private async readPageSource(
     source: HotSourceInput,
@@ -97,9 +101,18 @@ export class HotTopicFetchService {
         ? WEIBO_HOT_FALLBACKS.find((item) => item.url === configured)
         : undefined;
     try {
+      // 凭据只存在于本次请求局部变量，不加入来源、任务快照或 AI 输入。
+      const douyinCookie =
+        source.kind === 'douyinHot' &&
+        Number.isSafeInteger(source.id) &&
+        source.id > 0
+          ? await this.sourceCredentials.douyinCookie(source.id)
+          : undefined;
+      signal.throwIfAborted();
       const body = await fetchHotSourceText(fixedSource.url, {
         signal,
         ...(configuredWeiboEndpoint ? { referer: 'https://weibo.com/' } : {}),
+        ...(douyinCookie ? { douyinCookie } : {}),
       });
       const candidates = parseHotTopicPayload(body, fixedSource, fetchedAt);
       if (source.kind === 'weiboHot' && !candidates.length)
@@ -117,6 +130,17 @@ export class HotTopicFetchService {
               : '已读取配置来源的公开结构化数据',
       };
     } catch (primaryError) {
+      if (
+        source.kind === 'douyinHot' &&
+        primaryError instanceof HotTopicFetchError &&
+        ['empty_douyin', 'invalid_douyin', 'douyin_unavailable'].includes(
+          primaryError.code,
+        )
+      )
+        throw new HotTopicFetchError(
+          primaryError.code,
+          `${primaryError.message}；请在热点来源上传或更新 Cookie 文件，若仍失败请人工确认访问权限`,
+        );
       if (source.kind !== 'weiboHot') throw primaryError;
       signal.throwIfAborted();
       const failures = [

@@ -9,6 +9,7 @@ import {
 import type { KnowledgeWebSearchService } from '../knowledge-ai-providers/knowledge-web-search.service';
 import type { HotSearchDiagnostics } from '../knowledge-ai-providers/knowledge-web-search-diagnostics';
 import type { AiFeatureConfig } from '../ai-feature-configs/entities/ai-feature-config.entity';
+import type { HotTopicSourcesService } from './hot-topic-sources.service';
 
 jest.mock('./hot-topic-network', () => ({
   ...jest.requireActual<typeof import('./hot-topic-network')>(
@@ -40,8 +41,15 @@ const source: HotSourceInput = {
   isEnabled: true,
 };
 const config = {} as AiFeatureConfig;
+const loadCookie = jest.fn();
+const sourceCredentials = {
+  douyinCookie: loadCookie,
+} as unknown as HotTopicSourcesService;
 describe('HotTopicFetchService orchestration', () => {
-  beforeEach(() => fetchText.mockReset());
+  beforeEach(() => {
+    fetchText.mockReset();
+    loadCookie.mockReset().mockResolvedValue(undefined);
+  });
   it.each(['platform', 'hybrid', 'aiSearch'] as const)(
     'successful Weibo lists never trigger additional search regardless of legacy mode %s',
     async (mode) => {
@@ -49,9 +57,12 @@ describe('HotTopicFetchService orchestration', () => {
         '{"data":{"band_list":[{"word":"真实微博榜单","realpos":1}]}}',
       );
       const search = jest.fn();
-      const result = await new HotTopicFetchService({
-        search,
-      } as unknown as KnowledgeWebSearchService).collect({
+      const result = await new HotTopicFetchService(
+        {
+          search,
+        } as unknown as KnowledgeWebSearchService,
+        sourceCredentials,
+      ).collect({
         sources: [{ ...source, accessMode: 'search' }],
         mode,
         config,
@@ -67,9 +78,12 @@ describe('HotTopicFetchService orchestration', () => {
   it('reports direct failures without selecting a paid model when no AI config is chosen', async () => {
     fetchText.mockRejectedValue(new HotTopicFetchError('http', '来源拒绝访问'));
     const search = jest.fn();
-    const result = await new HotTopicFetchService({
-      search,
-    } as unknown as KnowledgeWebSearchService).collect({
+    const result = await new HotTopicFetchService(
+      {
+        search,
+      } as unknown as KnowledgeWebSearchService,
+      sourceCredentials,
+    ).collect({
       sources: [{ ...source, accessMode: 'search' }],
       mode: 'aiSearch',
       config: null,
@@ -109,9 +123,12 @@ describe('HotTopicFetchService orchestration', () => {
         );
       },
     );
-    const result = await new HotTopicFetchService({
-      search,
-    } as unknown as KnowledgeWebSearchService).collect({
+    const result = await new HotTopicFetchService(
+      {
+        search,
+      } as unknown as KnowledgeWebSearchService,
+      sourceCredentials,
+    ).collect({
       sources: [
         source,
         {
@@ -160,9 +177,12 @@ describe('HotTopicFetchService orchestration', () => {
         },
       ],
     });
-    const service = new HotTopicFetchService({
-      search,
-    } as unknown as KnowledgeWebSearchService);
+    const service = new HotTopicFetchService(
+      {
+        search,
+      } as unknown as KnowledgeWebSearchService,
+      sourceCredentials,
+    );
     const result = await service.collect({
       sources: [source],
       mode: 'hybrid',
@@ -206,9 +226,12 @@ describe('HotTopicFetchService orchestration', () => {
       kind: 'weiboHot' as const,
       url: 'https://tophub.today/n/KqndgxeLl9',
     };
-    const result = await new HotTopicFetchService({
-      search: jest.fn(),
-    } as unknown as KnowledgeWebSearchService).collect({
+    const result = await new HotTopicFetchService(
+      {
+        search: jest.fn(),
+      } as unknown as KnowledgeWebSearchService,
+      sourceCredentials,
+    ).collect({
       sources: [weibo],
       mode: 'platform',
       config: null,
@@ -249,9 +272,12 @@ describe('HotTopicFetchService orchestration', () => {
       );
     const signal = new AbortController().signal;
     const search = jest.fn();
-    const result = await new HotTopicFetchService({
-      search,
-    } as unknown as KnowledgeWebSearchService).collect({
+    const result = await new HotTopicFetchService(
+      {
+        search,
+      } as unknown as KnowledgeWebSearchService,
+      sourceCredentials,
+    ).collect({
       sources: [{ ...source, url: 'https://tophub.today/node-items-by-date' }],
       mode: 'platform',
       config: null,
@@ -289,9 +315,12 @@ describe('HotTopicFetchService orchestration', () => {
       .mockResolvedValueOnce(
         '{"ok":1,"data":{"realtime":[{"word":"辅助榜单"}]}}',
       );
-    const result = await new HotTopicFetchService({
-      search: jest.fn(),
-    } as unknown as KnowledgeWebSearchService).collect({
+    const result = await new HotTopicFetchService(
+      {
+        search: jest.fn(),
+      } as unknown as KnowledgeWebSearchService,
+      sourceCredentials,
+    ).collect({
       sources: [source],
       mode: 'platform',
       config: null,
@@ -307,9 +336,12 @@ describe('HotTopicFetchService orchestration', () => {
       '{"ok":1,"data":{"realtime":[{"word":"直接侧栏词"}]}}',
     );
     const signal = new AbortController().signal;
-    const result = await new HotTopicFetchService({
-      search: jest.fn(),
-    } as unknown as KnowledgeWebSearchService).collect({
+    const result = await new HotTopicFetchService(
+      {
+        search: jest.fn(),
+      } as unknown as KnowledgeWebSearchService,
+      sourceCredentials,
+    ).collect({
       sources: [{ ...source, url: 'https://weibo.com/ajax/side/hotSearch' }],
       mode: 'platform',
       config: null,
@@ -333,9 +365,12 @@ describe('HotTopicFetchService orchestration', () => {
       fetchText.mockRejectedValue(
         new HotTopicFetchError('http', '来源拒绝访问'),
       );
-      const result = await new HotTopicFetchService({
-        search: jest.fn(),
-      } as unknown as KnowledgeWebSearchService).collect({
+      const result = await new HotTopicFetchService(
+        {
+          search: jest.fn(),
+        } as unknown as KnowledgeWebSearchService,
+        sourceCredentials,
+      ).collect({
         sources: [{ ...source, url }],
         mode: 'platform',
         config: null,
@@ -358,9 +393,12 @@ describe('HotTopicFetchService orchestration', () => {
       )
       .mockRejectedValueOnce(new Error('private-upstream-token'))
       .mockResolvedValueOnce('{"ok":1,"data":{"realtime":[]}}');
-    const result = await new HotTopicFetchService({
-      search: jest.fn(),
-    } as unknown as KnowledgeWebSearchService).collect({
+    const result = await new HotTopicFetchService(
+      {
+        search: jest.fn(),
+      } as unknown as KnowledgeWebSearchService,
+      sourceCredentials,
+    ).collect({
       sources: [source],
       mode: 'platform',
       config: null,
@@ -379,24 +417,28 @@ describe('HotTopicFetchService orchestration', () => {
     'does not start further fallbacks after request %i is cancelled',
     async (cancelAt) => {
       const controller = new AbortController();
+      const cancellation = new DOMException('cancelled', 'AbortError');
       if (cancelAt === 2)
         fetchText.mockRejectedValueOnce(
           new HotTopicFetchError('http', '读取失败'),
         );
       fetchText.mockImplementationOnce(() => {
-        controller.abort();
+        controller.abort(cancellation);
         return Promise.reject(new Error('cancelled'));
       });
-      const collecting = new HotTopicFetchService({
-        search: jest.fn(),
-      } as unknown as KnowledgeWebSearchService).collect({
+      const collecting = new HotTopicFetchService(
+        {
+          search: jest.fn(),
+        } as unknown as KnowledgeWebSearchService,
+        sourceCredentials,
+      ).collect({
         sources: [source],
         mode: 'platform',
         config: null,
         preferences,
         signal: controller.signal,
       });
-      await expect(collecting).rejects.toBe(controller.signal.reason);
+      await expect(collecting).rejects.toBe(cancellation);
       expect(fetchText).toHaveBeenCalledTimes(cancelAt);
     },
   );
@@ -420,9 +462,12 @@ describe('HotTopicFetchService orchestration', () => {
       );
       const search = jest.fn();
       const signal = new AbortController().signal;
-      const result = await new HotTopicFetchService({
-        search,
-      } as unknown as KnowledgeWebSearchService).collect({
+      const result = await new HotTopicFetchService(
+        {
+          search,
+        } as unknown as KnowledgeWebSearchService,
+        sourceCredentials,
+      ).collect({
         sources: [
           {
             ...source,
@@ -457,9 +502,12 @@ describe('HotTopicFetchService orchestration', () => {
       );
       const search = jest.fn();
       const signal = new AbortController().signal;
-      const result = await new HotTopicFetchService({
-        search,
-      } as unknown as KnowledgeWebSearchService).collect({
+      const result = await new HotTopicFetchService(
+        {
+          search,
+        } as unknown as KnowledgeWebSearchService,
+        sourceCredentials,
+      ).collect({
         sources: [{ ...source, kind: 'douyinHot' }],
         mode,
         config,
@@ -478,9 +526,12 @@ describe('HotTopicFetchService orchestration', () => {
     fetchText.mockResolvedValue('{"status_code":0,"data":{"word_list":[]}}');
     const search = jest.fn();
     const signal = new AbortController().signal;
-    await new HotTopicFetchService({
-      search,
-    } as unknown as KnowledgeWebSearchService).collect({
+    await new HotTopicFetchService(
+      {
+        search,
+      } as unknown as KnowledgeWebSearchService,
+      sourceCredentials,
+    ).collect({
       sources: [],
       mode: 'aiSearch',
       config: null,
@@ -519,9 +570,12 @@ describe('HotTopicFetchService orchestration', () => {
       ],
     });
     const signal = new AbortController().signal;
-    const result = await new HotTopicFetchService({
-      search,
-    } as unknown as KnowledgeWebSearchService).collect({
+    const result = await new HotTopicFetchService(
+      {
+        search,
+      } as unknown as KnowledgeWebSearchService,
+      sourceCredentials,
+    ).collect({
       sources: [
         {
           ...source,
@@ -580,9 +634,12 @@ describe('HotTopicFetchService orchestration', () => {
       };
       const search = jest.fn();
       const signal = new AbortController().signal;
-      const result = await new HotTopicFetchService({
-        search,
-      } as unknown as KnowledgeWebSearchService).collect({
+      const result = await new HotTopicFetchService(
+        {
+          search,
+        } as unknown as KnowledgeWebSearchService,
+        sourceCredentials,
+      ).collect({
         sources: [netease],
         mode,
         config: null,
@@ -603,9 +660,12 @@ describe('HotTopicFetchService orchestration', () => {
       .mockRejectedValue(
         new HotTopicFetchError('search_unverified', '未返回真实搜索来源'),
       );
-    const result = await new HotTopicFetchService({
-      search,
-    } as unknown as KnowledgeWebSearchService).collect({
+    const result = await new HotTopicFetchService(
+      {
+        search,
+      } as unknown as KnowledgeWebSearchService,
+      sourceCredentials,
+    ).collect({
       sources: [source],
       mode: 'aiSearch',
       config,
@@ -620,5 +680,97 @@ describe('HotTopicFetchService orchestration', () => {
     });
     expect(result.sources[0].message).toContain('未返回真实搜索来源');
     expect(fetchText).toHaveBeenCalledTimes(3);
+  });
+  it('loads a selected Douyin credential by ID only for the fixed request, never for other platforms or AI', async () => {
+    const cookie = 'sessionid=private-test-cookie';
+    loadCookie.mockResolvedValue(cookie);
+    fetchText.mockImplementation((url: string) =>
+      url === DOUYIN_HOT_URL
+        ? Promise.resolve(
+            '{"status_code":0,"data":{"word_list":[{"word":"真实抖音榜单"}]}}',
+          )
+        : Promise.reject(new HotTopicFetchError('http', '微博直读失败')),
+    );
+    const search = jest.fn().mockResolvedValue({
+      searchExecuted: true,
+      totalTokens: 1,
+      sources: [],
+    });
+    const signal = new AbortController().signal;
+    const result = await new HotTopicFetchService(
+      { search } as unknown as KnowledgeWebSearchService,
+      sourceCredentials,
+    ).collect({
+      sources: [{ ...source, id: 2, kind: 'douyinHot' }, source],
+      config,
+      preferences,
+      signal,
+    });
+    expect(loadCookie).toHaveBeenCalledTimes(1);
+    expect(loadCookie).toHaveBeenCalledWith(2);
+    expect(fetchText).toHaveBeenCalledWith(DOUYIN_HOT_URL, {
+      signal,
+      douyinCookie: cookie,
+    });
+    for (const [url, options] of fetchText.mock.calls as [string, object][])
+      if (url !== DOUYIN_HOT_URL)
+        expect(options).not.toHaveProperty('douyinCookie');
+    expect(JSON.stringify(search.mock.calls)).not.toContain(cookie);
+    expect(JSON.stringify(result)).not.toContain(cookie);
+  });
+  it('rejects expired/decryption failures before sending a request and does not fall back to AI', async () => {
+    loadCookie.mockRejectedValue(
+      new HotTopicFetchError(
+        'expired_cookie',
+        '抖音 Cookie 已过期，请重新上传',
+      ),
+    );
+    const search = jest.fn();
+    const result = await new HotTopicFetchService(
+      { search } as unknown as KnowledgeWebSearchService,
+      sourceCredentials,
+    ).collect({
+      sources: [{ ...source, kind: 'douyinHot' }],
+      config,
+      preferences,
+      signal: new AbortController().signal,
+    });
+    expect(fetchText).not.toHaveBeenCalled();
+    expect(search).not.toHaveBeenCalled();
+    expect(result.sources[0].message).toContain('已过期');
+  });
+  it('does not load saved credentials for the default source and hints on empty Douyin responses', async () => {
+    fetchText.mockResolvedValue('');
+    const result = await new HotTopicFetchService(
+      { search: jest.fn() } as unknown as KnowledgeWebSearchService,
+      sourceCredentials,
+    ).collect({
+      sources: [],
+      config: null,
+      preferences,
+      signal: new AbortController().signal,
+    });
+    expect(loadCookie).not.toHaveBeenCalled();
+    expect(result.sources[0].message).toContain('响应内容为空');
+    expect(result.sources[0].message).toContain('上传或更新 Cookie 文件');
+  });
+  it('does not issue a Douyin request after cancellation during credential loading', async () => {
+    const controller = new AbortController();
+    loadCookie.mockImplementation(() => {
+      controller.abort();
+      return Promise.resolve('sessionid=private-test');
+    });
+    await expect(
+      new HotTopicFetchService(
+        { search: jest.fn() } as unknown as KnowledgeWebSearchService,
+        sourceCredentials,
+      ).collect({
+        sources: [{ ...source, kind: 'douyinHot' }],
+        config: null,
+        preferences,
+        signal: controller.signal,
+      }),
+    ).rejects.toBe(controller.signal.reason);
+    expect(fetchText).not.toHaveBeenCalled();
   });
 });

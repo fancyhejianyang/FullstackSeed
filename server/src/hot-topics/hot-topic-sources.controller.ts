@@ -56,7 +56,7 @@ export class HotTopicSourcesController {
   }
   @Patch(':id')
   @RequirePermissions('HotTopicSource.update')
-  @ApiOperation({ summary: '更新热点来源，空密钥保留原值' })
+  @ApiOperation({ summary: '更新热点来源，未上传新文件时保留 Cookie' })
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateHotTopicSourceDto,

@@ -62,6 +62,10 @@ export class SaveHotTopicSourceDto {
   @IsBoolean()
   isEnabled?: boolean;
   @IsOptional() @IsString() @MaxLength(2000) description?: string;
+  /** 仅写入；与来源配置一起保存，不走公开附件上传。 */
+  @IsOptional() @IsString() @MaxLength(255) cookieFileName?: string;
+  @IsOptional() @IsString() @MaxLength(65536) cookieFileContent?: string;
+  @IsOptional() @IsBoolean() clearCookie?: boolean;
 }
 export class UpdateHotTopicSourceDto extends PartialType(
   SaveHotTopicSourceDto,

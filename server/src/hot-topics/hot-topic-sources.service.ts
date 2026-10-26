@@ -12,6 +12,7 @@ import {
   UpdateHotTopicSourceDto,
 } from './dto/hot-topic.dto';
 import { normalizeHotTopicLink } from './hot-topic-network';
+import { HotTopicCookieService } from './hot-topic-cookie.service';
 import {
   CONFIGURABLE_HOT_SOURCE_KINDS,
   fixedHotSourceUrl,
@@ -21,8 +22,17 @@ import {
 } from './hot-topic.types';
 
 export function sourceView(row: HotTopicSource) {
-  const { apiToken, accountName, accountId, accessMode, ...safe } = row;
+  const {
+    apiToken,
+    cookieEncrypted,
+    cookieUpdatedAt,
+    accountName,
+    accountId,
+    accessMode,
+    ...safe
+  } = row;
   void apiToken;
+  void cookieEncrypted;
   void accountName;
   void accountId;
   void accessMode;
@@ -35,6 +45,9 @@ export function sourceView(row: HotTopicSource) {
     kind: supported ? row.kind : ('douyinHot' as const),
     ...(fixedUrl ? { url: fixedUrl } : {}),
     isEnabled: supported ? row.isEnabled : false,
+    hasCookie: row.kind === 'douyinHot' && Boolean(cookieUpdatedAt),
+    cookieUpdatedAt:
+      row.kind === 'douyinHot' ? (cookieUpdatedAt ?? null) : null,
   };
 }
 
@@ -104,6 +117,7 @@ export class HotTopicSourcesService {
   constructor(
     @InjectRepository(HotTopicSource)
     private readonly repository: Repository<HotTopicSource>,
+    private readonly cookies: HotTopicCookieService,
   ) {}
 
   async findAll(query: HotTopicSourceQueryDto) {
@@ -117,6 +131,7 @@ export class HotTopicSourcesService {
         description: true,
         createdAt: true,
         updatedAt: true,
+        cookieUpdatedAt: true,
       },
       where: {
         kind: In(CONFIGURABLE_HOT_SOURCE_KINDS),
@@ -147,6 +162,7 @@ export class HotTopicSourcesService {
         url: true,
         isEnabled: true,
         description: true,
+        cookieUpdatedAt: true,
       },
     });
     return rows.map(sourceView);
@@ -172,6 +188,7 @@ export class HotTopicSourcesService {
     });
     applyFixedSourceDefaults(row);
     validateSource(row);
+    this.applyCookie(row, dto);
     return sourceView(await this.repository.save(row));
   }
   async update(id: number, dto: UpdateHotTopicSourceDto) {
@@ -180,7 +197,11 @@ export class HotTopicSourcesService {
       throw new BadRequestException(
         '来源字段不能为 null，请使用空字符串或明确的启停状态',
       );
-    Object.assign(row, dto);
+    const { cookieFileName, cookieFileContent, clearCookie, ...fields } = dto;
+    void cookieFileName;
+    void cookieFileContent;
+    void clearCookie;
+    Object.assign(row, fields);
     if (!isConfigurableHotSourceKind(row.kind)) row.kind = 'douyinHot';
     row.name = row.name.trim();
     row.url = row.url.trim();
@@ -188,7 +209,48 @@ export class HotTopicSourcesService {
     row.accountId = '';
     applyFixedSourceDefaults(row);
     validateSource(row);
+    this.applyCookie(row, dto);
     return sourceView(await this.repository.save(row));
+  }
+  private applyCookie(
+    row: HotTopicSource,
+    dto: SaveHotTopicSourceDto | UpdateHotTopicSourceDto,
+  ) {
+    const hasFile =
+      dto.cookieFileName !== undefined || dto.cookieFileContent !== undefined;
+    if (hasFile && dto.clearCookie)
+      throw new BadRequestException(
+        '不能同时上传和清除 Cookie，请选择一种操作',
+      );
+    if (hasFile && row.kind !== 'douyinHot')
+      throw new BadRequestException('目前仅抖音热点来源支持 Cookie 文件');
+    if (hasFile) {
+      if (
+        typeof dto.cookieFileName !== 'string' ||
+        typeof dto.cookieFileContent !== 'string'
+      )
+        throw new BadRequestException('请选择完整的 Cookie .txt 文件后保存');
+      row.cookieEncrypted = this.cookies.encryptFile(
+        dto.cookieFileName,
+        dto.cookieFileContent,
+      );
+      row.cookieUpdatedAt = new Date();
+    } else if (dto.clearCookie || row.kind !== 'douyinHot') {
+      row.cookieEncrypted = null;
+      row.cookieUpdatedAt = null;
+    }
+    // 没有文件且未清除时不触碰 select:false 列，保留已有凭据。
+  }
+  /** 仅供采集器读取，永不并入来源、任务快照或公开 API。 */
+  async douyinCookie(id: number): Promise<string | undefined> {
+    if (!Number.isSafeInteger(id) || id < 1) return undefined;
+    const row = await this.repository.findOne({
+      where: { id, kind: 'douyinHot', isEnabled: true },
+      select: { id: true, cookieEncrypted: true },
+    });
+    return row?.cookieEncrypted
+      ? this.cookies.cookieHeader(row.cookieEncrypted)
+      : undefined;
   }
   async remove(id: number) {
     await this.record(id);

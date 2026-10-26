@@ -24,6 +24,10 @@ export class HotTopicSource extends BaseEntity {
   @Column({ type: 'text', nullable: true, select: false }) apiToken:
     | string
     | null;
+  /** 用户主动导入的抖音凭据；只在固定接口采集时显式读取。 */
+  @Column({ type: 'mediumtext', nullable: true, select: false })
+  cookieEncrypted: string | null;
+  @Column({ type: 'datetime', nullable: true }) cookieUpdatedAt: Date | null;
   @Column({ type: 'boolean', default: false }) isEnabled: boolean;
   @Column({ length: 2000, default: '' }) description: string;
 }

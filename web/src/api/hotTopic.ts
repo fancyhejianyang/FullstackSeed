@@ -17,11 +17,20 @@ export interface HotSourceForm {
   url: string;
   isEnabled: boolean;
   description: string;
+  /** 仅写入：在保存来源时提交，不作为公开附件上传或回显。 */
+  cookieFileName?: string;
+  cookieFileContent?: string;
+  clearCookie?: boolean;
 }
-export interface HotSource extends HotSourceForm {
+export interface HotSource extends Omit<
+  HotSourceForm,
+  'cookieFileName' | 'cookieFileContent' | 'clearCookie'
+> {
   id: number;
   createdAt: string;
   updatedAt: string;
+  hasCookie?: boolean;
+  cookieUpdatedAt?: string | null;
 }
 export interface HotPreference {
   aiConfigId: number | null;

@@ -16,6 +16,7 @@ import { HotTopicSourcesService } from './hot-topic-sources.service';
 import { HotTopicSourcesController } from './hot-topic-sources.controller';
 import { HotTopicsController } from './hot-topics.controller';
 import { HotTopicsService } from './hot-topics.service';
+import { HotTopicCookieService } from './hot-topic-cookie.service';
 
 @Module({
   imports: [
@@ -32,7 +33,12 @@ import { HotTopicsService } from './hot-topics.service';
     ContentArticlesModule,
   ],
   controllers: [HotTopicsController, HotTopicSourcesController],
-  providers: [HotTopicsService, HotTopicSourcesService, HotTopicFetchService],
+  providers: [
+    HotTopicsService,
+    HotTopicSourcesService,
+    HotTopicFetchService,
+    HotTopicCookieService,
+  ],
   exports: [HotTopicsService],
 })
 export class HotTopicsModule {}

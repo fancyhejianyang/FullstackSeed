@@ -6,6 +6,7 @@ import {
   validateSource,
 } from './hot-topic-sources.service';
 import { DOUYIN_HOT_URL, NETEASE_NEWS_URL } from './hot-topic.types';
+import { HotTopicCookieService } from './hot-topic-cookie.service';
 
 const source = () =>
   ({
@@ -99,6 +100,7 @@ describe('热点来源配置', () => {
     };
     const service = new HotTopicSourcesService(
       repository as unknown as Repository<HotTopicSource>,
+      {} as HotTopicCookieService,
     );
     const dto = {
       name: '固定来源',
@@ -164,5 +166,150 @@ describe('热点来源配置', () => {
           url: `https://news.163.com/?${key}=private`,
         }),
       ).toThrow('访问密钥');
+  });
+});
+
+describe('抖音 Cookie 保存与私密读取', () => {
+  const setup = (kind: HotTopicSource['kind'] = 'douyinHot') => {
+    const original = {
+      ...source(),
+      kind,
+      isEnabled: true,
+      cookieUpdatedAt: new Date('2026-10-26T00:00:00Z'),
+    };
+    const repository = {
+      create: jest.fn((row: unknown) => row),
+      save: jest.fn((row: unknown) => Promise.resolve(row)),
+      findOne: jest
+        .fn()
+        .mockImplementation(() => Promise.resolve({ ...original })),
+      findAndCount: jest.fn((query: unknown) => {
+        void query;
+        return Promise.resolve([[original], 1]);
+      }),
+      find: jest.fn((query: unknown) => {
+        void query;
+        return Promise.resolve([original]);
+      }),
+    };
+    const cookies = {
+      encryptFile: jest.fn().mockReturnValue('encrypted-only'),
+      cookieHeader: jest.fn().mockReturnValue('session=test-only'),
+    };
+    const service = new HotTopicSourcesService(
+      repository as unknown as Repository<HotTopicSource>,
+      cookies as unknown as HotTopicCookieService,
+    );
+    return { service, repository, cookies, original };
+  };
+  const file = {
+    cookieFileName: 'cookies.txt',
+    cookieFileContent: 'private-file',
+  };
+  it('文件与来源一次保存，只落密文且响应从不回显凭据', async () => {
+    const { service, repository, cookies } = setup();
+    const result = await service.create({
+      name: '抖音',
+      kind: 'douyinHot',
+      url: DOUYIN_HOT_URL,
+      ...file,
+    });
+    expect(cookies.encryptFile).toHaveBeenCalledWith(
+      'cookies.txt',
+      'private-file',
+    );
+    expect(repository.save).toHaveBeenCalledTimes(1);
+    const saved = repository.save.mock.calls[0][0] as HotTopicSource;
+    expect(saved.cookieEncrypted).toBe('encrypted-only');
+    expect(saved).not.toHaveProperty('cookieFileContent');
+    expect(saved).not.toHaveProperty('cookieFileName');
+    expect(result).toMatchObject({ hasCookie: true });
+    expect(JSON.stringify(result)).not.toMatch(/private-file|encrypted-only/);
+  });
+  it('未上传保持 select:false 原列，替换与清除使用明确操作', async () => {
+    const { service, repository } = setup();
+    await service.update(1, { name: '新名字' });
+    expect(repository.save.mock.calls[0][0]).not.toHaveProperty(
+      'cookieEncrypted',
+    );
+    await service.update(1, file);
+    expect(repository.save.mock.calls[1][0]).toMatchObject({
+      cookieEncrypted: 'encrypted-only',
+    });
+    const result = await service.update(1, { clearCookie: true });
+    expect(repository.save.mock.calls[2][0]).toMatchObject({
+      cookieEncrypted: null,
+      cookieUpdatedAt: null,
+    });
+    expect(result.hasCookie).toBe(false);
+  });
+  it('拒绝半个文件、上传同时清除、其它平台上传，校验失败不保存', async () => {
+    const { service, repository, cookies } = setup();
+    await expect(
+      service.update(1, { cookieFileName: 'x.txt' }),
+    ).rejects.toThrow('完整');
+    await expect(
+      service.update(1, { ...file, clearCookie: true }),
+    ).rejects.toThrow('同时');
+    await expect(
+      service.update(1, {
+        ...file,
+        kind: 'weiboHot',
+        url: 'https://weibo.com/hot',
+      }),
+    ).rejects.toThrow('仅抖音');
+    cookies.encryptFile.mockImplementation(() => {
+      throw new Error('invalid-format');
+    });
+    await expect(service.update(1, file)).rejects.toThrow('invalid-format');
+    expect(repository.save).not.toHaveBeenCalled();
+  });
+  it('从抖音切到其它来源会清除凭据，不会转交其它平台', async () => {
+    const { service, repository, cookies } = setup();
+    await service.update(1, { kind: 'neteaseNews' });
+    expect(repository.save.mock.calls[0][0]).toMatchObject({
+      kind: 'neteaseNews',
+      cookieEncrypted: null,
+      cookieUpdatedAt: null,
+    });
+    expect(cookies.encryptFile).not.toHaveBeenCalled();
+  });
+  it('列表、选项、详情只返回配置状态，查询不选择密文', async () => {
+    const { service, repository } = setup();
+    await expect(service.findAll({})).resolves.toMatchObject({
+      list: [{ hasCookie: true }],
+    });
+    await service.options();
+    await service.findOne(1);
+    expect(repository.findAndCount.mock.calls[0][0]).not.toHaveProperty(
+      'select.cookieEncrypted',
+    );
+    expect(repository.find.mock.calls[0][0]).not.toHaveProperty(
+      'select.cookieEncrypted',
+    );
+    const raw = {
+      ...source(),
+      kind: 'douyinHot',
+      cookieEncrypted: 'never-return',
+      cookieUpdatedAt: new Date(),
+    } as HotTopicSource;
+    expect(sourceView(raw)).not.toHaveProperty('cookieEncrypted');
+  });
+  it('凭据仅按启用的抖音来源编号显式读取；过期异常不吞掉', async () => {
+    const { service, repository, cookies } = setup();
+    repository.findOne.mockResolvedValue({ cookieEncrypted: 'encrypted-only' });
+    await expect(service.douyinCookie(1)).resolves.toBe('session=test-only');
+    expect(repository.findOne).toHaveBeenCalledWith({
+      where: { id: 1, kind: 'douyinHot', isEnabled: true },
+      select: { id: true, cookieEncrypted: true },
+    });
+    expect(cookies.cookieHeader).toHaveBeenCalledWith('encrypted-only');
+    cookies.cookieHeader.mockImplementation(() => {
+      throw new Error('expired');
+    });
+    await expect(service.douyinCookie(1)).rejects.toThrow('expired');
+    repository.findOne.mockClear();
+    await expect(service.douyinCookie(0)).resolves.toBeUndefined();
+    expect(repository.findOne).not.toHaveBeenCalled();
   });
 });

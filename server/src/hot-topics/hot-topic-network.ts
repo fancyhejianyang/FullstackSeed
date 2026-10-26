@@ -3,6 +3,7 @@ import type { LookupAddress } from 'node:dns';
 import { get } from 'node:https';
 import { isIP } from 'node:net';
 import { isPublicImageAddress } from '../common/ai/image-utils';
+import { DOUYIN_HOT_URL } from './hot-topic.types';
 
 export const HOT_SOURCE_BYTE_LIMIT = 3 * 1024 * 1024;
 export const HOT_SOURCE_TIMEOUT_MS = 20000;
@@ -100,15 +101,35 @@ export async function resolveHotSourceTarget(
   return { url, address: addresses[0].address };
 }
 
-/** No cookies/browser automation, scripts, redirects or cross-origin credentials. */
+/** No scripts/redirects; the only credential option is scoped to the fixed Douyin API. */
 export async function fetchHotSourceText(
   value: string,
   options: {
     signal: AbortSignal;
     /** 仅供已知平台公开接口使用；不得传入含凭据的地址。 */
     referer?: string;
+    /** 内部解密的抖音凭据，仅允许发送给完全一致的固定接口。 */
+    douyinCookie?: string;
   },
 ): Promise<string> {
+  const cookie = options.douyinCookie;
+  if (
+    cookie !== undefined &&
+    (value !== DOUYIN_HOT_URL ||
+      !cookie ||
+      Buffer.byteLength(cookie, 'utf8') > 32 * 1024 ||
+      !cookie
+        .split('; ')
+        .every((item) =>
+          /^[!#$%&'*+.^_`|~0-9A-Za-z-]+=[\x21\x23-\x2b\x2d-\x3a\x3c-\x5b\x5d-\x7e]*$/.test(
+            item,
+          ),
+        ))
+  )
+    throw new HotTopicFetchError(
+      'invalid_cookie',
+      '抖音 Cookie 无效或目标地址不受支持，请在热点来源重新上传 Cookie 文件',
+    );
   const signal = AbortSignal.any([
     options.signal,
     AbortSignal.timeout(HOT_SOURCE_TIMEOUT_MS),
@@ -130,6 +151,7 @@ export async function fetchHotSourceText(
           'Accept-Encoding': 'identity',
           'User-Agent': 'FullstackSeed-HotTopics/1.0',
           ...(referer ? { Referer: referer } : {}),
+          ...(cookie ? { Cookie: cookie } : {}),
         },
         lookup: (_host, options, callback) => {
           if (options.all)
@@ -145,7 +167,9 @@ export async function fetchHotSourceText(
             status === 429
               ? '来源请求受到限流，请稍后重试'
               : [401, 403].includes(status)
-                ? '来源拒绝访问，可能需要授权或人工验证'
+                ? target.url.href === DOUYIN_HOT_URL
+                  ? '抖音来源拒绝访问，请在热点来源上传或更新 Cookie 文件；若仍失败，请人工确认登录和访问权限'
+                  : '来源拒绝访问，可能需要授权或人工验证'
                 : status >= 300 && status < 400
                   ? '来源发生重定向，请配置最终 HTTPS 地址'
                   : `来源返回 HTTP ${status}`;
