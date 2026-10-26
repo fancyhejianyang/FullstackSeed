@@ -92,10 +92,12 @@ export class ModelEndpointTestsService {
           item.endpointId === endpointId,
       )
       .at(-1)?.[1];
+    const accountOptions =
+      await this.providers.endpointTestAccountOptions(endpointId);
     return {
       card,
       accountCatalogRequired: card.source === 'builtin',
-      accounts: await this.providers.endpointTestAccounts(endpointId),
+      ...accountOptions,
       requestBody: endpointTestTemplate(
         card.source === 'builtin'
           ? { ...card, modelCode: 'REPLACE_WITH_MODEL_CODE' }

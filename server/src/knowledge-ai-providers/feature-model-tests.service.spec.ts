@@ -83,9 +83,10 @@ function harness(
           });
         },
       ),
-    endpointTestAccounts: jest
-      .fn()
-      .mockResolvedValue([{ id: 2, name: '测试账号' }]),
+    endpointTestAccountOptions: jest.fn().mockResolvedValue({
+      accounts: [{ id: 2, name: '测试账号' }],
+      excludedAccounts: [],
+    }),
   };
   const endpoints = {
     findOne: jest.fn().mockResolvedValue({

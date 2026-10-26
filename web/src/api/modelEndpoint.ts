@@ -188,6 +188,13 @@ export interface ModelEndpointTestOptions {
     models?: Array<{ code: string; name: string }>;
     apiPath?: string;
   }>;
+  /** 同平台启用但不满足当前卡片测试条件的账号，仅用于解释排除原因。 */
+  excludedAccounts?: Array<{
+    id: number;
+    name: string;
+    reasonCode: "missingKey" | "emptyCatalog" | "dedicatedOverride";
+    reason: string;
+  }>;
   requestBody: Record<string, unknown>;
   recentTest: { providerId: number; result: ModelEndpointTestResult } | null;
   accountCatalogRequired?: boolean;

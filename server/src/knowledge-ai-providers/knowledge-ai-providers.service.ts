@@ -123,6 +123,18 @@ export interface ModelEndpointTestAccount {
   apiPath?: string;
 }
 
+export interface ModelEndpointTestAccountExclusion {
+  id: number;
+  name: string;
+  reasonCode: 'missingKey' | 'emptyCatalog' | 'dedicatedOverride';
+  reason: string;
+}
+
+export interface ModelEndpointTestAccountOptions {
+  accounts: ModelEndpointTestAccount[];
+  excludedAccounts: ModelEndpointTestAccountExclusion[];
+}
+
 export interface KnowledgeAiWebSearchTarget {
   model: string;
   functionType: 'webSearch';
@@ -509,6 +521,12 @@ export class KnowledgeAiProvidersService {
   async endpointTestAccounts(
     endpointId: number,
   ): Promise<ModelEndpointTestAccount[]> {
+    return (await this.endpointTestAccountOptions(endpointId)).accounts;
+  }
+
+  async endpointTestAccountOptions(
+    endpointId: number,
+  ): Promise<ModelEndpointTestAccountOptions> {
     const endpoint = await this.endpoints?.findOne(endpointId);
     if (!endpoint) throw new NotFoundException('模型调用接口不存在');
     const providers = await this.providerRepository.find({
@@ -526,15 +544,34 @@ export class KnowledgeAiProvidersService {
           ).map((item) => item.modelCode),
         )
       : new Set<string>();
-    return providers.flatMap((provider) => {
+    const accounts: ModelEndpointTestAccount[] = [];
+    const excludedAccounts: ModelEndpointTestAccountExclusion[] = [];
+    for (const provider of providers) {
       if (
         !provider.isEnabled ||
-        !this.normalizeSecretKey(provider.secretKey) ||
         detectModelPlatform(provider.apiUrl) !== endpoint.platformType
       )
-        return [];
+        continue;
+      if (!this.normalizeSecretKey(provider.secretKey)) {
+        excludedAccounts.push({
+          id: provider.id,
+          name: provider.name,
+          reasonCode: 'missingKey',
+          reason: '账号未配置有效密钥，请在大模型账号中检查密钥配置',
+        });
+        continue;
+      }
       if (builtin) {
         const models = this.endpointCatalog(provider, endpoint.functionType);
+        if (!models.length) {
+          excludedAccounts.push({
+            id: provider.id,
+            name: provider.name,
+            reasonCode: 'emptyCatalog',
+            reason: `账号未配置有效的“${FUNCTION_LABELS[endpoint.functionType]}”模型目录，请在大模型账号中维护对应功能目录`,
+          });
+          continue;
+        }
         const available = models.filter(
           (item) =>
             !overrides.has(item.code) &&
@@ -544,20 +581,28 @@ export class KnowledgeAiProvidersService {
               item.code,
             )?.id === endpoint.id,
         );
-        return available.length
-          ? [
-              {
-                id: provider.id,
-                name: provider.name,
-                models: available,
-                apiPath: builtinModelEndpointPath(provider.apiUrl, endpoint),
-              },
-            ]
-          : [];
+        if (!available.length) {
+          excludedAccounts.push({
+            id: provider.id,
+            name: provider.name,
+            reasonCode: 'dedicatedOverride',
+            reason:
+              '对应功能目录中的模型均由模型专用接口覆盖，请到对应模型专用卡片测试',
+          });
+          continue;
+        }
+        accounts.push({
+          id: provider.id,
+          name: provider.name,
+          models: available,
+          apiPath: builtinModelEndpointPath(provider.apiUrl, endpoint),
+        });
+        continue;
       }
       // 专用卡片用于核实尚未登记的模型，开通情况由实际测试确认。
-      return [{ id: provider.id, name: provider.name }];
-    });
+      accounts.push({ id: provider.id, name: provider.name });
+    }
+    return { accounts, excludedAccounts };
   }
 
   /** 测试只使用指定的已保存卡片，不接受客户端地址、密钥或其它模型。 */
@@ -641,7 +686,14 @@ export class KnowledgeAiProvidersService {
         : featureType
           ? this.getFeatureModels(provider, featureType)
           : null;
-    return catalog?.trim() ? this.parseModels(catalog) : [];
+    const seen = new Set<string>();
+    return catalog?.trim()
+      ? this.parseModels(catalog).filter(({ code }) => {
+          if (/[\s*?]/.test(code) || seen.has(code)) return false;
+          seen.add(code);
+          return true;
+        })
+      : [];
   }
 
   async validateModel(dto: ValidateKnowledgeAiProviderModelDto) {
@@ -1625,7 +1677,11 @@ export class KnowledgeAiProvidersService {
     if (!workspaceId) return provider.apiUrl;
     try {
       const url = new URL(provider.apiUrl);
-      if (/\.maas\.aliyuncs\.com$/i.test(url.hostname)) {
+      const hostname = url.hostname.toLowerCase().replace(/\.$/, '');
+      // 套餐入口不是业务空间专用域名，不能替换后意外改走按量入口。
+      if (hostname === 'token-plan.cn-beijing.maas.aliyuncs.com')
+        return provider.apiUrl;
+      if (/\.maas\.aliyuncs\.com$/.test(hostname)) {
         const parts = url.hostname.split('.');
         parts[0] = workspaceId;
         url.hostname = parts.join('.');

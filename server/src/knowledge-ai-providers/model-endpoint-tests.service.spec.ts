@@ -33,9 +33,10 @@ function harness(
   };
   const providers = {
     resolveEndpointTestTarget: jest.fn().mockResolvedValue(target),
-    endpointTestAccounts: jest
-      .fn()
-      .mockResolvedValue([{ id: 2, name: '测试账号' }]),
+    endpointTestAccountOptions: jest.fn().mockResolvedValue({
+      accounts: [{ id: 2, name: '测试账号' }],
+      excludedAccounts: [],
+    }),
   };
   const endpoints = {
     findOne: jest.fn().mockResolvedValue({
@@ -72,6 +73,32 @@ describe('模型接口卡片调试', () => {
     expect(
       Reflect.getMetadata(PERMISSIONS_KEY, ModelEndpointTestsController),
     ).toEqual(['ModelEndpoint.update']);
+  });
+
+  it('测试选项一次读取候选和受控排除原因，读取不调用供应商', async () => {
+    const { service, providers } = harness();
+    const excludedAccounts = [
+      {
+        id: 3,
+        name: '套餐账号',
+        reasonCode: 'emptyCatalog',
+        reason: '账号未配置对应功能模型目录',
+      },
+    ];
+    providers.endpointTestAccountOptions.mockResolvedValue({
+      accounts: [{ id: 2, name: '测试账号' }],
+      excludedAccounts,
+    });
+    const fetchSpy = jest
+      .spyOn(globalThis, 'fetch')
+      .mockRejectedValue(new Error('测试选项读取不得发送网络请求'));
+    await expect(service.options(1, 7)).resolves.toMatchObject({
+      accounts: [{ id: 2, name: '测试账号' }],
+      excludedAccounts,
+    });
+    expect(providers.endpointTestAccountOptions).toHaveBeenCalledTimes(1);
+    expect(providers.endpointTestAccountOptions).toHaveBeenCalledWith(1);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('按已保存模型发送单次请求，强制非流式并脱敏响应，不修改账号', async () => {

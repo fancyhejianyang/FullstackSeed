@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-10-26 修复系统通用卡片测试默认选择并说明套餐账号排除原因
+
+- 系统通用卡片打开时，优先恢复仍有效的历史账号和模型；无有效历史账号时默认首个对应目录非空的可用账号及其首模型，历史账号有效但原模型失效时使用该账号首个现有模型。明确退役历史仍保持清空、不自动改选；专用卡片保留原“有效历史或唯一账号”策略。回填一次性同步请求 JSON 的 model，不依赖相同值是否触发 watch；仅选择和预填，不自动调用模型，pending 历史继续沿用原编号查询。
+- 测试选项新增可选 `excludedAccounts` 诊断，与原 `accounts` 分开：只解释同平台启用账号的缺密钥、空/无效功能目录、模型全被专用接口覆盖三种受控原因。返回仅账号编号、名称、reasonCode 和 reason，不含密钥、URL 或原始模型目录；停用和其它平台账号不为诊断而暴露。表单复用测试账号的 hint 展示名称与原因，不把排除账号加入可测下拉；旧响应无诊断字段仍兼容。原数组方法保留兼容，新选项方法一次查询统一收集，不重复读取供应商配置。
+- 阿里 Token Plan 官方 `token-plan.cn-beijing.maas.aliyuncs.com` 与空间型域名原本均能识别为百炼，套餐名称不影响平台。修复套餐账号配置 workspaceId 时被错误改写首段的问题：对规范化后的官方套餐 hostname 保留原地址，真实空间域名继续按原空间配置解析。普通调用及卡片测试共用保护，不改用户账号数据、密钥或计费类型，不切换到其它账号。官方套餐入口依据见 [Token Plan 接入说明](https://help.aliyun.com/en/model-studio/token-plan-personal-quick-start)。
+- 卡片目录按具体模型编码保序去重，只过滤提交校验本身不允许的空白/通配编码，不扩大模型能力。识图仍只读 visionModels，向量仍用 embeddingModels，普通调用使用既有普通/文本目录；不借其它目录补假模型，不绕过启用、密钥、专用覆盖或停用规则。提交时继续核对实际命中卡片，不能凭候选返回绕过专用接口。
+- 新增文件（2）：`web/src/views/model-endpoint/testSelection.ts`、`web/src/views/model-endpoint/testSelection.test.mjs`。修改文件（10）：`server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`、`server/src/knowledge-ai-providers/model-endpoint-tests.service.ts`、`server/src/knowledge-ai-providers/model-endpoint-tests.service.spec.ts`、`server/src/knowledge-ai-providers/feature-model-tests.service.spec.ts`、`server/src/model-endpoints/model-endpoint.builtins.spec.ts`、`server/src/model-endpoints/model-endpoints.service.spec.ts`、`web/src/api/modelEndpoint.ts`、`web/src/views/model-endpoint/Test.vue`、`.design-spec.md`、本文件。删除文件：无。用户原有 `web/auto-imports.d.ts`、`web/src/api/hotTopic.ts` 修改保持，不纳入提交。
+- 验证：按修复规则仅静态检查。后端生产源码及相关变更规格 noEmit、6 个后端文件定向 ESLint、前端 Vue 类型、测试脚本语法、格式、组件复用及 diff 检查通过。新增规格覆盖默认/历史/退役/空目录选择、JSON 同步、无自动付费入口、排除字段安全、套餐域名与空间替换、识图目录隔离、专用覆盖及目录去重；行为规格未运行，不宣称实际账号已测试成功。包含其它模块旧规格的全量类型检查仍有 8 处既有无关错误，本次定向检查无新增诊断。未 build、未执行服务启动或重启命令、未读取 `.env` 或真实凭据、未连接运行中数据库、未发真实或付费测试请求；既有用户 watch 可能随源码保存自行热重载。套餐账号当前究竟因何不在候选，仍以页面返回的实际受控排除原因及用户配置为准。
+
 ### 2026-10-26 修复客服调度器重启时的单实例锁交接
 
 - 保留同一数据库仅一个客服调度实例的约束，将启动取锁从立即失败改为参数化 `GET_LOCK(..., 10)`，有限等待旧进程的连接和锁释放。只有明确返回数字或字符串 `1` 才恢复中断任务、就绪并启动调度；明确 `0` 为等待超时，再只读查询持锁连接编号，规范的正整数才进入提示。NULL、非法状态、连接或查询异常单独报“取锁异常”，不再全部冒充另一个实例。诊断失败不覆盖原超时，不重试抢锁、不终止连接或绕过锁保护。

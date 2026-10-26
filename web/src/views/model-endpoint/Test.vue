@@ -16,6 +16,10 @@ import {
 import { getPermissionActionColor } from "@/utils/permission";
 import { removedModelMatchesSelection } from "@/utils/retiredModelOptions";
 import { modelPlatformLabels } from "@/utils/modelPlatform";
+import {
+  getExcludedEndpointTestAccountsHint,
+  getInitialEndpointTestForm,
+} from "./testSelection";
 
 const props = defineProps<{ row: ModelEndpoint | null }>();
 const visible = defineModel<boolean>("visible", { required: true });
@@ -50,6 +54,19 @@ const pending = computed(
     result.value?.status === "running" ||
     result.value?.status === "accepted",
 );
+const accountHint = computed(() => {
+  const selectionHint =
+    options.value && !options.value.accounts.length
+      ? isBuiltin.value
+        ? "暂无对应目录含可用模型的同平台账号，请检查账号启用状态、密钥和模型目录；已配置专用卡片的模型请到专用卡片测试。"
+        : `暂无可用的${modelPlatformLabels[options.value.card.platformType]}账号，请在大模型账号中确认该平台账号已启用且已配置密钥。`
+      : isBuiltin.value
+        ? "只显示同平台、已启用且对应目录有可用模型的账号；已配置专用卡片的模型请到专用卡片测试。"
+        : "可选择同平台、已启用且已配置密钥的账号，无需先登记此模型；模型是否开通以实际测试结果为准。";
+  return [selectionHint, getExcludedEndpointTestAccountsHint(options.value)]
+    .filter(Boolean)
+    .join(" ");
+});
 const fields = computed<FormField[]>(() => [
   {
     prop: "providerId",
@@ -60,14 +77,7 @@ const fields = computed<FormField[]>(() => [
       value: item.id,
     })),
     componentProps: { disabled: pending.value },
-    hint:
-      options.value && !options.value.accounts.length
-        ? isBuiltin.value
-          ? "暂无对应目录含可用模型的同平台账号，请检查账号启用状态、密钥和模型目录；已配置专用卡片的模型请到专用卡片测试。"
-          : `暂无可用的${modelPlatformLabels[options.value.card.platformType]}账号，请在大模型账号中确认该平台账号已启用且已配置密钥。`
-        : isBuiltin.value
-          ? "只显示同平台、已启用且对应目录有可用模型的账号；已配置专用卡片的模型请到专用卡片测试。"
-          : "可选择同平台、已启用且已配置密钥的账号，无需先登记此模型；模型是否开通以实际测试结果为准。",
+    hint: accountHint.value,
   },
   ...(isBuiltin.value
     ? [
@@ -320,30 +330,13 @@ watch(
       if (current !== session || !visible.value || sequence !== optionsSequence)
         return;
       const previous = data.recentTest;
-      const restoringRemovedModel = previous?.result.modelRemoved === true;
       synchronizingRemovedOptions = true;
       options.value = data;
       testedAccountName.value = previous
         ? (data.accounts.find((item) => item.id === previous.providerId)
             ?.name ?? `账号 ${previous.providerId}`)
         : "";
-      form.providerId = restoringRemovedModel
-        ? ""
-        : previous &&
-            data.accounts.some((item) => item.id === previous.providerId)
-          ? previous.providerId
-          : data.accounts.length === 1
-            ? data.accounts[0]!.id
-            : "";
-      form.requestBody = JSON.stringify(data.requestBody, null, 2);
-      form.model = previous?.result.model ?? "";
-      if (
-        data.card.source === "builtin" &&
-        !availableModels.value.some((item) => item.code === form.model)
-      )
-        form.model = restoringRemovedModel
-          ? ""
-          : (availableModels.value[0]?.code ?? "");
+      Object.assign(form, getInitialEndpointTestForm(data));
       synchronizingRemovedOptions = false;
       result.value = previous?.result ?? null;
       lastNotifiedResult = previous

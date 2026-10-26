@@ -263,6 +263,168 @@ describe('系统通用规则与模型专用覆盖', () => {
     await expect(providers.endpointTestAccounts(-2)).resolves.toEqual([]);
   });
 
+  it('套餐账号普通调用可用，识图空目录不会借用普通目录，并返回受控原因', async () => {
+    const { providers, provider } = harness();
+    provider.name = '百炼套餐账号';
+    provider.apiUrl =
+      'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1';
+    provider.visionModels = '';
+    await expect(providers.endpointTestAccountOptions(-1)).resolves.toEqual({
+      accounts: [
+        {
+          id: 2,
+          name: '百炼套餐账号',
+          apiPath: '/compatible-mode/v1/chat/completions',
+          models: [
+            { code: 'qwen3.8-flash', name: 'Flash' },
+            { code: 'qwen-plus', name: 'Plus' },
+            { code: 'qwen-future', name: 'qwen-future' },
+          ],
+        },
+      ],
+      excludedAccounts: [],
+    });
+    await expect(providers.endpointTestAccountOptions(-2)).resolves.toEqual({
+      accounts: [],
+      excludedAccounts: [
+        {
+          id: 2,
+          name: '百炼套餐账号',
+          reasonCode: 'emptyCatalog',
+          reason: expect.stringContaining('模型目录') as unknown,
+        },
+      ],
+    });
+    await expect(
+      providers.resolveEndpointTestTarget(-2, 2, 'qwen3.8-flash'),
+    ).rejects.toThrow('能力目录');
+    provider.visionModels = 'qwen3-vl-plus#套餐识图';
+    await expect(providers.endpointTestAccountOptions(-2)).resolves.toEqual({
+      accounts: [
+        {
+          id: 2,
+          name: '百炼套餐账号',
+          apiPath: '/compatible-mode/v1/chat/completions',
+          models: [{ code: 'qwen3-vl-plus', name: '套餐识图' }],
+        },
+      ],
+      excludedAccounts: [],
+    });
+  });
+
+  it.each([true, false])(
+    '套餐识图目录全部被专用配置覆盖时不进入通用候选（专用启用=%s）',
+    async (isActive) => {
+      const { providers, provider, addOverride } = harness();
+      provider.apiUrl =
+        'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1';
+      provider.visionModels = 'qwen-plus';
+      addOverride(isActive).functionType = 'vision';
+      await expect(providers.endpointTestAccountOptions(-2)).resolves.toEqual({
+        accounts: [],
+        excludedAccounts: [
+          {
+            id: 2,
+            name: '百炼账号',
+            reasonCode: 'dedicatedOverride',
+            reason: expect.stringContaining('专用') as unknown,
+          },
+        ],
+      });
+      await expect(
+        providers.resolveEndpointTestTarget(-2, 2, 'qwen-plus'),
+      ).rejects.toThrow(isActive ? '专用卡片' : '停用');
+    },
+  );
+
+  it('排除原因只包含同平台启用账号的受控字段，不包含地址、密钥或目录原文', async () => {
+    const { providers, provider, providerRepository, repository, addOverride } =
+      harness();
+    addOverride(false);
+    providerRepository.find.mockResolvedValue([
+      provider,
+      {
+        ...provider,
+        id: 3,
+        name: '无密钥账号',
+        secretKey: '   ',
+        models: '',
+        textModels: '',
+      },
+      {
+        ...provider,
+        id: 4,
+        name: '空目录账号',
+        models: 'invalid model#不可调用\nqwen*',
+        textModels: '',
+      },
+      {
+        ...provider,
+        id: 5,
+        name: '专用覆盖账号',
+        models: 'qwen-plus',
+        textModels: '',
+      },
+      { ...provider, id: 6, name: '停用账号', isEnabled: false },
+      {
+        ...provider,
+        id: 7,
+        name: '其它平台账号',
+        apiUrl: 'https://tokenhub.tencentmaas.com',
+      },
+    ]);
+    const options = await providers.endpointTestAccountOptions(-1);
+    expect(providerRepository.find).toHaveBeenCalledTimes(1);
+    expect(repository.find).toHaveBeenCalledTimes(1);
+    expect(options.accounts).toHaveLength(1);
+    expect(
+      options.excludedAccounts.map(({ id, reasonCode }) => ({
+        id,
+        reasonCode,
+      })),
+    ).toEqual([
+      { id: 3, reasonCode: 'missingKey' },
+      { id: 4, reasonCode: 'emptyCatalog' },
+      { id: 5, reasonCode: 'dedicatedOverride' },
+    ]);
+    for (const account of options.excludedAccounts) {
+      expect(Object.keys(account).sort()).toEqual([
+        'id',
+        'name',
+        'reason',
+        'reasonCode',
+      ]);
+      expect(account.reason).toBeTruthy();
+    }
+    const encoded = JSON.stringify(options.excludedAccounts);
+    expect(encoded).not.toContain('must-not-leak');
+    expect(encoded).not.toContain('https://');
+    expect(encoded).not.toContain('invalid model');
+    expect(encoded).not.toContain('停用账号');
+    expect(encoded).not.toContain('其它平台账号');
+    await expect(providers.endpointTestAccounts(-1)).resolves.toEqual(
+      options.accounts,
+    );
+  });
+
+  it('通用候选按编码保序去重，只过滤提交本身不允许的无效编码', async () => {
+    const { providers, provider } = harness();
+    provider.models =
+      'qwen3.8-flash#首个名称\ninvalid model#无效\nqwen*\n?\n#空编码';
+    provider.textModels = 'qwen3.8-flash#重复名称\nqwen-future#后续模型';
+    await expect(providers.endpointTestAccounts(-1)).resolves.toEqual([
+      {
+        id: 2,
+        name: '百炼账号',
+        apiPath: '/compatible-mode/v1/chat/completions',
+        models: [
+          { code: 'qwen3.8-flash', name: '首个名称' },
+          { code: 'qwen-future', name: '后续模型' },
+        ],
+      },
+    ]);
+  });
+
   it('专用卡片新增后不能从通用测试入口绕过，未登记/空白/通配/跨平台模型均拒绝', async () => {
     const { providers, provider, addOverride } = harness();
     addOverride(true);
@@ -359,6 +521,48 @@ describe('系统通用规则与模型专用覆盖', () => {
       url: 'https://proxy.example/v1/chat/completions',
     });
   });
+
+  it.each([
+    'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
+    'https://TOKEN-PLAN.CN-BEIJING.MAAS.ALIYUNCS.COM./compatible-mode/v1',
+  ])('套餐地址 %s 不因业务空间配置而改走其它域名', async (base) => {
+    const { providers, provider } = harness();
+    provider.apiUrl = base;
+    provider.workspaceId = 'workspace';
+    const url = `${new URL(base).origin}/compatible-mode/v1/chat/completions`;
+    await expect(
+      providers.inspectFeatureEndpoint({
+        id: 2,
+        model: 'qwen3.8-flash',
+        featureType: 'chat',
+      }),
+    ).resolves.toMatchObject({ source: 'builtin', url });
+    await expect(
+      providers.resolveEndpointTestTarget(-1, 2, 'qwen3.8-flash'),
+    ).resolves.toMatchObject({ url });
+    await expect(
+      providers.resolveChatTarget({ id: 2, model: 'qwen3.8-flash' }),
+    ).resolves.toMatchObject({ url });
+  });
+
+  it.each(['cn-beijing', 'ap-southeast-1'])(
+    '真实空间型 %s 地址仍按业务空间解析普通调用和文本向量',
+    async (region) => {
+      const { providers, provider } = harness();
+      provider.apiUrl = `https://old.${region}.maas.aliyuncs.com/compatible-mode/v1`;
+      provider.workspaceId = 'workspace';
+      await expect(
+        providers.resolveChatTarget({ id: 2, model: 'qwen3.8-flash' }),
+      ).resolves.toMatchObject({
+        url: `https://workspace.${region}.maas.aliyuncs.com/compatible-mode/v1/chat/completions`,
+      });
+      await expect(
+        providers.resolveEmbeddingTarget({ id: 2, model: 'text-embedding-v4' }),
+      ).resolves.toMatchObject({
+        url: `https://workspace.${region}.maas.aliyuncs.com/compatible-mode/v1/embeddings`,
+      });
+    },
+  );
 
   it('后续补充目录不再创建与通用规则相同的逐版本记录', () => {
     expect(MODEL_SPECIFIC_PRESETS).toHaveLength(181);

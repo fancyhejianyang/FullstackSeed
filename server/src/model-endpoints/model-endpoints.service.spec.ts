@@ -73,6 +73,14 @@ describe('模型平台识别', () => {
     ],
     ['https://workspace.cn-beijing.maas.aliyuncs.com/api/v1', 'aliyunBailian'],
     [
+      'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
+      'aliyunBailian',
+    ],
+    [
+      'https://TOKEN-PLAN.CN-BEIJING.MAAS.ALIYUNCS.COM./compatible-mode/v1',
+      'aliyunBailian',
+    ],
+    [
       'https://workspace.ap-southeast-1.maas.aliyuncs.com/api/v1',
       'aliyunBailian',
     ],
