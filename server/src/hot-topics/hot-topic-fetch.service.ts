@@ -22,7 +22,16 @@ import {
   type HotTopicMode,
 } from './hot-topic.types';
 
-const WEIBO_HOT_FALLBACK_URL = 'https://weibo.com/ajax/statuses/hot_band';
+const WEIBO_HOT_FALLBACKS = [
+  {
+    url: 'https://weibo.com/ajax/statuses/hot_band',
+    label: '微博官方热搜接口',
+  },
+  {
+    url: 'https://weibo.com/ajax/side/hotSearch',
+    label: '微博侧栏热搜辅助接口',
+  },
+] as const;
 
 function sourceHost(source: HotSourceInput): string | null {
   const platformHost = platformSource(source.kind)?.host;
@@ -83,38 +92,69 @@ export class HotTopicFetchService {
     const fixedSource = fixedUrl
       ? { ...source, accessMode: 'page' as const, url: fixedUrl }
       : source;
+    const configured = normalizeHotTopicLink(fixedSource.url);
+    const configuredWeiboEndpoint =
+      source.kind === 'weiboHot'
+        ? WEIBO_HOT_FALLBACKS.find((item) => item.url === configured)
+        : undefined;
     try {
-      const body = await fetchHotSourceText(fixedSource.url, { signal });
+      const body = await fetchHotSourceText(fixedSource.url, {
+        signal,
+        ...(configuredWeiboEndpoint ? { referer: 'https://weibo.com/' } : {}),
+      });
+      const candidates = parseHotTopicPayload(body, fixedSource, fetchedAt);
+      if (source.kind === 'weiboHot' && !candidates.length)
+        throw new HotTopicFetchError(
+          'empty_weibo',
+          '微博来源未返回可用的热搜榜单条目',
+        );
       return {
-        candidates: parseHotTopicPayload(body, fixedSource, fetchedAt),
+        candidates,
         message:
           source.kind === 'douyinHot'
             ? '已读取抖音固定热搜接口数据'
-            : '已读取配置来源的公开结构化数据',
+            : configuredWeiboEndpoint
+              ? `已读取${configuredWeiboEndpoint.label}`
+              : '已读取配置来源的公开结构化数据',
       };
     } catch (primaryError) {
-      const configured = normalizeHotTopicLink(fixedSource.url);
-      if (source.kind !== 'weiboHot' || configured === WEIBO_HOT_FALLBACK_URL)
-        throw primaryError;
-      try {
-        const body = await fetchHotSourceText(WEIBO_HOT_FALLBACK_URL, {
-          signal,
-          referer: 'https://weibo.com/',
-        });
-        return {
-          candidates: parseHotTopicPayload(
+      if (source.kind !== 'weiboHot') throw primaryError;
+      signal.throwIfAborted();
+      const failures = [
+        `配置来源未能直读（${safeHotTopicError(primaryError)}）`,
+      ];
+      const attempted = new Set([configured]);
+      for (const fallback of WEIBO_HOT_FALLBACKS) {
+        if (attempted.has(fallback.url)) continue;
+        attempted.add(fallback.url);
+        signal.throwIfAborted();
+        try {
+          const body = await fetchHotSourceText(fallback.url, {
+            signal,
+            referer: 'https://weibo.com/',
+          });
+          const candidates = parseHotTopicPayload(
             body,
-            { ...fixedSource, url: WEIBO_HOT_FALLBACK_URL },
+            { ...fixedSource, url: fallback.url },
             fetchedAt,
-          ),
-          message: `配置页面未能直读（${safeHotTopicError(primaryError)}），已改用微博官方热搜接口`,
-        };
-      } catch (fallbackError) {
-        throw new HotTopicFetchError(
-          'weibo_unavailable',
-          `配置页面未能直读（${safeHotTopicError(primaryError)}），微博官方热搜回退也失败（${safeHotTopicError(fallbackError)}）`,
-        );
+          );
+          if (!candidates.length)
+            throw new HotTopicFetchError(
+              'empty_weibo',
+              '微博接口未返回可用的热搜榜单条目',
+            );
+          return {
+            candidates,
+            message: `${failures.join('；')}，已改用${fallback.label}`,
+          };
+        } catch (fallbackError) {
+          signal.throwIfAborted();
+          failures.push(
+            `${fallback.label}失败（${safeHotTopicError(fallbackError)}）`,
+          );
+        }
       }
+      throw new HotTopicFetchError('weibo_unavailable', failures.join('；'));
     }
   }
 

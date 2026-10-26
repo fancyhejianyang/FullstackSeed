@@ -182,6 +182,71 @@ function parseDouyinHotList(
   return output;
 }
 
+function isWeiboRealtimeSource(source: HotSourceInput): boolean {
+  if (source.kind !== 'weiboHot') return false;
+  try {
+    const url = new URL(source.url);
+    return (
+      url.protocol === 'https:' &&
+      url.hostname === 'weibo.com' &&
+      url.pathname === '/ajax/side/hotSearch'
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** 微博侧栏接口只收录 data.realtime，不混入置顶、推荐或其它榜单。 */
+function parseWeiboRealtime(
+  body: string,
+  source: HotSourceInput,
+  fetchedAt: string,
+): HotTopicCandidate[] {
+  if (!body.trim())
+    throw new HotTopicFetchError(
+      'empty_weibo_realtime',
+      '微博辅助热搜接口响应为空，未返回可用榜单',
+    );
+  let payload: Record<string, unknown>;
+  try {
+    payload = hotRecord(JSON.parse(body) as unknown);
+  } catch {
+    throw new HotTopicFetchError(
+      'invalid_weibo_realtime',
+      '微博辅助热搜接口未返回有效 JSON，可能需要授权或人工验证',
+    );
+  }
+  if (
+    payload.error ||
+    ('ok' in payload &&
+      payload.ok !== 1 &&
+      payload.ok !== '1' &&
+      payload.ok !== true) ||
+    (payload.error_code !== undefined &&
+      payload.error_code !== null &&
+      payload.error_code !== 0 &&
+      payload.error_code !== '0')
+  )
+    throw new HotTopicFetchError(
+      'weibo_realtime_unavailable',
+      '微博辅助热搜接口返回失败状态，可能需要授权或人工验证',
+    );
+  const rows = hotRecord(payload.data).realtime;
+  if (!Array.isArray(rows))
+    throw new HotTopicFetchError(
+      'invalid_weibo_realtime',
+      '微博辅助热搜接口未返回 data.realtime 榜单',
+    );
+  // 仅将已确认的列表交给既有微博词条解析，不递归采集原响应的其它字段。
+  const output = parseJsonData({ band_list: rows }, source, fetchedAt);
+  if (!output.length)
+    throw new HotTopicFetchError(
+      'empty_weibo_realtime',
+      '微博辅助热搜接口 data.realtime 为空或没有有效词条',
+    );
+  return output;
+}
+
 function parseJsonData(
   data: unknown,
   source: HotSourceInput,
@@ -471,6 +536,8 @@ export function parseHotTopicPayload(
     return parseNeteaseDomesticNews(body, source, fetchedAt);
   if (source.kind === 'douyinHot')
     return parseDouyinHotList(body, source, fetchedAt);
+  if (isWeiboRealtimeSource(source))
+    return parseWeiboRealtime(body, source, fetchedAt);
   if (body.trimStart().startsWith('{') || body.trimStart().startsWith('[')) {
     try {
       return parseJsonData(JSON.parse(body) as unknown, source, fetchedAt);

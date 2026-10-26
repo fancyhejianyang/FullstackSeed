@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-10-26 微博增加侧栏 realtime 辅助热搜接口
+
+- 按用户提供的 GET 地址和字段，将 `https://weibo.com/ajax/side/hotSearch` 加入微博平台直读备用链路：先读配置来源，失败或没有可用条目时依次尝试已有 `hot_band`、新增侧栏辅助接口；任一来源返回有效榜单即停止。单个回退链跳过已请求的相同地址，已取消任务不再尝试后续接口。直接将该地址配置为微博公开来源时同样可用，不修改已有来源 URL。
+- 新接口仅读取 JSON 的 `data.realtime`，不混入 `hotgov/hotgovs`、顶层同名列表、其它推荐或广告列表；复用既有微博词条的标题、安全链接、排名、热度及可用事件时间映射，缺失保持未知，不将数组序号当名次。空体、非 JSON、明确 `ok/error/error_code` 失败、缺少或空榜单使用固定中文错误，原始响应和敏感错误不进入提示。
+- 任务来源记录说明实际采用的“微博侧栏热搜辅助接口”及前序失败原因，所有通道失败时保留各自受控原因，不伪装采集成功。沿用 HTTPS GET、公网地址检查、大小及超时限制，仅保留已知微博接口的公开 Referer；无 Cookie、代理池、IP/浏览器身份伪装或 AI 代取。微博纯 AI/search 来源的模式语义、抖音与网易固定直读、百炼及腾讯联网解析不变。
+- 前后端 API、DTO、实体及权限字段不变，无需新增表单项或数据库迁移。新增文件：无。删除文件：无。修改文件：`server/src/hot-topics/hot-topic-fetch.service.ts`、`server/src/hot-topics/hot-topic-fetch.service.spec.ts`、`server/src/hot-topics/hot-topic-parsers.ts`、`server/src/hot-topics/hot-topic-parsers.spec.ts`、`.design-spec.md`、本文件，合计 6 个。原有 `web/auto-imports.d.ts`、`web/components.d.ts`、`web/src/api/hotTopic.ts` 改动保留，不纳入提交。
+- 验证：业务源码及本次两个 spec 的 TypeScript no-emit 编译检查、定向 ESLint/Prettier 与 diff 检查通过；补充字段隔离、错误结构、安全链接、去重上限、三级回退、直接配置、跳过重复、空结果和取消等回归断言。按既有采集整改约定仅做静态检查，未执行测试、build、启动/重启服务、数据库写入或付费模型调用。本轮公开读取未取得可用线上 JSON，不将代码接入表述为线上采集已经成功。
+
 ### 2026-10-26 抖音热搜改为唯一固定接口读取
 
 - 按用户确认的接口与返回契约，将抖音热搜唯一地址固定为 `https://www.douyin.com/aweme/v1/web/hot/search/list/`。与网易共用固定来源判定，三种获取模式均直接读取，不加入模型联网搜索，不回退旧网页或其它接口；未选来源的 AI 模式继续使用默认抖音来源，但不再要求联网 AI 配置。抖音与微博同时选择时，仅微博进入原有 AI 搜索约束。

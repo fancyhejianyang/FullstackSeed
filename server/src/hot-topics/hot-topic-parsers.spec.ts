@@ -199,6 +199,174 @@ describe('hot topic source parsers (offline fixtures)', () => {
       [],
     );
   });
+  it('reads only the auxiliary Weibo data.realtime list and preserves actual fields', () => {
+    const weibo = {
+      ...source,
+      kind: 'weiboHot' as const,
+      url: 'https://weibo.com/ajax/side/hotSearch',
+    };
+    const result = parseHotTopicPayload(
+      JSON.stringify({
+        ok: 1,
+        data: {
+          realtime: [
+            {
+              word: '<b>微博实时热搜</b>',
+              realpos: 2,
+              num: 9527,
+              event_time: 1792569600,
+            },
+            { word: '缺失字段的热搜' },
+          ],
+          hotgov: { word: '不收录的置顶词' },
+          hotgovs: [{ word: '不收录的其它置顶词' }],
+          band_list: [{ word: '不收录的其它榜单' }],
+        },
+        realtime: [{ word: '不收录的顶层列表' }],
+      }),
+      weibo,
+      at,
+    );
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({
+      title: '微博实时热搜',
+      platform: '微博',
+      rank: 2,
+      heat: 9527,
+      publishedAt: at,
+      fetchedAt: at,
+      acquisition: 'page',
+      url: `https://s.weibo.com/weibo?q=${encodeURIComponent('#微博实时热搜#')}`,
+    });
+    expect(result[1]).toMatchObject({
+      title: '缺失字段的热搜',
+      rank: null,
+      heat: null,
+      publishedAt: null,
+    });
+  });
+  it('reuses safe Weibo links and field fallbacks without taking list indexes as rank', () => {
+    const weibo = {
+      ...source,
+      kind: 'weiboHot' as const,
+      url: 'https://weibo.com/ajax/side/hotSearch?version=1',
+    };
+    const result = parseHotTopicPayload(
+      JSON.stringify({
+        ok: '1',
+        data: {
+          realtime: [
+            {
+              word: '安全链接',
+              url: 'https://weibo.com/post/123',
+              rank: '3',
+              raw_hot: '1234',
+            },
+            {
+              word: '无效链接',
+              word_scheme: '#真实词条#',
+              url: 'javascript:alert(1)',
+              position: -1,
+              hot_value: 'unknown',
+              event_time: 'invalid',
+            },
+          ],
+        },
+      }),
+      weibo,
+      at,
+    );
+    expect(result[0]).toMatchObject({
+      title: '安全链接',
+      url: 'https://weibo.com/post/123',
+      rank: 3,
+      heat: 1234,
+    });
+    expect(result[1]).toMatchObject({
+      title: '无效链接',
+      url: `https://s.weibo.com/weibo?q=${encodeURIComponent('#真实词条#')}`,
+      rank: null,
+      heat: null,
+      publishedAt: null,
+    });
+  });
+  it.each([
+    '',
+    '   ',
+    '<html>登录验证<script>doNotExecute()</script></html>',
+    '{invalid json}',
+    '{"data":{"hotgovs":[{"word":"不能代替 realtime"}]}}',
+    '{"realtime":[{"word":"错误位置"}]}',
+    '{"data":{"nested":{"realtime":[{"word":"不可递归查找"}]}}}',
+    '{"data":{"realtime":{}}}',
+    '{"data":{"realtime":[]}}',
+    '{"data":{"realtime":[null,{"word":""},{"word":12}]}}',
+  ])(
+    'rejects absent or unusable auxiliary Weibo realtime responses: %p',
+    (body) => {
+      expect(() =>
+        parseHotTopicPayload(body, {
+          ...source,
+          kind: 'weiboHot',
+          url: 'https://weibo.com/ajax/side/hotSearch',
+        }),
+      ).toThrow('微博辅助热搜接口');
+    },
+  );
+  it.each([
+    { ok: 0 },
+    { ok: '0' },
+    { ok: false },
+    { ok: null },
+    { error: 'untrusted secret-value' },
+    { error_code: 10001 },
+  ])(
+    'rejects explicit Weibo errors without returning their raw content: %p',
+    (error) => {
+      const parse = () =>
+        parseHotTopicPayload(
+          JSON.stringify({
+            ...error,
+            message: 'untrusted secret-value',
+            data: { realtime: [{ word: '不应收录的失败响应' }] },
+          }),
+          {
+            ...source,
+            kind: 'weiboHot',
+            url: 'https://weibo.com/ajax/side/hotSearch',
+          },
+        );
+      expect(parse).toThrow('微博辅助热搜接口返回失败状态');
+      expect(parse).not.toThrow('untrusted secret-value');
+    },
+  );
+  it('deduplicates auxiliary Weibo entries and retains the 100-entry bound', () => {
+    const weibo = {
+      ...source,
+      kind: 'weiboHot' as const,
+      url: 'https://weibo.com/ajax/side/hotSearch',
+    };
+    expect(
+      parseHotTopicPayload(
+        JSON.stringify({
+          data: { realtime: [{ word: '重复' }, { word: '重复' }] },
+        }),
+        weibo,
+      ),
+    ).toHaveLength(1);
+    expect(
+      parseHotTopicPayload(
+        JSON.stringify({
+          data: {
+            realtime: Array.from({ length: 150 }, (_, index) => ({
+              word: `热搜 ${index}`,
+            })),
+          },
+        }),
+        weibo,
+      ),
+    ).toHaveLength(100);
+  });
   it('reads server-rendered hot list tables (e.g. aggregator pages) without inventing links', () => {
     const weibo = {
       ...source,
