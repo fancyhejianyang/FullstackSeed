@@ -5,10 +5,10 @@ import Button from '@/components/Button.vue';
 import {
   getHotSource,
   sourceKindLabels,
-  sourceAccessLabels,
   safeSourceUrl,
   type HotSource,
 } from '@/api/hotTopic';
+import { fixedHotSourceUrl, hotSourceAccessLabel } from '@/api/hotTopicSources';
 const props = defineProps<{ row: HotSource | null }>();
 const visible = defineModel<boolean>('visible', { required: true });
 const detail = ref<HotSource | null>(null);
@@ -23,7 +23,13 @@ async function load() {
   loading.value = true;
   try {
     const result = await getHotSource(props.row.id);
-    if (sequence === epoch && visible.value) detail.value = result;
+    if (sequence === epoch && visible.value) {
+      const url = fixedHotSourceUrl(result.kind);
+      detail.value = {
+        ...result,
+        ...(url ? { url, accessMode: 'page' as const } : {}),
+      };
+    }
   } catch {
     if (sequence === epoch) failed.value = true;
   } finally {
@@ -61,7 +67,7 @@ onBeforeUnmount(() => ++epoch);
           sourceKindLabels[detail.kind]
         }}</el-descriptions-item>
         <el-descriptions-item label="获取方式">{{
-          sourceAccessLabels[detail.accessMode]
+          hotSourceAccessLabel(detail)
         }}</el-descriptions-item>
         <el-descriptions-item label="地址"
           ><a

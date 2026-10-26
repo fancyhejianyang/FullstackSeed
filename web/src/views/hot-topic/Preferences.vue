@@ -16,10 +16,10 @@ import {
   saveHotPreference,
   getHotOptions,
   modeLabels,
-  sourceAccessLabels,
   type HotPreference,
   type HotOptions,
 } from "@/api/hotTopic";
+import { fixedHotSourceUrl, hotSourceAccessLabel } from "@/api/hotTopicSources";
 const visible = defineModel<boolean>("visible", { required: true });
 const emit = defineEmits<{ success: [] }>();
 const formRef = ref<InstanceType<typeof Form>>();
@@ -48,7 +48,7 @@ let wasScheduled = false;
 const sourceOptions = computed(() => {
   const rows = options.value.sources.map((source) => ({
     value: String(source.id),
-    label: `${source.name} · ${sourceAccessLabels[source.accessMode]}`,
+    label: `${source.name} · ${hotSourceAccessLabel(source)}`,
   }));
   for (const id of form.sourceIds)
     if (!rows.some((item) => item.value === id))
@@ -61,7 +61,7 @@ const directSourcesIgnored = computed(
     options.value.sources.some(
       (source) =>
         form.sourceIds.includes(String(source.id)) &&
-        source.kind !== "neteaseNews" &&
+        !fixedHotSourceUrl(source.kind) &&
         source.accessMode !== "search",
     ),
 );
@@ -80,7 +80,7 @@ const searchProtocolHint = computed(() => {
     return "当前获取方式依赖 AI 联网搜索，但尚未选用已启用原生联网的热点 AI 配置。仅需平台采集并用普通 AI 推荐时，请将获取模式改为“平台来源”；需要 AI 联网搜索时，请选择已启用百炼 Responses 或腾讯 TokenHub 原生搜索的热点 AI 配置。";
   if (
     form.mode === "hybrid" &&
-    selectedSources.value.some((source) => source.kind !== "neteaseNews")
+    selectedSources.value.some((source) => !fixedHotSourceUrl(source.kind))
   )
     return "当前未选用已启用原生联网的热点 AI 配置，混合模式仍可先采集能直接读取的来源，AI 搜索不可用的原因会记录在任务来源结果中。仅需平台采集并用普通 AI 推荐可选“平台来源”；需要 AI 联网搜索时，请选择已启用百炼 Responses 或腾讯 TokenHub 原生搜索的热点 AI 配置。";
   return "";
@@ -107,7 +107,7 @@ const fields = computed<FormField[]>(() => [
       label,
     })),
     span: 2,
-    hint: "AI 联网模式搜索平台页面；平台模式直读来源；混合模式合并两者。网易国内新闻在所有模式下均直接读取固定接口。",
+    hint: "抖音热搜与网易国内新闻在所有模式下均直接读取固定接口，不走 AI 搜索。微博按模式搜索或直读；AI 联网模式未选择来源时默认读取抖音固定榜单。",
   },
   {
     prop: "aiConfigId",
@@ -115,7 +115,7 @@ const fields = computed<FormField[]>(() => [
     type: "select",
     options: configOptions,
     span: 2,
-    hint: "使用独立“热点发现”功能配置。平台采集可选普通 AI 配置进行推荐；AI 联网搜索需选择已启用百炼 Responses 或腾讯 TokenHub 原生搜索的配置，并核验当前模型的联网能力。网易接口读取不要求联网协议。",
+    hint: "使用独立“热点发现”功能配置。固定接口或平台采集可选普通 AI 配置进行推荐；微博 AI 联网搜索需选择已启用百炼 Responses 或腾讯 TokenHub 原生搜索的配置，并核验模型联网能力。仅采集抖音、网易无需联网协议。",
   },
   {
     prop: "sourceIds",
@@ -123,7 +123,7 @@ const fields = computed<FormField[]>(() => [
     type: "selectMultiple",
     options: sourceOptions,
     span: 2,
-    hint: "最多选择 5 个；支持平台热点页面、热搜聚合页与网易国内新闻，选项后的标记表示其获取方式。",
+    hint: "最多选择 5 个；抖音、网易使用固定接口，微博保留官方热点页或合规聚合页，选项后的标记表示获取方式。",
   },
   {
     prop: "interests",
@@ -296,7 +296,7 @@ async function submit() {
         当前为“仅 AI
         联网搜索”，所选平台页面不会被直接读取。按来源地址采集并用普通 AI
         推荐请选择“平台来源”；需要同时采集和联网搜索补充，请选择“平台 + AI
-        联网搜索”。网易国内新闻始终通过固定接口获取。
+        联网搜索”。抖音热搜与网易国内新闻始终通过固定接口获取，不参与 AI 搜索。
       </p>
       <Form
         ref="formRef"

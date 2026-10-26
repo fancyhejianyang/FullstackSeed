@@ -1,4 +1,5 @@
 import type { HotOptions, HotPreference } from "@/api/hotTopic";
+import { fixedHotSourceUrl } from "@/api/hotTopicSources";
 
 export function supportsHotSearchMode(
   mode: HotOptions["aiConfigs"][number]["webSearchMode"] | undefined,
@@ -13,11 +14,9 @@ export function preferenceRequiresSearch(
 ): boolean {
   if (mode === "platform") return false;
   if (mode === "aiSearch")
-    return (
-      !sources.length || sources.some((source) => source.kind !== "neteaseNews")
-    );
+    return sources.some((source) => !fixedHotSourceUrl(source.kind));
   return !sources.some(
-    (source) => source.kind === "neteaseNews" || source.accessMode === "page",
+    (source) => fixedHotSourceUrl(source.kind) || source.accessMode === "page",
   );
 }
 
@@ -46,7 +45,7 @@ export function scheduleValidationError(
     preference.mode === "platform" &&
     sources.some(
       (source) =>
-        source.kind !== "neteaseNews" && source.accessMode === "search",
+        !fixedHotSourceUrl(source.kind) && source.accessMode === "search",
     )
   )
     return "所选来源需要 AI 搜索，请切换到 AI 联网或混合模式";

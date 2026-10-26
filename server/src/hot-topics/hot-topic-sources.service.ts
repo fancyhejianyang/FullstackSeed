@@ -14,8 +14,8 @@ import {
 import { normalizeHotTopicLink } from './hot-topic-network';
 import {
   CONFIGURABLE_HOT_SOURCE_KINDS,
+  fixedHotSourceUrl,
   isConfigurableHotSourceKind,
-  NETEASE_NEWS_URL,
   platformSource,
   type ConfigurableHotSourceKind,
 } from './hot-topic.types';
@@ -26,11 +26,13 @@ export function sourceView(row: HotTopicSource) {
   void accountName;
   void accountId;
   const supported = isConfigurableHotSourceKind(row.kind);
+  const fixedUrl = supported ? fixedHotSourceUrl(row.kind) : null;
   return {
     ...safe,
     // Legacy account, RSS and JSON Feed records are kept only in the database
     // audit trail. They cannot be returned as executable source configurations.
     kind: supported ? row.kind : ('douyinHot' as const),
+    ...(fixedUrl ? { url: fixedUrl, accessMode: 'page' as const } : {}),
     isEnabled: supported ? row.isEnabled : false,
   };
 }
@@ -75,11 +77,15 @@ export function validateSource(
     )
   )
     throw new BadRequestException('来源只支持公开访问，请移除地址中的访问密钥');
-  if (row.kind === 'neteaseNews') {
+  const fixedUrl = fixedHotSourceUrl(row.kind);
+  if (fixedUrl) {
+    const label = row.kind === 'douyinHot' ? '抖音热搜' : '网易国内新闻';
+    const endpointLabel =
+      row.kind === 'douyinHot' ? '固定热搜接口' : '固定新闻接口';
     if (row.accessMode !== 'page')
-      throw new BadRequestException('网易国内新闻仅支持固定新闻接口读取');
-    if (url.href !== NETEASE_NEWS_URL)
-      throw new BadRequestException('网易国内新闻使用系统固定新闻接口地址');
+      throw new BadRequestException(`${label}仅支持${endpointLabel}读取`);
+    if (url.href !== fixedUrl)
+      throw new BadRequestException(`${label}使用系统${endpointLabel}地址`);
     return;
   }
   const platform = platformSource(row.kind);
@@ -90,9 +96,10 @@ export function validateSource(
 function applyFixedSourceDefaults(
   row: Pick<HotTopicSource, 'kind' | 'accessMode' | 'url'>,
 ) {
-  if (row.kind === 'neteaseNews') {
+  const fixedUrl = fixedHotSourceUrl(row.kind);
+  if (fixedUrl) {
     row.accessMode = 'page';
-    row.url = NETEASE_NEWS_URL;
+    row.url = fixedUrl;
   }
 }
 

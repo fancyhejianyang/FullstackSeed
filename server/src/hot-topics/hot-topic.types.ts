@@ -8,8 +8,15 @@ export type HotSourceKind =
   | 'weiboHot'
   | 'neteaseNews';
 export type ConfigurableHotSourceKind = Exclude<HotSourceKind, 'douyinAccount'>;
+export const DOUYIN_HOT_URL =
+  'https://www.douyin.com/aweme/v1/web/hot/search/list/';
 export const NETEASE_NEWS_URL =
   'https://news.163.com/special/0001220O/new_json2021.js?0.20812515014162658';
+export function fixedHotSourceUrl(kind: string): string | null {
+  if (kind === 'douyinHot') return DOUYIN_HOT_URL;
+  if (kind === 'neteaseNews') return NETEASE_NEWS_URL;
+  return null;
+}
 export const CONFIGURABLE_HOT_SOURCE_KINDS = [
   'douyinHot',
   'weiboHot',
@@ -22,15 +29,14 @@ export function isConfigurableHotSourceKind(
 }
 /**
  * 平台类来源（公开页面 / AI 搜索）的展示名称与域名归属：
- * - 热榜来源不限域名——既可以是平台自有页面，也可以是合规的第三方聚合页
- *   （如 tophub.today 的微博热搜榜），真实可用地址由使用者自行负责；
+ * - 抖音与网易只读取系统固定接口；微博保留公开页面 / AI 搜索，允许合规聚合页；
  * 历史账号来源不再参与配置或任务执行。
  */
 export const PLATFORM_SOURCES: Record<
   string,
   { host?: string; label: string }
 > = {
-  douyinHot: { label: '抖音' },
+  douyinHot: { label: '抖音', host: 'douyin.com' },
   weiboHot: { label: '微博' },
   neteaseNews: { label: '网易新闻', host: '163.com' },
 };
@@ -45,7 +51,7 @@ export function platformLabelForHost(host: string): string | null {
 export function isHostOf(host: string, base: string) {
   return host === base || host.endsWith(`.${base}`);
 }
-/** 热榜类来源允许任意公网 HTTPS 页面（含聚合站）。 */
+/** 热榜类来源；抖音固定接口，微博允许公网 HTTPS 聚合页。 */
 export const HOT_LIST_KINDS = ['douyinHot', 'weiboHot'];
 export type HotSourceAccess = 'page' | 'search';
 export type HotTopicMode = 'aiSearch' | 'platform' | 'hybrid';

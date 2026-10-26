@@ -6,24 +6,22 @@ const source: HotSourceInput = {
   name: '测试热点',
   kind: 'douyinHot',
   accessMode: 'page',
-  url: 'https://www.douyin.com/hot',
+  url: 'https://www.douyin.com/aweme/v1/web/hot/search/list/',
   isEnabled: true,
   description: '',
 };
 const at = '2026-10-21T08:00:00.000Z';
 describe('hot topic source parsers (offline fixtures)', () => {
-  it('reads URL-encoded RENDER_DATA without executing JavaScript and does not invent time/rank', () => {
+  it('reads only data.word_list and preserves missing time/rank as unknown', () => {
     const data = {
+      status_code: 0,
       data: { word_list: [{ word: '科技新进展', hot_value: 123 }] },
     };
-    const result = parseHotTopicPayload(
-      `<script id="RENDER_DATA">${encodeURIComponent(JSON.stringify(data))}</script>`,
-      source,
-      at,
-    );
+    const result = parseHotTopicPayload(JSON.stringify(data), source, at);
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({
       title: '科技新进展',
+      url: 'https://www.douyin.com/hot',
       heat: 123,
       rank: null,
       publishedAt: null,
@@ -31,72 +29,93 @@ describe('hot topic source parsers (offline fixtures)', () => {
       acquisition: 'page',
     });
   });
-  it('parses nested __NEXT_DATA__ without treating author metadata as a configured binding', () => {
+  it('maps actual Douyin rank, heat, event time and sentence links without collecting other lists', () => {
     const data = {
-      props: {
-        aweme_list: [
+      status_code: 0,
+      data: {
+        word_list: [
           {
-            aweme_id: '123',
-            desc: '作者真正的作品',
-            author: {
-              nickname: '指定作者',
-              sec_uid: 'MS4wLjABAAAA-123',
-            },
-            create_time: 1792569600,
+            sentence_id: '7699694920800080483',
+            word: '<b>真实热搜词</b>',
+            position: 2,
+            hot_value: 12170000,
+            event_time: 1792569600,
           },
           {
-            aweme_id: '124',
-            desc: '同名其它作者',
-            author: { nickname: '指定作者', sec_uid: 'different' },
+            sentence_id: 124,
+            word: '第二条热搜词',
+            rank: '3',
+            hot_value: '12345',
           },
         ],
+        aweme_list: [{ aweme_id: '1', desc: '不能收录的作品' }],
+        trending_list: [{ word: '不能收录的上升榜' }],
       },
+      word_list: [{ word: '不能收录的顶层榜单' }],
     };
-    const result = parseHotTopicPayload(
-      `<script id="__NEXT_DATA__">${JSON.stringify(data)}</script>`,
-      source,
-      at,
-    );
+    const result = parseHotTopicPayload(JSON.stringify(data), source, at);
     expect(result).toHaveLength(2);
     expect(result[0]).toMatchObject({
       accountMatched: false,
-      accountId: 'MS4wLjABAAAA-123',
-      title: '作者真正的作品',
-      url: 'https://www.douyin.com/video/123',
+      accountId: null,
+      title: '真实热搜词',
+      url: 'https://www.douyin.com/hot/7699694920800080483',
+      rank: 2,
+      heat: 12170000,
       publishedAt: '2026-10-21T08:00:00.000Z',
     });
+    expect(result[1]).toMatchObject({
+      title: '第二条热搜词',
+      url: 'https://www.douyin.com/hot/124',
+      rank: 3,
+      heat: 12345,
+      publishedAt: null,
+    });
   });
-  it('parses a direct Douyin post-list JSON response with title and published time', () => {
+  it('rejects invalid sentence IDs and untrusted URLs instead of creating unsafe content links', () => {
+    const invalidIds: unknown[] = [
+      undefined,
+      '../outside',
+      'https://example.com/',
+      '1?token=secret',
+      '1'.repeat(65),
+      Number.MAX_SAFE_INTEGER + 1,
+      -1,
+      1.5,
+      {},
+    ];
     const result = parseHotTopicPayload(
       JSON.stringify({
-        status_code: 0,
-        aweme_list: [
-          {
-            aweme_id: '7699694920800080483',
-            desc: '军训拉练经过村庄，退伍老兵在路边驻足敬礼',
-            author: { sec_uid: 'MS4wLjABAAAA-123' },
-            create_time: 1792569600,
-          },
-        ],
+        data: {
+          word_list: invalidIds.map((id, index) => ({
+            word: `安全条目 ${index}`,
+            sentence_id: id,
+            url: 'javascript:alert(1)',
+            share_url: 'https://unrelated.example/hot',
+          })),
+        },
       }),
       source,
       at,
     );
-    expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({
-      accountMatched: false,
-      title: '军训拉练经过村庄，退伍老兵在路边驻足敬礼',
-      url: 'https://www.douyin.com/video/7699694920800080483',
-      publishedAt: '2026-10-21T08:00:00.000Z',
-    });
+    expect(result).toHaveLength(invalidIds.length);
+    expect(
+      result.every((item) => item.url === 'https://www.douyin.com/hot'),
+    ).toBe(true);
   });
-  it('rejects pages without embedded hotspot JSON', () => {
+  it('rejects browser checks and even embedded word_list HTML without executing JavaScript', () => {
     expect(() =>
       parseHotTopicPayload(
         '<html>验证码<script>window.run()</script></html>',
         source,
       ),
-    ).toThrow('没有可解析');
+    ).toThrow('浏览器校验');
+    expect(() =>
+      parseHotTopicPayload(
+        `<script id="RENDER_DATA">${encodeURIComponent(JSON.stringify({ data: { word_list: [{ word: '不可收录' }] } }))}</script>`,
+        source,
+      ),
+    ).toThrow('有效榜单 JSON');
   });
   it('reads only domestic news from the fixed NetEase payload without executing JavaScript', () => {
     const netease = {
@@ -208,15 +227,100 @@ describe('hot topic source parsers (offline fixtures)', () => {
       url: 'https://tophub.today/n/detail',
     });
   });
-  it('returns no fabricated items for empty structured data or unknown JSON schemas', () => {
-    expect(parseHotTopicPayload('{"data":{"word_list":[]}}', source)).toEqual(
-      [],
+  it.each([
+    '',
+    '   ',
+    '{"data":{"word_list":[]}}',
+    '{"data":{"word_list":[null,{"word":""},{"word":123}]}}',
+  ])('rejects empty Douyin response or unusable word lists: %p', (body) => {
+    expect(() => parseHotTopicPayload(body, source)).toThrow(
+      '抖音固定热搜接口未返回',
     );
-    expect(parseHotTopicPayload('{"text":"一条热点"}', source)).toEqual([]);
+  });
+  it.each([
+    '{"text":"一条热点"}',
+    '{"word_list":[{"word":"错误位置的词条"}]}',
+    '{"data":{"word_list":{}}}',
+    '{"aweme_list":[{"aweme_id":"1","desc":"不能替代榜单"}]}',
+    '{"data":{"nested":{"word_list":[{"word":"不递归搜索榜单"}]}}}',
+  ])(
+    'rejects unknown Douyin schemas instead of harvesting unrelated content: %p',
+    (body) => {
+      expect(() => parseHotTopicPayload(body, source)).toThrow(
+        '未返回 data.word_list 榜单',
+      );
+    },
+  );
+  it.each([1, -1, 'blocked', false, null])(
+    'rejects an explicit unsuccessful Douyin status without leaking the raw message: %p',
+    (statusCode) => {
+      expect(() =>
+        parseHotTopicPayload(
+          JSON.stringify({
+            status_code: statusCode,
+            status_msg: 'untrusted secret-value',
+            data: { word_list: [{ word: '不能被收录的失败响应' }] },
+          }),
+          source,
+        ),
+      ).toThrow('抖音固定热搜接口返回失败状态');
+    },
+  );
+  it('deduplicates and caps Douyin entries without inventing invalid rank/heat/time', () => {
+    const row = {
+      word: '重复条目',
+      sentence_id: '123',
+      position: -2,
+      hot_value: 'unknown',
+      event_time: 'not a date',
+    };
+    const result = parseHotTopicPayload(
+      JSON.stringify({ data: { word_list: [row, row] } }),
+      source,
+      at,
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      rank: null,
+      heat: null,
+      publishedAt: null,
+    });
+    expect(
+      parseHotTopicPayload(
+        JSON.stringify({
+          data: {
+            word_list: Array.from({ length: 150 }, (_, index) => ({
+              word: `榜单条目 ${index}`,
+              sentence_id: String(index + 1),
+            })),
+          },
+        }),
+        source,
+      ),
+    ).toHaveLength(100);
+  });
+  it('preserves generic embedded JSON reading for non-fixed Weibo sources', () => {
+    const weibo = {
+      ...source,
+      kind: 'weiboHot' as const,
+      url: 'https://tophub.today/n/KqndgxeLl9',
+    };
+    const payload = { band_list: [{ word: '微博页面热搜', raw_hot: 123 }] };
+    const result = parseHotTopicPayload(
+      `<script id="RENDER_DATA">${encodeURIComponent(JSON.stringify(payload))}</script>`,
+      weibo,
+      at,
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ title: '微博页面热搜', heat: 123 });
+    expect(parseHotTopicPayload('{"text":"未知结构"}', weibo)).toEqual([]);
   });
   it('safely ignores unclosed markup', () => {
     expect(() =>
-      parseHotTopicPayload('<script id="RENDER_DATA">'.repeat(2000), source),
+      parseHotTopicPayload('<script id="RENDER_DATA">'.repeat(2000), {
+        ...source,
+        kind: 'weiboHot',
+      }),
     ).toThrow('没有可解析');
   });
 });

@@ -42,6 +42,7 @@ import {
 import { HotTopicFetchService } from './hot-topic-fetch.service';
 import { HotTopicSourcesService } from './hot-topic-sources.service';
 import { hotSearchResponseForSource } from './hot-topic-search-response';
+import { fixedHotSourceUrl } from './hot-topic.types';
 import type {
   HotPreferenceInput,
   HotSourceOutcome,
@@ -447,7 +448,7 @@ export class HotTopicsService implements OnModuleInit, OnModuleDestroy {
         pref.mode === 'platform' &&
         selected.some(
           (source) =>
-            source.kind !== 'neteaseNews' && source.accessMode === 'search',
+            !fixedHotSourceUrl(source.kind) && source.accessMode === 'search',
         )
       )
         throw new BadRequestException(
@@ -455,15 +456,15 @@ export class HotTopicsService implements OnModuleInit, OnModuleDestroy {
         );
       const hasDirectSource = selected.some(
         (source) =>
-          source.kind === 'neteaseNews' || source.accessMode === 'page',
+          Boolean(fixedHotSourceUrl(source.kind)) ||
+          source.accessMode === 'page',
       );
       const requiresSearch =
-        pref.mode === 'aiSearch' ||
+        (pref.mode === 'aiSearch' &&
+          selected.some((source) => !fixedHotSourceUrl(source.kind))) ||
         (pref.mode === 'hybrid' && !hasDirectSource);
       if (
         requiresSearch &&
-        (!selected.length ||
-          selected.some((source) => source.kind !== 'neteaseNews')) &&
         (!config ||
           !['bailianResponses', 'tokenhubSearch'].includes(
             config.webSearchMode,
@@ -472,12 +473,7 @@ export class HotTopicsService implements OnModuleInit, OnModuleDestroy {
         throw new BadRequestException(
           '当前获取方式需要 AI 联网搜索，请在“偏好与计划”中选择已启用原生联网搜索的热点 AI 配置；如需直接采集并由普通模型推荐，请将获取模式改为“平台来源”。',
         );
-      if (
-        requiresSearch &&
-        (!selected.length ||
-          selected.some((source) => source.kind !== 'neteaseNews')) &&
-        config
-      )
+      if (requiresSearch && config)
         await this.providers.resolveWebSearchTarget({
           id: config.providerId!,
           model: config.model!,

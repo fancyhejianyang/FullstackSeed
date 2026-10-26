@@ -1,6 +1,11 @@
 import { HotTopicSource } from './entities/hot-topic.entity';
-import { sourceView, validateSource } from './hot-topic-sources.service';
-import { NETEASE_NEWS_URL } from './hot-topic.types';
+import { Repository } from 'typeorm';
+import {
+  HotTopicSourcesService,
+  sourceView,
+  validateSource,
+} from './hot-topic-sources.service';
+import { DOUYIN_HOT_URL, NETEASE_NEWS_URL } from './hot-topic.types';
 
 const source = () =>
   ({
@@ -25,17 +30,15 @@ describe('热点来源配置', () => {
     ])
       expect(() => validateSource({ ...source(), url })).toThrow();
   });
-  it('热点页面来源允许平台自有页与第三方聚合页', () => {
-    // 热榜既可以是平台自有页面，也可以是合规聚合页（如 tophub.today 的微博热搜榜）。
+  it('微博页面来源仍允许平台自有页与第三方聚合页', () => {
     for (const url of [
-      'https://www.douyin.com/hot',
       'https://s.weibo.com/top/summary',
       'https://tophub.today/n/KqndgxeLl9',
     ])
       expect(() =>
         validateSource({
           ...source(),
-          kind: (url.includes('douyin') ? 'douyinHot' : 'weiboHot') as const,
+          kind: 'weiboHot',
           accessMode: 'page',
           url,
         }),
@@ -48,6 +51,75 @@ describe('热点来源配置', () => {
         url: 'https://tophub.today/n/KqndgxeLl9',
       }),
     ).not.toThrow();
+  });
+  it('抖音热搜仅接受固定接口，拒绝旧网页和 AI 搜索方式', () => {
+    const douyin = {
+      ...source(),
+      kind: 'douyinHot' as const,
+      url: DOUYIN_HOT_URL,
+    };
+    expect(() => validateSource(douyin)).not.toThrow();
+    expect(() =>
+      validateSource({ ...douyin, url: 'https://www.douyin.com/hot' }),
+    ).toThrow('固定热搜接口地址');
+    expect(() => validateSource({ ...douyin, accessMode: 'search' })).toThrow(
+      '仅支持固定热搜接口读取',
+    );
+  });
+  it.each([
+    ['douyinHot', DOUYIN_HOT_URL],
+    ['neteaseNews', NETEASE_NEWS_URL],
+  ] as const)('旧 %s 来源只读回显固定值，不改变原记录或启停', (kind, url) => {
+    const row = {
+      ...source(),
+      kind,
+      accessMode: 'search' as const,
+      url: 'https://legacy.example.com/?token=private',
+      apiToken: 'private',
+    } as HotTopicSource;
+    expect(sourceView(row)).toMatchObject({
+      kind,
+      url,
+      accessMode: 'page',
+      isEnabled: false,
+    });
+    expect(sourceView(row)).not.toHaveProperty('apiToken');
+    expect(row.url).toContain('private');
+    expect(row.accessMode).toBe('search');
+  });
+  it.each([
+    ['douyinHot', DOUYIN_HOT_URL],
+    ['neteaseNews', NETEASE_NEWS_URL],
+  ] as const)('创建和编辑 %s 都保存固定接口与 page 方式', async (kind, url) => {
+    const original = { ...source(), kind, isEnabled: true };
+    const repository = {
+      create: jest.fn((row: unknown) => row),
+      save: jest.fn((row: unknown) => Promise.resolve(row)),
+      findOne: jest.fn().mockResolvedValue(original),
+    };
+    const service = new HotTopicSourcesService(
+      repository as unknown as Repository<HotTopicSource>,
+    );
+    const dto = {
+      name: '固定来源',
+      kind,
+      accessMode: 'search' as const,
+      url: 'https://legacy.example.com/not-used',
+      isEnabled: true,
+    };
+    await expect(service.create(dto)).resolves.toMatchObject({
+      url,
+      accessMode: 'page',
+      isEnabled: true,
+    });
+    await expect(service.update(1, dto)).resolves.toMatchObject({
+      url,
+      accessMode: 'page',
+      isEnabled: true,
+    });
+    expect(repository.save).toHaveBeenCalledTimes(2);
+    for (const [row] of repository.save.mock.calls)
+      expect(row).toMatchObject({ url, accessMode: 'page', isEnabled: true });
   });
   it('网易国内新闻仅接受系统固定接口与页面读取方式', () => {
     expect(() =>

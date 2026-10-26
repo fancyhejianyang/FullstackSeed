@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-10-26 抖音热搜改为唯一固定接口读取
+
+- 按用户确认的接口与返回契约，将抖音热搜唯一地址固定为 `https://www.douyin.com/aweme/v1/web/hot/search/list/`。与网易共用固定来源判定，三种获取模式均直接读取，不加入模型联网搜索，不回退旧网页或其它接口；未选来源的 AI 模式继续使用默认抖音来源，但不再要求联网 AI 配置。抖音与微博同时选择时，仅微博进入原有 AI 搜索约束。
+- 抖音仅解析 JSON 的 `data.word_list`；从真实字段读取 `word`、`position/rank`、`hot_value` 和可用 `event_time`，不混入顶层榜单、推荐词、作品或网页脚本。合法正数字字符串或安全整数 `sentence_id` 生成抖音词条链接，无有效编号时使用热榜页面而非 JSON 地址；缺失排名、热度和时间保持未知。空体、非 JSON/校验页、非零失败状态、无榜单或无有效条目均使用受控中文报错，不透出原始响应或虚构成功。
+- 来源创建/编辑强制固定地址及 `accessMode=page`；旧记录在安全回显与执行时归一化，不批量写数据库、不改启停状态。前端新增、切类型、回显和提交保持同一契约，抖音与网易地址只读、隐藏获取方式，列表/详情/选项显示“固定接口”。偏好提示、手动执行及每日计划校验同步：仅固定来源无需模型联网协议，可另用普通 AI 做推荐。
+- 微博保留现有网页、聚合页、官方回退和 AI 联网行为，本轮不加入尚未确认的 TopHub 契约；网易固定接口及国内分类解析、百炼与腾讯模型联网解析不变。复用原 DTO、权限和数据库字段，不新增迁移、草稿或配置开关，不在打开/保存页面时发起采集。
+- 新增文件：`web/src/api/hotTopicSources.ts`。
+- 修改文件（后端）：`server/src/hot-topics/hot-topic.types.ts`、`server/src/hot-topics/hot-topic-sources.service.ts`、`server/src/hot-topics/hot-topic-sources.service.spec.ts`、`server/src/hot-topics/hot-topic-fetch.service.ts`、`server/src/hot-topics/hot-topic-fetch.service.spec.ts`、`server/src/hot-topics/hot-topic-parsers.ts`、`server/src/hot-topics/hot-topic-parsers.spec.ts`、`server/src/hot-topics/hot-topics.service.ts`、`server/src/hot-topics/hot-topics.service.spec.ts`。
+- 修改文件（前端与文档）：`web/src/views/hot-topic-source/Edit.vue`、`web/src/views/hot-topic-source/Index.vue`、`web/src/views/hot-topic-source/View.vue`、`web/src/views/hot-topic/Preferences.vue`、`web/src/views/hot-topic/preferenceValidation.ts`、`web/src/views/hot-topic/hotTopic.test.mjs`、`.design-spec.md`、本文件。合计新增 1 个、修改 17 个文件，删除文件无。原有 `web/auto-imports.d.ts`、`web/components.d.ts`、`web/src/api/hotTopic.ts` 未提交改动保留，不纳入本次提交。
+- 验证：后端热点全套及两家联网相关 10 套件 138 项、前端热点与响应诊断 23 项模拟测试通过（合计 161 项）；后端业务源码类型、前端 Vue 类型、定向 ESLint/Prettier、实体列、组件复用与 diff 检查通过。全量含测试文件的 TypeScript 检查仍有其它模块 8 处既有类型错误，未扩展本次范围修复。前端测试因默认子进程受限，采用 `--test-isolation=none` 同进程执行通过。本轮为既有采集配置整改，未 build、未启动或重启服务、未修改运行中数据库、未调用付费模型。
+- 通过现有安全采集器真实 GET 固定抖音地址一次，当前环境返回 HTTP 200 但响应体为 0 字节，未取得实时榜单；未追加 Cookie、签名、代理或验证绕过。接口固定及解析回归已完成，不将模拟通过或 HTTP 200 声称为当前环境真实采集成功。
+
 ### 2026-10-26 热点执行记录增加联网响应查看
 
 - 热点获取与推荐记录为保存了诊断的 AI 联网来源增加“查看联网响应”。独立弹窗按需读取已保存的脱敏接口返回，展示平台、模型、账号编号、实际路径、HTTP 状态、耗时、来源解析状态、来源数及受控原因；响应仅以安全纯文本展示。一个请求同时检索多个来源时显示同一份响应，解析来源总数与任务中单来源实际收录数分别说明。关闭、切任务/来源及卸载后忽略迟到响应，不轮询诊断，不重新调用模型；历史任务缺少正文时明确无法补回。

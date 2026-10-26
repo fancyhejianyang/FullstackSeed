@@ -1,6 +1,7 @@
 import { HotTopicFetchService } from './hot-topic-fetch.service';
 import { fetchHotSourceText, HotTopicFetchError } from './hot-topic-network';
 import {
+  DOUYIN_HOT_URL,
   NETEASE_NEWS_URL,
   type HotPreferenceInput,
   type HotSourceInput,
@@ -31,10 +32,10 @@ const preferences: HotPreferenceInput = {
 };
 const source: HotSourceInput = {
   id: 1,
-  name: '抖音热点',
-  kind: 'douyinHot',
+  name: '微博热点',
+  kind: 'weiboHot',
   accessMode: 'page',
-  url: 'https://www.douyin.com/hot',
+  url: 'https://weibo.com/hot',
   description: '',
   isEnabled: true,
 };
@@ -43,7 +44,7 @@ describe('HotTopicFetchService orchestration', () => {
   beforeEach(() => fetchText.mockReset());
   it('即使联网解析失败，也为各搜索来源保存同一次响应；平台直读结果保留', async () => {
     fetchText.mockResolvedValue(
-      '<a href="https://www.douyin.com/video/123">平台读取的新闻</a>',
+      '<table><tr><td>1</td><td><a href="https://weibo.com/post/123">平台读取的新闻</a></td><td>123</td></tr></table>',
     );
     const diagnostic: HotSearchDiagnostics = {
       version: 1,
@@ -80,7 +81,7 @@ describe('HotTopicFetchService orchestration', () => {
         {
           ...source,
           id: 2,
-          name: '微博热点',
+          name: '微博另一个榜单',
           kind: 'weiboHot',
           accessMode: 'search',
           url: 'https://weibo.com/hot',
@@ -110,13 +111,13 @@ describe('HotTopicFetchService orchestration', () => {
       totalTokens: 42,
       sources: [
         {
-          url: 'https://www.douyin.com/video/123',
+          url: 'https://weibo.com/post/123',
           title: 'AI 搜索找到的新闻',
           summary: '来源概要',
           publishedAt: null,
         },
         {
-          url: 'https://not-douyin.example.com/post',
+          url: 'https://not-weibo.example.com/post',
           title: '其它站点',
           summary: '',
           publishedAt: null,
@@ -136,7 +137,7 @@ describe('HotTopicFetchService orchestration', () => {
     expect(result.candidates).toHaveLength(1);
     expect(result.sources).toHaveLength(1);
     expect(result.sources[0]).toMatchObject({
-      sourceName: '抖音热点',
+      sourceName: '微博热点',
       status: 'succeeded',
       count: 1,
     });
@@ -195,6 +196,154 @@ describe('HotTopicFetchService orchestration', () => {
     ]);
   });
   it.each(['platform', 'hybrid', 'aiSearch'] as const)(
+    'uses only the fixed Douyin endpoint in %s mode, including legacy search sources',
+    async (mode) => {
+      fetchText.mockResolvedValue(
+        JSON.stringify({
+          status_code: 0,
+          data: {
+            word_list: [
+              {
+                word: '抖音新闻',
+                position: 1,
+                hot_value: 123,
+                event_time: Math.floor(Date.now() / 1000),
+              },
+            ],
+          },
+        }),
+      );
+      const search = jest.fn();
+      const signal = new AbortController().signal;
+      const result = await new HotTopicFetchService({
+        search,
+      } as unknown as KnowledgeWebSearchService).collect({
+        sources: [
+          {
+            ...source,
+            kind: 'douyinHot',
+            accessMode: 'search',
+            url: 'https://legacy.example.com/not-used',
+          },
+        ],
+        mode,
+        config: null,
+        preferences,
+        signal,
+      });
+      expect(fetchText).toHaveBeenCalledTimes(1);
+      expect(fetchText).toHaveBeenCalledWith(DOUYIN_HOT_URL, { signal });
+      expect(search).not.toHaveBeenCalled();
+      expect(result.searchExecuted).toBe(false);
+      expect(result.candidates[0]).toMatchObject({
+        title: '抖音新闻',
+        rank: 1,
+        heat: 123,
+        acquisition: 'page',
+      });
+      expect(result.sources[0].message).toContain('抖音固定热搜接口');
+    },
+  );
+  it.each(['platform', 'hybrid', 'aiSearch'] as const)(
+    'does not fall back to a page or AI after Douyin endpoint failure in %s mode',
+    async (mode) => {
+      fetchText.mockRejectedValue(
+        new HotTopicFetchError('http', '来源拒绝访问'),
+      );
+      const search = jest.fn();
+      const signal = new AbortController().signal;
+      const result = await new HotTopicFetchService({
+        search,
+      } as unknown as KnowledgeWebSearchService).collect({
+        sources: [{ ...source, kind: 'douyinHot' }],
+        mode,
+        config,
+        preferences,
+        signal,
+      });
+      expect(fetchText).toHaveBeenCalledTimes(1);
+      expect(fetchText).toHaveBeenCalledWith(DOUYIN_HOT_URL, { signal });
+      expect(search).not.toHaveBeenCalled();
+      expect(result.candidates).toEqual([]);
+      expect(result.sources[0]).toMatchObject({ status: 'failed', count: 0 });
+      expect(result.sources[0].message).toContain('来源拒绝访问');
+    },
+  );
+  it('empty sources default to fixed Douyin acquisition without an AI config', async () => {
+    fetchText.mockResolvedValue('{"status_code":0,"data":{"word_list":[]}}');
+    const search = jest.fn();
+    const signal = new AbortController().signal;
+    await new HotTopicFetchService({
+      search,
+    } as unknown as KnowledgeWebSearchService).collect({
+      sources: [],
+      mode: 'aiSearch',
+      config: null,
+      preferences,
+      signal,
+    });
+    expect(fetchText).toHaveBeenCalledTimes(1);
+    expect(fetchText).toHaveBeenCalledWith(DOUYIN_HOT_URL, { signal });
+    expect(search).not.toHaveBeenCalled();
+  });
+  it('excludes fixed Douyin from the search query when mixed with Weibo', async () => {
+    fetchText.mockResolvedValue(
+      JSON.stringify({
+        status_code: 0,
+        data: {
+          word_list: [{ word: '固定抖音新闻', position: 1, hot_value: 123 }],
+        },
+      }),
+    );
+    const search = jest.fn().mockResolvedValue({
+      searchExecuted: true,
+      totalTokens: 42,
+      sources: [
+        {
+          url: 'https://weibo.com/post/123',
+          title: '真实微博新闻',
+          summary: '',
+          publishedAt: null,
+        },
+      ],
+    });
+    const signal = new AbortController().signal;
+    const result = await new HotTopicFetchService({
+      search,
+    } as unknown as KnowledgeWebSearchService).collect({
+      sources: [
+        {
+          ...source,
+          id: 2,
+          name: '抖音热点',
+          kind: 'douyinHot',
+          accessMode: 'search',
+          url: 'https://legacy-douyin.example.com/not-used',
+        },
+        source,
+      ],
+      mode: 'aiSearch',
+      config,
+      preferences,
+      signal,
+    });
+    expect(fetchText).toHaveBeenCalledTimes(1);
+    expect(fetchText).toHaveBeenCalledWith(DOUYIN_HOT_URL, { signal });
+    expect(search).toHaveBeenCalledTimes(1);
+    const requests = search.mock.calls as unknown as Array<
+      Parameters<KnowledgeWebSearchService['search']>
+    >;
+    const query = requests[0][1];
+    expect(query).toContain('weibo.com');
+    expect(query).not.toContain('douyin');
+    expect(query).not.toContain('抖音');
+    expect(result.candidates.map((item) => item.title)).toEqual([
+      '固定抖音新闻',
+      '真实微博新闻',
+    ]);
+    expect(result.sources[0].message).not.toContain('AI 联网');
+  });
+  it.each(['platform', 'hybrid', 'aiSearch'] as const)(
     'uses the fixed NetEase endpoint in %s mode without AI search',
     async (mode) => {
       fetchText.mockResolvedValue(
@@ -245,7 +394,7 @@ describe('HotTopicFetchService orchestration', () => {
     const result = await new HotTopicFetchService({
       search,
     } as unknown as KnowledgeWebSearchService).collect({
-      sources: [],
+      sources: [source],
       mode: 'aiSearch',
       config,
       preferences,
@@ -254,7 +403,7 @@ describe('HotTopicFetchService orchestration', () => {
     expect(result.candidates).toEqual([]);
     expect(result.searchExecuted).toBe(false);
     expect(result.sources[0]).toMatchObject({
-      sourceName: '抖音热点',
+      sourceName: '微博热点',
       status: 'failed',
     });
     expect(result.sources[0].message).toContain('未返回真实搜索来源');

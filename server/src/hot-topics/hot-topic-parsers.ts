@@ -116,6 +116,72 @@ function base(source: HotSourceInput, fetchedAt: string): HotTopicCandidate {
   };
 }
 
+/** 抖音固定热搜接口只接受 data.word_list，不能将网页或作品列表冒充榜单。 */
+function parseDouyinHotList(
+  body: string,
+  source: HotSourceInput,
+  fetchedAt: string,
+): HotTopicCandidate[] {
+  if (!body.trim())
+    throw new HotTopicFetchError(
+      'empty_douyin',
+      '抖音固定热搜接口未返回榜单，响应内容为空',
+    );
+  let payload: Record<string, unknown>;
+  try {
+    payload = hotRecord(JSON.parse(body) as unknown);
+  } catch {
+    throw new HotTopicFetchError(
+      'invalid_douyin',
+      '抖音固定热搜接口未返回有效榜单 JSON，可能存在浏览器校验或访问限制',
+    );
+  }
+  if (
+    'status_code' in payload &&
+    payload.status_code !== 0 &&
+    payload.status_code !== '0'
+  )
+    throw new HotTopicFetchError(
+      'douyin_unavailable',
+      '抖音固定热搜接口返回失败状态，未采集榜单，请检查接口访问限制',
+    );
+  const rows = hotRecord(payload.data).word_list;
+  if (!Array.isArray(rows))
+    throw new HotTopicFetchError(
+      'invalid_douyin',
+      '抖音固定热搜接口未返回 data.word_list 榜单，请检查返回结构或访问限制',
+    );
+  const output: HotTopicCandidate[] = [];
+  const seen = new Set<string>();
+  for (const value of rows.slice(0, 100)) {
+    const row = hotRecord(value);
+    const title = hotPlainText(row.word, 300);
+    if (!title) continue;
+    // 大整数编码必须保留字符串，不能把失真的 JS 数值或任意路径当作词条 ID。
+    const sentenceId = identifier(row.sentence_id);
+    const url = /^[1-9]\d{0,63}$/.test(sentenceId)
+      ? `https://www.douyin.com/hot/${sentenceId}`
+      : 'https://www.douyin.com/hot';
+    const key = `${url}\n${title}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    output.push({
+      ...base(source, fetchedAt),
+      title,
+      url,
+      rank: rank(row.position ?? row.rank),
+      heat: number(row.hot_value),
+      publishedAt: hotPublishedAt(row.event_time),
+    });
+  }
+  if (!output.length)
+    throw new HotTopicFetchError(
+      'empty_douyin',
+      '抖音固定热搜接口未返回可用榜单条目，data.word_list 为空或没有有效标题',
+    );
+  return output;
+}
+
 function parseJsonData(
   data: unknown,
   source: HotSourceInput,
@@ -403,6 +469,8 @@ export function parseHotTopicPayload(
     throw new HotTopicFetchError('too_large', '来源响应超过 3 MB 限制');
   if (source.kind === 'neteaseNews')
     return parseNeteaseDomesticNews(body, source, fetchedAt);
+  if (source.kind === 'douyinHot')
+    return parseDouyinHotList(body, source, fetchedAt);
   if (body.trimStart().startsWith('{') || body.trimStart().startsWith('[')) {
     try {
       return parseJsonData(JSON.parse(body) as unknown, source, fetchedAt);

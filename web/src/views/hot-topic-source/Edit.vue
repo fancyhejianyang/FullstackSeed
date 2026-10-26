@@ -9,13 +9,13 @@ import {
   createHotSource,
   updateHotSource,
   getHotSource,
-  NETEASE_NEWS_API_URL,
   safeSourceUrl,
   sourceKindLabels,
   sourceAccessLabels,
   type HotSource,
   type HotSourceForm,
 } from "@/api/hotTopic";
+import { DOUYIN_HOT_API_URL, fixedHotSourceUrl } from "@/api/hotTopicSources";
 const props = defineProps<{ row: HotSource | null }>();
 const emit = defineEmits<{ success: [] }>();
 const visible = defineModel<boolean>("visible", { required: true });
@@ -27,11 +27,12 @@ const initial = (): HotSourceForm => ({
   name: "",
   kind: "douyinHot",
   accessMode: "page",
-  url: "",
+  url: DOUYIN_HOT_API_URL,
   isEnabled: false,
   description: "",
 });
 const form = reactive(initial());
+const fixedSourceUrl = computed(() => fixedHotSourceUrl(form.kind));
 let epoch = 0;
 let hydrating = false;
 const fields = computed<FormField[]>(() => [
@@ -45,7 +46,7 @@ const fields = computed<FormField[]>(() => [
       label,
     })),
   },
-  ...(form.kind === "neteaseNews"
+  ...(fixedSourceUrl.value
     ? []
     : [
         {
@@ -60,16 +61,16 @@ const fields = computed<FormField[]>(() => [
       ]),
   {
     prop: "url",
-    label: form.kind === "neteaseNews" ? "新闻接口（固定）" : "来源地址",
+    label: fixedSourceUrl.value ? "来源接口（固定）" : "来源地址",
     type: "input",
-    placeholder:
-      form.kind === "neteaseNews" ? NETEASE_NEWS_API_URL : "https://…",
-    componentProps:
-      form.kind === "neteaseNews" ? { readonly: true } : undefined,
+    placeholder: fixedSourceUrl.value || "https://…",
+    componentProps: fixedSourceUrl.value ? { readonly: true } : undefined,
     hint:
-      form.kind === "neteaseNews"
-        ? "系统固定读取网易国内新闻接口，仅解析“国内”分类的标题、原文链接与发布时间。"
-        : "可填写平台官方热榜或合规聚合页面的公开 HTTPS 地址；不绕过登录、验证码或访问限制。",
+      form.kind === "douyinHot"
+        ? "系统仅从固定抖音热搜接口读取 data.word_list 榜单；所有获取模式均直接读取，不回退网页或 AI 搜索。"
+        : form.kind === "neteaseNews"
+          ? "系统固定读取网易国内新闻接口，仅解析“国内”分类的标题、原文链接与发布时间。"
+          : "可填写微博官方热榜或合规聚合页面的公开 HTTPS 地址；不绕过登录、验证码或访问限制。",
   },
   { prop: "isEnabled", label: "启用状态", component: "Switch" },
   { prop: "description", label: "说明", type: "textarea", rows: 3 },
@@ -95,25 +96,23 @@ watch(
   () => form.kind,
   (kind, previousKind) => {
     if (hydrating) return;
-    if (kind === "neteaseNews") {
+    const url = fixedHotSourceUrl(kind);
+    if (url) {
       form.accessMode = "page";
-      form.url = NETEASE_NEWS_API_URL;
-      if (!form.name.trim()) form.name = "网易国内新闻";
-    } else if (previousKind === "neteaseNews") {
+      form.url = url;
+      if (!form.name.trim())
+        form.name = kind === "douyinHot" ? "抖音热点" : "网易国内新闻";
+    } else if (fixedHotSourceUrl(previousKind)) {
       form.url = "";
+      form.accessMode = "page";
     }
   },
   { flush: "sync" },
 );
 function fillForm(values: HotSourceForm) {
+  const url = fixedHotSourceUrl(values.kind);
   hydrating = true;
-  Object.assign(
-    form,
-    values,
-    values.kind === "neteaseNews"
-      ? { url: NETEASE_NEWS_API_URL, accessMode: "page" }
-      : {},
-  );
+  Object.assign(form, values, url ? { url, accessMode: "page" } : {});
   hydrating = false;
 }
 async function load() {
@@ -156,11 +155,10 @@ async function submit() {
   await formRef.value?.validate();
   submitting.value = true;
   try {
+    const url = fixedHotSourceUrl(form.kind);
     const data = {
       ...form,
-      ...(form.kind === "neteaseNews"
-        ? { url: NETEASE_NEWS_API_URL, accessMode: "page" as const }
-        : {}),
+      ...(url ? { url, accessMode: "page" as const } : {}),
       isEnabled: Boolean(form.isEnabled),
     };
     if (props.row) await updateHotSource(props.row.id, data);

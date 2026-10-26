@@ -13,7 +13,8 @@ import { compactHotSearchResponses } from './hot-topic-search-response';
 import {
   platformLabelForHost,
   platformSource,
-  NETEASE_NEWS_URL,
+  DOUYIN_HOT_URL,
+  fixedHotSourceUrl,
   type HotPreferenceInput,
   type HotSourceInput,
   type HotTopicCandidate,
@@ -63,9 +64,10 @@ export const DEFAULT_HOT_SOURCE: HotSourceInput = {
   name: '抖音热点',
   kind: 'douyinHot',
   accessMode: 'page',
-  url: 'https://www.douyin.com/hot',
+  url: DOUYIN_HOT_URL,
   isEnabled: true,
-  description: '公开热点页；动态内容不可读时明确失败，可选择 AI 联网补充。',
+  description:
+    '仅通过抖音固定热搜接口读取；访问受限时明确失败，不回退网页或 AI 搜索。',
 };
 
 @Injectable()
@@ -77,15 +79,18 @@ export class HotTopicFetchService {
     fetchedAt: string,
     signal: AbortSignal,
   ) {
-    const fixedSource =
-      source.kind === 'neteaseNews'
-        ? { ...source, accessMode: 'page' as const, url: NETEASE_NEWS_URL }
-        : source;
+    const fixedUrl = fixedHotSourceUrl(source.kind);
+    const fixedSource = fixedUrl
+      ? { ...source, accessMode: 'page' as const, url: fixedUrl }
+      : source;
     try {
       const body = await fetchHotSourceText(fixedSource.url, { signal });
       return {
         candidates: parseHotTopicPayload(body, fixedSource, fetchedAt),
-        message: '已读取配置来源的公开结构化数据',
+        message:
+          source.kind === 'douyinHot'
+            ? '已读取抖音固定热搜接口数据'
+            : '已读取配置来源的公开结构化数据',
       };
     } catch (primaryError) {
       const configured = normalizeHotTopicLink(fixedSource.url);
@@ -129,13 +134,14 @@ export class HotTopicFetchService {
       input.sources.length
         ? input.sources.filter((source) => source.isEnabled)
         : [DEFAULT_HOT_SOURCE]
-    ).map((source) =>
-      source.kind === 'neteaseNews'
-        ? { ...source, url: NETEASE_NEWS_URL, accessMode: 'page' as const }
-        : source,
-    );
+    ).map((source) => {
+      const fixedUrl = fixedHotSourceUrl(source.kind);
+      return fixedUrl
+        ? { ...source, url: fixedUrl, accessMode: 'page' as const }
+        : source;
+    });
     const searchSources = sources.filter(
-      (source) => source.kind !== 'neteaseNews',
+      (source) => !fixedHotSourceUrl(source.kind),
     );
     const result: HotTopicFetchResult = {
       candidates: [],
@@ -146,7 +152,7 @@ export class HotTopicFetchService {
     const fetchedAt = new Date().toISOString();
     {
       for (const source of sources) {
-        if (input.mode === 'aiSearch' && source.kind !== 'neteaseNews')
+        if (input.mode === 'aiSearch' && !fixedHotSourceUrl(source.kind))
           continue;
         input.signal.throwIfAborted();
         if (source.accessMode === 'search') {
