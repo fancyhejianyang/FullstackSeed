@@ -39,6 +39,7 @@ const QUEUE_LIMIT = 200;
 const QUEUE_TIMEOUT_MS = 15 * 60_000;
 const EXECUTION_TIMEOUT_MS = 180_000;
 const HISTORY_PAGE_SIZE = 200;
+const DISPATCH_LOCK_WAIT_SECONDS = 10;
 
 interface RunningTask {
   controller: AbortController;
@@ -93,6 +94,8 @@ export class CustomerServiceService implements OnModuleInit, OnModuleDestroy {
   private ready = false;
   private readonly executions = new Set<Promise<void>>();
   private drainPromise?: Promise<void>;
+  private initializationPromise?: Promise<void>;
+  private shutdownPromise?: Promise<void>;
   private readonly pendingFinalizers = new Map<
     number,
     { sessionId: number; finish: () => Promise<void> }
@@ -114,26 +117,77 @@ export class CustomerServiceService implements OnModuleInit, OnModuleDestroy {
     this.events.setMaxListeners(0);
   }
 
-  async onModuleInit() {
+  onModuleInit() {
+    return (this.initializationPromise ??= this.initialize());
+  }
+
+  private async initialize() {
+    if (this.stopping) throw new Error('客服调度初始化已取消，服务正在关闭');
     // GET_LOCK 绑定专用连接，阻止第二个服务实例误将本进程任务当作孤儿恢复。
     const runner = this.dataSource.createQueryRunner();
-    await runner.connect();
+    let acquiredLock = false;
     try {
-      const rows: Array<{ acquired: number }> = await runner.query(
-        "SELECT GET_LOCK(SHA2(CONCAT(DATABASE(), ':customer-service-dispatch'), 256), 0) AS acquired",
-      );
-      if (Number(rows[0]?.acquired) !== 1)
-        throw new Error('客服调度首版仅支持单服务进程，已有另一实例持有调度锁');
+      let acquired: unknown;
+      try {
+        await runner.connect();
+        const rows: unknown = await runner.query(
+          "SELECT GET_LOCK(SHA2(CONCAT(DATABASE(), ':customer-service-dispatch'), 256), ?) AS acquired",
+          [DISPATCH_LOCK_WAIT_SECONDS],
+        );
+        acquired = Array.isArray(rows)
+          ? (rows[0] as { acquired?: unknown } | null | undefined)?.acquired
+          : undefined;
+      } catch (error) {
+        throw new Error('客服调度取锁异常，请检查数据库连接与命名锁状态', {
+          cause: error,
+        });
+      }
+      acquiredLock = acquired === 1 || acquired === '1';
+      if (this.stopping) throw new Error('客服调度初始化已取消，服务正在关闭');
+      if (acquired === 0 || acquired === '0') {
+        let holderConnectionId: unknown;
+        try {
+          const rows: unknown = await runner.query(
+            "SELECT IS_USED_LOCK(SHA2(CONCAT(DATABASE(), ':customer-service-dispatch'), 256)) AS holderConnectionId",
+          );
+          holderConnectionId = Array.isArray(rows)
+            ? (rows[0] as { holderConnectionId?: unknown } | null | undefined)
+                ?.holderConnectionId
+            : undefined;
+        } catch {
+          // 诊断失败不覆盖已经确认的等待超时，也不重新取锁。
+        }
+        const validHolderId =
+          (typeof holderConnectionId === 'number' &&
+            Number.isSafeInteger(holderConnectionId) &&
+            holderConnectionId > 0) ||
+          (typeof holderConnectionId === 'string' &&
+            /^[1-9]\d*$/.test(holderConnectionId) &&
+            Number.isSafeInteger(Number(holderConnectionId)));
+        throw new Error(
+          `客服调度锁等待超时（${DISPATCH_LOCK_WAIT_SECONDS} 秒），${
+            validHolderId
+              ? `当前持锁连接编号：${String(holderConnectionId)}`
+              : '持锁连接暂不可确认'
+          }`,
+        );
+      }
+      if (!acquiredLock)
+        throw new Error('客服调度取锁异常，GET_LOCK 未返回有效的取得状态');
       this.lockRunner = runner;
       await this.recoverInterruptedTasks();
+      if (this.stopping) throw new Error('客服调度初始化已取消，服务正在关闭');
       this.ready = true;
     } catch (error) {
-      await runner
-        .query(
-          "SELECT RELEASE_LOCK(SHA2(CONCAT(DATABASE(), ':customer-service-dispatch'), 256))",
-        )
-        .catch(() => undefined);
-      await runner.release();
+      this.ready = false;
+      if (this.lockRunner === runner) this.lockRunner = undefined;
+      if (acquiredLock)
+        await runner
+          .query(
+            "SELECT RELEASE_LOCK(SHA2(CONCAT(DATABASE(), ':customer-service-dispatch'), 256))",
+          )
+          .catch(() => undefined);
+      await runner.release().catch(() => undefined);
       throw error;
     }
     this.timer = setInterval(() => this.schedule(), 2000);
@@ -172,9 +226,15 @@ export class CustomerServiceService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async onModuleDestroy() {
+  onModuleDestroy() {
+    return (this.shutdownPromise ??= this.shutdown());
+  }
+
+  private async shutdown() {
     this.stopping = true;
     this.ready = false;
+    // init 中的取锁与恢复也必须 settle，关闭后不能重新启动调度或提前归还连接。
+    await this.initializationPromise?.catch(() => undefined);
     if (this.timer) clearInterval(this.timer);
     // 先等待领取事务返回，避免释放调度锁后旧进程又启动刚领取的任务。
     await this.drainPromise?.catch(() => undefined);
@@ -185,13 +245,18 @@ export class CustomerServiceService implements OnModuleInit, OnModuleDestroy {
     this.events.emit('shutdown');
     this.events.removeAllListeners();
     await Promise.allSettled([...this.executions]);
-    if (this.lockRunner) {
-      await this.lockRunner
-        .query(
+    const runner = this.lockRunner;
+    this.lockRunner = undefined;
+    if (runner) {
+      try {
+        await runner.query(
           "SELECT RELEASE_LOCK(SHA2(CONCAT(DATABASE(), ':customer-service-dispatch'), 256))",
-        )
-        .catch(() => undefined);
-      await this.lockRunner.release();
+        );
+      } catch {
+        // 即使命名锁释放失败，也必须归还专用连接。
+      } finally {
+        await runner.release();
+      }
     }
   }
 
@@ -229,7 +294,7 @@ export class CustomerServiceService implements OnModuleInit, OnModuleDestroy {
     ) {
       throw new ForbiddenException('会话凭证无效，请新建会话');
     }
-    return session!;
+    return session;
   }
 
   async submitVisitorMessage(
@@ -777,9 +842,9 @@ export class CustomerServiceService implements OnModuleInit, OnModuleDestroy {
     try {
       if (this.lockRunner) {
         try {
-          const rows: Array<{ ownsLock: number }> = await this.lockRunner.query(
+          const rows = (await this.lockRunner.query(
             "SELECT IS_USED_LOCK(SHA2(CONCAT(DATABASE(), ':customer-service-dispatch'), 256)) = CONNECTION_ID() AS ownsLock",
-          );
+          )) as Array<{ ownsLock: number }>;
           if (Number(rows[0]?.ownsLock) !== 1)
             throw new Error('客服调度锁已失效');
         } catch (error) {
