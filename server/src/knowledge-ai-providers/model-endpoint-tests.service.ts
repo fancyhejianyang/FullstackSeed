@@ -17,7 +17,10 @@ import {
 import { readMediaJson, imageMime } from '../common/ai/image-utils';
 import { generationResult } from '../common/ai/image-generation';
 import { videoTaskId, videoTaskResult } from '../common/ai/video-generation';
-import { mediaProtocol } from '../model-endpoints/model-endpoint.constants';
+import {
+  mediaProtocol,
+  type ModelFunction,
+} from '../model-endpoints/model-endpoint.constants';
 import { extendedTokenhubResult } from '../common/ai/tokenhub-adapters';
 import {
   modelBillingErrorMessage,
@@ -28,9 +31,11 @@ import { createVisionChallenge } from '../agent-apps/agent-media-probe';
 import { isRetiredModelError } from '../common/ai/model-retirement';
 import { detectModelPlatform } from '../model-endpoints/model-endpoint.constants';
 
-type TestTarget = Awaited<
-  ReturnType<KnowledgeAiProvidersService['resolveEndpointTestTarget']>
+type TestTarget = Omit<
+  Awaited<ReturnType<KnowledgeAiProvidersService['resolveEndpointTestTarget']>>,
+  'functionLabel' | 'ruleName' | 'source' | 'functionType'
 > & {
+  functionType: ModelFunction;
   functionLabel?: string;
   ruleName?: string;
   source?: 'configured' | 'builtin' | 'standard';

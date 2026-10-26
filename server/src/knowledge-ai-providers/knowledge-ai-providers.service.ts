@@ -28,6 +28,7 @@ import type { ModelEndpoint } from '../model-endpoints/entities/model-endpoint.e
 import {
   builtinModelEndpoint,
   builtinModelEndpointPath,
+  isBuiltinModelEndpointTestCompatible,
 } from '../model-endpoints/model-endpoint.builtins';
 import { modelBillingErrorMessage } from '../common/ai/model-provider-error';
 import {
@@ -535,15 +536,15 @@ export class KnowledgeAiProvidersService {
     });
     const builtin = endpoint.source === 'builtin';
     const overrides = builtin
-      ? new Set(
+      ? new Map(
           (
             await this.endpoints!.overriddenModels(
               endpoint.platformType,
               endpoint.functionType,
             )
-          ).map((item) => item.modelCode),
+          ).map((item) => [item.modelCode, item] as const),
         )
-      : new Set<string>();
+      : new Map<string, ModelEndpoint>();
     const accounts: ModelEndpointTestAccount[] = [];
     const excludedAccounts: ModelEndpointTestAccountExclusion[] = [];
     for (const provider of providers) {
@@ -572,22 +573,26 @@ export class KnowledgeAiProvidersService {
           });
           continue;
         }
-        const available = models.filter(
-          (item) =>
-            !overrides.has(item.code) &&
+        const baseUrl = this.applyWorkspaceId(provider);
+        const available = models.filter((item) => {
+          const override = overrides.get(item.code);
+          return (
             builtinModelEndpoint(
               endpoint.platformType,
               endpoint.functionType,
               item.code,
-            )?.id === endpoint.id,
-        );
+            )?.id === endpoint.id &&
+            (!override ||
+              isBuiltinModelEndpointTestCompatible(baseUrl, endpoint, override))
+          );
+        });
         if (!available.length) {
           excludedAccounts.push({
             id: provider.id,
             name: provider.name,
             reasonCode: 'dedicatedOverride',
             reason:
-              '对应功能目录中的模型均由模型专用接口覆盖，请到对应模型专用卡片测试',
+              '对应功能目录中的模型均由停用或调用格式不同的专用接口覆盖，请到对应模型专用卡片检查或测试',
           });
           continue;
         }
@@ -595,7 +600,7 @@ export class KnowledgeAiProvidersService {
           id: provider.id,
           name: provider.name,
           models: available,
-          apiPath: builtinModelEndpointPath(provider.apiUrl, endpoint),
+          apiPath: builtinModelEndpointPath(baseUrl, endpoint),
         });
         continue;
       }
@@ -605,7 +610,7 @@ export class KnowledgeAiProvidersService {
     return { accounts, excludedAccounts };
   }
 
-  /** 测试只使用指定的已保存卡片，不接受客户端地址、密钥或其它模型。 */
+  /** 测试重新核对实际规则；通用入口仅兼容启用且等价的聊天/向量专用卡片。 */
   async resolveEndpointTestTarget(
     endpointId: number,
     providerId: number,
@@ -640,7 +645,20 @@ export class KnowledgeAiProvidersService {
       model,
       route.functionType,
     );
-    if (!endpoint || endpoint.id !== endpointId)
+    if (
+      !endpoint ||
+      endpoint.functionType === 'webSearch' ||
+      (endpoint.id !== endpointId &&
+        !(
+          route.source === 'builtin' &&
+          endpoint.source === 'configured' &&
+          isBuiltinModelEndpointTestCompatible(
+            this.applyWorkspaceId(provider),
+            route,
+            endpoint,
+          )
+        ))
+    )
       throw new BadRequestException(
         '该模型的实际匹配规则已变化或存在专用卡片，请到对应模型专用卡片测试',
       );
@@ -659,6 +677,9 @@ export class KnowledgeAiProvidersService {
             )
           : null,
       secretKey: this.normalizeSecretKey(provider.secretKey),
+      functionLabel: FUNCTION_LABELS[endpoint.functionType],
+      ruleName: endpoint.modelName,
+      source: endpoint.source,
     };
   }
 

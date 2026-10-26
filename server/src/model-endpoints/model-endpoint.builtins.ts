@@ -2,7 +2,9 @@ import type { CreateModelEndpointDto } from './dto/model-endpoint.dto';
 import {
   FUNCTION_LABELS,
   PLATFORM_LABELS,
+  detectModelPlatform,
   modelCategory,
+  protocolTaskMethod,
   type ModelFunction,
   type PlatformType,
 } from './model-endpoint.constants';
@@ -70,6 +72,53 @@ export function usesBuiltinModelEndpoint(card: CreateModelEndpointDto) {
     rule.executionMode === card.executionMode &&
     !card.taskApiPath
   );
+}
+
+/** 仅测试入口兼容启用且最终请求格式等价的专用配置，不改变正式调用优先级。 */
+export function isBuiltinModelEndpointTestCompatible(
+  baseUrl: string,
+  rule: Pick<CreateModelEndpointDto, 'platformType' | 'functionType'>,
+  configured: Pick<
+    CreateModelEndpointDto,
+    | 'platformType'
+    | 'functionType'
+    | 'protocol'
+    | 'apiPath'
+    | 'taskApiPath'
+    | 'executionMode'
+    | 'isActive'
+  >,
+) {
+  const builtin = builtinModelEndpoint(rule.platformType, rule.functionType);
+  if (
+    !builtin ||
+    configured.isActive !== true ||
+    configured.platformType !== builtin.platformType ||
+    configured.functionType !== builtin.functionType ||
+    configured.protocol !== builtin.protocol ||
+    configured.executionMode !== builtin.executionMode ||
+    protocolTaskMethod(configured.protocol) !== builtin.taskMethod ||
+    !!configured.taskApiPath
+  )
+    return false;
+  try {
+    const base = new URL(baseUrl);
+    if (
+      base.protocol !== 'https:' ||
+      base.username ||
+      base.password ||
+      base.search ||
+      base.hash ||
+      detectModelPlatform(baseUrl) !== builtin.platformType
+    )
+      return false;
+    // 专用路径按已保存字面值使用；只有通用规则应用 Coding 等官方域名差异。
+    const configuredUrl = base.origin + configured.apiPath;
+    const builtinUrl = base.origin + builtinModelEndpointPath(baseUrl, builtin);
+    return configuredUrl === builtinUrl;
+  } catch {
+    return false;
+  }
 }
 
 /** 百炼专用域名使用 /v1；其它官方通用域名使用卡片中的标准路径。 */

@@ -178,6 +178,9 @@ export interface ModelEndpointTestResult {
   model?: string;
   apiPath?: string;
   providerId?: number;
+  source?: "builtin" | "configured" | "standard";
+  ruleName?: string;
+  functionLabel?: string;
   modelRemoved?: boolean;
 }
 export interface ModelEndpointTestOptions {

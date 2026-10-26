@@ -291,7 +291,16 @@ export class ModelEndpointsService implements OnModuleInit {
       throw new BadRequestException('联网搜索不再使用模型接口卡片');
     return this.repository.find({
       where: { platformType, functionType },
-      select: { modelCode: true },
+      select: {
+        modelCode: true,
+        platformType: true,
+        functionType: true,
+        protocol: true,
+        apiPath: true,
+        taskApiPath: true,
+        executionMode: true,
+        isActive: true,
+      },
     });
   }
 

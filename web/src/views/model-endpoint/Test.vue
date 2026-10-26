@@ -58,17 +58,21 @@ const accountHint = computed(() => {
   const scopeHint = isBuiltin.value
     ? "系统通用仅提供聊天和文本向量测试；识图、生图、视频等请到“模型专用”页签。"
     : "";
+  const compatibilityHint = isBuiltin.value
+    ? "已启用且调用格式与当前通用规则完全一致的聊天或文本向量专用卡也可在此测试，实际仍使用专用配置；停用或格式不同的专用卡请到“模型专用”页签处理。"
+    : "";
   const selectionHint =
     options.value && !options.value.accounts.length
       ? isBuiltin.value
-        ? "暂无对应目录含可用模型的同平台账号，请检查账号启用状态、密钥和模型目录；已配置专用卡片的模型请到专用卡片测试。"
+        ? "暂无符合当前通用测试条件的同平台账号，请检查账号启用状态、密钥、对应模型目录及专用卡片状态或调用格式。"
         : `暂无可用的${modelPlatformLabels[options.value.card.platformType]}账号，请在大模型账号中确认该平台账号已启用且已配置密钥。`
       : isBuiltin.value
-        ? "只显示同平台、已启用且对应目录有可用模型的账号；已配置专用卡片的模型请到专用卡片测试。"
+        ? "只显示同平台、已启用且对应目录含可测试模型的账号。"
         : "可选择同平台、已启用且已配置密钥的账号，无需先登记此模型；模型是否开通以实际测试结果为准。";
   return [
     scopeHint,
     selectionHint,
+    compatibilityHint,
     getExcludedEndpointTestAccountsHint(options.value),
   ]
     .filter(Boolean)
@@ -164,6 +168,18 @@ const statusLabels = {
   failed: "测试失败",
   unknown: "结果待核实",
 };
+const actualSourceLabel = computed(() => {
+  switch (result.value?.source) {
+    case "configured":
+      return "模型专用";
+    case "builtin":
+      return "系统通用";
+    case "standard":
+      return "标准兼容接口";
+    default:
+      return "旧结果未记录";
+  }
+});
 const statusColor = computed(() =>
   getPermissionActionColor(
     result.value?.status === "succeeded"
@@ -522,6 +538,11 @@ async function refreshResult(explicit = false) {
           测试模型：{{
             result.model || (isBuiltin ? "未记录" : row?.modelCode)
           }}
+        </div>
+        <div>实际配置来源：{{ actualSourceLabel }}</div>
+        <div>实际规则：{{ result.ruleName?.trim() || "旧结果未记录" }}</div>
+        <div v-if="result.functionLabel">
+          功能场景：{{ result.functionLabel }}
         </div>
         <div v-if="result.apiPath">调用路径：POST {{ result.apiPath }}</div>
         <div>
