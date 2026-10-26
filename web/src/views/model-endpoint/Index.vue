@@ -39,7 +39,11 @@ const searchFields = computed<FormField[]>(() => [
     prop: "category",
     label: "类别",
     type: "select",
-    options: options.value.categories ?? [],
+    options: (options.value.categories ?? []).filter(
+      (item) =>
+        source.value === "configured" ||
+        ["language", "embedding"].includes(item.value),
+    ),
   },
   {
     prop: "keyword",
@@ -58,7 +62,11 @@ const searchFields = computed<FormField[]>(() => [
     prop: "functionType",
     label: "功能",
     type: "select",
-    options: options.value.functions,
+    options: options.value.functions.filter(
+      (item) =>
+        source.value === "configured" ||
+        ["chat", "embedding"].includes(item.value),
+    ),
   },
   ...(source.value === "configured"
     ? [
@@ -128,8 +136,8 @@ onMounted(async () => {
       class="endpoint-card__scope-hint"
       :title="
         source === 'builtin'
-          ? '系统规则只读，按账号功能目录和模型匹配默认调用格式。存在模型专用卡片时优先使用专用配置，停用的专用卡片会阻止调用。热点采集与联网补充由后端策略统一处理，无需配置联网搜索卡片。'
-          : '按具体模型和功能设置接口，优先于系统通用规则。历史卡片保留；生图、视频等专用功能必须配置对应接口。'
+          ? '系统通用仅提供聊天（普通调用）和文本向量的只读规则，按账号对应目录选择模型；识图、生图、视频等请到“模型专用”页签配置和测试。专用卡片优先，已停用的专用卡片仍会阻止调用。热点采集与联网补充由后端策略统一处理。'
+          : '按具体模型和功能设置接口，保留识图、生图、视频等功能及全部已有卡片。聊天和文本向量专用配置优先于系统通用规则；已停用卡片仍阻止对应调用。'
       "
       type="info"
       :closable="false"
@@ -194,7 +202,7 @@ onMounted(async () => {
         <div class="endpoint-card__model">
           {{
             row.isReadOnly
-              ? "适用模型：账号对应功能目录；无需逐版本配置"
+              ? "适用模型：账号对应聊天或文本向量目录；无需逐版本配置"
               : row.modelCode
           }}
         </div>

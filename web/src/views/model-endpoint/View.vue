@@ -27,9 +27,15 @@ const items = computed(() =>
             : "模型专用（优先）",
         ],
         [
+          "使用范围",
+          detail.value.source === "builtin"
+            ? "仅聊天和文本向量；识图、生图、视频等在模型专用页签配置和测试"
+            : "按具体模型和功能配置；已停用接口不会回退到系统通用",
+        ],
+        [
           detail.value.isReadOnly ? "适用模型" : "模型编码",
           detail.value.isReadOnly
-            ? "账号对应功能目录中的模型；专用配置优先"
+            ? "账号对应聊天或文本向量目录中的模型；专用配置优先"
             : detail.value.modelCode,
         ],
         ["模型名称", detail.value.modelName],

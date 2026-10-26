@@ -972,7 +972,7 @@ export class KnowledgeAiProvidersService {
       throw new BadRequestException(
         '所选模型未登记在账号对应功能目录中，不能使用系统通用规则',
       );
-    if (!endpoint && !['chat', 'vision', 'embedding'].includes(functionType))
+    if (!endpoint && !['chat', 'embedding'].includes(functionType))
       throw new BadRequestException(
         `模型 ${model} 缺少“${FUNCTION_LABELS[functionType]}”调用接口，请在第三方配置 → 模型厂商调用接口中配置`,
       );

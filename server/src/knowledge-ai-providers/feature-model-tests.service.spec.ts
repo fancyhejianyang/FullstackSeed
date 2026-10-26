@@ -49,7 +49,9 @@ function harness(
     secretKey: 'never-return-this-key',
     functionLabel: '接口功能',
     ruleName: '当前规则',
-    source: 'builtin' as const,
+    source: ['chat', 'embedding'].includes(functionType)
+      ? 'builtin'
+      : 'configured',
   };
   const providers = {
     resolveFeatureTestTarget: jest

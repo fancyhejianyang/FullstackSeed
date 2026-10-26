@@ -228,6 +228,33 @@ describe('模型调用接口配置', () => {
         functionType: item.functionType,
       });
   });
+  it('启动和手动补接口补充缺失的识图专用预设，不写入聊天或文本向量通用重复项', async () => {
+    const { service, rows, repository } = harness();
+    await service.importPresets();
+    const expected = MODEL_SPECIFIC_PRESETS.filter(
+      (item) => item.functionType === 'vision',
+    );
+    expect(expected.length).toBeGreaterThan(0);
+    expect(rows.filter((item) => item.functionType === 'vision')).toHaveLength(
+      expected.length,
+    );
+    for (const item of expected)
+      expect(rows).toContainEqual(
+        expect.objectContaining({
+          platformType: item.platformType,
+          modelCode: item.modelCode,
+          functionType: 'vision',
+          protocol: item.protocol,
+          apiPath: item.apiPath,
+        }),
+      );
+    expect(
+      rows.some((item) => ['chat', 'embedding'].includes(item.functionType)),
+    ).toBe(false);
+    expect(repository.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({ withDeleted: true }),
+    );
+  });
   it('重启不覆盖已编辑/停用/软删除过的预设', async () => {
     const { service, repository } = harness();
     repository.findOne.mockResolvedValue({

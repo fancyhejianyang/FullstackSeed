@@ -1,5 +1,14 @@
 # CHANGELOG
 
+### 2026-10-26 将系统通用限定为聊天与向量，识图统一归入模型专用
+
+- 按用户确认的分类整改，不采用“通用入口兼容等价专用覆盖”方案。系统通用仅保留百炼、腾讯的聊天和文本向量四张只读卡片（-1/-3/-4/-6）；移除两张识图通用卡（-2/-5），不重排或复用历史编号。前端系统页签只提供聊天/向量及对应类别筛选，列表、详情、测试提示同步说明识图、生图和视频等在模型专用页签配置和测试。已有专用卡片不删除、不改写、不绕过停用状态。
+- 识图正式调用、AI 功能配置检查/测试、OCR 与 Agent 共用的解析必须命中启用的模型专用卡片；缺卡或停用明确拒绝，不再回退标准 Chat 路径。聊天和向量仍保留“专用优先、系统通用其次”的既有行为。Agent/媒体仍校验独立识图目录，OCR 对旧普通目录的兼容保持；卡片分类变更不新增业务模型权限。
+- 官方预设只过滤与系统聊天/向量格式相同的逐版本重复项，识图即使使用相同 Chat Completions 路径也保留逐模型专用卡。下次正常启动或用户点击“补充官方接口”时沿用原有导入逻辑只补缺，不复活软删除项，不覆盖已编辑/停用记录。本轮未连接数据库或主动执行补接口。专用卡片调试继续按同平台、启用及有效密钥选择账号，不要求先登记该模型目录；腾讯识图应从对应模型专用卡测试，不再进入已移除的通用识图入口。
+- 临时测试缓存清除已不在系统规则中的负数卡片记录，避免旧识图卡通过完成结果缓存继续恢复或重放；四个保留编号、正数专用卡和功能测试记录不受影响。原有用户隔离、幂等、费用提示、显式开始测试及异步任务查询边界不变，不自动发起模型请求。
+- 新增文件（2）：`server/src/knowledge-ai-providers/vision-endpoint-scope.spec.ts`、`web/src/views/model-endpoint/endpointScope.test.mjs`。修改文件（后端 8）：`server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`、`server/src/knowledge-ai-providers/model-endpoint-tests.service.ts`、`server/src/knowledge-ai-providers/model-endpoint-tests.service.spec.ts`、`server/src/knowledge-ai-providers/feature-model-tests.service.spec.ts`、`server/src/model-endpoints/model-endpoint.builtins.ts`、`server/src/model-endpoints/model-endpoint.builtins.spec.ts`、`server/src/model-endpoints/model-endpoint.presets.ts`、`server/src/model-endpoints/model-endpoints.service.spec.ts`。修改文件（前端及文档 5）：`web/src/views/model-endpoint/Index.vue`、`web/src/views/model-endpoint/Test.vue`、`web/src/views/model-endpoint/View.vue`、`.design-spec.md`、本文件。合计新增 2 个、修改 13 个，删除文件无。原有 `web/auto-imports.d.ts`、`web/src/api/hotTopic.ts` 用户修改保留、不纳入提交。
+- 验证：仅静态检查。后端全部生产源码及五份相关规格的 TypeScript noEmit、9 个后端文件定向 ESLint/格式、前端 Vue 类型、两份前端规格语法、3 个组件复用扫描及 diff 检查通过。规格补充三平台四个识图入口、启停/缺卡阻断、专用路径、调试目录豁免与业务目录边界、四张系统卡、识图预设补缺和旧缓存退役等情形；未执行行为规格，不能据此声称实际腾讯或百炼账号测试成功。全量包含其它旧规格的类型检查仍有 8 处既有无关诊断，定向检查无新增诊断。未 build、未执行启动或重启命令、未读取 `.env` 或真实凭据、未操作运行中数据库、未调用真实/付费模型；既有用户 watch 可能随源码保存自行热重载。
+
 ### 2026-10-26 修复系统通用卡片测试默认选择并说明套餐账号排除原因
 
 - 系统通用卡片打开时，优先恢复仍有效的历史账号和模型；无有效历史账号时默认首个对应目录非空的可用账号及其首模型，历史账号有效但原模型失效时使用该账号首个现有模型。明确退役历史仍保持清空、不自动改选；专用卡片保留原“有效历史或唯一账号”策略。回填一次性同步请求 JSON 的 model，不依赖相同值是否触发 watch；仅选择和预填，不自动调用模型，pending 历史继续沿用原编号查询。

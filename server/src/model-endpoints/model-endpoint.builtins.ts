@@ -7,13 +7,11 @@ import {
   type PlatformType,
 } from './model-endpoint.constants';
 
-/** 负数 ID 是稳定系统标识；已移除的 -7/-8/-9 永不复用，不保存可编辑影子配置。 */
+/** 负数 ID 是稳定系统标识；已移除的 -2/-5/-7/-8/-9 永不复用，不保存可编辑影子配置。 */
 const definitions = [
   { id: -1, platformType: 'aliyunBailian', functionType: 'chat' },
-  { id: -2, platformType: 'aliyunBailian', functionType: 'vision' },
   { id: -3, platformType: 'aliyunBailian', functionType: 'embedding' },
   { id: -4, platformType: 'tencentTokenhub', functionType: 'chat' },
-  { id: -5, platformType: 'tencentTokenhub', functionType: 'vision' },
   { id: -6, platformType: 'tencentTokenhub', functionType: 'embedding' },
 ] as const;
 
@@ -42,7 +40,7 @@ export const BUILTIN_MODEL_ENDPOINTS = definitions.map(
         ? functionType === 'embedding'
           ? 'https://help.aliyun.com/zh/model-studio/embedding-interfaces-compatible-with-openai'
           : 'https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions/'
-        : `https://cloud.tencent.com/document/product/1823/${functionType === 'embedding' ? '133515' : functionType === 'vision' ? '136956' : '130079'}`,
+        : `https://cloud.tencent.com/document/product/1823/${functionType === 'embedding' ? '133515' : '130079'}`,
   }),
 );
 

@@ -55,6 +55,9 @@ const pending = computed(
     result.value?.status === "accepted",
 );
 const accountHint = computed(() => {
+  const scopeHint = isBuiltin.value
+    ? "系统通用仅提供聊天和文本向量测试；识图、生图、视频等请到“模型专用”页签。"
+    : "";
   const selectionHint =
     options.value && !options.value.accounts.length
       ? isBuiltin.value
@@ -63,7 +66,11 @@ const accountHint = computed(() => {
       : isBuiltin.value
         ? "只显示同平台、已启用且对应目录有可用模型的账号；已配置专用卡片的模型请到专用卡片测试。"
         : "可选择同平台、已启用且已配置密钥的账号，无需先登记此模型；模型是否开通以实际测试结果为准。";
-  return [selectionHint, getExcludedEndpointTestAccountsHint(options.value)]
+  return [
+    scopeHint,
+    selectionHint,
+    getExcludedEndpointTestAccountsHint(options.value),
+  ]
     .filter(Boolean)
     .join(" ");
 });

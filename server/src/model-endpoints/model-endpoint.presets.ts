@@ -135,7 +135,7 @@ for (const preset of TOKENHUB_OFFICIAL_PRESETS) {
     MODEL_ENDPOINT_PRESETS.push(preset);
 }
 
-/** 当前普通/媒体通用协议交给系统规则；历史联网卡片由导入入口单独退役。 */
+/** 仅聊天与文本向量的同格式预设交给系统规则；识图等专用场景保留逐模型卡片。 */
 export const MODEL_SPECIFIC_PRESETS = MODEL_ENDPOINT_PRESETS.filter(
   (item) => !usesBuiltinModelEndpoint(item),
 );

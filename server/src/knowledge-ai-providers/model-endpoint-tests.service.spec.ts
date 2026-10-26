@@ -101,6 +101,46 @@ describe('模型接口卡片调试', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it.each([-2, -5])(
+    '已移除的识图通用卡片 %s 不恢复或重放旧临时结果',
+    async (id) => {
+      const { service, dto, providers } = harness('vision');
+      const fetchSpy = jest
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(json({ choices: [{ message: { content: 'OK' } }] }));
+      // 模拟移除前已完成的记录；当前真实解析器已不接受这两个编号。
+      await service.start(id, dto, 7);
+      providers.resolveEndpointTestTarget.mockRejectedValue(
+        new Error('系统通用规则不存在'),
+      );
+      await expect(service.query(id, requestId, 7)).rejects.toThrow('不存在');
+      await expect(service.start(id, dto, 7)).rejects.toThrow(
+        '系统通用规则不存在',
+      );
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([-1, -3, -4, -6])(
+    '保留的通用卡片 %s 仍可读取和幂等重放临时结果',
+    async (id) => {
+      const { service, dto } = harness();
+      const fetchSpy = jest
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(json({ choices: [{ message: { content: 'OK' } }] }));
+      await expect(service.start(id, dto, 7)).resolves.toMatchObject({
+        status: 'succeeded',
+      });
+      await expect(service.query(id, requestId, 7)).resolves.toMatchObject({
+        status: 'succeeded',
+      });
+      await expect(service.start(id, dto, 7)).resolves.toMatchObject({
+        status: 'succeeded',
+      });
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('按已保存模型发送单次请求，强制非流式并脱敏响应，不修改账号', async () => {
     const { service, dto, providers } = harness();
     const fetchSpy = jest.spyOn(globalThis, 'fetch').mockResolvedValue(

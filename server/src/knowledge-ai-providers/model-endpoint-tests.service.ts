@@ -7,6 +7,7 @@ import {
 import { createHash } from 'node:crypto';
 import { KnowledgeAiProvidersService } from './knowledge-ai-providers.service';
 import { ModelEndpointsService } from '../model-endpoints/model-endpoints.service';
+import { BUILTIN_MODEL_ENDPOINTS } from '../model-endpoints/model-endpoint.builtins';
 import { TestModelEndpointDto } from './dto/model-endpoint-test.dto';
 import {
   endpointTestResponse,
@@ -683,7 +684,12 @@ export class ModelEndpointTestsService {
       } catch {
         // 历史内存记录不是可执行输入，不能因为其格式影响其它测试记录。
       }
-      if (entry.expiresAt <= now || retiredSearch) this.records.delete(key);
+      const retiredBuiltin =
+        entry.origin === 'card' &&
+        entry.endpointId < 0 &&
+        !BUILTIN_MODEL_ENDPOINTS.some((card) => card.id === entry.endpointId);
+      if (entry.expiresAt <= now || retiredSearch || retiredBuiltin)
+        this.records.delete(key);
     }
     for (const [key, times] of this.attempts)
       if (!times.some((time) => time > now - 60000)) this.attempts.delete(key);
