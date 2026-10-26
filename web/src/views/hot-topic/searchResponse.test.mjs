@@ -224,3 +224,28 @@ test('诊断接口仅GET，模板安全转义原文且保留历史记录说明',
   assert.match(runsSource, /历史任务或未发起联网请求/);
   assert.doesNotMatch(responseSource, /setTimeout|setInterval|startHotRun/);
 });
+
+test('保留来源原始解析数量并与筛选后候选及整次请求来源数明确区分', () => {
+  assert.match(
+    runsSource,
+    /\{\{ detail\.action === 'discover' \? '筛选后候选' : '候选' \}\}\s*\{\{ detail\.candidateCount \?\? 0 \}\} 条/,
+  );
+  assert.match(
+    runsSource,
+    /<p v-if="detail\.action === 'discover'" class="hint">/,
+  );
+  assert.match(runsSource, /解析 \{\{ source\.count \}\} 条（筛选前）/);
+  assert.match(
+    runsSource,
+    /候选经过时间范围筛选、去重和数量上限限制，可能少于各来源解析条数之和/,
+  );
+  assert.match(responseSource, /label="请求解析来源"/);
+  assert.match(responseSource, /\{\{ detail\.parsing\.sourceCount \}\} 条/);
+  assert.match(responseSource, /本次请求解析到的全部可核验来源数量/);
+  assert.match(responseSource, /任务记录显示各来源筛选前解析条数/);
+  assert.match(
+    responseSource,
+    /最终候选经过时间范围筛选、去重和数量上限限制，可能少于解析数量/,
+  );
+  assert.doesNotMatch(responseSource, /各来源收录数量/);
+});

@@ -85,7 +85,8 @@ onBeforeUnmount(clear);
       <p class="hint">
         任务 #{{ props.runId }} · {{ props.sourceName || '联网搜索' }}。
         以下为本次调用保存的脱敏信息，查看和重新读取不会再次调用模型。
-        一次搜索可能覆盖多个来源；此处显示解析到的全部来源数量，各来源收录数量见任务记录。
+        一次搜索可能覆盖多个来源；此处显示本次请求解析到的全部可核验来源数量，任务记录显示各来源筛选前解析条数。
+        最终候选经过时间范围筛选、去重和数量上限限制，可能少于解析数量。
       </p>
       <p v-if="failed" class="error">
         联网响应读取失败，记录可能尚未保存或已不可用。
@@ -131,7 +132,7 @@ onBeforeUnmount(clear);
           <el-descriptions-item label="解析结果">{{
             parsingLabels[detail.parsing.status]
           }}</el-descriptions-item>
-          <el-descriptions-item label="解析来源"
+          <el-descriptions-item label="请求解析来源"
             >{{ detail.parsing.sourceCount }} 条</el-descriptions-item
           >
           <el-descriptions-item v-if="detail.parsing.code" label="原因编码">{{

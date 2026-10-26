@@ -148,7 +148,8 @@ onBeforeUnmount(stop);
           {{ detail.errorMessage }}
         </p>
         <p class="hint">
-          候选 {{ detail.candidateCount ?? 0 }} 条 · 选题
+          {{ detail.action === 'discover' ? '筛选后候选' : '候选' }}
+          {{ detail.candidateCount ?? 0 }} 条 · 选题
           {{ detail.topicCount ?? 0 }} 条 ·
           {{
             detail.searchExecuted
@@ -157,6 +158,9 @@ onBeforeUnmount(stop);
           }}<template v-if="detail.totalTokens != null">
             · {{ detail.totalTokens }} tokens</template
           >
+        </p>
+        <p v-if="detail.action === 'discover'" class="hint">
+          各来源数量为筛选前解析条数；候选经过时间范围筛选、去重和数量上限限制，可能少于各来源解析条数之和。
         </p>
         <ul>
           <li v-for="(source, index) in detail.sources || []" :key="index">
@@ -167,7 +171,7 @@ onBeforeUnmount(stop);
                   ? '已跳过'
                   : '失败'
             }}
-            · {{ source.count }} 条 · {{ source.message }}
+            · 解析 {{ source.count }} 条（筛选前） · {{ source.message }}
             <Button
               v-if="source.hasSearchResponse"
               perm="HotTopic.read"

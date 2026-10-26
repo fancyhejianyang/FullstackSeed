@@ -8,7 +8,7 @@ import ts from 'typescript';
 const source = await readFile(new URL('./Edit.vue', import.meta.url), 'utf8');
 const script =
   parse(source).descriptor.scriptSetup.content +
-  '\nexport { form, fields, providers, fillForm, buildPayload, formReadyForModelValidation, validateSelectedModel, modelValidationHint, currentTestSelection, selectionKey };';
+  '\nexport { form, fields, providers, fillForm, buildPayload, formReadyForModelValidation, validateSelectedModel, modelValidationHint, currentTestSelection, selectionKey, queryModelTest, modelTests, modelTestHint, latestTestRequestId, queryingTests };';
 const compiled = ts.transpileModule(script, {
   compilerOptions: {
     module: ts.ModuleKind.CommonJS,
@@ -26,10 +26,11 @@ const provider = (id, platformType) => ({
   textModels: 'shared-text',
 });
 
-async function harness(t, initial = {}, { checkEndpoint } = {}) {
+async function harness(t, initial = {}, { checkEndpoint, queryTest } = {}) {
   const exported = {};
   const scheduled = [];
   const checked = [];
+  const notifications = [];
   const scope = vue.effectScope();
   t.after(() => scope.stop());
   class QueueStub {
@@ -72,19 +73,27 @@ async function harness(t, initial = {}, { checkEndpoint } = {}) {
         if (name === 'axios') return { isAxiosError: () => false };
         if (name === 'element-plus')
           return {
-            ElMessage: { info() {}, warning() {}, error() {}, success() {} },
+            ElMessage: Object.fromEntries(
+              ['info', 'warning', 'error', 'success'].map((type) => [
+                type,
+                (message) => notifications.push({ type, message }),
+              ]),
+            ),
           };
         if (name === '@/api/aiFeatureConfig')
           return new Proxy(
             {},
             {
-              get: (_target, key) =>
-                key === 'checkAiFeatureModelEndpoint' && checkEndpoint
-                  ? async (payload) => {
-                      checked.push(payload);
-                      return checkEndpoint(payload);
-                    }
-                  : forbiddenRequest,
+              get: (_target, key) => {
+                if (key === 'checkAiFeatureModelEndpoint' && checkEndpoint)
+                  return async (payload) => {
+                    checked.push(payload);
+                    return checkEndpoint(payload);
+                  };
+                if (key === 'queryAiFeatureModelTest' && queryTest)
+                  return queryTest;
+                return forbiddenRequest;
+              },
             },
           );
         if (name === '@/api/thirdPartyConfig')
@@ -120,10 +129,144 @@ async function harness(t, initial = {}, { checkEndpoint } = {}) {
     ...exported,
     scheduled,
     checked,
+    notifications,
     searchField: () =>
       exported.fields.value.find((field) => field.prop === 'webSearchMode'),
   };
 }
+
+function deferred() {
+  let resolve, reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+const acceptedTest = () => ({
+  requestId: 'original-test',
+  providerId: 2,
+  model: 'hy3',
+  featureType: 'topicDiscovery',
+  status: 'accepted',
+  message: '原测试已受理',
+  httpStatus: 200,
+  responseBody: '',
+  taskId: 'original-task',
+  elapsedMilliseconds: 1,
+  checkedAt: new Date().toISOString(),
+});
+
+const changeSelections = [
+  [
+    '切换模型',
+    (form) => {
+      form.model = 'shared-text';
+    },
+  ],
+  [
+    '清空模型',
+    (form) => {
+      form.model = '';
+    },
+  ],
+  [
+    '切换账号',
+    (form) => {
+      form.providerId = 1;
+    },
+  ],
+  [
+    '切换功能',
+    (form) => {
+      form.featureType = 'contentCreation';
+    },
+  ],
+  [
+    '切走后选回同一模型',
+    (form) => {
+      form.model = 'shared-text';
+      form.model = 'hy3';
+    },
+  ],
+];
+
+test('主动查询迟到成功只保留历史，不串入切换后的提示', async (t) => {
+  for (const [name, change] of changeSelections) {
+    await t.test(name, async (subtest) => {
+      const response = deferred();
+      const h = await harness(
+        subtest,
+        { providerId: 2, model: 'hy3' },
+        { queryTest: () => response.promise },
+      );
+      const record = acceptedTest();
+      h.latestTestRequestId.value = record.requestId;
+      const pending = h.queryModelTest(record, true);
+      change(h.form);
+      h.modelTestHint.value = '当前选择的提示';
+      h.latestTestRequestId.value = 'current-test';
+      response.resolve({
+        ...record,
+        status: 'succeeded',
+        message: '原测试成功',
+      });
+      await pending;
+      assert.deepEqual(h.notifications, []);
+      assert.equal(h.modelTestHint.value, '当前选择的提示');
+      assert.equal(h.latestTestRequestId.value, 'current-test');
+      assert.equal(h.modelTests.value[0].status, 'succeeded');
+      assert.deepEqual(h.queryingTests.value, []);
+    });
+  }
+});
+
+test('后台轮询迟到失败只保留历史，不串入切换后的提示', async (t) => {
+  for (const [name, change] of changeSelections) {
+    await t.test(name, async (subtest) => {
+      const response = deferred();
+      const h = await harness(
+        subtest,
+        { providerId: 2, model: 'hy3' },
+        { queryTest: () => response.promise },
+      );
+      const record = acceptedTest();
+      h.latestTestRequestId.value = record.requestId;
+      const pending = h.queryModelTest(record, false);
+      change(h.form);
+      h.modelTestHint.value = '当前选择的提示';
+      h.latestTestRequestId.value = 'current-test';
+      response.reject(new Error('旧查询网络异常'));
+      await pending;
+      assert.deepEqual(h.notifications, []);
+      assert.equal(h.modelTestHint.value, '当前选择的提示');
+      assert.equal(h.latestTestRequestId.value, 'current-test');
+      assert.equal(h.modelTests.value[0].status, 'unknown');
+      assert.deepEqual(h.queryingTests.value, []);
+    });
+  }
+});
+
+test('选择不变时仍反馈主动查询的结果', async (t) => {
+  const record = acceptedTest();
+  const h = await harness(
+    t,
+    { providerId: 2, model: 'hy3' },
+    {
+      queryTest: async () => ({
+        ...record,
+        status: 'succeeded',
+        message: '本次测试成功',
+      }),
+    },
+  );
+  h.latestTestRequestId.value = record.requestId;
+  await h.queryModelTest(record, true);
+  assert.equal(h.notifications.length, 1);
+  assert.equal(h.notifications[0].type, 'success');
+  assert.match(h.modelTestHint.value, /本次测试成功/);
+});
 
 test('热点配置不再提供联网方式；旧协议不回填或提交', async (t) => {
   for (const providerId of [1, 2, 3, 4]) {

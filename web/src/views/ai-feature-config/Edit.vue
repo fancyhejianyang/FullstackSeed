@@ -51,6 +51,7 @@ const formReadyForModelValidation = ref(false);
 const validatingModel = ref(false);
 const modelValidationHint = ref("");
 let modelValidationSequence = 0;
+let modelSelectionSequence = 0;
 let dialogSession = 0;
 let retiredOptionsSequence = 0;
 const appliedModelRemovals = new Set<string>();
@@ -297,13 +298,21 @@ async function queryModelTest(
 ) {
   if (!visible.value || queryingTests.value.includes(record.requestId)) return;
   const session = dialogSession;
+  const selectionSequence = modelSelectionSequence;
+  const selectionUnchanged = () =>
+    session === dialogSession &&
+    visible.value &&
+    selectionSequence === modelSelectionSequence;
   queryingTests.value = [...queryingTests.value, record.requestId];
   try {
     const result = await queryAiFeatureModelTest(record.requestId);
     if (session !== dialogSession || !visible.value) return;
     const stored = storeModelTest(result);
+    // 保留历史结果，但切换或清空后的旧查询不得覆盖提示或重新开始轮询。
+    if (!selectionUnchanged()) return;
     const cleared = await refreshRetiredModelOptions([stored], session);
     if (session !== dialogSession || !visible.value) return;
+    if (!selectionUnchanged() && !cleared) return;
     const current =
       cleared ||
       (result.requestId === latestTestRequestId.value &&
@@ -328,6 +337,7 @@ async function queryModelTest(
       checkedAt: new Date().toISOString(),
     };
     const stored = storeModelTest(result, true);
+    if (!selectionUnchanged()) return;
     if (record.requestId === latestTestRequestId.value) {
       stopModelTestPoll();
       modelTestHint.value = stored.message;
@@ -904,6 +914,7 @@ watch(
   () =>
     [form.model, form.providerId, form.featureType, form.useMineru] as const,
   () => {
+    modelSelectionSequence += 1;
     const sequence = ++modelValidationSequence;
     retiredOptionsSequence += 1;
     modelTestQueue.cancelPending();

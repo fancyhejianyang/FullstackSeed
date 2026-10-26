@@ -166,8 +166,9 @@ export class KnowledgeWebSearchService {
             errorValue = text;
           }
         } catch {
-          // 与原错误读取保持一致：读取失败或超限时仍返回当前 HTTP 的受控错误。
+          // 非取消的读取失败或超限仍沿用当前 HTTP 的受控错误。
         }
+        boundedSignal.throwIfAborted();
         const billing = modelBillingErrorMessage(errorValue);
         if (billing) throw new HotTopicFetchError('search_billing', billing);
         const reason = [401, 403].includes(response.status)
@@ -187,6 +188,7 @@ export class KnowledgeWebSearchService {
         );
       }
       const value = await readLimitedJson(response, capture);
+      boundedSignal.throwIfAborted();
       const billing = modelBillingErrorMessage(value);
       if (billing) throw new HotTopicFetchError('search_billing', billing);
       parsing.status = 'failed';
