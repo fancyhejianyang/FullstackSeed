@@ -13,7 +13,7 @@ import { ContentGenerationTask } from './entities/content-generation-task.entity
 import { ContentArticlesController } from './content-articles.controller';
 import { AddContentGenerationTasks1792371600000 } from '../migrations/1792371600000-AddContentGenerationTasks';
 
-function setup() {
+function setup(timeoutSeconds?: string | number) {
   const article = {
     id: 3,
     userId: 7,
@@ -90,6 +90,13 @@ function setup() {
       .fn()
       .mockResolvedValue({ status: 'skipped', data: { message: '未配置' } }),
   };
+  const runtimeConfig = {
+    get: jest.fn((key: string, defaultValue?: number) =>
+      key === 'CONTENT_GENERATION_TIMEOUT_SECONDS'
+        ? (timeoutSeconds ?? defaultValue)
+        : defaultValue,
+    ),
+  };
   const service = new ContentGenerationService(
     tasks as never,
     articles as never,
@@ -97,6 +104,7 @@ function setup() {
     providers as never,
     templates as never,
     covers as never,
+    runtimeConfig as never,
   );
   const dto = {
     version: 2,
@@ -129,6 +137,7 @@ function setup() {
     providers,
     templates,
     covers,
+    runtimeConfig,
     dto,
     task,
   };
@@ -925,6 +934,193 @@ describe('持久化文章生成任务', () => {
         expect.objectContaining({ status: 'failed', result: null }),
       );
       expect(h.article.content).toBe('原文');
+    },
+  );
+  it.each([
+    [undefined, 300],
+    ['600', 600],
+  ] as const)(
+    '正文配置 %s 使用 %i 秒预算和额外 30 秒租约，超时后释放锁且不生成封面',
+    async (configured, seconds) => {
+      jest.useFakeTimers({ now: new Date('2026-10-27T00:00:00Z') });
+      const timeout = jest
+        .spyOn(AbortSignal, 'timeout')
+        .mockImplementation((milliseconds) => {
+          const controller = new AbortController();
+          setTimeout(
+            () =>
+              controller.abort(new DOMException('deadline', 'TimeoutError')),
+            milliseconds,
+          );
+          return controller.signal;
+        });
+      try {
+        const h = setup(configured);
+        const startedAt = Date.now();
+        h.task.snapshot.coverRequested = true;
+        h.tasks.findOne.mockImplementation(
+          ({ where }: { where: { coverStatus?: string } }) =>
+            Promise.resolve(where.coverStatus ? null : h.task),
+        );
+        const failure = {
+          isSuccess: false,
+          answer: '',
+          errorMessage: 'private-provider-response',
+          usage: { totalTokens: 0 },
+        };
+        h.providers.withExecutionSignal.mockImplementation((signal, run) => {
+          h.providers.callChat.mockImplementation(
+            () =>
+              new Promise<typeof failure>((resolve) => {
+                signal.addEventListener('abort', () => resolve(failure), {
+                  once: true,
+                });
+              }),
+          );
+          return run();
+        });
+        const running = h.service.tick();
+        await jest.advanceTimersByTimeAsync(120001);
+        expect(h.providers.callChat).toHaveBeenCalledTimes(1);
+        expect(h.providers.withExecutionSignal.mock.calls[0][0].aborted).toBe(
+          false,
+        );
+        expect(timeout).toHaveBeenCalledWith(seconds * 1000);
+        expect(h.tasks.update).toHaveBeenNthCalledWith(
+          3,
+          expect.objectContaining({ status: 'pending' }),
+          expect.objectContaining({
+            status: 'running',
+            leaseExpiresAt: new Date(startedAt + seconds * 1000 + 30000),
+          }),
+        );
+        await jest.advanceTimersByTimeAsync(seconds * 1000 - 120001);
+        await running;
+        expect(h.providers.withExecutionSignal.mock.calls[0][0].aborted).toBe(
+          true,
+        );
+        expect(h.tasks.update).toHaveBeenLastCalledWith(
+          expect.anything(),
+          expect.objectContaining({
+            status: 'failed',
+            result: null,
+            generatedTitle: null,
+            editorNotes: null,
+            coverStatus: null,
+            activeArticleId: null,
+            activeUserId: null,
+            errorMessage: expect.stringMatching(
+              new RegExp(`正文生成超过\\s*${seconds}\\s*秒`),
+            ) as unknown,
+          }),
+        );
+        expect(JSON.stringify(h.tasks.update.mock.calls)).not.toContain(
+          'private-provider-response',
+        );
+        expect(h.covers.generate).not.toHaveBeenCalled();
+        expect(h.articles.save).not.toHaveBeenCalled();
+        h.tasks.findOne.mockResolvedValue(null);
+        await h.service.tick();
+        expect(h.providers.callChat).toHaveBeenCalledTimes(1);
+      } finally {
+        timeout.mockRestore();
+        jest.clearAllTimers();
+        jest.useRealTimers();
+      }
+    },
+  );
+  it.each([false, true])(
+    '超时后的成功响应不得采用，停服状态优先于超时（停服：%s）',
+    async (stop) => {
+      const controller = new AbortController();
+      const timeout = jest
+        .spyOn(AbortSignal, 'timeout')
+        .mockReturnValue(controller.signal);
+      try {
+        const h = setup();
+        h.task.snapshot.coverRequested = true;
+        h.tasks.findOne.mockImplementation(
+          ({ where }: { where: { coverStatus?: string } }) =>
+            Promise.resolve(where.coverStatus ? null : h.task),
+        );
+        h.providers.callChat.mockImplementation(() => {
+          controller.abort(new DOMException('deadline', 'TimeoutError'));
+          if (stop) h.service.onModuleDestroy();
+          return Promise.resolve({
+            isSuccess: true,
+            answer: JSON.stringify({
+              outcome: 'completed',
+              title: '迟到标题',
+              body: '迟到正文',
+              notes: [],
+            }),
+            usage: { totalTokens: 100 },
+          });
+        });
+        await h.service.tick();
+        expect(h.tasks.update).toHaveBeenLastCalledWith(
+          expect.anything(),
+          expect.objectContaining({
+            status: stop ? 'interrupted' : 'failed',
+            result: null,
+            generatedTitle: null,
+            editorNotes: null,
+            coverStatus: null,
+            activeArticleId: null,
+            activeUserId: null,
+            errorMessage: expect.stringMatching(
+              stop ? /服务停止/ : /正文生成超过\s*300\s*秒/,
+            ) as unknown,
+          }),
+        );
+        expect(h.providers.callChat).toHaveBeenCalledTimes(1);
+        expect(h.covers.generate).not.toHaveBeenCalled();
+        expect(h.articles.save).not.toHaveBeenCalled();
+      } finally {
+        timeout.mockRestore();
+      }
+    },
+  );
+  it.each([
+    ['模型接口调用失败：401', /鉴权|认证|密钥/],
+    ['模型接口调用失败：429', /限流|请求过多/],
+    ['模型接口调用失败：503', /HTTP 503/],
+    ['fetch failed', /模型服务连接失败/],
+  ] as const)(
+    '已知模型错误 %s 保留分类但不记录供应商原文与地址',
+    async (reason, expected) => {
+      const h = setup();
+      h.tasks.findOne.mockImplementation(
+        ({ where }: { where: { coverStatus?: string } }) =>
+          Promise.resolve(where.coverStatus ? null : h.task),
+      );
+      h.providers.callChat.mockImplementation(() =>
+        Promise.resolve({
+          isSuccess: false,
+          answer: '',
+          errorMessage: `${reason} private-provider-response https://internal.example/sk-credential`,
+          usage: { totalTokens: 0 },
+        }),
+      );
+      await h.service.tick();
+      expect(h.tasks.update).toHaveBeenLastCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          status: 'failed',
+          result: null,
+          activeUserId: null,
+          errorMessage: expect.stringMatching(expected) as unknown,
+        }),
+      );
+      const written = JSON.stringify(h.tasks.update.mock.calls);
+      for (const secret of [
+        'private-provider-response',
+        'internal.example',
+        'sk-credential',
+      ])
+        expect(written).not.toContain(secret);
+      expect(h.providers.callChat).toHaveBeenCalledTimes(1);
+      expect(h.covers.generate).not.toHaveBeenCalled();
     },
   );
   it('失败不泄漏供应商错误，不自动重试', async () => {

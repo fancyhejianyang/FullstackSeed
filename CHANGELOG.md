@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-10-27 修复热点立即创作与文章生成的正文超时处理
+
+- 核对两入口共用文章生成队列；针对任务反复在 120 秒结束的问题，正文等待上限改为默认 300 秒，通过 `CONTENT_GENERATION_TIMEOUT_SECONDS` 配置（整数 60–900 秒）。同一次执行的任务租约使用该预算加 30 秒，避免扩大请求等待后仍被旧 150 秒租约中断；热点与文章入口统一生效，封面维持独立的 120 秒预算及 150 秒租约。
+- 保留正文超时信号，明确记录“正文生成超过 N 秒”；请求返回后先核对取消状态，超时后的迟到成功不采纳、不排封面。停服优先记录中断，失败释放文章/员工占用，保留原文且不自动重试或重放历史失败任务。
+- 模型调用错误按已知 HTTP 状态、网络故障、空正文等返回受控文案，保留已有精确计费提示；不保存供应商响应体、地址或凭据。沿用 `status/errorMessage` 接口契约，前端详情可直接展示，不改表结构或页面。
+- 新增文件（1）：`server/src/content-articles/content-generation-error.ts`。修改文件（5）：`server/src/content-articles/content-generation.service.ts`、`server/src/content-articles/content-generation.service.spec.ts`、`server/src/app.module.ts`、`server/.env.example`、本文件。删除文件：无。用户原有 `web/auto-imports.d.ts`、`web/src/api/hotTopic.ts` 改动保留，不纳入提交。
+- 验证：后端生产源码及相关规格 TypeScript noEmit 通过；生成服务、错误分类及规格定向 ESLint 和格式检查通过，根模块原有 10 条数据库导入相关 ESLint 问题经 HEAD 基线对比确认未增加。补充预算与租约同步、超过旧 120 秒继续等待、超时释放占用、迟到成功丢弃、停服优先及错误脱敏规格；按修复规则仅做静态检查，未执行行为测试、build、服务启动/重启或真实模型调用。尚未核验现场模型生成结果，更新后需由运行服务加载新代码。
+
 ### 2026-10-27 修复 Agent 生图模型候选被静默过滤
 
 - Agent 按所选账号的生图目录完整返回候选，继续保序去重并保留模型显示名；新增 `available`、`unavailableReason`，缺少文生图接口、接口停用、平台不匹配或配置无效的模型保持可见并禁用。账号目录本身为空与已登记但不可用分别提示，展示账号来源、登记/可选数量及“第三方配置 → 模型厂商调用接口 → 文生图”配置位置。

@@ -8,12 +8,13 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
 import { EntityManager, IsNull, LessThan, MoreThan, Repository } from 'typeorm';
 import { AiFeatureConfigsService } from '../ai-feature-configs/ai-feature-configs.service';
 import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge-ai-providers.service';
 import { ContentTemplatesService } from '../content-templates/content-templates.service';
-import { modelBillingErrorMessage } from '../common/ai/model-provider-error';
+import { contentGenerationErrorMessage } from './content-generation-error';
 import { ContentArticle } from './entities/content-article.entity';
 import { ContentCoverService } from './content-cover.service';
 import {
@@ -51,6 +52,7 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
   private draining = false;
   private stopped = false;
   private activeAbort?: AbortController;
+  private readonly textTimeoutMilliseconds: number;
   constructor(
     @InjectRepository(ContentGenerationTask)
     private readonly tasks: Repository<ContentGenerationTask>,
@@ -60,7 +62,11 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
     private readonly providers: KnowledgeAiProvidersService,
     private readonly templates: ContentTemplatesService,
     private readonly covers: ContentCoverService,
-  ) {}
+    config: ConfigService,
+  ) {
+    this.textTimeoutMilliseconds =
+      config.get<number>('CONTENT_GENERATION_TIMEOUT_SECONDS', 300) * 1000;
+  }
 
   onModuleInit() {
     this.timer = setInterval(() => {
@@ -443,23 +449,26 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
         order: { id: 'ASC' },
       });
       if (!task || this.stopped) return;
+      const timeoutMilliseconds = this.textTimeoutMilliseconds;
       const claim = await this.tasks.update(
         { id: task.id, status: 'pending', deletedAt: IsNull() },
         {
           status: 'running',
           workerId: this.workerId,
           startedAt: new Date(),
-          leaseExpiresAt: new Date(Date.now() + 150000),
+          leaseExpiresAt: new Date(Date.now() + timeoutMilliseconds + 30000),
         },
       );
       if (claim.affected !== 1) return;
-      await this.run(task);
+      await this.run(task, timeoutMilliseconds);
     } finally {
       this.draining = false;
     }
   }
-  private async run(task: ContentGenerationTask) {
+  private async run(task: ContentGenerationTask, timeoutMilliseconds: number) {
     this.activeAbort = new AbortController();
+    const timeoutSignal = AbortSignal.timeout(timeoutMilliseconds);
+    const signal = AbortSignal.any([this.activeAbort.signal, timeoutSignal]);
     let status: ContentTaskStatus = 'failed';
     let result: string | null = null;
     let generatedTitle: string | null = null;
@@ -468,34 +477,36 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
     let errorMessage: string | null =
       '生成失败，原文未修改；供应商可能已计费，请检查配置后手动重试';
     try {
+      if (this.stopped) this.activeAbort.abort();
+      signal.throwIfAborted();
       await this.article(task.articleId, task.userId);
+      signal.throwIfAborted();
       const { config, title, idea } = task.snapshot;
-      const response = await this.providers.withExecutionSignal(
-        AbortSignal.any([this.activeAbort.signal, AbortSignal.timeout(120000)]),
-        () =>
-          this.providers.callChat({
-            id: config.providerId,
-            model: config.model,
-            temperature: config.temperature,
-            thinkingParameters: config.thinkingParameters,
-            systemPrompt: buildContentWritingPrompt(
-              task.snapshot,
-              new Date(),
-              task.createdAt,
-            ),
-            question: JSON.stringify({
-              title,
-              idea,
-              ...(task.snapshot.sourceMaterials?.length
-                ? { sourceMaterials: task.snapshot.sourceMaterials }
-                : {}),
-            }),
+      const response = await this.providers.withExecutionSignal(signal, () =>
+        this.providers.callChat({
+          id: config.providerId,
+          model: config.model,
+          temperature: config.temperature,
+          thinkingParameters: config.thinkingParameters,
+          systemPrompt: buildContentWritingPrompt(
+            task.snapshot,
+            new Date(),
+            task.createdAt,
+          ),
+          question: JSON.stringify({
+            title,
+            idea,
+            ...(task.snapshot.sourceMaterials?.length
+              ? { sourceMaterials: task.snapshot.sourceMaterials }
+              : {}),
           }),
+        }),
       );
+      // callChat 会将取消转为失败结果；迟到的成功同样不能越过截止时间。
+      signal.throwIfAborted();
       totalTokens = response.usage?.totalTokens ?? null;
-      if (!response.isSuccess && !this.activeAbort.signal.aborted)
-        errorMessage =
-          modelBillingErrorMessage(response.errorMessage) ?? errorMessage;
+      if (!response.isSuccess)
+        errorMessage = contentGenerationErrorMessage(response.errorMessage);
       if (response.isSuccess) {
         const parsed = parseContentWritingResponse(response.answer ?? '', true);
         if (parsed) {
@@ -512,11 +523,14 @@ export class ContentGenerationService implements OnModuleInit, OnModuleDestroy {
       }
     } catch (error) {
       /* 不记录供应商原始错误、密钥或内部思考内容。 */
-      if (!this.activeAbort.signal.aborted)
-        errorMessage =
-          modelBillingErrorMessage(
-            error instanceof Error ? error.message : error,
-          ) ?? errorMessage;
+      errorMessage = contentGenerationErrorMessage(error);
+    }
+    if (timeoutSignal.aborted) {
+      status = 'failed';
+      result = null;
+      generatedTitle = null;
+      editorNotes = null;
+      errorMessage = `正文生成超过 ${timeoutMilliseconds / 1000} 秒，已停止等待；原文未修改，供应商可能仍在处理或计费，请核实后手动重试`;
     }
     if (this.stopped) {
       status = 'interrupted';

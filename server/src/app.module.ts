@@ -71,6 +71,11 @@ import { ModelEndpointsModule } from './model-endpoints/model-endpoints.module';
         }),
         JWT_EXPIRES_IN: Joi.string().default('7d'),
         BCRYPT_SALT_ROUNDS: Joi.number().integer().min(4).max(15).default(10),
+        CONTENT_GENERATION_TIMEOUT_SECONDS: Joi.number()
+          .integer()
+          .min(60)
+          .max(900)
+          .default(300),
         UPLOAD_PUBLIC_BASE_URL: Joi.string().allow('').default(''),
         CHROMA_URL: Joi.string().allow('').default('http://localhost:8000'),
         CHROMA_COLLECTION: Joi.string().allow('').default('knowledge_chunks'),
