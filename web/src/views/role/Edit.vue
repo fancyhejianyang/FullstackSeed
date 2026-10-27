@@ -1,10 +1,15 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, reactive, ref, watch } from "vue";
 import { ElMessage, type FormRules } from "element-plus";
 import Form, { type FormField } from "@/components/Form.vue";
 import Dialog from "@/components/Dialog.vue";
-import { getMenuTree, type MenuNode } from "@/api/menu";
-import { getAllPermissions, type Permission } from "@/api/permission";
+import type { MenuNode } from "@/api/menu";
+import { getPermissionCatalog, type PermissionModule } from "@/api/permission";
+import {
+  buildPermissionTree,
+  permissionTreeCodes,
+  mergePermissionSelection,
+} from "./permissionTree";
 import {
   createRole,
   getRole,
@@ -24,16 +29,10 @@ const formRef = ref<InstanceType<typeof Form>>();
 const permissionTreeRef = ref();
 
 const menuTree = ref<MenuNode[]>([]);
-const basePermissions = ref<Permission[]>([]);
+const modules = ref<PermissionModule[]>([]);
+const loadFailed = ref(false);
+let loadSequence = 0;
 const permissionsLoading = ref(false);
-
-interface PermissionTreeNode {
-  id: string;
-  label: string;
-  type: "menu" | "permission" | "group";
-  permissionCode?: string;
-  children?: PermissionTreeNode[];
-}
 
 const form = reactive({
   code: "",
@@ -69,114 +68,27 @@ const rules: FormRules = {
   isActive: [{ required: true, message: "请选择状态", trigger: "change" }],
 };
 
-onMounted(async () => {
-  const [menus] = await Promise.all([getMenuTree(), loadBasePermissions()]);
-  menuTree.value = menus;
-});
-
-async function loadBasePermissions() {
-  permissionsLoading.value = true;
-  try {
-    const res = await getAllPermissions();
-    const byCode = new Map<string, Permission>();
-    res.list.forEach((permission) => {
-      byCode.set(permission.code, permission);
-    });
-    basePermissions.value = Array.from(byCode.values());
-    await nextTick();
-    if (visible.value) {
-      syncPermissionTreeChecked();
-    }
-  } finally {
-    permissionsLoading.value = false;
-  }
-}
-
-function splitMenuPermissionCodes(code: string | undefined | null) {
-  if (!code) return [];
-  return code
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function getMenuModules(menu: MenuNode) {
-  const dottedModules = splitMenuPermissionCodes(menu.permissionCode)
-    .filter((code) => code.includes("."))
-    .map((code) => code.split(".")[0]);
-  if (menu.path === "/third-party-config/storage") {
-    dottedModules.push("MediaStorage");
-  }
-  if (dottedModules.length) return Array.from(new Set(dottedModules));
-
-  const segment = menu.path?.split("/").filter(Boolean)[0] ?? "";
-  const moduleMap: Record<string, string> = {
-    demo: "Demo",
-    users: "User",
-    roles: "Role",
-    permissions: "Permission",
-    menus: "Menu",
-    "system-config": "Menu",
-  };
-  if (moduleMap[segment]) return [moduleMap[segment]];
-  if (!segment) return [];
-
-  const normalized = segment.replace(/-([a-z])/g, (_, char: string) =>
-    char.toUpperCase(),
-  );
-  const singular = normalized.endsWith("s")
-    ? normalized.slice(0, -1)
-    : normalized;
-  return [singular.charAt(0).toUpperCase() + singular.slice(1)];
-}
-
-function getBaseActionLabel(permission: Permission) {
-  return `${permission.name}（${permission.code}）`;
-}
-
+const permissionTreeData = computed(() =>
+  buildPermissionTree(menuTree.value, modules.value),
+);
+const displayedCodes = computed(() =>
+  permissionTreeCodes(permissionTreeData.value),
+);
+const preservedCount = computed(
+  () =>
+    form.permissionCodes.filter((code) => !displayedCodes.value.includes(code))
+      .length,
+);
 function isTruthyValue(value: unknown) {
   return value === true || value === 1 || value === "1" || value === "true";
 }
 
-const permissionTreeData = computed<PermissionTreeNode[]>(() => {
-  const buildMenus = (menus: MenuNode[]): PermissionTreeNode[] =>
-    menus.flatMap((menu) => {
-      if (menu.isSystem || !menu.isActive) return [];
-
-      const children = buildMenus(menu.children || []);
-      // 目录只分组，不把聚合权限的第一个模块再生成一组重复授权节点。
-      const moduleNames = menu.children?.length ? [] : getMenuModules(menu);
-      const permissions = moduleNames.flatMap((moduleName) =>
-        basePermissions.value.map((permission) => {
-          const code = `${moduleName}.${permission.code}`;
-          return {
-            id: `permission-${code}`,
-            label:
-              moduleNames.length > 1
-                ? `${moduleName} · ${getBaseActionLabel(permission)}`
-                : getBaseActionLabel(permission),
-            type: "permission" as const,
-            permissionCode: code,
-          };
-        }),
-      );
-
-      const node = {
-        id: `menu-${menu.id}`,
-        label: menu.name,
-        type: "menu" as const,
-        children: [...children, ...permissions],
-      };
-      return node.children.length ? [node] : [];
-    });
-
-  return buildMenus(menuTree.value);
-});
-
 function syncPermissionTreeChecked() {
   const codes = new Set(form.permissionCodes);
   const keys: string[] = [];
-  const collectCheckedKeys = (nodes: PermissionTreeNode[]) => {
+  const collectCheckedKeys = (
+    nodes: ReturnType<typeof buildPermissionTree>,
+  ) => {
     nodes.forEach((node) => {
       if (node.permissionCode && codes.has(node.permissionCode)) {
         keys.push(node.id);
@@ -207,30 +119,60 @@ function fillForm(data: Role) {
     : (legacyRelationCodes ?? []);
 }
 
-// 打开时：编辑态强制走详情接口取最新数据
-watch(visible, async (val) => {
-  if (!val) return;
+// 每次打开重新读取，失败时禁止保存，避免空树覆盖已有授权。
+watch(visible, async (open) => {
+  const sequence = ++loadSequence;
+  if (!open) return;
   isEdit.value = !!props.row;
-
-  if (props.row?.id) {
-    loading.value = true;
-    try {
-      const detail = await getRole(props.row.id);
-      fillForm(detail);
-      await nextTick();
-      syncPermissionTreeChecked();
-    } finally {
-      loading.value = false;
-    }
-  } else {
-    resetForm();
+  loading.value = true;
+  permissionsLoading.value = true;
+  loadFailed.value = false;
+  resetForm();
+  menuTree.value = [];
+  modules.value = [];
+  try {
+    const [catalog, detail] = await Promise.all([
+      getPermissionCatalog(),
+      props.row?.id ? getRole(props.row.id) : Promise.resolve(null),
+    ]);
+    if (sequence !== loadSequence || !visible.value) return;
+    menuTree.value = catalog.menus;
+    modules.value = catalog.modules;
+    if (detail) fillForm(detail);
     await nextTick();
-    syncPermissionTreeChecked();
+    if (sequence === loadSequence && visible.value) syncPermissionTreeChecked();
+  } catch {
+    if (sequence === loadSequence) loadFailed.value = true;
+  } finally {
+    if (sequence === loadSequence) {
+      loading.value = false;
+      permissionsLoading.value = false;
+    }
   }
 });
 
 async function handleSubmit() {
+  if (
+    !visible.value ||
+    loading.value ||
+    permissionsLoading.value ||
+    loadFailed.value ||
+    submitting.value
+  ) {
+    if (loadFailed.value)
+      ElMessage.warning("权限目录读取失败，请重新打开后再保存");
+    return;
+  }
+  const sequence = loadSequence;
+  const roleId = props.row?.id;
   await formRef.value?.validate();
+  if (
+    sequence !== loadSequence ||
+    !visible.value ||
+    loading.value ||
+    loadFailed.value
+  )
+    return;
   const checkedKeys = permissionTreeRef.value?.getCheckedKeys(true) ?? [];
   const permissionCodes = checkedKeys
     .filter((key: string) => key.startsWith("permission-"))
@@ -241,16 +183,20 @@ async function handleSubmit() {
       code: form.code,
       name: form.name,
       isActive: !!form.isActive,
-      permissionCodes,
+      permissionCodes: mergePermissionSelection(
+        form.permissionCodes,
+        displayedCodes.value,
+        permissionCodes,
+      ),
     };
-    if (props.row) {
-      await updateRole(props.row.id, payload);
+    if (roleId) {
+      await updateRole(roleId, payload);
       ElMessage.success("更新成功");
     } else {
       await createRole(payload);
       ElMessage.success("创建成功");
     }
-    visible.value = false;
+    if (sequence === loadSequence) visible.value = false;
     emit("success");
   } finally {
     submitting.value = false;
@@ -266,19 +212,38 @@ async function handleSubmit() {
     @confirm="handleSubmit"
   >
     <div v-loading="loading">
-      <Form ref="formRef" v-model="form" :fields="fields" :rules="rules">
+      <p v-if="loadFailed" role="alert">
+        权限读取失败，请关闭后重新打开；未修改任何授权。
+      </p>
+      <Form
+        ref="formRef"
+        v-model="form"
+        :fields="fields"
+        :rules="rules"
+        :disabled="loading || loadFailed || submitting"
+      >
         <!-- 菜单权限树 -->
         <template #field-permissionIds>
-          <el-tree
-            ref="permissionTreeRef"
-            v-loading="permissionsLoading"
-            :data="permissionTreeData"
-            node-key="id"
-            show-checkbox
-            check-on-click-node
-            default-expand-all
-            class="perm-tree"
-          />
+          <div>
+            <p>权限变更后，相关账号需重新登录生效。</p>
+            <p>
+              同一模块的多个入口合并授权，仅列出实际支持的动作。超管专用或停用菜单不参与分配。
+            </p>
+            <p v-if="preservedCount">
+              另有
+              {{ preservedCount }} 项历史或当前未展示的权限，本次保存将保留。
+            </p>
+            <el-tree
+              ref="permissionTreeRef"
+              v-loading="permissionsLoading"
+              :data="permissionTreeData"
+              node-key="id"
+              show-checkbox
+              check-on-click-node
+              default-expand-all
+              class="perm-tree"
+            />
+          </div>
         </template>
       </Form>
     </div>

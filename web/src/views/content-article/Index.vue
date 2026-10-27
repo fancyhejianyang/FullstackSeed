@@ -94,7 +94,7 @@ function canGenerate(rows: ContentArticleSummary[]) {
   );
 }
 async function openGenerate(rows: ContentArticleSummary[]) {
-  if (!user.hasPermission('ContentArticle.update')) return;
+  if (!user.hasPermission('ContentArticle.aiGenerate')) return;
   if (rows.length !== 1) {
     ElMessage.warning('请选中一篇文章后生成');
     return;
@@ -200,7 +200,7 @@ function batchDeleteRequest({ ids }: { ids: Array<string | number> }) {
           >记录想法</Button
         >
         <Button
-          perm="ContentArticle.update"
+          perm="ContentArticle.aiGenerate"
           icon="MagicStick"
           :disabled="!canGenerate(selectedRows)"
           :loading="generatingId !== null"
@@ -217,7 +217,7 @@ function batchDeleteRequest({ ids }: { ids: Array<string | number> }) {
       </template>
       <template #actions="{ row }">
         <Button
-          perm="ContentArticle.update"
+          perm="ContentArticle.aiGenerate"
           link
           :auto-icon="false"
           :disabled="!canGenerate([row])"

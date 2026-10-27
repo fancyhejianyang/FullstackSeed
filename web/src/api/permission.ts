@@ -1,4 +1,5 @@
 import request from '@/utils/request';
+import type { MenuNode } from './menu';
 
 export type PermissionType = 'menu' | 'button' | 'api';
 
@@ -9,6 +10,7 @@ export interface Permission {
   type: PermissionType;
   description?: string;
   menuId?: number | null;
+  modules?: Array<{ code: string; name: string }>;
   createdAt: string;
   updatedAt: string;
 }
@@ -29,6 +31,19 @@ export interface PermissionForm {
   code: string;
   name: string;
   type?: PermissionType;
+}
+
+export interface PermissionModule {
+  code: string;
+  name: string;
+  actions: Array<{ code: string; name: string }>;
+}
+
+export function getPermissionCatalog() {
+  return request.get<
+    unknown,
+    { menus: MenuNode[]; modules: PermissionModule[] }
+  >('/permissions/catalog');
 }
 
 /** 分页查询权限 */

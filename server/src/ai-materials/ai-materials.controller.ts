@@ -110,7 +110,7 @@ export class AiMaterialsController {
   }
 
   @Post(':id/generate')
-  @RequirePermissions('AiMaterial.update')
+  @RequirePermissions('AiMaterial.aiGenerate')
   generate(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: GenerateAiMaterialDto,

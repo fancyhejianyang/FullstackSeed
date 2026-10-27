@@ -1,5 +1,17 @@
 # CHANGELOG
 
+### 2026-10-27 核对角色授权目录并补齐 AI 生成与 AI 提炼权限
+
+- 核对现行接口及页面权限，整理统一模块动作注册表：36 个模块、155 个实际权限码，覆盖 305 处接口权限声明及页面直接使用的权限码。模块前缀原本已有登记，主要问题是角色树将每个菜单与全部 CRUD 动作组合，既遗漏 AI 独立授权，也出现不存在的操作和同模块重复节点。现在由注册表声明实际支持的动作，不再为所有模块批量生成全部动作。
+- 增加 `aiGenerate`（AI 生成）与 `aiRefine`（AI 提炼）动作定义。文章、AI 素材、Comfy 创作任务与提示词转化使用 AI 生成；提示词总结提炼使用 AI 提炼。前端按钮、服务端接口同步校验，热点“立即创作”与 Agent 文章生成链路同步对齐。普通编辑、保存与采用文章保留原 CRUD 权限；无提炼授权仍可在具备新增/编辑权限时保存提示词配置，不自动调用 AI。
+- 角色编辑通过 `GET /permissions/catalog` 获取菜单及实际模块动作，仅依赖 `Role.read`，不再额外依赖菜单管理、权限定义管理的查看权限。相同模块在多个菜单下只展示一次；超管专用、停用菜单不参与分配；真正无菜单关联的模块单列。每次打开刷新目录，加载失败禁止保存，关闭重开隔离旧请求；保存只替换可见授权，保留历史或当前未展示的权限，避免误清空。
+- 权限定义页新增“适用模块”，补齐该页编辑/删除按钮的权限模块绑定；通用按钮增加两类 AI 动作的文案、图标、配色。自定义动作需同时接入模块注册表、接口和按钮，不能仅新增一条定义就自动成为所有模块的能力。同步项目规则与设计文档，允许在基础 CRUD 之外按真实业务扩展动作。
+- 不新增数据库字段，不改变 `Module.action`、`permissionCodes` 契约。后端下次启动按既有种子流程补齐新动作，已软删除的内置动作按原 ID 恢复，默认管理角色由同一注册表补齐；普通角色不自动获得新 AI 授权。管理员需在角色编辑中分配新动作；现有 JWT 保存了登录时的权限，相关账号需重新登录生效。
+- 新增文件（4）：`server/src/permissions/permission-catalog.spec.ts`、`server/src/permissions/permission-catalog.ts`、`web/src/views/role/permissionTree.test.mjs`、`web/src/views/role/permissionTree.ts`。
+- 修改文件（33）：`.design-spec.md`、`AGENTS-BACKEND.md`、`AGENTS-FRONTEND.md`、`AGENTS.md`、`server/src/agent-apps/agent-business.registry.ts`、`server/src/ai-command-definitions/ai-command-definitions.constants.spec.ts`、`server/src/ai-command-definitions/ai-command-definitions.constants.ts`、`server/src/ai-materials/ai-materials.controller.ts`、`server/src/comfyui/comfy-tasks.controller.ts`、`server/src/comfyui/comfy-workflows.controller.ts`、`server/src/content-articles/content-articles.controller.ts`、`server/src/hot-topics/hot-topics.service.spec.ts`、`server/src/hot-topics/hot-topics.service.ts`、`server/src/menus/menus.module.ts`、`server/src/permissions/permissions.controller.ts`、`server/src/permissions/permissions.module.ts`、`server/src/permissions/permissions.service.ts`、`server/src/users/users.service.ts`、`server/src/visual-prompt-templates/visual-prompt-templates.controller.ts`、`web/src/api/permission.ts`、`web/src/utils/permission.ts`、`web/src/views/ai-material/Index.vue`、`web/src/views/comfy-create/Index.vue`、`web/src/views/comfy-task/TaskTable.vue`、`web/src/views/content-article/Generate.vue`、`web/src/views/content-article/Index.vue`、`web/src/views/hot-topic/CreateArticle.vue`、`web/src/views/permission/Edit.vue`、`web/src/views/permission/Index.vue`、`web/src/views/role/Edit.vue`、`web/src/views/visual-prompt-template/Edit.vue`、`web/src/views/visual-prompt-template/Index.vue`、`CHANGELOG.md`。
+- 删除文件：无。用户原有 `web/auto-imports.d.ts`、`web/src/api/hotTopic.ts` 改动保留，不纳入本次提交。
+- 验证：按项目规则仅做静态检查。后端全部生产源码及本次新增/修改规格的 TypeScript noEmit 检查、改动 TS 定向 ESLint 通过；前端应用 Vue/TypeScript noEmit 检查、角色树规格语法检查通过。静态核对目录未发现接口或页面权限码遗漏；组件审查沿用项目 Form/Table/Dialog/Button。补充规格涵盖权限目录、真实接口权限元数据、热点立即生成拒绝旧权限、同模块合并、隐藏菜单、历史授权保留等；未运行行为测试。额外纳入未改动的 `server/src/menus/system-access.spec.ts` 时仍有一处既有 TS2352 类型断言错误，本次未修改该文件。未 build、启动或重启服务，未连接运行中数据库、读取真实密钥或调用付费 AI；页面交互及普通账号实际授权仍待运行环境验收。
+
 ### 2026-10-27 修复热点立即创作与文章生成的正文超时处理
 
 - 核对两入口共用文章生成队列；针对任务反复在 120 秒结束的问题，正文等待上限改为默认 300 秒，通过 `CONTENT_GENERATION_TIMEOUT_SECONDS` 配置（整数 60–900 秒）。同一次执行的任务租约使用该预算加 30 秒，避免扩大请求等待后仍被旧 150 秒租约中断；热点与文章入口统一生效，封面维持独立的 120 秒预算及 150 秒租约。

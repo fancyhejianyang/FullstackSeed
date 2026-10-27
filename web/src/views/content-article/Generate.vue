@@ -181,7 +181,7 @@ async function generate() {
   if (
     !visible.value ||
     !ready.value ||
-    !user.hasPermission('ContentArticle.update')
+    !user.hasPermission('ContentArticle.aiGenerate')
   )
     return;
   const current = epoch;
@@ -343,7 +343,7 @@ onBeforeUnmount(() => {
     <template #footer>
       <Button :disabled="submitting" @click="requestClose">取消</Button>
       <Button
-        perm="ContentArticle.update"
+        perm="ContentArticle.aiGenerate"
         icon="MagicStick"
         :loading="submitting"
         :disabled="!ready || !form.aiConfigId"

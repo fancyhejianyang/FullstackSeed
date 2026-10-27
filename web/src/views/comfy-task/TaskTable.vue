@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import { ElMessage } from "element-plus";
+import { useUserStore } from "@/stores/user";
 import Table, { type TableColumn } from "@/components/Table.vue";
 import Button from "@/components/Button.vue";
 import type { FormField } from "@/components/Form.vue";
@@ -16,6 +17,7 @@ import {
 } from "@/api/comfyUi";
 import View from "./View.vue";
 
+const user = useUserStore();
 const emit = defineEmits<{
   recreate: [task: ComfyTask];
 }>();
@@ -176,8 +178,10 @@ defineExpose({ refresh });
     }}</template>
     <template #actions="{ row }">
       <Button
-        v-if="row.status === 'succeeded'"
-        perm="ComfyTask.create"
+        v-if="
+          row.status === 'succeeded' && user.hasPermission('ComfyTask.create')
+        "
+        perm="ComfyTask.aiGenerate"
         link
         icon="RefreshRight"
         :confirm="false"
@@ -185,8 +189,8 @@ defineExpose({ refresh });
         >再次创作</Button
       >
       <Button
-        v-if="row.status === 'failed'"
-        perm="ComfyTask.create"
+        v-if="row.status === 'failed' && user.hasPermission('ComfyTask.create')"
+        perm="ComfyTask.aiGenerate"
         link
         icon="RefreshRight"
         confirm

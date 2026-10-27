@@ -76,7 +76,7 @@ export class ComfyWorkflowsController {
   }
 
   @Post(':id/compose-prompt')
-  @RequirePermissions('ComfyTask.create')
+  @RequirePermissions('ComfyTask.create', 'ComfyTask.aiGenerate')
   composePrompt(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: ComposeComfyWorkflowPromptDto,

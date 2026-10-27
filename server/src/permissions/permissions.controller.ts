@@ -31,6 +31,13 @@ export class PermissionsController {
     return this.permissionsService.findAll(query);
   }
 
+  @Get('catalog')
+  @RequirePermissions('Role.read')
+  @ApiOperation({ summary: '角色授权使用的菜单及实际模块动作目录' })
+  catalog() {
+    return this.permissionsService.catalog();
+  }
+
   @Get(':id')
   @RequirePermissions('Permission.read')
   @ApiOperation({ summary: '权限详情' })

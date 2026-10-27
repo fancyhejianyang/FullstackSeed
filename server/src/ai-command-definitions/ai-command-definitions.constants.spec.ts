@@ -52,7 +52,7 @@ describe('AI command catalog', () => {
         );
         expect(bindings.requiredPermissions).toEqual([
           'ContentArticle.create',
-          'ContentArticle.update',
+          'ContentArticle.aiGenerate',
         ]);
       } else {
         expect(command.executionMode).toBe('api');

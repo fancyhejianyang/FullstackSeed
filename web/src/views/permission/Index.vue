@@ -5,14 +5,24 @@ import Button from '@/components/Button.vue';
 import Table, { type TableColumn } from '@/components/Table.vue';
 import type { FormField } from '@/components/Form.vue';
 import { formatDateTime } from '@/utils/format';
-import { getPermissions, deletePermission, type Permission } from '@/api/permission';
+import {
+  getPermissions,
+  deletePermission,
+  type Permission,
+} from '@/api/permission';
 import Edit from './Edit.vue';
 
 // Table 为泛型组件，InstanceType 取不到，直接声明暴露的方法类型
-const tableRef = ref<{ refresh: () => Promise<void>; search: () => Promise<void> }>();
+const tableRef = ref<{
+  refresh: () => Promise<void>;
+  search: () => Promise<void>;
+}>();
 
 // 权限类型 → 标签配色
-const TYPE_META: Record<string, { label: string; type: 'primary' | 'success' | 'info' }> = {
+const TYPE_META: Record<
+  string,
+  { label: string; type: 'primary' | 'success' | 'info' }
+> = {
   menu: { label: '菜单', type: 'primary' },
   button: { label: '按钮', type: 'success' },
   api: { label: '接口', type: 'info' },
@@ -22,6 +32,7 @@ const columns: TableColumn[] = [
   { prop: 'code', label: '权限编码', minWidth: 180 },
   { prop: 'name', label: '权限名称', minWidth: 160 },
   { prop: 'type', label: '类型', width: 100, slot: true },
+  { prop: 'modules', label: '适用模块', minWidth: 240, slot: true },
   { prop: 'createdAt', label: '创建时间', width: 180, slot: true },
 ];
 
@@ -48,6 +59,10 @@ function getTypeMeta(type: string) {
   return TYPE_META[type] ?? { label: type || '-', type: 'info' as const };
 }
 
+function moduleNames(row: Permission) {
+  return row.modules?.map((item) => item.name).join('、') || '尚未接入业务操作';
+}
+
 const editVisible = ref(false);
 const editingRow = ref<Permission | null>(null);
 
@@ -70,6 +85,7 @@ function deletePermissionRequest(row: Permission) {
   <PageContainer title="权限定义">
     <Table
       ref="tableRef"
+      perm-module="permission"
       :columns="columns"
       :search-fields="searchFields"
       :request="fetchPermissions"
@@ -78,10 +94,15 @@ function deletePermissionRequest(row: Permission) {
       @edit="handleEdit"
     >
       <template #toolbar>
-        <Button perm="Permission.create" :auto-icon="false" @click="openCreate">新增权限</Button>
+        <Button perm="Permission.create" :auto-icon="false" @click="openCreate"
+          >新增权限</Button
+        >
       </template>
 
       <!-- 类型列 -->
+      <template #column-modules="{ row }">
+        {{ moduleNames(row) }}
+      </template>
       <template #column-type="{ row }">
         <el-tag size="small" :type="getTypeMeta(row.type).type">
           {{ getTypeMeta(row.type).label }}

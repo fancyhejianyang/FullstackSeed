@@ -58,7 +58,7 @@ FullstackSeed 是一个全栈项目开发框架 / 平台基座，采用管理后
 - 接口字段对齐规则：登录令牌等接口契约字段（如 `access_token`、`statusCode`、`success`）前后端必须一字不差对齐，**改字段先改两端类型定义**
 - 文件 / 目录命名：后端用 **kebab-case**（`jwt-auth.guard.ts`、`auth.module.ts`）；前端组件/页面用 **PascalCase**（`LoginView.vue`、`MainLayout.vue`），其他 ts 文件 camelCase。前端菜单模块在 `views/<module>/`（小写目录）下用标准文件名 `Index.vue`/`Edit.vue`/`View.vue`
 - 组件 / 类 / 函数命名：类用 PascalCase（`AuthService`）；函数/方法 camelCase（`getProfile`）；Vue 组件名 PascalCase
-- **权限码格式（前后端共契约）**：`Module.action`，模块首字母大写 + 点号，动作统一 `read/create/update/delete/batchDelete`，如 `Role.read` / `Demo.batchDelete`
+- **权限码格式（前后端共契约）**：`Module.action`，模块首字母大写 + 点号，基础动作使用 `read/create/update/delete/batchDelete`；业务动作可扩展 `aiGenerate/aiRefine`，必须同步登记 `server/src/permissions/permission-catalog.ts` 并接入接口与按钮，如 `Role.read` / `Demo.batchDelete`
 
 ## 变更前 AI 输出格式
 
@@ -93,7 +93,7 @@ FullstackSeed 是一个全栈项目开发框架 / 平台基座，采用管理后
 
 > 新增一个业务模块（假设名 `Foo`，路由 `/foos`，权限码前缀 `Foo`）的标准作业总览。**核心动作是"复制 demo → 改字段/权限码"**，具体步骤见各端文档：
 
-- **后端 6 步** → 见 [`AGENTS-BACKEND.md`](AGENTS-BACKEND.md#新增业务模块后端-6-步)：复制 `demo/` → 改字段 → 改权限码 → 挂根模块 → SEED 权限点 → SEED 菜单
+- **后端 6 步** → 见 [`AGENTS-BACKEND.md`](AGENTS-BACKEND.md#新增业务模块后端-6-步)：复制 `demo/` → 改字段 → 改权限码 → 挂根模块 → 登记实际模块动作 → SEED 菜单
 - **前端 5 步** → 见 [`AGENTS-FRONTEND.md`](AGENTS-FRONTEND.md#新增业务模块前端-5-步)：复制 `views/demo/` → 改类型 & API → 改列表页 → 改弹窗 → 加路由（侧边栏动态自动接管）
 - **组件用法** → 见 [`AGENTS-COMPONENTS.md`](AGENTS-COMPONENTS.md)：不要在业务页里重造 Table/Form/Dialog 的能力
 - **跨端字段对齐** → 前端 `Foo` 类型 = 后端 DTO = 实体字段名（camelCase 一字不差）；权限码 `Module.action`；分页 `{list,total}`

@@ -98,7 +98,7 @@ console.log(result);
 
 ## 新增业务模块（前端 5 步）
 
-> 前置：后端 `Foo` 模块已按 [`AGENTS-BACKEND.md`](AGENTS-BACKEND.md) 完成。**动作命名严格 `read/create/update/delete/batchDelete`**。
+> 前置：后端 `Foo` 模块已按 [`AGENTS-BACKEND.md`](AGENTS-BACKEND.md) 完成。**CRUD 使用 `read/create/update/delete/batchDelete`；AI 等业务动作与后端目录一致**。
 
 1. **复制 demo**：把 `views/demo/` 整个目录复制为 `views/foo/`；把 `api/demo.ts` 复制为 `api/foo.ts`。
 2. **改类型 & API**：把 `api/foo.ts` 里的 `Demo`/`DemoForm`/`QueryDemoParams` 与 5 个函数改为 `Foo` 语义；接口路径 `/demo` → `/foos`。
@@ -133,7 +133,7 @@ console.log(result);
 ## 字段对齐 checklist（每次新模块必核）
 
 - 前端 `Foo` 类型字段名 = 后端 DTO 字段名 = 实体字段名（camelCase）
-- 权限码：`Module.action` 五种动作
+- 权限码：`Module.action`；基础 CRUD 与已登记业务动作（如 `aiGenerate/aiRefine`）前后端一致。角色树以服务端目录的实际动作为准，不将动作列表套到全部模块。
 - 分页返回：`{list, total}`
 - 布尔：`boolean`；日期：ISO string → `formatDateTime` 显示
 

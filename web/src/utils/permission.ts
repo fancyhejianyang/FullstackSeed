@@ -23,6 +23,8 @@ const ACTION_TYPE_MAP: Record<string, ElementSemanticType> = {
   create: 'success',
   update: 'primary',
   edit: 'primary',
+  aiGenerate: 'primary',
+  aiRefine: 'primary',
   delete: 'danger',
   batchDelete: 'danger',
   export: 'warning',
@@ -45,6 +47,8 @@ const ACTION_LABEL_MAP: Record<string, string> = {
   create: '新增',
   update: '编辑',
   edit: '编辑',
+  aiGenerate: 'AI 生成',
+  aiRefine: 'AI 提炼',
   delete: '删除',
   batchDelete: '批量删除',
   export: '导出',
@@ -67,6 +71,8 @@ const ACTION_ICON_MAP: Record<string, string> = {
   create: 'Plus',
   update: 'Edit',
   edit: 'Edit',
+  aiGenerate: 'MagicStick',
+  aiRefine: 'MagicStick',
   delete: 'Delete',
   batchDelete: 'Delete',
   export: 'Download',
@@ -140,9 +146,7 @@ export function getPermissionActionIcon(
 }
 
 /** 判断权限码对应动作是否需要二次确认 */
-export function isDestructiveAction(
-  code: string | undefined | null,
-): boolean {
+export function isDestructiveAction(code: string | undefined | null): boolean {
   const action = getPermissionAction(code);
   return DESTRUCTIVE_ACTIONS.has(action);
 }

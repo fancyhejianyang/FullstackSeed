@@ -89,7 +89,7 @@ export class VisualPromptTemplatesController {
     return this.service.update(id, dto, userId);
   }
   @Post(':id/extract')
-  @RequirePermissions('VisualPromptTemplate.update')
+  @RequirePermissions('VisualPromptTemplate.aiRefine')
   extract(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: SubmitVisualPromptTaskDto,
@@ -98,7 +98,10 @@ export class VisualPromptTemplatesController {
     return this.service.submitExtraction(id, userId, dto.requestId);
   }
   @Post(':id/compose')
-  @RequirePermissions('VisualPromptTemplate.read')
+  @RequirePermissions(
+    'VisualPromptTemplate.read',
+    'VisualPromptTemplate.aiGenerate',
+  )
   compose(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: ComposeVisualPromptDto,

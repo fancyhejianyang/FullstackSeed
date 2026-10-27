@@ -19,6 +19,7 @@ import Select from "@/components/Select.vue";
 import Switch from "@/components/Switch.vue";
 import UploadFile from "@/components/UploadFile.vue";
 import UploadImage from "@/components/UploadImage.vue";
+import { useUserStore } from "@/stores/user";
 import TaskTable from "@/views/comfy-task/TaskTable.vue";
 import type { UploadResult } from "@/api/upload";
 import {
@@ -37,6 +38,7 @@ import {
 import { buildComfyTaskParameterDraft } from "./recreateTask";
 
 const router = useRouter();
+const user = useUserStore();
 const taskTableRef = ref<{ refresh: () => Promise<void> }>();
 const createVisible = ref(false);
 const loading = ref(false);
@@ -217,6 +219,11 @@ async function openRecreate(row: ComfyTask) {
 }
 
 async function composePrompt() {
+  if (
+    !user.hasPermission("ComfyTask.create") ||
+    !user.hasPermission("ComfyTask.aiGenerate")
+  )
+    return;
   if (!current.value?.visualPromptTemplateId) {
     ElMessage.warning("该工作流尚未建立提示词总结");
     return;
@@ -293,6 +300,11 @@ async function load() {
   }
 }
 async function submit() {
+  if (
+    !user.hasPermission("ComfyTask.create") ||
+    !user.hasPermission("ComfyTask.aiGenerate")
+  )
+    return;
   if (!current.value) {
     ElMessage.warning("请选择可用的工作流");
     return;
@@ -352,7 +364,12 @@ onMounted(load);
   <PageContainer title="创作任务">
     <TaskTable ref="taskTableRef" @recreate="openRecreate">
       <template #toolbar>
-        <Button perm="ComfyTask.create" icon="Plus" @click="openCreate">
+        <Button
+          v-if="user.hasPermission('ComfyTask.create')"
+          perm="ComfyTask.aiGenerate"
+          icon="Plus"
+          @click="openCreate"
+        >
           新建创作任务
         </Button>
       </template>
@@ -522,10 +539,14 @@ onMounted(load);
                   </p>
                 </div>
                 <Button
-                  v-if="current?.visualPromptTemplateId"
+                  v-if="
+                    current?.visualPromptTemplateId &&
+                    user.hasPermission('ComfyTask.create')
+                  "
                   :confirm="false"
                   icon="MagicStick"
                   :loading="composing"
+                  perm="ComfyTask.aiGenerate"
                   @click="composePrompt"
                   >{{
                     composing ? composeStage || "转换中" : "转换提示词"
@@ -665,7 +686,8 @@ onMounted(load);
                   取消
                 </Button>
                 <Button
-                  perm="ComfyTask.create"
+                  v-if="user.hasPermission('ComfyTask.create')"
+                  perm="ComfyTask.aiGenerate"
                   icon="MagicStick"
                   :loading="submitting"
                   @click="submit"

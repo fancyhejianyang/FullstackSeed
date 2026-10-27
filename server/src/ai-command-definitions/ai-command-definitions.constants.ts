@@ -562,7 +562,10 @@ export const AI_BUSINESS_COMMAND_CATALOG: AiCommandCatalogItem[] = [
       },
     }),
     contextBindings: toJson({
-      requiredPermissions: ['ContentArticle.create', 'ContentArticle.update'],
+      requiredPermissions: [
+        'ContentArticle.create',
+        'ContentArticle.aiGenerate',
+      ],
       operatorId: '$operator.id',
       source: 'agent-confirmed-content-generation',
     }),

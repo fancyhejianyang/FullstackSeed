@@ -86,6 +86,34 @@ function setup() {
 }
 
 describe('热点选题核心', () => {
+  it('立即创作不能借用文章编辑权限绕过 AI 生成授权', async () => {
+    const { service, articles, topics } = setup();
+    await expect(
+      service.createArticle(
+        1,
+        {
+          requestId: 'd6a7bb93-18ff-4358-9b57-a3f4304d9e27',
+          idea: '创作想法',
+          generate: true,
+          aiConfigId: 7,
+        },
+        {
+          userId: 9,
+          username: 'tester',
+          isAdmin: false,
+          roles: [],
+          permissions: [
+            'HotTopic.create',
+            'ContentArticle.create',
+            'ContentArticle.update',
+          ],
+        },
+      ),
+    ).rejects.toThrow('缺少文章创建或生成权限');
+    expect(topics.manager.transaction).not.toHaveBeenCalled();
+    expect(articles.createAndQueueGeneration).not.toHaveBeenCalled();
+  });
+
   it('任务详情和分页只返回诊断入口标记，正文仅通过独立接口读取', async () => {
     const { service, runs } = setup();
     const response = { responseBody: '{"output":[]}', version: 1 };

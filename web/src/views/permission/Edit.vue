@@ -39,7 +39,8 @@ const fields: FormField[] = [
     prop: 'code',
     label: '权限编码',
     component: 'Input',
-    placeholder: '如 read、batchDelete',
+    placeholder: '如 read、aiGenerate、aiRefine',
+    hint: 'AI 生成与 AI 提炼属于按钮动作。新增定义后，还需在对应模块、接口和按钮接入，才会出现在角色授权中。',
     componentProps: { disabled: isEdit, trim: false, clearable: false },
   },
   { prop: 'name', label: '权限名称', type: 'input' },
@@ -61,7 +62,7 @@ const rules: FormRules = {
     { required: true, message: '请输入权限编码', trigger: 'blur' },
     {
       pattern: /^[a-z][A-Za-z0-9]*$/,
-      message: '为纯动作标识，如 read、batchDelete',
+      message: '为纯动作标识，如 read、aiGenerate、aiRefine',
       trigger: 'blur',
     },
   ],
@@ -122,6 +123,12 @@ async function handleSubmit() {
     :confirm-loading="submitting"
     @confirm="handleSubmit"
   >
-    <Form ref="formRef" v-model="form" :fields="fields" :rules="rules" label-width="90px" />
+    <Form
+      ref="formRef"
+      v-model="form"
+      :fields="fields"
+      :rules="rules"
+      label-width="90px"
+    />
   </Dialog>
 </template>

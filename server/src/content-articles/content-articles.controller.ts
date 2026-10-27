@@ -47,7 +47,7 @@ export class ContentArticlesController {
   }
 
   @Get('generation-configs')
-  @RequirePermissions('ContentArticle.update')
+  @RequirePermissions('ContentArticle.read')
   @ApiOperation({ summary: '文章生成可选配置（仅启用的内容创作配置概要）' })
   generationConfigs(@Query() query: QueryContentArticleDto) {
     return this.generation.configOptions(query);
@@ -134,7 +134,7 @@ export class ContentArticlesController {
   }
 
   @Post(':id/generate')
-  @RequirePermissions('ContentArticle.update')
+  @RequirePermissions('ContentArticle.aiGenerate')
   @ApiOperation({ summary: '提交持久化正文生成任务' })
   regenerate(
     @Param('id', ParseIntPipe) id: number,

@@ -139,7 +139,7 @@ export const AGENT_BUSINESS_TOOLS = AI_BUSINESS_COMMAND_CATALOG.filter(
     // 外键选择也需要读取所属业务的权限。
     extraPermissions:
       item.commandKey === 'contentArticle.generate'
-        ? ['ContentArticle.update']
+        ? ['ContentArticle.aiGenerate']
         : operation === 'create' && moduleKey === 'productSku'
           ? ['Product.read']
           : operation === 'create' &&

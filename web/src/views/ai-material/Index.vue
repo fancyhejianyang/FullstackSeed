@@ -186,7 +186,7 @@ function statusLabel(status: unknown) {
       <template #toolbar="{ selectedRows }">
         <Button perm="AiMaterial.create" @click="openCreate">新增素材</Button>
         <Button
-          perm="AiMaterial.update"
+          perm="AiMaterial.aiGenerate"
           icon="MagicStick"
           :disabled="selectedRows.length !== 1 || !canGenerate(selectedRows[0])"
           :loading="generatingId !== null"
@@ -205,7 +205,7 @@ function statusLabel(status: unknown) {
       </template>
       <template #actions="{ row }">
         <Button
-          perm="AiMaterial.update"
+          perm="AiMaterial.aiGenerate"
           link
           :auto-icon="false"
           :disabled="!canGenerate(row)"

@@ -6,6 +6,8 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Like, Repository } from 'typeorm';
 import { Permission } from './entities/permission.entity';
+import { MenusService } from '../menus/menus.service';
+import { PERMISSION_ACTIONS, PERMISSION_MODULES } from './permission-catalog';
 import {
   CreatePermissionDto,
   UpdatePermissionDto,
@@ -17,7 +19,31 @@ export class PermissionsService {
   constructor(
     @InjectRepository(Permission)
     private readonly permissionRepository: Repository<Permission>,
+    private readonly menusService: MenusService,
   ) {}
+
+  /** 角色编辑读取统一目录，避免额外依赖权限定义/菜单管理的授权。 */
+  async catalog() {
+    const [definitions, menus] = await Promise.all([
+      this.permissionRepository.find(),
+      this.menusService.findTree(),
+    ]);
+    const labels = new Map<string, string>(
+      PERMISSION_ACTIONS.map((action) => [action.code, action.name]),
+    );
+    definitions.forEach((action) => labels.set(action.code, action.name));
+    return {
+      menus,
+      modules: PERMISSION_MODULES.map((module) => ({
+        code: module.code,
+        name: module.name,
+        actions: module.actions.map((code) => ({
+          code,
+          name: labels.get(code) ?? code,
+        })),
+      })),
+    };
+  }
 
   /** 分页查询（支持 code/name 关键字） */
   async findAll(query: QueryPermissionDto) {
@@ -45,6 +71,9 @@ export class PermissionsService {
         type,
         description,
         menuId,
+        modules: PERMISSION_MODULES.filter((module) =>
+          module.actions.includes(code),
+        ).map(({ code, name }) => ({ code, name })),
       })),
       total,
     };

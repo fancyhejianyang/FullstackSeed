@@ -9,71 +9,17 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import { In, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
+import {
+  PERMISSION_ACTIONS,
+  getRegisteredPermissionCodes,
+} from '../permissions/permission-catalog';
 import { User } from './entities/user.entity';
 import { Role } from '../roles/entities/role.entity';
 import { Permission } from '../permissions/entities/permission.entity';
 import { CreateUserDto, UpdateUserDto, QueryUserDto } from './dto/user.dto';
 
-const STANDARD_ACTIONS = [
-  ['read', '查看'],
-  ['create', '新增'],
-  ['update', '编辑'],
-  ['delete', '删除'],
-  ['batchDelete', '批量删除'],
-] as const;
-
-const ADMIN_PERMISSION_MODULES = [
-  'Demo',
-  'ContentArticle',
-  'HotTopic',
-  'HotTopicSource',
-  'ContentTemplate',
-  'VisualPromptTemplate',
-  'AiMaterial',
-  'ComfyConnection',
-  'ComfyWorkflow',
-  'ComfyMaterial',
-  'ComfyTask',
-  'MediaStorage',
-  'KnowledgeBase',
-  'KnowledgeRoutingRule',
-  'KnowledgeStandardQa',
-  'KnowledgeColloquialTerm',
-  'AiCommandDefinition',
-  'AiWorkflow',
-  'Product',
-  'ProductSku',
-  'CustomerService',
-  'AgentApp',
-  'AgentWorkspace',
-  'User',
-  'Role',
-  'Permission',
-  'Menu',
-  'DashboardConfig',
-  'LogRecord',
-  'DataImport',
-  'KnowledgeAiProvider',
-  'ModelEndpoint',
-  'WechatConfig',
-  'StorageConfig',
-  'MineruConfig',
-  'VectorConfig',
-];
-
-// 内置权限点种子：只保存基础动作目录。
-// 角色授权时由「菜单模块 × 基础动作」组合成完整权限码并存入 roles.permissionCodes。
-const SEED_PERMISSIONS: Array<{
-  code: string;
-  name: string;
-  type: 'menu' | 'button' | 'api';
-}> = [
-  ...STANDARD_ACTIONS.map(([code, name]) => ({
-    code,
-    name,
-    type: 'button' as const,
-  })),
-];
+// 动作定义与角色目录共用同一注册表，启动时仅补齐定义，不给普通角色自动授权。
+const SEED_PERMISSIONS = PERMISSION_ACTIONS;
 
 // 系统内置保留账号用户名：禁止创建同名、禁止删除
 const RESERVED_USERNAMES = ['root', 'admin'];
@@ -105,9 +51,7 @@ export class UsersService implements OnModuleInit {
   }
 
   private getDefaultAdminPermissionCodes(): string[] {
-    return ADMIN_PERMISSION_MODULES.flatMap((module) =>
-      STANDARD_ACTIONS.map(([action]) => `${module}.${action}`),
-    );
+    return getRegisteredPermissionCodes();
   }
 
   /**
@@ -159,11 +103,14 @@ export class UsersService implements OnModuleInit {
     for (const seed of SEED_PERMISSIONS) {
       const exist = await this.permissionRepository.findOne({
         where: { code: seed.code },
+        withDeleted: true,
       });
       if (!exist) {
         await this.permissionRepository.save(
           this.permissionRepository.create(seed),
         );
+      } else if (exist.deletedAt) {
+        await this.permissionRepository.restore(exist.id);
       }
     }
     return this.permissionRepository.find();

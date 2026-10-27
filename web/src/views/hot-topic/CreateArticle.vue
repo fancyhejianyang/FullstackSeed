@@ -18,7 +18,7 @@ const canCreate = computed(
     user.hasPermission('ContentArticle.create'),
 );
 const canGenerate = computed(
-  () => canCreate.value && user.hasPermission('ContentArticle.update'),
+  () => canCreate.value && user.hasPermission('ContentArticle.aiGenerate'),
 );
 const formRef = ref<InstanceType<typeof Form>>();
 const form = reactive({

@@ -350,7 +350,7 @@ export class HotTopicsService implements OnModuleInit, OnModuleDestroy {
       user.isAdmin || user.permissions.includes(code);
     if (
       !allowed('ContentArticle.create') ||
-      (dto.generate && !allowed('ContentArticle.update'))
+      (dto.generate && !allowed('ContentArticle.aiGenerate'))
     )
       throw new ForbiddenException('缺少文章创建或生成权限');
     if (dto.generate && !dto.aiConfigId)

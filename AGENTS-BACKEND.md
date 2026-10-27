@@ -81,13 +81,13 @@ demo 覆盖的能力：
 
 ## 新增业务模块（后端 6 步）
 
-> 目标：新增模块 `Foo`（路由 `/foos`，权限码前缀 `Foo`）。**动作命名严格 `read/create/update/delete/batchDelete`**，模块名首字母大写。
+> 目标：新增模块 `Foo`（路由 `/foos`，权限码前缀 `Foo`）。**CRUD 使用 `read/create/update/delete/batchDelete`；AI 等业务动作单独登记与校验**，模块名首字母大写。
 
 1. **复制 demo**：把 `server/src/demo/` 整个目录复制为 `server/src/foos/`，文件重命名为 `foo.*`；类名 `Demo`→`Foo`、`DemoService`→`FoosService` 等。
 2. **改字段**：`foos/entities/foo.entity.ts` 与 `foos/dto/foo.dto.ts` 按业务改列/属性；实体名 `@Entity('foos')`。
 3. **改权限码**：`foos/foos.controller.ts` 中 `@RequirePermissions('Demo.*')` → `@RequirePermissions('Foo.*')`。
 4. **挂载根模块**：`server/src/app.module.ts` imports 加 `FoosModule`。
-5. **SEED 权限点**：`server/src/users/users.service.ts` `SEED_PERMISSIONS` 补 `Foo.read/create/update/delete/batchDelete` 5 条。
+5. **权限目录**：在 `server/src/permissions/permission-catalog.ts` 登记模块名称与实际支持的动作；新增动作同时补 `PERMISSION_ACTIONS`。`UsersService` 自动补齐动作定义及 admin 权限，普通角色不自动授权。
 6. **SEED 菜单**：`server/src/menus/menus.service.ts` `SEED_MENUS` 补 `{ name:'Foo 管理', path:'/foos', icon, sort, permissionCode:'Foo.read' }`。
 
 > **不用重复处理**：全局响应/异常包装、鉴权/权限校验、字段校验、软删除 timestamps、Swagger 装饰器（已被 `@ApiTags`/`@ApiBearerAuth` 覆盖）。
@@ -111,10 +111,10 @@ demo 覆盖的能力：
 - **入参校验**：DTO + class-validator，全局 `ValidationPipe({ whitelist:true })`
 - **响应结构**：`TransformInterceptor` 包 `{ statusCode, data, success, message, timestamp }`；`HttpExceptionFilter` 包错误
 - **鉴权**：默认全局 `JwtAuthGuard`；公开加 `@Public()`；权限用 `@RequirePermissions('Module.action')`
-- **权限码**：`Module.action` 首字母大写点号，动作统一 `read/create/update/delete/batchDelete`
+- **权限码**：`Module.action` 首字母大写点号，基础动作使用 `read/create/update/delete/batchDelete`；`aiGenerate/aiRefine` 等业务动作须登记目录并在实际执行入口校验
 - **业务资源状态**：默认使用 `isActive:boolean`（数据库 `tinyint`，默认 `true`）表达启用/关闭，DTO 查询参数需显式转换布尔值。禁止为普通配置或内容资源增加 `draft/published`、`isDraft/isPublished`、草稿副本、发布版本或发布/回退接口；确有异步任务、人工确认或审批流程时，使用 `pending/running/failed`、`PendingAction` 等真实过程语义，并在需求中明确例外。
 - **默认超管**：开发默认 `root/root123`，生产环境必须通过 `ADMIN_PASSWORD` 显式配置；用户表空时启动 seed 自动创建；`isAdmin` 放行一切
-- **SEED_PERMISSIONS 兜底**：至少覆盖 RBAC 基建 + 各业务模块 5 个动作；启动会**清理不合规旧权限**
+- **权限目录兜底**：共用 `permission-catalog.ts` 中的实际模块动作，不生成无实现的组合；启动补齐/恢复内置动作定义，清理旧格式前保留角色完整权限码
 - **账号模块**：`users` + `roles` + `permissions` 为必迁基建，详见 `MIGRATION.md`
 
 ## 后端易踩坑

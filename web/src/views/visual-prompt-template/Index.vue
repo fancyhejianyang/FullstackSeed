@@ -78,6 +78,7 @@ function openView(row: VisualPromptTemplateSummary) {
   viewVisible.value = true;
 }
 async function extract(row: VisualPromptTemplateSummary) {
+  if (!user.hasPermission("VisualPromptTemplate.aiRefine")) return;
   if (extractionTasks.has(row.id)) {
     ElMessage.warning("该提示词总结正在排队或提炼");
     return;
@@ -125,7 +126,11 @@ async function extract(row: VisualPromptTemplateSummary) {
           perm="VisualPromptTemplate.create"
           icon="Plus"
           @click="openCreate"
-          >提炼提示词</Button
+          >{{
+            user.hasPermission("VisualPromptTemplate.aiRefine")
+              ? "提炼提示词"
+              : "新增提示词"
+          }}</Button
         >
         <Button
           perm="VisualPromptTemplate.batchDelete"
@@ -136,7 +141,7 @@ async function extract(row: VisualPromptTemplateSummary) {
       </template>
       <template #actions="{ row }">
         <Button
-          perm="VisualPromptTemplate.update"
+          perm="VisualPromptTemplate.aiRefine"
           link
           confirm
           confirm-title="AI 提炼提示词总结"

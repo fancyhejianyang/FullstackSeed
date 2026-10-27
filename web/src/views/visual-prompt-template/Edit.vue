@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from "vue";
 import { ElMessage, type FormRules } from "element-plus";
+import { useUserStore } from "@/stores/user";
 import Dialog from "@/components/Dialog.vue";
 import Form, { type FormField } from "@/components/Form.vue";
 import {
@@ -19,6 +20,10 @@ import {
   type VisualPromptTemplateForm,
 } from "@/api/visualPromptTemplate";
 
+const user = useUserStore();
+const canRefine = computed(() =>
+  user.hasPermission("VisualPromptTemplate.aiRefine"),
+);
 const props = defineProps<{ row?: VisualPromptTemplateSummary | null }>();
 const emit = defineEmits<{ success: [] }>();
 const visible = defineModel<boolean>("visible", { required: true });
@@ -266,6 +271,11 @@ async function submit() {
       : await createVisualPromptTemplate(payload);
     activeTemplateId.value = saved.id;
     emit("success");
+    if (!canRefine.value) {
+      ElMessage.success("保存成功；未发起 AI 提炼");
+      visible.value = false;
+      return;
+    }
     extractStage.value = "正在提交 AI 提炼";
     let task = await extractVisualPromptTemplate(saved.id, crypto.randomUUID());
     while (["pending", "running"].includes(task.status)) {
@@ -293,10 +303,18 @@ async function submit() {
 <template>
   <Dialog
     v-model="visible"
-    :title="row ? '重新提炼提示词' : '提炼提示词'"
+    :title="
+      canRefine
+        ? row
+          ? '重新提炼提示词'
+          : '提炼提示词'
+        : row
+          ? '编辑提示词'
+          : '新增提示词'
+    "
     width="960px"
     body-max-height="76vh"
-    confirm-text="保存并提炼"
+    :confirm-text="canRefine ? '保存并提炼' : '保存'"
     :confirm-loading="submitting"
     @confirm="submit"
   >

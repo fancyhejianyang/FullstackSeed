@@ -43,13 +43,13 @@ export class ComfyTasksController {
   }
 
   @Post()
-  @RequirePermissions('ComfyTask.create')
+  @RequirePermissions('ComfyTask.create', 'ComfyTask.aiGenerate')
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateComfyTaskDto) {
     return this.service.create(user.userId, dto);
   }
 
   @Post(':id/retry')
-  @RequirePermissions('ComfyTask.create')
+  @RequirePermissions('ComfyTask.create', 'ComfyTask.aiGenerate')
   retry(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: AuthUser) {
     return this.service.retry(id, user.userId);
   }
