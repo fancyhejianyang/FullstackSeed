@@ -3,9 +3,157 @@ import { KnowledgeAiProvidersService } from '../knowledge-ai-providers/knowledge
 import { KnowledgeAiProvider } from '../knowledge-ai-providers/entities/knowledge-ai-provider.entity';
 import type { AiFeatureConfig } from '../ai-feature-configs/entities/ai-feature-config.entity';
 import type { LogRecordsService } from '../log-records/log-records.service';
-import type { ModelEndpointsService } from './model-endpoints.service';
+import { ModelEndpointsService } from './model-endpoints.service';
+import { ModelEndpoint } from './entities/model-endpoint.entity';
+
+describe('生图候选与实际调用共用配置校验', () => {
+  function imageHarness() {
+    const provider = Object.assign(new KnowledgeAiProvider(), {
+      id: 1,
+      name: '生图账号',
+      isEnabled: true,
+      apiUrl: 'https://tokenhub.tencentmaas.com/v1',
+      secretKey: 'private-test-key',
+      imageGenerationModels:
+        'ready\noff\nmissing\nforeign\ninvalid\nreference-only\nready',
+    });
+    const route = (modelCode: string, values: Partial<ModelEndpoint> = {}) =>
+      Object.assign(new ModelEndpoint(), {
+        modelCode,
+        modelName: modelCode,
+        platformType: 'tencentTokenhub',
+        functionType: 'textToImage',
+        protocol: 'openaiImages',
+        apiPath: '/v1/images/generations',
+        taskApiPath: '',
+        executionMode: 'sync',
+        isActive: true,
+        ...values,
+      });
+    const rows = [
+      route('ready'),
+      route('off', { isActive: false }),
+      route('foreign', { platformType: 'aliyunBailian' }),
+      route('invalid', { protocol: 'openaiChat' }),
+      route('reference-only', {
+        functionType: 'imageToImage',
+        protocol: 'tokenhubSeedreamImage',
+      }),
+    ];
+    const routeRepository = {
+      find: jest.fn(({ where }: { where: Partial<ModelEndpoint> }) =>
+        Promise.resolve(
+          rows.filter((row) => row.functionType === where.functionType),
+        ),
+      ),
+      findOne: jest.fn(({ where }: { where: Partial<ModelEndpoint> }) =>
+        Promise.resolve(
+          rows.find(
+            (row) =>
+              row.platformType === where.platformType &&
+              row.modelCode === where.modelCode &&
+              row.functionType === where.functionType,
+          ) ?? null,
+        ),
+      ),
+    };
+    const providerRepository = {
+      findOne: jest.fn().mockResolvedValue(provider),
+      findAndCount: jest.fn().mockResolvedValue([[provider], 1]),
+    };
+    const endpoints = new ModelEndpointsService(
+      routeRepository as unknown as Repository<ModelEndpoint>,
+    );
+    const service = new KnowledgeAiProvidersService(
+      providerRepository as unknown as Repository<KnowledgeAiProvider>,
+      {} as Repository<AiFeatureConfig>,
+      {} as LogRecordsService,
+      endpoints,
+    );
+    return { service, provider, rows, routeRepository };
+  }
+
+  it('保留所有登记模型并区分缺卡、停用、平台不符与无效协议，目录查询只批量读取一次', async () => {
+    const { service, routeRepository } = imageHarness();
+    const { list } = await service.findAll({ page: 1, pageSize: 20 });
+    expect(routeRepository.find).toHaveBeenCalledTimes(1);
+    expect(routeRepository.findOne).not.toHaveBeenCalled();
+    expect(list[0].imageGenerationModelOptions).toEqual([
+      { model: 'ready', available: true, unavailableReason: null },
+      { model: 'off', available: false, unavailableReason: '文生图接口已停用' },
+      {
+        model: 'missing',
+        available: false,
+        unavailableReason: '未配置当前平台的文生图接口',
+      },
+      {
+        model: 'foreign',
+        available: false,
+        unavailableReason: '文生图接口与当前账号平台不匹配',
+      },
+      {
+        model: 'invalid',
+        available: false,
+        unavailableReason: '文生图接口配置无效，请检查协议、路径与账号地址',
+      },
+      {
+        model: 'reference-only',
+        available: false,
+        unavailableReason: '未配置当前平台的文生图接口',
+      },
+    ]);
+    expect(list[0].imageEndpointModels).toEqual(['ready']);
+    expect(JSON.stringify(list[0].imageGenerationModelOptions)).not.toMatch(
+      /https|private-test-key/,
+    );
+    await expect(
+      service.resolveAgentMediaTarget(1, 'ready', 'imageGeneration'),
+    ).resolves.toMatchObject({ model: 'ready' });
+    for (const model of [
+      'off',
+      'missing',
+      'foreign',
+      'invalid',
+      'reference-only',
+    ])
+      await expect(
+        service.resolveAgentMediaTarget(1, model, 'imageGeneration'),
+      ).rejects.toThrow();
+  });
+
+  it('候选返回后停用接口，保存使用的目标解析仍拒绝；重新读取更新不可用原因', async () => {
+    const { service, rows } = imageHarness();
+    expect(
+      (await service.findOne(1)).imageGenerationModelOptions[0].available,
+    ).toBe(true);
+    rows[0].isActive = false;
+    await expect(
+      service.resolveAgentMediaTarget(1, 'ready', 'imageGeneration'),
+    ).rejects.toThrow('停用');
+    expect(
+      (await service.findOne(1)).imageGenerationModelOptions[0],
+    ).toMatchObject({
+      available: false,
+      unavailableReason: '文生图接口已停用',
+    });
+  });
+
+  it('账号调用地址无效时保持候选可见但不可用，真实解析同样拒绝', async () => {
+    const { service, provider } = imageHarness();
+    provider.apiUrl = 'http://tokenhub.tencentmaas.com/v1';
+    expect(
+      (await service.findOne(1)).imageGenerationModelOptions[0],
+    ).toMatchObject({ available: false });
+    await expect(
+      service.resolveAgentMediaTarget(1, 'ready', 'imageGeneration'),
+    ).rejects.toThrow('HTTPS');
+  });
+});
 
 function harness() {
+  const routeResolver = new ModelEndpointsService(
+    {} as Repository<ModelEndpoint>,
+  );
   const provider = Object.assign(new KnowledgeAiProvider(), {
     id: 1,
     name: '腾讯账号',
@@ -29,6 +177,7 @@ function harness() {
     findOne: jest.fn(),
     resolve: jest.fn().mockResolvedValue(null),
     imageRoutes: jest.fn().mockResolvedValue([]),
+    resolveFromRows: routeResolver.resolveFromRows.bind(routeResolver),
     buildUrl: (base: string, path: string) => new URL(base).origin + path,
   };
   const service = new KnowledgeAiProvidersService(
@@ -275,6 +424,7 @@ describe('账号按模型功能解析调用接口', () => {
     const route = {
       platformType: 'tencentTokenhub',
       modelCode: 'seedream-image-v5.0-pro',
+      modelName: 'Seedream',
       functionType: 'textToImage',
       isActive: true,
       protocol: 'tokenhubSeedreamImage',

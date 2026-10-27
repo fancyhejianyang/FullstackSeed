@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-10-27 修复 Agent 生图模型候选被静默过滤
+
+- Agent 按所选账号的生图目录完整返回候选，继续保序去重并保留模型显示名；新增 `available`、`unavailableReason`，缺少文生图接口、接口停用、平台不匹配或配置无效的模型保持可见并禁用。账号目录本身为空与已登记但不可用分别提示，展示账号来源、登记/可选数量及“第三方配置 → 模型厂商调用接口 → 文生图”配置位置。
+- 候选与实际调用共用接口解析、URL 和媒体目标构造，目录检查批量读取接口配置，不逐模型查询或调用供应商。保存生图引用重新解析最新配置，防止旧候选绕过停用或无效接口；不恢复生图通用兜底。账号响应补充 `imageGenerationModelOptions`，原 `imageEndpointModels` 从可用项派生；创建/更新账号后返回最新接口状态，前后端类型同步。
+- 已保存的不可用引用保留回显，重测和保存入口明确提示修正或清除；刷新候选不触发生图测试。沿用 Form/Select/Button，不新增数据库字段或修改账号、接口数据。
+- 新增文件：无。删除文件：无。修改文件（10）：`server/src/agent-apps/agent-apps.service.ts`、`server/src/agent-apps/agent-apps.service.spec.ts`、`server/src/knowledge-ai-providers/knowledge-ai-providers.service.ts`、`server/src/model-endpoints/model-endpoints.service.ts`、`server/src/model-endpoints/model-endpoint-routing.spec.ts`、`web/src/api/agentApp.ts`、`web/src/api/knowledgeAiProvider.ts`、`web/src/views/agent-app/Edit.vue`、`web/src/views/agent-app/mediaModelProbe.test.mjs`、本文件。用户原有 `web/auto-imports.d.ts`、`web/src/api/hotTopic.ts` 修改保留，不纳入提交。
+- 验证：前端 Vue 类型检查、后端生产源码及两份相关规格 TypeScript noEmit、5 个后端文件定向 ESLint、前端规格语法、格式、组件复用与 diff 检查通过。补充规格覆盖全目录及账号隔离、缺卡/停用/错平台/无效配置、批量查询、候选后配置变化、历史引用拦截及刷新不计费；按修复规则未执行行为测试、build、服务启动或真实付费请求，未核验现场账号的实际生图结果。
+
 ### 2026-10-26 修复旧同格式专用卡导致通用测试账号列表为空
 
 - 截图中的腾讯普通调用测试已识别账号，但旧筛选把任何专用覆盖都排除；早期逐模型聊天/向量官方预设即使与系统规则完全相同，也可能让账号全部模型被过滤。仅移除通用识图卡并不能解决这处普通调用问题。本轮不删除历史卡片、不操作数据库，改为聊天/向量通用测试兼容严格等价的启用专用卡片，实际仍按已保存专用配置调用，不把专用配置当成不存在。

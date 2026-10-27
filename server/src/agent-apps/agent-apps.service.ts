@@ -170,16 +170,23 @@ export class AgentAppsService {
         imageGeneration: providers.list
           .filter((item) => item.secretKeySet)
           .flatMap((item) =>
-            this.parseModelOptions(item.imageGenerationModels)
-              .filter((model) =>
-                item.imageEndpointModels?.includes(model.value),
-              )
-              .map((model) => ({
+            this.parseModelOptions(item.imageGenerationModels).map((model) => {
+              const availability = item.imageGenerationModelOptions?.find(
+                (option) => option.model === model.value,
+              );
+              return {
                 providerId: item.id,
                 providerName: item.name,
                 model: model.value,
                 text: model.text,
-              })),
+                available: availability?.available ?? false,
+                unavailableReason:
+                  availability?.unavailableReason ??
+                  (availability?.available
+                    ? null
+                    : '文生图接口配置不可用，请检查模型厂商调用接口'),
+              };
+            }),
           ),
       },
     };
@@ -389,13 +396,6 @@ export class AgentAppsService {
       );
       if (!provider.isEnabled || !provider.secretKeySet)
         throw new BadRequestException(`${label}模型账号未启用或未配置密钥`);
-      if (
-        key === 'imageGeneration' &&
-        !provider.imageEndpointModels?.includes(reference.model.trim())
-      )
-        throw new BadRequestException(
-          '请先在第三方配置 → 模型厂商调用接口中配置并启用该模型的文生图场景',
-        );
       const models = this.parseModelOptions(
         key === 'vision'
           ? provider.visionModels
@@ -405,6 +405,12 @@ export class AgentAppsService {
       if (!models.some((item) => item.value === model))
         throw new BadRequestException(
           `${label}模型未登记在账号的对应能力目录中，请重新选择`,
+        );
+      if (key === 'imageGeneration')
+        await this.providersService.resolveAgentMediaTarget(
+          reference.providerId,
+          model,
+          key,
         );
       result[key] = { providerId: reference.providerId, model };
     }

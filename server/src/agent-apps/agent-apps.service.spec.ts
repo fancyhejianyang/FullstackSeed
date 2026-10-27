@@ -28,23 +28,30 @@ describe('AgentAppsService access and tool policy', () => {
   };
   const providers = {
     findOne: jest.fn(),
-    findAll: jest.fn(() =>
-      Promise.resolve({
-        list: [
-          {
-            id: 1,
-            name: '模型账号',
-            models: 'qwen-plus#通义千问 Plus',
-            textModels: 'qwen-plus#重复名称\ngpt-4o-mini#GPT-4o Mini',
-            secretKeySet: true,
-          },
-        ],
-        total: 1,
-      }),
+    findAll: jest.fn(
+      (): Promise<{
+        list: Partial<
+          Awaited<ReturnType<KnowledgeAiProvidersService['findOne']>>
+        >[];
+        total: number;
+      }> =>
+        Promise.resolve({
+          list: [
+            {
+              id: 1,
+              name: '模型账号',
+              models: 'qwen-plus#通义千问 Plus',
+              textModels: 'qwen-plus#重复名称\ngpt-4o-mini#GPT-4o Mini',
+              secretKeySet: true,
+            },
+          ],
+          total: 1,
+        }),
     ),
     resolveChatTarget: jest.fn(({ id, model }: { id: number; model: string }) =>
       Promise.resolve({ providerId: id, providerName: '模型账号', model }),
     ),
+    resolveAgentMediaTarget: jest.fn(() => Promise.resolve({})),
   };
   const commandDefinitions = {
     findAll: jest.fn(() =>
@@ -148,6 +155,9 @@ describe('AgentAppsService access and tool policy', () => {
   });
 
   it('requires an explicitly configured generation endpoint before saving a generation reference', async () => {
+    providers.resolveAgentMediaTarget.mockRejectedValueOnce(
+      new BadRequestException('请在模型厂商调用接口配置文生图接口'),
+    );
     providers.findOne.mockResolvedValueOnce({
       isEnabled: true,
       secretKeySet: true,
@@ -168,6 +178,55 @@ describe('AgentAppsService access and tool policy', () => {
         },
       }),
     ).rejects.toThrow('模型厂商调用接口');
+    expect(providers.resolveAgentMediaTarget).toHaveBeenCalledWith(
+      2,
+      'image',
+      'imageGeneration',
+    );
+  });
+
+  it('keeps unavailable generation models visible with their reasons and de-duplicates catalog labels', async () => {
+    providers.findAll.mockResolvedValueOnce({
+      list: [
+        {
+          id: 1,
+          name: '模型账号',
+          models: 'qwen-plus',
+          textModels: '',
+          secretKeySet: true,
+          imageGenerationModels: 'image#生图#一号\nmissing#待配置\nimage#重复',
+          imageGenerationModelOptions: [
+            { model: 'image', available: true, unavailableReason: null },
+            {
+              model: 'missing',
+              available: false,
+              unavailableReason: '未配置当前平台的文生图接口',
+            },
+          ],
+        },
+      ],
+      total: 1,
+    });
+    const options = await service.getConfigurationOptions();
+    expect(options.mediaModels.imageGeneration).toEqual([
+      {
+        providerId: 1,
+        providerName: '模型账号',
+        model: 'image',
+        text: '生图#一号（image）',
+        available: true,
+        unavailableReason: null,
+      },
+      {
+        providerId: 1,
+        providerName: '模型账号',
+        model: 'missing',
+        text: '待配置（missing）',
+        available: false,
+        unavailableReason: '未配置当前平台的文生图接口',
+      },
+    ]);
+    expect(providers.resolveAgentMediaTarget).not.toHaveBeenCalled();
   });
 
   it('filters user-scoped apps while allowing administrators', async () => {

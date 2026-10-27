@@ -12,6 +12,14 @@ export interface AgentMediaModels {
   imageGeneration: AgentModelReference | null;
 }
 
+export interface AgentMediaModelOption extends AgentModelReference {
+  providerName: string;
+  text: string;
+  /** 旧响应及识图候选可省略；生图候选由服务端返回接口可用状态。 */
+  available?: boolean;
+  unavailableReason?: string | null;
+}
+
 export interface AgentMediaProbeResult extends AgentModelReference {
   kind: keyof AgentMediaModels;
   status: "valid" | "invalid" | "inconclusive";
@@ -103,10 +111,7 @@ export interface AgentAppListResult {
 }
 
 export interface AgentConfigurationOptions {
-  mediaModels?: Record<
-    keyof AgentMediaModels,
-    Array<AgentModelReference & { providerName: string; text: string }>
-  >;
+  mediaModels?: Record<keyof AgentMediaModels, AgentMediaModelOption[]>;
   providers: Array<{
     id: number;
     name: string;

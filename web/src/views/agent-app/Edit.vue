@@ -159,14 +159,34 @@ function mediaReference(value: string): AgentModelReference | null {
     model: value.slice(separator + 1),
   };
 }
-function mediaOptions(kind: "vision" | "imageGeneration", selected: string) {
-  const list = (options.value.mediaModels?.[kind] ?? [])
-    .filter((item) => item.providerId === Number(form.providerId))
+function mediaCandidates(kind: MediaKind) {
+  return (options.value.mediaModels?.[kind] ?? []).filter(
+    (item) => item.providerId === Number(form.providerId),
+  );
+}
+function mediaUnavailableReason(kind: MediaKind, selected: string) {
+  if (!selected) return "";
+  const candidate = mediaCandidates(kind).find(
+    (item) => mediaKey(item) === selected,
+  );
+  if (!candidate)
+    return "模型已不在当前账号目录中，请刷新候选后重新选择或清除引用";
+  const rejected = rejectedMedia.get(`${kind}:${selected}`);
+  if (rejected) return rejected.message;
+  return candidate.available === false
+    ? candidate.unavailableReason || "模型调用接口暂不可用"
+    : "";
+}
+function mediaOptions(kind: MediaKind, selected: string) {
+  const list = mediaCandidates(kind)
     .filter((item) => !rejectedMedia.has(`${kind}:${mediaKey(item)}`))
     .map((item) => ({
       value: mediaKey(item),
-      label: item.text,
-      disabled: false,
+      label:
+        item.available === false
+          ? `${item.text} · ${item.unavailableReason || "模型调用接口暂不可用"}`
+          : item.text,
+      disabled: item.available === false,
     }));
   if (selected && !list.some((item) => item.value === selected))
     list.push({
@@ -175,6 +195,31 @@ function mediaOptions(kind: "vision" | "imageGeneration", selected: string) {
       disabled: true,
     });
   return list;
+}
+
+const imageGenerationCatalogHint = computed(() => {
+  if (!form.providerId) return "请先选择模型账号。";
+  if (loading.value || refreshingMedia.value)
+    return "正在读取账号的生图模型目录…";
+  if (!options.value.mediaModels)
+    return "生图模型目录尚未加载，请刷新模型候选。";
+  const candidates = mediaCandidates("imageGeneration");
+  if (!candidates.length)
+    return "该账号尚未填写有效的生图模型，请到大模型账号 → 生图模型中配置（每行一个模型编码）。";
+  const available = candidates.filter(
+    (item) =>
+      item.available !== false &&
+      !rejectedMedia.has(`imageGeneration:${mediaKey(item)}`),
+  ).length;
+  const name =
+    options.value.providers.find((item) => item.id === Number(form.providerId))
+      ?.name || "当前账号";
+  return `来源：${name} · 已登记 ${candidates.length} 个生图模型，当前可选 ${available} 个。禁用项已标注原因；接口配置位置：第三方配置 → 模型厂商调用接口 → 文生图。${mediaCheckHint("imageGeneration")}`;
+});
+
+function canProbeMedia(kind: MediaKind) {
+  const selected = form[mediaProps[kind]];
+  return !!selected && !mediaUnavailableReason(kind, selected);
 }
 
 const rejectedForProvider = computed(() =>
@@ -209,6 +254,11 @@ async function checkMediaModel(kind: MediaKind) {
     !visible.value
   )
     return;
+  const unavailableReason = mediaUnavailableReason(kind, selected);
+  if (unavailableReason) {
+    ElMessage.warning(`${mediaLabel(kind)}：${unavailableReason}`);
+    return;
+  }
   const version = ++probeVersion;
   probingKind.value = kind;
   delete mediaChecks[kind];
@@ -440,9 +490,11 @@ const fields = computed<FormField[]>(() => [
       : "请先选择模型账号",
     componentProps: {
       disabled: !form.providerId || probeBusy.value,
-      notFoundText: "无生图候选：请配置该账号的生图模型、协议及完整接口地址",
+      notFoundText: mediaCandidates("imageGeneration").length
+        ? "没有匹配的生图候选；测试已移除的模型可在更新账号配置后刷新"
+        : "该账号尚未填写有效的生图模型",
     },
-    hint: `来源为当前账号的生图目录及已启用的文生图接口卡片；接口在第三方配置 → 模型厂商调用接口中维护。${mediaCheckHint("imageGeneration")}`,
+    hint: imageGenerationCatalogHint.value,
   },
   {
     prop: "mediaProbeControls",
@@ -717,6 +769,15 @@ async function handleSubmit() {
     return;
   }
   await formRef.value?.validate();
+  for (const kind of ["vision", "imageGeneration"] as const) {
+    const reason = mediaUnavailableReason(kind, form[mediaProps[kind]]);
+    if (reason) {
+      ElMessage.warning(
+        `${mediaLabel(kind)}：${reason}。请修正配置或清除该引用后保存。`,
+      );
+      return;
+    }
+  }
   if (unavailableSelectedTools.value.length) {
     ElMessage.warning("请先手动移除业务工具中标记为不可执行的历史选项");
     return;
@@ -786,7 +847,7 @@ async function handleSubmit() {
                 v-for="kind in ['vision', 'imageGeneration'] as const"
                 :key="kind"
                 :type="getPermissionActionColor('read')"
-                :disabled="probeBusy || loading || !form[mediaProps[kind]]"
+                :disabled="probeBusy || loading || !canProbeMedia(kind)"
                 @click="checkMediaModel(kind)"
                 >重测{{ mediaLabel(kind) }}</Button
               >

@@ -278,9 +278,49 @@ export class ModelEndpointsService implements OnModuleInit {
     const row = await this.repository.findOne({
       where: { platformType, modelCode, functionType },
     });
+    return this.resolveConfiguredEndpoint(
+      row,
+      platformType,
+      modelCode,
+      functionType,
+    );
+  }
+
+  /** 已批量读取的目录与正式调用共用解析，候选查询不逐模型访问数据库。 */
+  resolveFromRows(
+    rows: ModelEndpoint[],
+    platformType: PlatformType,
+    modelCode: string,
+    functionType: ModelFunction,
+  ) {
+    const row = rows.find(
+      (item) =>
+        !item.deletedAt &&
+        item.platformType === platformType &&
+        item.modelCode === modelCode &&
+        item.functionType === functionType,
+    );
+    return this.resolveConfiguredEndpoint(
+      row,
+      platformType,
+      modelCode,
+      functionType,
+    );
+  }
+
+  private resolveConfiguredEndpoint(
+    row: ModelEndpoint | null | undefined,
+    platformType: PlatformType,
+    modelCode: string,
+    functionType: ModelFunction,
+  ) {
+    if (functionType === 'webSearch')
+      throw new BadRequestException('联网搜索不再使用模型接口卡片');
     if (row) this.assertCurrentEndpoint(row);
     if (row && !row.isActive)
       throw new BadRequestException('当前模型功能的调用接口已停用');
+    // 历史生图配置同样需要符合当前协议；在副本上校验，不改数据库或调用方快照。
+    if (row && functionType === 'textToImage') this.validate({ ...row });
     return row
       ? { ...row, source: 'configured' as const, isReadOnly: false }
       : builtinModelEndpoint(platformType, functionType, modelCode);

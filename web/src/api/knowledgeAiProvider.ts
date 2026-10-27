@@ -7,6 +7,11 @@ export interface KnowledgeAiProvider {
   apiUrl: string;
   platformType?: ModelPlatform;
   imageEndpointModels?: string[];
+  imageGenerationModelOptions?: Array<{
+    model: string;
+    available: boolean;
+    unavailableReason: string | null;
+  }>;
   workspaceId: string;
   models: string;
   textModels: string;

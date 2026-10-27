@@ -273,7 +273,7 @@ export class KnowledgeAiProvidersService {
   create(dto: CreateKnowledgeAiProviderDto) {
     return this.providerRepository
       .save(this.providerRepository.create(this.toEntityPayload(dto, true)))
-      .then((provider) => this.toView(provider));
+      .then((provider) => this.findOne(provider.id));
   }
 
   async update(id: number, dto: UpdateKnowledgeAiProviderDto) {
@@ -282,7 +282,7 @@ export class KnowledgeAiProvidersService {
     // 不保存查询时的整份旧实体，避免覆盖并发退役清理后的模型目录。
     if (Object.keys(patch).length)
       await this.providerRepository.update({ id }, patch);
-    return this.toView(await this.findEntity(id));
+    return this.findOne(id);
   }
 
   async remove(id: number) {
@@ -952,10 +952,21 @@ export class KnowledgeAiProvidersService {
       selected,
       operation,
     );
+    return this.buildMediaTarget(provider, selected, { endpoint, url });
+  }
+
+  private buildMediaTarget(
+    provider: KnowledgeAiProvider,
+    model: string,
+    {
+      endpoint,
+      url,
+    }: ReturnType<KnowledgeAiProvidersService['buildFunctionEndpoint']>,
+  ) {
     return {
       providerId: provider.id,
       providerName: provider.name,
-      model: selected,
+      model,
       url,
       secretKey: this.normalizeSecretKey(provider.secretKey),
       protocol: endpoint
@@ -984,6 +995,15 @@ export class KnowledgeAiProvidersService {
       model,
       functionType,
     );
+    return this.buildFunctionEndpoint(provider, model, functionType, endpoint);
+  }
+
+  private buildFunctionEndpoint(
+    provider: KnowledgeAiProvider,
+    model: string,
+    functionType: Exclude<ModelFunction, 'webSearch'>,
+    endpoint: Awaited<ReturnType<ModelEndpointsService['resolve']>> | undefined,
+  ) {
     if (
       endpoint?.source === 'builtin' &&
       !this.endpointCatalog(provider, functionType).some(
@@ -1624,21 +1644,66 @@ export class KnowledgeAiProvidersService {
     imageRoutes: ModelEndpoint[] = [],
   ) {
     const platformType = detectModelPlatform(provider.apiUrl);
-    const imageEndpointModels = this.parseModels(provider.imageGenerationModels)
-      .filter(({ code }) => {
-        const route = imageRoutes.find(
-          (item) =>
-            item.platformType === platformType && item.modelCode === code,
-        );
-        return !!route?.isActive;
-      })
-      .map(({ code }) => code);
+    const imageGenerationModelOptions = this.parseModels(
+      provider.imageGenerationModels,
+    )
+      .filter(
+        (item, index, models) =>
+          models.findIndex((model) => model.code === item.code) === index,
+      )
+      .map(({ code }) => {
+        let unavailableReason: string | null = null;
+        try {
+          const endpoint = this.endpoints?.resolveFromRows(
+            imageRoutes,
+            platformType,
+            code,
+            'textToImage',
+          );
+          this.buildMediaTarget(
+            provider,
+            code,
+            this.buildFunctionEndpoint(provider, code, 'textToImage', endpoint),
+          );
+        } catch {
+          // 只返回受控配置原因，不回传原始异常、调用 URL 或密钥。
+          const route = imageRoutes.find(
+            (item) =>
+              !item.deletedAt &&
+              item.platformType === platformType &&
+              item.modelCode === code &&
+              item.functionType === 'textToImage',
+          );
+          unavailableReason = route
+            ? route.isActive
+              ? '文生图接口配置无效，请检查协议、路径与账号地址'
+              : '文生图接口已停用'
+            : imageRoutes.some(
+                  (item) =>
+                    !item.deletedAt &&
+                    item.modelCode === code &&
+                    item.functionType === 'textToImage' &&
+                    item.platformType !== platformType,
+                )
+              ? '文生图接口与当前账号平台不匹配'
+              : '未配置当前平台的文生图接口';
+        }
+        return {
+          model: code,
+          available: unavailableReason === null,
+          unavailableReason,
+        };
+      });
+    const imageEndpointModels = imageGenerationModelOptions
+      .filter((item) => item.available)
+      .map((item) => item.model);
     return {
       id: provider.id,
       name: provider.name,
       apiUrl: provider.apiUrl,
       platformType,
       imageEndpointModels,
+      imageGenerationModelOptions,
       workspaceId: provider.workspaceId ?? '',
       models: provider.models ?? '',
       textModels: provider.textModels ?? '',
