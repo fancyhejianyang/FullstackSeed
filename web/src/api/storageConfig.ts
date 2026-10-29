@@ -30,8 +30,10 @@ export function updateStorageConfig(
   return request.put<unknown, StorageConfig>("/storage-config", data);
 }
 
+export type ManagedCleanupScope = "ai-materials" | "comfyui" | "uploads";
+
 export interface ManagedCleanupPreview {
-  scope: string;
+  scope: ManagedCleanupScope;
   environment: string;
   count: number;
   totalSize: number;
@@ -45,14 +47,19 @@ export interface ManagedCleanupPreview {
   }>;
 }
 
-export function getManagedCleanupPreview(scope = "ai-materials") {
+export function getManagedCleanupPreview(
+  scope: ManagedCleanupScope = "ai-materials",
+) {
   return request.get<unknown, ManagedCleanupPreview>(
     "/media-storage/cleanup-preview",
     { params: { scope, limit: 100 } },
   );
 }
 
-export function cleanupManagedFiles(fileIds: number[], scope = "ai-materials") {
+export function cleanupManagedFiles(
+  fileIds: number[],
+  scope: ManagedCleanupScope = "ai-materials",
+) {
   return request.post<
     unknown,
     { requested: number; deleted: number; failed: number }

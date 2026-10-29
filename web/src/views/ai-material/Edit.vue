@@ -39,6 +39,10 @@ const form = reactive<AiMaterialForm>({
   videoRatio: "adaptive",
   videoDuration: 5,
 });
+const uploadContext = computed(
+  () => `${visible.value}:${props.row?.id ?? 'new'}:${form.generationMode}`,
+);
+watch(uploadContext, () => formRef.value?.resetUploads(), { flush: "sync" });
 
 const isVideoMode = computed(() =>
   ["textToVideo", "imageToVideo", "referenceToVideo"].includes(
@@ -237,18 +241,23 @@ const rules = computed<FormRules>(() => ({
     : {}),
 }));
 
-watch(visible, async (value) => {
+watch(() => [visible.value, props.row?.id] as const, async ([value, id], _previous, onCleanup) => {
+  let obsolete = false;
+  onCleanup(() => { obsolete = true; });
+  releaseReferenceObjectUrl();
+  referenceImageFile.value = null;
   if (!value) {
-    releaseReferenceObjectUrl();
-    referenceImageFile.value = null;
+    loading.value = false;
     return;
   }
   loading.value = true;
   try {
     const options = await getAiMaterialConfigOptions();
+    if (obsolete) return;
     configs.value = options.list;
-    if (props.row?.id) {
-      const detail = await getAiMaterial(props.row.id);
+    if (id) {
+      const detail = await getAiMaterial(id);
+      if (obsolete) return;
       form.prompt = detail.prompt;
       form.generationMode = detail.generationMode;
       form.styleKey = detail.styleKey;
@@ -277,7 +286,7 @@ watch(visible, async (value) => {
     }
     referenceImageFile.value = null;
   } finally {
-    loading.value = false;
+    if (!obsolete) loading.value = false;
   }
 });
 
@@ -380,7 +389,12 @@ function validateReferenceMedia() {
 }
 
 async function submit() {
-  await formRef.value?.validate();
+  if (loading.value || submitting.value) return;
+  try {
+    await formRef.value?.validate();
+  } catch {
+    return;
+  }
   if (!validateReferenceMedia()) return;
   if (
     (needsReference.value || needsReferenceMedia.value) &&
@@ -440,7 +454,7 @@ async function submit() {
     @confirm="submit"
   >
     <div v-loading="loading">
-      <Form ref="formRef" v-model="form" :fields="fields" :rules="rules">
+      <Form ref="formRef" v-model="form" :fields="fields" :rules="rules" :disabled="loading || submitting">
         <template #field-generationMode>
           <el-radio-group v-model="form.generationMode">
             <el-radio value="textToImage">文生图</el-radio>
@@ -453,6 +467,7 @@ async function submit() {
         <template #field-referenceImageUrl>
           <UploadImage
             v-model="form.referenceImageUrl"
+            :context-key="uploadContext"
             accept=".png,.jpg,.jpeg,.webp"
             :max-size-mb="isVideoMode ? 20 : 5"
             :upload-request="selectReferenceImage"

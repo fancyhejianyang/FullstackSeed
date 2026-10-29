@@ -1,5 +1,15 @@
 # CHANGELOG
 
+### 2026-10-29 完善文件与图片上传组件及附件回收
+
+- `UploadFile`、`UploadImage` 共用单文件上传状态管理：选择/拖拽均校验大小、空文件和类型，图片另校验实际可解码；失败或超限后清理隐藏队列，可重新选择，传输失败可重试。增加进度、取消、错误反馈和独立 120 秒上传超时；文本先读取成功再上传并同步写回 URL/文件名/内容，避免部分提交。
+- 用取消信号、请求版本和 `contextKey` 隔离不同记录/会话的上传，屏蔽迟到结果；区分自身 v-model 回传与外部修改。图片预览不再借用 Element Plus 上传队列，避免它释放业务页面拥有的 Blob URL。`Form` 自动登记插槽与动态上传组件，校验中、上传中及未清除的失败阻止提交；补充 `uploading/resetUploads`，同步接入示例、知识库、AI 素材、文章、Comfy 创作与 Agent 工作台，保留 Comfy 本地暂存和 Agent 私有上传链路。
+- 普通上传服务端增加单文件 20 MB 硬限制、空文件、允许扩展及二进制签名检查。保持既有 URL 字段契约，返回可选 `fileId`；增加鉴权下载与延迟回收接口，下载只读取登记对象或严格匹配的历史普通上传路径，不代理任意 URL，兼容本地/OSS 和历史无扩展名附件。
+- 普通附件复用现有 `managed_files`、无新增表字段或迁移。至少保留 24 小时，在「OSS/CDN 配置 → 文件清理 → 普通附件」手动预览/回收；清理时锁定记录，重检业务字段、富文本、生成历史及软删除引用，不扫描历史未登记文件。业务保存与清理共用引用映射和锁/保留期保护，不立即删除移除的附件。
+- 新增文件（12）：`server/src/uploads/dto/upload.dto.ts`、`server/src/uploads/ordinary-uploads.service.ts`、`server/src/uploads/ordinary-uploads.service.spec.ts`、`server/src/uploads/ordinary-upload-references.ts`、`server/src/uploads/ordinary-upload-reference.subscriber.ts`、`server/src/uploads/ordinary-upload-reference.subscriber.spec.ts`、`server/src/uploads/upload-policy.ts`、`server/src/uploads/upload-policy.spec.ts`、`web/src/components/useSingleUpload.ts`、`web/src/components/uploadValidation.ts`、`web/src/components/uploadForm.ts`、`web/src/components/upload.test.mjs`。
+- 修改文件（24）：`server/src/uploads/uploads.controller.ts`、`server/src/uploads/uploads.module.ts`、`server/src/uploads/uploads.service.ts`、`server/src/uploads/uploads.service.spec.ts`、`server/src/managed-files/managed-files.service.ts`、`server/src/managed-files/dto/managed-file.dto.ts`、`web/src/api/upload.ts`、`web/src/api/agentWorkspace.ts`、`web/src/api/storageConfig.ts`、`web/src/components/UploadFile.vue`、`web/src/components/UploadImage.vue`、`web/src/components/Component.d.ts`、`web/src/components/Form.vue`、`web/src/components/inputNumber.test.mjs`、`web/src/views/demo/Edit.vue`、`web/src/views/knowledge-base/Edit.vue`、`web/src/views/ai-material/Edit.vue`、`web/src/views/content-article/Edit.vue`、`web/src/views/comfy-create/Index.vue`、`web/src/views/agent-workspace/Index.vue`、`web/src/views/agent-workspace/agentDebug.test.mjs`、`web/src/views/storage-config/Index.vue`、`AGENTS-COMPONENTS.md`、本文件。删除文件：无。
+- 验证：前端实际应用源码 Vue/TypeScript noEmit、后端生产源码 TypeScript noEmit、上传/受管文件定向 ESLint、前端回归规格语法和 diff 检查通过；补充状态竞态、Form 上传拦截、上传策略、下载路径及引用保护回归规格。全量含测试文件类型检查仍有其他模块 8 处错误，本次上传相关文件无报错。按修复约定未执行运行时测试、build、服务启动/重启或真实上传/清理；未实测现场 OSS。提交仅包含本次代码与文档，保留原有业务改动、自动生成声明及本地视频记录。
+
 ### 2026-10-29 准备输入框组件设计与讲解视频方案
 
 - 基于现有 Input、InputNumber、InputAmount、InputEmail、InputPhone、inputRules 与 Form 源码，准备约 6 分钟的视频选题、组件职责与数据流、逐段口播、分镜、教学代码及演示清单，覆盖编辑缓冲、金额/百分比换算、邮箱组合输入和 rules 传入。

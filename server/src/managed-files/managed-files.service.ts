@@ -15,6 +15,7 @@ import {
 } from '../uploads/uploads.service';
 import { ManagedFile } from './entities/managed-file.entity';
 import { ManagedFileReference } from './entities/managed-file-reference.entity';
+import { ORDINARY_UPLOAD_REFERENCE_FIELDS } from '../uploads/ordinary-upload-references';
 
 const RETENTION_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_MAX_REFERENCE_IMAGE_SIZE = 5 * 1024 * 1024;
@@ -240,7 +241,7 @@ export class ManagedFilesService {
   }
 
   async cleanupPreview(scope = 'ai-materials', limit = 100) {
-    if (!['ai-materials', 'comfyui'].includes(scope))
+    if (!['ai-materials', 'comfyui', 'uploads'].includes(scope))
       throw new BadRequestException('受管文件清理范围无效');
     const environment = this.environmentName();
     const candidates = await this.files.find({
@@ -267,17 +268,41 @@ export class ManagedFilesService {
       order: { id: 'ASC' },
       take: Math.min(200, Math.max(1, limit)),
     });
-    const totalSize = candidates.reduce(
+    const eligible: ManagedFile[] = [];
+    for (const file of candidates) {
+      if (
+        scope !== 'uploads' ||
+        !(await this.hasOrdinaryUploadReference(
+          this.files.manager,
+          file.publicUrl,
+        ))
+      ) {
+        eligible.push(file);
+        continue;
+      }
+      // Referenced rows must not occupy the first preview page indefinitely.
+      await this.files.update(
+        { id: file.id, status: file.status },
+        {
+          deleteAfter: new Date(Date.now() + RETENTION_MS),
+          retryAt:
+            file.status === 'delete_failed'
+              ? new Date(Date.now() + RETENTION_MS)
+              : null,
+        },
+      );
+    }
+    const totalSize = eligible.reduce(
       (sum, file) => sum + Number(file.size || 0),
       0,
     );
     return {
       scope,
       environment,
-      count: candidates.length,
+      count: eligible.length,
       totalSize,
-      fileIds: candidates.map((file) => file.id),
-      list: candidates.map((file) => ({
+      fileIds: eligible.map((file) => file.id),
+      list: eligible.map((file) => ({
         id: file.id,
         status: file.status,
         size: Number(file.size),
@@ -288,7 +313,7 @@ export class ManagedFilesService {
   }
 
   async cleanup(fileIds: number[], scope = 'ai-materials') {
-    if (!['ai-materials', 'comfyui'].includes(scope))
+    if (!['ai-materials', 'comfyui', 'uploads'].includes(scope))
       throw new BadRequestException('受管文件清理范围无效');
     const ids = Array.from(new Set(fileIds)).slice(0, 200);
     let deleted = 0;
@@ -317,6 +342,19 @@ export class ManagedFilesService {
           return null;
         if (await refs.exists({ where: { fileId: id, deletedAt: IsNull() } }))
           return null;
+        if (
+          scope === 'uploads' &&
+          (await this.hasOrdinaryUploadReference(manager, file.publicUrl))
+        ) {
+          await files.update(file.id, {
+            deleteAfter: new Date(Date.now() + RETENTION_MS),
+            retryAt:
+              file.status === 'delete_failed'
+                ? new Date(Date.now() + RETENTION_MS)
+                : null,
+          });
+          return null;
+        }
         file.status = 'deleting';
         await files.save(file);
         return file;
@@ -364,6 +402,34 @@ export class ManagedFilesService {
         retryAt: null,
       },
     );
+  }
+
+  private async hasOrdinaryUploadReference(
+    manager: EntityManager,
+    url: string,
+  ) {
+    for (const [table, fields] of Object.entries(
+      ORDINARY_UPLOAD_REFERENCE_FIELDS,
+    )) {
+      const metadata = manager.connection.entityMetadatas.find(
+        (entry) => entry.tableName === table,
+      );
+      if (!metadata)
+        throw new BadRequestException(`无法校验 ${table} 附件引用，已停止清理`);
+      const query = manager
+        .getRepository(metadata.target)
+        .createQueryBuilder('business')
+        .withDeleted();
+      const predicates = fields.map((field) => {
+        const column = metadata.findColumnWithPropertyName(field);
+        if (!column)
+          throw new BadRequestException('附件引用字段缺失，已停止清理');
+        return `LOCATE(:url, CAST(business.${column.propertyPath} AS CHAR)) > 0`;
+      });
+      if (await query.where(predicates.join(' OR '), { url }).getExists())
+        return true;
+    }
+    return false;
   }
 
   private environmentName() {

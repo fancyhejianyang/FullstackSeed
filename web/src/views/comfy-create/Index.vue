@@ -50,6 +50,18 @@ const parameters = reactive<Record<string, unknown>>({});
 const stagedMediaFiles = reactive<Record<string, File | undefined>>({});
 const mediaPreviewUrls = reactive<Record<string, string | null>>({});
 const mediaFileNames = reactive<Record<string, string>>({});
+// Ownership is separate from v-model: the component clears its model before emitting remove.
+const mediaObjectUrls = new Map<string, string>();
+type MediaInputControl = { validate: () => true | string; reset: () => void };
+const mediaInputs = new Map<string, MediaInputControl>();
+const mediaContext = ref(0);
+function setMediaInput(key: string, instance: unknown) {
+  if (instance && typeof instance === "object" && "validate" in instance && "reset" in instance) {
+    mediaInputs.set(key, instance as MediaInputControl);
+  } else {
+    mediaInputs.delete(key);
+  }
+}
 const creativeIdea = ref("");
 const composing = ref(false);
 const composeStage = ref("");
@@ -77,14 +89,18 @@ function isMediaBinding(binding: ComfyInputBinding) {
   return binding.type === "image" || binding.type === "video";
 }
 function releaseMediaPreview(key: string) {
-  const previewUrl = mediaPreviewUrls[key];
-  if (previewUrl?.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
+  const previewUrl = mediaObjectUrls.get(key);
+  if (previewUrl) URL.revokeObjectURL(previewUrl);
+  mediaObjectUrls.delete(key);
 }
 function clearMediaState(clearParameters = false) {
+  mediaInputs.forEach((input) => input.reset());
+  mediaContext.value += 1;
   const keys = new Set([
     ...Object.keys(stagedMediaFiles),
     ...Object.keys(mediaPreviewUrls),
     ...Object.keys(mediaFileNames),
+    ...mediaObjectUrls.keys(),
   ]);
   for (const key of keys) {
     releaseMediaPreview(key);
@@ -109,9 +125,9 @@ async function stageMediaFile(
 ): Promise<UploadResult> {
   releaseMediaPreview(binding.key);
   const previewUrl = URL.createObjectURL(file);
+  mediaObjectUrls.set(binding.key, previewUrl);
   stagedMediaFiles[binding.key] = file;
   parameters[binding.key] = "";
-  mediaPreviewUrls[binding.key] = previewUrl;
   mediaFileNames[binding.key] = file.name;
   return {
     url: previewUrl,
@@ -300,6 +316,14 @@ async function load() {
   }
 }
 async function submit() {
+  if (loading.value || submitting.value || !createVisible.value) return;
+  for (const input of mediaInputs.values()) {
+    const result = input.validate();
+    if (typeof result === "string") {
+      ElMessage.warning(result);
+      return;
+    }
+  }
   if (
     !user.hasPermission("ComfyTask.create") ||
     !user.hasPermission("ComfyTask.aiGenerate")
@@ -334,10 +358,11 @@ async function submit() {
     return;
   }
   submitting.value = true;
+  const selectedWorkflowId = current.value.id;
   try {
     const taskParameters = await prepareTaskParameters();
     const task = await createComfyTask({
-      workflowId: current.value.id,
+      workflowId: selectedWorkflowId,
       parameters: taskParameters,
       requestId: crypto.randomUUID(),
     });
@@ -352,6 +377,13 @@ async function submit() {
   } finally {
     submitting.value = false;
   }
+}
+function beforeCreateClose(done: () => void) {
+  if (submitting.value) {
+    ElMessage.warning("请等待任务提交完成");
+    return;
+  }
+  done();
 }
 watch(createVisible, (visible) => {
   if (!visible) clearMediaState();
@@ -385,6 +417,7 @@ onMounted(load);
       width="1040px"
       body-max-height="76vh"
       :show-footer="false"
+      :before-close="beforeCreateClose"
     >
       <div v-loading="loading" class="create-page">
         <el-alert
@@ -470,6 +503,7 @@ onMounted(load);
                 class="workflow-card"
                 :class="{ 'is-active': workflow.id === current?.id }"
                 :aria-checked="workflow.id === current?.id"
+                :disabled="submitting"
                 @click="workflowId = String(workflow.id)"
               >
                 <span
@@ -649,7 +683,10 @@ onMounted(load);
                 />
                 <UploadImage
                   v-else-if="binding.type === 'image'"
+                  :ref="(instance) => setMediaInput(binding.key, instance)"
                   v-model="mediaPreviewUrls[binding.key]"
+                  :context-key="mediaContext"
+                  :disabled="submitting"
                   accept="image/*"
                   :max-size-mb="20"
                   :upload-request="(file) => stageMediaFile(binding, file)"
@@ -657,7 +694,10 @@ onMounted(load);
                 />
                 <UploadFile
                   v-else-if="binding.type === 'video'"
+                  :ref="(instance) => setMediaInput(binding.key, instance)"
                   v-model="mediaPreviewUrls[binding.key]"
+                  :context-key="mediaContext"
+                  :disabled="submitting"
                   v-model:name="mediaFileNames[binding.key]"
                   accept="video/*"
                   :max-size-mb="100"
@@ -682,7 +722,7 @@ onMounted(load);
                 素材库。</span
               >
               <div class="submit-bar__actions">
-                <Button :confirm="false" @click="createVisible = false">
+                <Button :confirm="false" :disabled="submitting" @click="createVisible = false">
                   取消
                 </Button>
                 <Button

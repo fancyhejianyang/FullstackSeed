@@ -2,6 +2,28 @@ import type { StorageConfig } from '../storage-config/storage-config.service';
 import { UploadsService } from './uploads.service';
 
 describe('UploadsService managed storage policy', () => {
+  it.each([
+    'https://attacker.example/file.txt',
+    '/uploads/../../storage/secrets.json',
+    '/uploads/2026/10/29/%2e%2e/secret.txt',
+    '/uploads/ai-materials/development/objects/1/1/1/file.txt',
+    'https://app.example/uploads/2026/10/29/file.txt?redirect=1',
+  ])(
+    'does not turn the download endpoint into an arbitrary file/URL reader: %s',
+    async (url) => {
+      const service = new UploadsService({
+        getConfig: jest.fn().mockResolvedValue({
+          enabled: false,
+          provider: 'local',
+          publicBaseUrl: '',
+        }),
+      } as never);
+      await expect(
+        service.readLegacyUpload(url, 'https://app.example'),
+      ).rejects.toThrow();
+    },
+  );
+
   it('keeps task input files local even when OSS is enabled', async () => {
     const config: StorageConfig = {
       enabled: true,

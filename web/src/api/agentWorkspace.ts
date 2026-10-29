@@ -1,6 +1,7 @@
 import request from "@/utils/request";
 import type { AgentBusinessToolOption, AgentToolKey } from "./agentApp";
 import type { ProductSkuChatContext } from "./knowledgeAiChat";
+import type { UploadRequestOptions } from "./upload";
 
 export type AgentPendingActionStatus =
   | "collecting"
@@ -335,13 +336,20 @@ export interface AgentImageReference {
   source: "upload" | "generated";
 }
 
-export function uploadAgentImage(sessionId: number, file: File) {
+export function uploadAgentImage(sessionId: number, file: File, options: UploadRequestOptions = {}) {
   const data = new FormData();
   data.append("file", file);
   return request.post<unknown, AgentImageReference>(
     `/agent-workspace/sessions/${sessionId}/images`,
     data,
-    { timeout: 60000 },
+    {
+      timeout: options.timeout ?? 120000,
+      signal: options.signal,
+      silentError: options.silentError,
+      onUploadProgress: (event) => {
+        if (event.total) options.onProgress?.(Math.min(100, Math.round(event.loaded / event.total * 100)));
+      },
+    },
   );
 }
 export function getAgentImage(sessionId: number, imageId: number) {

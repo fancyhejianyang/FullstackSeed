@@ -85,7 +85,7 @@ function workspaceHarness(debug = true) {
     "withDefaults",
     compile(
       parse(workspace).descriptor.scriptSetup.content +
-        "\nexport { apps, selectedAgentId, selectedTextModel, inputText, activeSession, pendingMessages, send, uploadImage, attachedImage, newSession, switchAgent, refreshDebugConfiguration, debugRevision, AUTO_TEXT_MODEL };",
+        "\nexport { apps, selectedAgentId, selectedTextModel, inputText, activeSession, pendingMessages, send, uploadImage, attachedImage, newSession, openImagePicker, showImagePicker, switchAgent, refreshDebugConfiguration, debugRevision, AUTO_TEXT_MODEL };",
     ),
   )(
     (name) => {
@@ -120,6 +120,7 @@ function workspaceHarness(debug = true) {
   return {
     ...exports,
     calls,
+    api,
     mount: () => mounted[0](),
     dispose: () => unmounted.forEach((fn) => fn()),
     setApps: (value) => {
@@ -200,6 +201,44 @@ test("the first debug image creates a session and uploads without automatically 
     ["upload", 100, "test.png"],
   );
   assert.ok(!h.calls.some(([name]) => name === "send" || name === "sessions"));
+  h.dispose();
+});
+
+test("a pending image picker cannot restore the previous Agent session after switching", async () => {
+  const h = workspaceHarness();
+  await h.mount();
+  let release;
+  h.api.createAgentSession = async () => new Promise((resolve) => { release = resolve; });
+  const opening = h.openImagePicker();
+  await flush();
+  h.selectedAgentId.value = "2";
+  await h.switchAgent();
+  release(session(100));
+  await opening;
+  assert.equal(h.activeSession.value, null);
+  assert.equal(h.showImagePicker.value, false);
+  assert.ok(!h.calls.some(([name]) => name === "upload" || name === "detail"));
+  h.dispose();
+});
+
+test("repeated send clicks while creating a session enqueue only one message", async () => {
+  const h = workspaceHarness();
+  await h.mount();
+  let release;
+  let created = 0;
+  h.api.createAgentSession = async () => {
+    created += 1;
+    return new Promise((resolve) => { release = resolve; });
+  };
+  h.inputText.value = "测试图片";
+  const first = h.send();
+  await flush();
+  await h.send();
+  release(session(100));
+  await first;
+  await flush();
+  assert.equal(created, 1);
+  assert.equal(h.calls.filter(([name]) => name === "send").length, 1);
   h.dispose();
 });
 

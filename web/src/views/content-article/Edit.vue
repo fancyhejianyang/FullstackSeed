@@ -17,7 +17,7 @@ import GenerationSettings from './GenerationSettings.vue';
 import SourceMaterials from './SourceMaterials.vue';
 import { useUserStore } from '@/stores/user';
 import UploadImage from '@/components/UploadImage.vue';
-import { uploadFile } from '@/api/upload';
+import { uploadFile, type UploadRequestOptions } from '@/api/upload';
 import {
   createContentArticle,
   getContentArticlePreview,
@@ -103,6 +103,8 @@ watch(
   () => [visible.value, props.row?.id] as const,
   async ([open, id]) => {
     const current = ++epoch;
+    formRef.value?.resetUploads();
+    uploading.value = false;
     savedId.value = id ?? null;
     loadFailed.value = false;
     loading.value = false;
@@ -191,7 +193,11 @@ async function saveContent() {
 }
 async function handleSubmit() {
   if (busy.value || loadFailed.value) return;
-  await formRef.value?.validate();
+  try {
+    await formRef.value?.validate();
+  } catch {
+    return;
+  }
   if (busy.value || loadFailed.value || !visible.value) return;
   submitting.value = true;
   const current = epoch;
@@ -207,19 +213,18 @@ async function handleSubmit() {
   }
 }
 
-async function uploadCover(file: File) {
+async function uploadCover(file: File, options?: UploadRequestOptions) {
   if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
-    ElMessage.warning('封面仅支持 PNG、JPEG 或 WebP 图片');
     throw new Error('不支持的封面图片格式');
   }
   uploading.value = true;
   const current = epoch;
   try {
-    const result = await uploadFile(file);
+    const result = await uploadFile(file, options);
     if (current !== epoch || !visible.value) throw new Error('当前记录已关闭');
     return result;
   } finally {
-    uploading.value = false;
+    if (current === epoch) uploading.value = false;
   }
 }
 
@@ -289,13 +294,14 @@ onBeforeUnmount(() => {
         :fields="fields"
         :rules="rules"
         label-position="top"
-        :disabled="busy"
+        :disabled="loading || submitting"
       >
         <template #field-coverUrl>
           <UploadImage
             v-model="form.coverUrl"
+            :context-key="`${visible}:${props.row?.id ?? 'new'}`"
             :upload-request="uploadCover"
-            :disabled="busy"
+            :disabled="loading || submitting"
             accept="image/png,image/jpeg,image/webp"
           />
         </template>

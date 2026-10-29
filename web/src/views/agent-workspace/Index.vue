@@ -6,6 +6,7 @@ import Button from "@/components/Button.vue";
 import Input from "@/components/Input.vue";
 import Select from "@/components/Select.vue";
 import UploadImage from "@/components/UploadImage.vue";
+import type { UploadRequestOptions } from "@/api/upload";
 import { useUserStore } from "@/stores/user";
 import { formatDateTime } from "@/utils/format";
 import { getPermissionActionColor } from "@/utils/permission";
@@ -75,6 +76,11 @@ const sessionKeyword = ref("");
 const inputText = ref("");
 const showImagePicker = ref(false);
 const uploadBusy = ref(false);
+const imagePickerRef = ref<InstanceType<typeof UploadImage>>();
+let imageUploadController: AbortController | undefined;
+let mediaContextVersion = 0;
+let preparingMedia = false;
+let preparingSend = false;
 const attachedImage = ref<AgentImageReference | null>(null);
 const imagePreview = ref<string | null>("");
 let previewObjectUrl = "";
@@ -136,31 +142,62 @@ function clearImage() {
   showImagePicker.value = false;
 }
 function resetMediaInput() {
+  mediaContextVersion += 1;
+  preparingMedia = false;
+  preparingSend = false;
+  loadingDetail.value = false;
+  loadingSessions.value = false;
+  imageUploadController?.abort();
+  imagePickerRef.value?.reset();
   clearImage();
 }
-async function uploadImage(file: File) {
+async function openImagePicker() {
+  if (preparingMedia || preparingSend || uploadBusy.value || actionBusy.value || debugBusy.value) return;
+  if (showImagePicker.value) {
+    showImagePicker.value = false;
+    return;
+  }
+  const context = mediaContextVersion;
+  const agentId = selectedAgentId.value;
+  preparingMedia = true;
+  try {
+    await ensureSession();
+    if (!disposed && context === mediaContextVersion && agentId === selectedAgentId.value) showImagePicker.value = true;
+  } catch { /* 请求层保留创建会话失败反馈。 */ }
+  finally { if (context === mediaContextVersion) preparingMedia = false; }
+}
+async function uploadImage(file: File, options?: UploadRequestOptions) {
   const error = imageUploadError(file);
   if (error) {
-    ElMessage.warning(error);
     throw new Error(error);
   }
   if (uploadBusy.value || actionBusy.value || debugBusy.value)
     throw new Error("请等待当前上传完成");
   if (!currentApp.value?.mediaCapabilities?.vision)
     throw new Error("当前 Agent 未配置图片识别模型");
-  const sessionId =
-    activeSession.value?.id ??
-    (props.debug ? await ensureSession() : undefined);
+  const context = mediaContextVersion;
+  const agentId = selectedAgentId.value;
+  const sessionId = activeSession.value?.id ?? (props.debug ? await ensureSession() : undefined);
+  if (context !== mediaContextVersion || agentId !== selectedAgentId.value || disposed) throw new DOMException("会话已切换", "AbortError");
   if (!sessionId) throw new Error("请先创建会话");
+  const controller = new AbortController();
+  imageUploadController = controller;
+  const cancel = () => controller.abort();
+  options?.signal?.addEventListener("abort", cancel, { once: true });
+  if (options?.signal?.aborted) cancel();
   uploadBusy.value = true;
   try {
-    const image = await uploadAgentImage(sessionId, file);
-    if (disposed || activeSession.value?.id !== sessionId)
+    controller.signal.throwIfAborted();
+    const image = await uploadAgentImage(sessionId, file, {
+      ...options,
+      signal: controller.signal,
+    });
+    controller.signal.throwIfAborted();
+    if (disposed || context !== mediaContextVersion || activeSession.value?.id !== sessionId)
       throw new Error("会话已切换，请重新上传图片");
     clearImage();
     attachedImage.value = image;
     previewObjectUrl = URL.createObjectURL(file);
-    imagePreview.value = previewObjectUrl;
     return {
       url: previewObjectUrl,
       fileName: String(image.id),
@@ -169,7 +206,11 @@ async function uploadImage(file: File) {
       size: image.size,
     };
   } finally {
-    uploadBusy.value = false;
+    options?.signal?.removeEventListener("abort", cancel);
+    if (imageUploadController === controller) {
+      uploadBusy.value = false;
+      imageUploadController = undefined;
+    }
   }
 }
 async function pasteImage(event: ClipboardEvent) {
@@ -180,7 +221,7 @@ async function pasteImage(event: ClipboardEvent) {
     ElMessage.warning("每条消息支持一张图片，请逐张粘贴");
     return;
   }
-  if (uploadBusy.value || actionBusy.value) {
+  if (preparingMedia || preparingSend || uploadBusy.value || actionBusy.value || debugBusy.value) {
     ElMessage.warning("请等待当前动作完成后再粘贴图片");
     return;
   }
@@ -192,11 +233,20 @@ async function pasteImage(event: ClipboardEvent) {
     ElMessage.warning("已有待发送图片，请先移除再粘贴，避免覆盖附件");
     return;
   }
+  const context = mediaContextVersion;
+  const agentId = selectedAgentId.value;
+  preparingMedia = true;
   try {
-    await uploadImage(images[0]!);
-  } catch {
-    /* 请求层已提示，保留文字且不自动发送。 */
-  }
+    await ensureSession();
+    if (disposed || context !== mediaContextVersion || agentId !== selectedAgentId.value) return;
+    const result = await uploadImage(images[0]!, { silentError: true });
+    if (disposed || context !== mediaContextVersion || agentId !== selectedAgentId.value) return;
+    imagePreview.value = result.url;
+  } catch (error) {
+    if ((error as { name?: string }).name !== "AbortError" && (error as { code?: string }).code !== "ERR_CANCELED") {
+      ElMessage.warning(error instanceof Error ? error.message : "图片上传失败，请重试");
+    }
+  } finally { if (context === mediaContextVersion) preparingMedia = false; }
 }
 const agentOptions = computed(() =>
   apps.value.map((item) => ({ value: String(item.id), text: item.name })),
@@ -340,26 +390,30 @@ async function loadSessions() {
     sessions.value = [];
     return;
   }
+  const agentId = selectedAgentId.value;
+  const context = mediaContextVersion;
   loadingSessions.value = true;
   try {
     const result = await getAgentSessions({
       page: 1,
       pageSize: 100,
-      agentAppId: Number(selectedAgentId.value),
+      agentAppId: Number(agentId),
       keyword: sessionKeyword.value.trim() || undefined,
     });
-    sessions.value = result.list;
+    if (!disposed && agentId === selectedAgentId.value && context === mediaContextVersion) sessions.value = result.list;
   } finally {
-    loadingSessions.value = false;
+    if (agentId === selectedAgentId.value && context === mediaContextVersion) loadingSessions.value = false;
   }
 }
 
 async function loadSession(id: number, silent = false) {
   const version = ++requestVersion;
+  const agentId = selectedAgentId.value;
+  const context = mediaContextVersion;
   if (!silent) loadingDetail.value = true;
   try {
     const detail = await getAgentSession(id);
-    if (version !== requestVersion) return;
+    if (disposed || version !== requestVersion || agentId !== selectedAgentId.value || context !== mediaContextVersion) return;
     activeSession.value = detail;
   } finally {
     if (!silent && version === requestVersion) loadingDetail.value = false;
@@ -397,23 +451,30 @@ async function loadOlderMessages() {
 }
 
 async function newSession() {
-  if (uploadBusy.value || debugBusy.value) return;
-  resetMediaInput();
+  if (preparingMedia || preparingSend) return;
+  await createSessionForInput(false);
+}
+async function createSessionForInput(preserveMediaInput: boolean) {
+  if (uploadBusy.value || debugBusy.value || loadingDetail.value) return;
+  if (!preserveMediaInput) resetMediaInput();
   if (!selectedAgentId.value) return;
+  const agentId = selectedAgentId.value;
+  const context = mediaContextVersion;
   requestVersion += 1;
-  if (props.debug) loadingDetail.value = true;
+  loadingDetail.value = true;
   try {
     const session = await createAgentSession({
-      agentAppId: Number(selectedAgentId.value),
+      agentAppId: Number(agentId),
       ...(props.debug
         ? { title: `调试 · ${currentApp.value?.name || "Agent"}` }
         : {}),
     });
-    if (disposed) return;
+    if (disposed || context !== mediaContextVersion || agentId !== selectedAgentId.value) return;
     await loadSessions();
+    if (disposed || context !== mediaContextVersion || agentId !== selectedAgentId.value) return;
     await loadSession(session.id);
   } finally {
-    if (props.debug) loadingDetail.value = false;
+    if (context === mediaContextVersion && agentId === selectedAgentId.value) loadingDetail.value = false;
   }
 }
 
@@ -508,13 +569,22 @@ function makeKey() {
 
 async function ensureSession() {
   if (activeSession.value) return activeSession.value.id;
-  await newSession();
+  const agentId = selectedAgentId.value;
+  const context = mediaContextVersion;
+  await createSessionForInput(true);
+  if (disposed || context !== mediaContextVersion || agentId !== selectedAgentId.value) throw new DOMException("会话已切换", "AbortError");
   const createdSession = activeSession.value as AgentSessionDetail | null;
   if (!createdSession) throw new Error("无法创建 Agent 会话");
   return createdSession.id;
 }
 
 async function send() {
+  if (preparingMedia || preparingSend) return;
+  const imageStatus = imagePickerRef.value?.validate();
+  if (typeof imageStatus === "string") {
+    ElMessage.warning(imageStatus);
+    return;
+  }
   const image = attachedImage.value ?? undefined;
   const content =
     inputText.value.trim() || (image ? "请识别并描述这张图片的内容。" : "");
@@ -527,11 +597,17 @@ async function send() {
   )
     return;
   let sessionId: number;
+  const context = mediaContextVersion;
+  const agentId = selectedAgentId.value;
+  preparingSend = true;
   try {
     sessionId = await ensureSession();
   } catch {
     return;
+  } finally {
+    if (context === mediaContextVersion) preparingSend = false;
   }
+  if (disposed || context !== mediaContextVersion || agentId !== selectedAgentId.value || activeSession.value?.id !== sessionId) return;
   const clientMessageId = makeKey();
   const requestId = `message:${sessionId}:${clientMessageId}`;
   const textModel =
@@ -786,7 +862,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-  clearImage();
+  resetMediaInput();
   disposed = true;
   progressPoller.stop();
   requestVersion += 1;
@@ -951,14 +1027,16 @@ onUnmounted(() => {
                 link
                 icon="Picture"
                 :disabled="uploadBusy || actionBusy || debugBusy"
-                @click="showImagePicker = !showImagePicker"
+                @click="openImagePicker"
                 >添加图片</Button
               >
               <span>{{ mediaHint }}</span>
             </div>
             <UploadImage
               v-if="showImagePicker || attachedImage"
+              ref="imagePickerRef"
               v-model="imagePreview"
+              :context-key="selectedAgentId ?? ''"
               class="agent-workspace__image-upload"
               :class="{ 'has-image': attachedImage }"
               accept="image/png,image/jpeg,image/webp"

@@ -53,19 +53,23 @@ const setupForm = await loadSetup('./Form.vue', [
   'formRef',
   'setNumberInputRef',
   'validate',
+  'resetUploads',
 ]);
+const uploadFormKey = Symbol('upload-form');
 
 function harness(setup, options = {}, value = null) {
   const props = vue.reactive({ ...options });
   const model = vue.ref(value);
   const events = [];
+  const provided = new Map();
   const exports = {};
   const scope = vue.effectScope();
   scope.run(() =>
     setup(
       (name) => {
-        if (name === 'vue') return vue;
+        if (name === 'vue') return { ...vue, provide: (key, value) => provided.set(key, value) };
         if (name === './inputRules') return inputRules;
+        if (name === './uploadForm') return { UPLOAD_FORM_KEY: uploadFormKey };
         if (name === './componentRegistry')
           return { FORM_COMPONENT_MAP: {}, getFormComponent: () => null };
         throw new Error(`Unexpected import: ${name}`);
@@ -86,8 +90,46 @@ function harness(setup, options = {}, value = null) {
       () => {},
     ),
   );
-  return { props, model, events, ...exports, stop: () => scope.stop() };
+  return { props, model, events, provided, ...exports, stop: () => scope.stop() };
 }
+
+test('Form blocks pending and failed slot uploads, and resets them with the form', async (t) => {
+  const h = harness(setupForm, { fields: [] }, {});
+  t.after(h.stop);
+  h.formRef.value = { validate: async () => true };
+  const pending = vue.ref(true);
+  let uploadError = '';
+  let resetCount = 0;
+  const unregister = h.provided.get(uploadFormKey).register({
+    prop: 'attachmentUrl',
+    uploading: pending,
+    validate: () => pending.value ? '上传中' : uploadError || true,
+    reset: () => { resetCount += 1; pending.value = false; uploadError = ''; },
+  });
+  await assert.rejects(h.validate(), (fields) => fields.attachmentUrl[0].message === '上传中');
+  pending.value = false;
+  uploadError = '上传失败';
+  await assert.rejects(h.validate(), (fields) => fields.attachmentUrl[0].message === '上传失败');
+  h.resetUploads();
+  assert.equal(resetCount, 1);
+  assert.equal(await h.validate(), true);
+  pending.value = true;
+  unregister();
+  assert.equal(await h.validate(), true);
+});
+
+test('Form rechecks uploads that start during asynchronous field validation', async (t) => {
+  const h = harness(setupForm, { fields: [] }, {});
+  t.after(h.stop);
+  const pending = vue.ref(false);
+  h.provided.get(uploadFormKey).register({
+    prop: 'imageUrl', uploading: pending,
+    validate: () => pending.value ? '上传中' : true,
+    reset: () => {},
+  });
+  h.formRef.value = { validate: async () => { pending.value = true; return true; } };
+  await assert.rejects(h.validate(), (fields) => fields.imageUrl[0].message === '上传中');
+});
 
 test('typing 1 -> 18 -> 180 is not clamped by min=10, even after model watchers flush', async (t) => {
   const h = harness(setupNumber, { mode: 'integer', min: 10, max: 300 }, 60);

@@ -27,6 +27,7 @@ const visible = defineModel<boolean>('visible', { required: true });
 const submitting = ref(false);
 const loading = ref(false);
 const formRef = ref<InstanceType<typeof Form>>();
+const uploadContext = computed(() => `${visible.value}:${props.row?.id ?? 'new'}`);
 const form = reactive<DemoForm>({
   title: '',
   content: '',
@@ -151,7 +152,7 @@ const fields: FormField[] = [
     prop: 'imageUrl',
     label: '封面图片',
     component: 'UploadImage',
-    componentProps: { maxSizeMb: 5 },
+    componentProps: { maxSizeMb: 5, contextKey: uploadContext },
   },
   { prop: 'attachmentUrl', label: '附件文件', slot: true },
   { prop: 'content', label: '内容', type: 'textarea', rows: 4 },
@@ -202,23 +203,37 @@ function fillForm(data: Demo) {
   form.attachmentUrl = data.attachmentUrl ?? '';
 }
 
-watch(visible, async (val) => {
-  if (!val) return;
-  if (props.row?.id) {
+watch(uploadContext, () => formRef.value?.resetUploads(), { flush: 'sync' });
+
+watch(() => [visible.value, props.row?.id] as const, async ([val, id], _previous, onCleanup) => {
+  let obsolete = false;
+  onCleanup(() => { obsolete = true; });
+  if (!val) {
+    loading.value = false;
+    return;
+  }
+  if (id) {
     loading.value = true;
     try {
-      const detail = await getDemo(props.row.id);
+      const detail = await getDemo(id);
+      if (obsolete) return;
       fillForm(detail);
     } finally {
-      loading.value = false;
+      if (!obsolete) loading.value = false;
     }
   } else {
+    loading.value = false;
     resetForm();
   }
 });
 
 async function handleSubmit() {
-  await formRef.value?.validate();
+  if (loading.value || submitting.value) return;
+  try {
+    await formRef.value?.validate();
+  } catch {
+    return;
+  }
   submitting.value = true;
   try {
     if (props.row) {
@@ -246,11 +261,12 @@ async function handleSubmit() {
     @confirm="handleSubmit"
   >
     <div v-loading="loading">
-      <Form ref="formRef" v-model="form" :fields="fields" :rules="rules">
+      <Form ref="formRef" v-model="form" :fields="fields" :rules="rules" :disabled="loading || submitting">
         <template #field-attachmentUrl>
           <UploadFile
             v-model="form.attachmentUrl"
             v-model:name="form.attachmentName"
+            :context-key="uploadContext"
           />
         </template>
       </Form>

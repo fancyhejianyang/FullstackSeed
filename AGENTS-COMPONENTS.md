@@ -138,11 +138,12 @@
 - 插槽：`#field-<prop>` 自定义某个字段渲染
 - 动态 `InputNumber` 字段的 v-model 必须是 `number | null`；空值统一写 `null`，禁止用空字符串 `''`，否则会触发 Vue prop 类型警告。对应 API 表单类型也应保持同一契约，让 TypeScript 在编译期拦截错误赋值。
 - `Form.validate()` 同时检查当前动态 `InputNumber` 的组件校验和原有 Element Plus 字段规则；越界等错误会拒绝提交，不会自动改成边界值。自定义插槽仍由页面规则或组件 ref 校验，不自动扫描插槽内部。
+- `UploadFile` / `UploadImage` 通过注入向最近的 `Form` 登记，动态字段和插槽内使用均参与 `validate()`：校验中、上传中或未清除的上传错误会阻止提交。`Form.uploading` 汇总当前上传状态，`resetUploads()` 取消待处理上传并清除临时状态，`resetFields()` 也会调用它；不改变父页面保存的 URL。组件在 Form 外使用时，页面需检查组件 `validate()` 或上传状态。
 - 两列表单的同排字段统一顶部对齐；某个字段带 `hint` 或产生多行辅助内容时，只增加当前栅格行高度，不得把同排无提示字段垂直居中或下移。业务页面禁止通过空提示文案、空白字符或局部 margin 人工占位。
 
 ### `defineExpose`
 
-- `validate()` / `resetFields()`
+- `validate()` / `resetFields()` / `resetUploads()` / `uploading`
 
 ### `FormField.type`
 
@@ -227,11 +228,19 @@
 
 ## UploadImage / UploadFile
 
-**契约**：上传组件默认调用统一后端接口 `POST /api/uploads`，后端返回前端可直接预览/下载的 `url`。业务模块只保存这个地址；文件原名如需展示，用 `UploadFile` 的 `v-model:name` 额外保存。
+**契约**：上传组件默认调用统一后端接口 `POST /api/uploads`，返回 `{url,fileName,originalName,mimeType,size,fileId?}`；业务模块仍保存 URL，文件原名如需展示，用 `UploadFile` 的 `v-model:name` 额外保存。默认接口为公开附件，受管文件 ID 不是私有下载权限凭据。
 
-- `UploadImage`：v-model 为图片 URL，默认 `accept='image/*'`
-- `UploadFile`：v-model 为文件 URL，`v-model:name` 为文件名，已上传后隐藏拖拽区并显示可下载文件名
-- `uploadRequest(file)`：可覆盖默认上传实现，未来直传 OSS 或特殊业务上传时仍保持组件契约不变
+- 两者均为单文件组件；`accept` 同时校验选择和拖拽，空文件、超限及不匹配的文件在上传前拦截。失败/取消后可重新选择，传输失败可重试；显示实际上传进度，服务端返回成功后才记为完成。
+- `UploadImage`：v-model 为图片 URL，默认 `accept='image/*'`、`maxSizeMb=5`，上传前还会尝试解码图片；预览支持放大。默认公开上传不接受 SVG 等主动内容，自定义业务上传仍可使用自己的格式约定。
+- `UploadFile`：v-model 为文件 URL，`v-model:name` 为文件名，默认 `maxSizeMb=20`。`readText=true` 时先读取文本，成功后统一更新 URL、文件名及 `v-model:content`，避免只写回部分字段。
+- `uploadRequest(file, options?)`：可覆盖默认实现，单参旧函数仍兼容。`options` 包含 `signal/onProgress/timeout/silentError`；默认请求超时为 120 秒，上传参数不影响其它接口的超时。自定义上传应传递取消信号，写入自身业务状态前也检查信号/上下文，不能只依赖组件屏蔽迟到结果。
+- `contextKey`：业务记录、会话或输入类型变化时必须变化；即使切换前后 URL 都为空，也会取消旧请求并拒绝旧结果写回。外部修改 v-model、调用 `reset()` 或组件卸载同样会使在途结果失效。
+- 事件：保留 `change/remove`，新增 `uploading-change(boolean)`、`progress(number)`、`status-change` 和 `error(Error)`。状态为 `idle/validating/uploading/success/error/cancelled`；暴露 `uploading/status/progress/error` 和 `validate/reset/abort/retry`。`validateEvent=false` 只关闭表单项的自动 change 校验，不绕过提交检查。
+- `reset()` 取消上传并清除错误、进度及重试文件，不清空父页面字段；移除操作清空字段。组件创建的临时解码 URL 由组件释放，业务提供的 Blob URL 始终由业务页面释放。
+- 点击普通附件名通过鉴权接口 `POST /api/uploads/download` 获取文件后下载，避免 CDN 跨域使 `download` 属性失效；本地暂存 Blob URL 直接下载。后端只读取已登记的普通附件或受限的历史上传路径，不代理任意外部 URL。
+- 普通上传由后端限制为 20 MB，按允许的扩展名与文件签名检查；前端调大 `maxSizeMb` 不会放宽该限制。需要更大文件的业务应接专用上传接口。
+- 新上传登记到现有 `managed_files` 的 `uploads` 范围。移除/取消不立即删除对象；至少保留 24 小时，可在「OSS/CDN 配置 → 文件清理 → 普通附件」预览并清理无引用文件。执行时重检引用、包含软删除记录，历史未登记文件不扫描。
+- 新业务持久化普通附件 URL（包括富文本/JSON 中的引用）时，须在后端 `uploads/ordinary-upload-references.ts` 登记对应实体表与字段；保存保护与清理检查共用该映射。正常 TypeORM 保存会锁定文件或先续期，拒绝引用正在清理/已删除的文件；不要通过绕过订阅器的原始 SQL 写入这些附件字段。
 - Agent 私有图片复用 `UploadImage.uploadRequest` 对接会话鉴权上传：组件 v-model 仅用本地 Blob URL 预览，发送消息使用服务端图片 ID，不把公开上传 URL 当作权限凭据。页面负责切换/卸载时释放 Blob URL。
 - Agent 输入框通过 Input 透传的 `paste` 事件读取本次粘贴文件，复用同一私有上传函数与 UploadImage 预览；不主动读取系统剪贴板、不抓取 HTML 外链图片。业务页负责待发送附件、单图/大小校验和会话隔离，不在通用输入组件中加入 Agent 网络逻辑。
 - 后端本地存储默认暴露 `/uploads/...`；未来 OSS/CDN 只调整上传服务或 `UPLOAD_PUBLIC_BASE_URL`

@@ -4,6 +4,7 @@ import { ElMessage, type FormRules } from "element-plus";
 import PageContainer from "@/components/PageContainer.vue";
 import Button from "@/components/Button.vue";
 import Form, { type FormField } from "@/components/Form.vue";
+import Select from "@/components/Select.vue";
 import { getPermissionActionColor } from "@/utils/permission";
 import {
   cleanupManagedFiles,
@@ -11,6 +12,7 @@ import {
   getStorageConfig,
   updateStorageConfig,
   type ManagedCleanupPreview,
+  type ManagedCleanupScope,
   type StorageConfig,
 } from "@/api/storageConfig";
 import { useUserStore } from "@/stores/user";
@@ -22,6 +24,12 @@ const saving = ref(false);
 const formRef = ref<InstanceType<typeof Form>>();
 const cleanupLoading = ref(false);
 const cleanupPreview = ref<ManagedCleanupPreview | null>(null);
+const cleanupScope = ref<ManagedCleanupScope>("ai-materials");
+const cleanupScopes = [
+  { text: "AI 素材", value: "ai-materials" },
+  { text: "ComfyUI 素材", value: "comfyui" },
+  { text: "普通附件", value: "uploads" },
+];
 const canReadCleanup = computed(() => user.hasPermission("MediaStorage.read"));
 
 const form = reactive<StorageConfig>({
@@ -137,23 +145,32 @@ async function handleSave(clearCredentials = false) {
 async function previewCleanup() {
   cleanupLoading.value = true;
   try {
-    cleanupPreview.value = await getManagedCleanupPreview();
-    if (!cleanupPreview.value.count)
-      ElMessage.info("当前没有到期的可清理素材文件");
+    cleanupPreview.value = await getManagedCleanupPreview(cleanupScope.value);
+    if (!cleanupPreview.value.count) ElMessage.info("当前没有到期的可清理文件");
   } finally {
     cleanupLoading.value = false;
   }
+}
+
+function setCleanupScope(value: string | null) {
+  if (value !== "ai-materials" && value !== "comfyui" && value !== "uploads")
+    return;
+  cleanupScope.value = value;
+  cleanupPreview.value = null;
 }
 
 async function runCleanup() {
   if (!cleanupPreview.value?.fileIds.length) return;
   cleanupLoading.value = true;
   try {
-    const result = await cleanupManagedFiles(cleanupPreview.value.fileIds);
+    const result = await cleanupManagedFiles(
+      cleanupPreview.value.fileIds,
+      cleanupPreview.value.scope,
+    );
     ElMessage.success(
       `清理完成：删除 ${result.deleted} 个${result.failed ? `，失败 ${result.failed} 个` : ""}`,
     );
-    cleanupPreview.value = await getManagedCleanupPreview();
+    cleanupPreview.value = await getManagedCleanupPreview(cleanupScope.value);
   } finally {
     cleanupLoading.value = false;
   }
@@ -222,13 +239,17 @@ onMounted(fetchConfig);
       <el-divider v-if="canReadCleanup" />
       <section v-if="canReadCleanup" class="storage-cleanup">
         <div>
-          <h3>AI 素材文件清理</h3>
-          <p>
-            仅检查 AI
-            素材专用路径中已登记、无引用且达到保留期的文件；不会扫描文章封面或历史上传目录。
-          </p>
+          <h3>文件清理</h3>
         </div>
         <div class="storage-cleanup__actions">
+          <Select
+            :model-value="cleanupScope"
+            :options="cleanupScopes"
+            :clearable="false"
+            :disabled="cleanupLoading"
+            aria-label="清理范围"
+            @update:model-value="setCleanupScope"
+          />
           <Button
             perm="MediaStorage.read"
             :loading="cleanupLoading"

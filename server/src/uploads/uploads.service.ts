@@ -21,14 +21,16 @@ export interface UploadResult {
   originalName: string;
   mimeType: string;
   size: number;
+  fileId?: number;
 }
 
 export interface ManagedUploadContext {
-  scope: 'ai-materials' | 'comfyui';
+  scope: 'ai-materials' | 'comfyui' | 'uploads';
   ownerId: number;
   businessId: number;
   revision: number;
   storagePolicy?: 'configured' | 'local';
+  requestOrigin?: string;
 }
 
 export interface ManagedUploadTarget extends UploadResult {
@@ -106,7 +108,11 @@ export class UploadsService {
         ? this.buildOssPublicUrl(config.publicBaseUrl, objectKey)
         : context.storagePolicy === 'local'
           ? `/uploads/${objectKey}`
-          : this.buildPublicUrl(`/uploads/${objectKey}`, config, '');
+          : this.buildPublicUrl(
+              `/uploads/${objectKey}`,
+              config,
+              context.requestOrigin || '',
+            );
     return {
       url,
       fileName,
@@ -168,6 +174,91 @@ export class UploadsService {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
+  }
+
+  async readManagedFile(target: {
+    provider: string;
+    objectKey: string;
+    storageIdentity: string;
+  }) {
+    const config = await this.storageConfigService.getConfig();
+    if (target.provider !== 'local' && target.provider !== 'aliyun-oss')
+      throw new BadRequestException('不支持该文件存储类型');
+    if (
+      target.storageIdentity !== this.storageIdentity(config, target.provider)
+    )
+      throw new BadRequestException('文件所属存储位置与当前配置不一致');
+    if (target.provider === 'aliyun-oss') {
+      this.assertManagedObjectKey(target.objectKey, config, 'aliyun-oss');
+      this.assertAliyunOssConfig(config);
+      const client = this.ossClient(config);
+      const metadata = await client.head(target.objectKey);
+      this.assertDownloadSize(
+        (metadata.res.headers as Record<string, string>)['content-length'],
+      );
+      const result = await client.get(target.objectKey);
+      return Buffer.from(result.content as Buffer);
+    }
+    const targetPath = this.localManagedPath(target.objectKey);
+    this.assertDownloadSize((await fs.stat(targetPath)).size);
+    return fs.readFile(targetPath);
+  }
+
+  /** Legacy ordinary uploads only: resolve keys, never fetch the supplied URL. */
+  async readLegacyUpload(url: string, requestOrigin: string) {
+    const config = await this.storageConfigService.getConfig();
+    const roots = new Set(
+      [requestOrigin, config.publicBaseUrl]
+        .filter(Boolean)
+        .map((root) => this.withProtocol(root).replace(/\/+$/, '')),
+    );
+    let pathname = '';
+    if (url.startsWith('/uploads/')) pathname = url;
+    else {
+      const root = [...roots].find((value) => url.startsWith(`${value}/`));
+      if (root) pathname = url.slice(root.length);
+    }
+    const configuredBase = config.publicBaseUrl
+      ? this.withProtocol(config.publicBaseUrl).replace(/\/+$/, '')
+      : '';
+    const comesFromOss =
+      !!configuredBase && url.startsWith(`${configuredBase}/`);
+    const oss =
+      config.enabled && config.provider === 'aliyun-oss' && comesFromOss;
+    const prefix = oss
+      ? `/${config.uploadDir.replace(/^\/+|\/+$/g, '') || 'uploads'}/`
+      : '/uploads/';
+    if (!pathname.startsWith(prefix))
+      throw new BadRequestException('此附件地址不属于当前上传存储');
+    const relative = pathname.slice(prefix.length);
+    if (
+      !/^\d{4}\/\d{2}\/\d{2}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\.[a-z0-9_-]+)?$/i.test(
+        relative,
+      )
+    )
+      throw new BadRequestException('此附件地址不属于普通上传文件');
+    if (oss) {
+      this.assertAliyunOssConfig(config);
+      const client = this.ossClient(config);
+      const key = `${prefix.slice(1)}${relative}`;
+      const metadata = await client.head(key);
+      this.assertDownloadSize(
+        (metadata.res.headers as Record<string, string>)['content-length'],
+      );
+      const result = await client.get(key);
+      return Buffer.from(result.content as Buffer);
+    }
+    const target = resolve(this.uploadRoot, ...relative.split('/'));
+    if (!target.startsWith(resolve(this.uploadRoot) + sep))
+      throw new BadRequestException('文件路径无效');
+    this.assertDownloadSize((await fs.stat(target)).size);
+    return fs.readFile(target);
+  }
+
+  private assertDownloadSize(value: unknown) {
+    const size = Number(value);
+    if (!Number.isSafeInteger(size) || size < 0 || size > 20 * 1024 * 1024)
+      throw new BadRequestException('附件大小未知或超过 20 MB 下载限制');
   }
 
   private async saveFileToOss(
@@ -327,7 +418,8 @@ export class UploadsService {
         : `${config?.uploadDir.replace(/^\/+|\/+$/g, '') || 'uploads'}/`;
     if (
       !normalized.startsWith(`${root}ai-materials/`) &&
-      !normalized.startsWith(`${root}comfyui/`)
+      !normalized.startsWith(`${root}comfyui/`) &&
+      !normalized.startsWith(`${root}uploads/`)
     )
       throw new BadRequestException('文件不属于允许的受管存储范围');
   }

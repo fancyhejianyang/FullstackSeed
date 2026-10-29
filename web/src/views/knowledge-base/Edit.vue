@@ -37,6 +37,10 @@ const form = reactive({
   fileUrl: '',
   isEnabled: true,
 });
+const uploadContext = computed(
+  () => `${visible.value}:${props.row?.id ?? 'new'}:${form.contentType}:${textSourceMode.value}`,
+);
+watch(uploadContext, () => contentFormRef.value?.resetUploads(), { flush: 'sync' });
 
 const contentTypeOptions = [
   { label: '文本', value: 'text' },
@@ -197,7 +201,7 @@ function fillForm(row: KnowledgeBase) {
   });
 }
 
-watch(visible, (val) => {
+watch(() => [visible.value, props.row?.id] as const, ([val]) => {
   if (!val) return;
   void fetchCategories();
   if (props.row) {
@@ -242,14 +246,19 @@ watch(
   () => {
     if (!visible.value || fillingForm.value) return;
     void nextTick(() => {
-      void contentFormRef.value?.validate();
+      void contentFormRef.value?.validate().catch(() => undefined);
     });
   },
 );
 
 async function handleSubmit() {
-  await baseFormRef.value?.validate();
-  await contentFormRef.value?.validate();
+  if (submitting.value) return;
+  try {
+    await baseFormRef.value?.validate();
+    await contentFormRef.value?.validate();
+  } catch {
+    return;
+  }
   submitting.value = true;
   try {
     const payload = {
@@ -306,6 +315,7 @@ onMounted(fetchCategories);
         v-model="form"
         :fields="baseFields"
         :rules="rules"
+        :disabled="submitting"
         label-width="100px"
       />
       <div class="knowledge-base-edit__section knowledge-base-edit__section--next">
@@ -316,6 +326,7 @@ onMounted(fetchCategories);
         v-model="form"
         :fields="contentFields"
         :rules="rules"
+        :disabled="submitting"
         label-width="100px"
       >
         <template #field-contentText>
@@ -336,6 +347,7 @@ onMounted(fetchCategories);
               v-else
               v-model="form.fileUrl"
               v-model:name="form.fileName"
+              :context-key="uploadContext"
               :accept="fileAccept"
               :drag-text="uploadDragText"
             />
@@ -348,6 +360,7 @@ onMounted(fetchCategories);
           <UploadFile
             v-model="form.fileUrl"
             v-model:name="form.fileName"
+            :context-key="uploadContext"
             :accept="fileAccept"
             :drag-text="uploadDragText"
           />

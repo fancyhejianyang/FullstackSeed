@@ -2,7 +2,7 @@ import { Type } from 'class-transformer';
 import { IsArray, IsInt, IsIn, IsOptional, Max, Min } from 'class-validator';
 
 export class CleanupPreviewDto {
-  @IsIn(['ai-materials', 'comfyui'])
+  @IsIn(['ai-materials', 'comfyui', 'uploads'])
   @IsOptional()
   scope?: string = 'ai-materials';
 
@@ -15,7 +15,7 @@ export class CleanupPreviewDto {
 }
 
 export class CleanupManagedFilesDto {
-  @IsIn(['ai-materials', 'comfyui'])
+  @IsIn(['ai-materials', 'comfyui', 'uploads'])
   @IsOptional()
   scope?: string = 'ai-materials';
 

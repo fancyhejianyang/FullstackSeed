@@ -1,101 +1,105 @@
 <script setup lang="ts">
-/**
- * UploadImage — 单图片上传回显组件。
- *
- * 核心能力：
- * - v-model 保存后端返回的图片 URL，业务表只需要存这个地址
- * - 默认调用统一上传接口，后端未来切 OSS 时不影响组件和业务字段
- * - 可通过 `uploadRequest` 覆盖上传实现，适配直传或特殊业务
- * - 默认限制单图、图片类型和大小
- * - el-upload attrs 透传，保留 Element Plus 原生扩展空间
- */
-import { computed, ref } from 'vue';
-import type { UploadFile, UploadUserFile } from 'element-plus';
+/** Single-image upload. Decode selected bytes and share cancellation/validation with UploadFile. */
+import type { UploadFile } from 'element-plus';
 import { UploadFilled } from '@element-plus/icons-vue';
-import { uploadFile, type UploadResult } from '@/api/upload';
+import type { UploadRequest } from '@/api/upload';
+import Button from './Button.vue';
+import { useSingleUpload, type UploadStatus } from './useSingleUpload';
 
 defineOptions({ inheritAttrs: false });
-
-const props = withDefaults(
-  defineProps<{
-    accept?: string;
-    maxSizeMb?: number;
-    disabled?: boolean;
-    uploadRequest?: (file: File) => Promise<UploadResult>;
-  }>(),
-  {
-    accept: 'image/*',
-    maxSizeMb: 5,
-    disabled: false,
-  },
-);
-
+const props = withDefaults(defineProps<{
+  accept?: string;
+  maxSizeMb?: number;
+  disabled?: boolean;
+  contextKey?: string | number;
+  validateEvent?: boolean;
+  uploadRequest?: UploadRequest;
+}>(), { accept: 'image/*', maxSizeMb: 5, disabled: false, validateEvent: true });
 const model = defineModel<string | null>({ default: '' });
-const fileName = ref('图片');
-const error = ref('');
-const uploading = ref(false);
-
 const emit = defineEmits<{
   change: [value: string | null, file?: UploadFile];
   remove: [];
+  'uploading-change': [value: boolean];
+  progress: [percentage: number];
+  'status-change': [status: UploadStatus];
+  error: [error: Error];
 }>();
-
-const fileList = computed<UploadUserFile[]>(() =>
-  model.value ? [{ name: fileName.value || '图片', url: model.value }] : [],
-);
-
-async function handleChange(file: UploadFile) {
-  error.value = '';
-  if (!file.raw) return;
-  if (props.maxSizeMb && file.raw.size > props.maxSizeMb * 1024 * 1024) {
-    error.value = `图片不能超过 ${props.maxSizeMb}MB`;
-    return;
-  }
-  uploading.value = true;
-  try {
-    const result = await (props.uploadRequest ?? uploadFile)(file.raw);
-    fileName.value = result.originalName || file.name;
+const {
+  uploading, disabled, status, progress, error, pickerKey, canRetry,
+  handleChange, handleExceed, reset, abort, retry, remove, validate,
+} = useSingleUpload(props, model, {
+  image: true,
+  events: {
+    uploading: (value) => emit('uploading-change', value),
+    progress: (value) => emit('progress', value),
+    status: (value) => emit('status-change', value),
+    error: (value) => emit('error', value),
+  },
+  commit: (result, file) => {
     model.value = result.url;
     emit('change', result.url, file);
-  } finally {
-    uploading.value = false;
-  }
-}
-
+  },
+});
 function handleRemove() {
-  model.value = '';
-  fileName.value = '图片';
-  error.value = '';
-  emit('remove');
-  emit('change', '');
+  remove(() => {
+    model.value = '';
+    emit('remove');
+    emit('change', '');
+  });
 }
-
+defineExpose({ uploading, status, progress, error, validate, reset, abort, retry });
 </script>
 
 <template>
-  <div class="upload-image">
+  <div class="upload-image" :class="$attrs.class" :style="$attrs.style">
+    <!-- Keep previews separate: el-upload must not revoke Blob URLs owned by a business page. -->
+    <div v-if="model" class="upload-image__preview el-upload-list__item">
+      <el-image :src="model" fit="cover" :preview-src-list="[model]" preview-teleported>
+        <template #error><span class="upload-image__unavailable">图片无法显示</span></template>
+      </el-image>
+      <Button v-if="!disabled" class="upload-image__remove" size="small" :confirm="false" aria-label="移除图片" @click="handleRemove">移除</Button>
+    </div>
     <el-upload
+      v-else
+      :key="pickerKey"
       v-bind="$attrs"
       list-type="picture-card"
       :auto-upload="false"
       :limit="1"
-      :file-list="fileList"
+      :multiple="false"
+      :show-file-list="false"
       :accept="props.accept"
-      :disabled="props.disabled || uploading"
+      :disabled="disabled || uploading"
       :on-change="handleChange"
-      :on-remove="handleRemove"
+      :on-exceed="handleExceed"
     >
       <el-icon><UploadFilled /></el-icon>
     </el-upload>
-    <div v-if="error" class="upload-image__error">{{ error }}</div>
+    <div v-if="uploading" class="upload-image__state" role="status">
+      <span>{{ status === 'validating' ? '正在检查图片' : '上传中 ' + progress + '%' }}</span>
+      <Button link type="info" :confirm="false" @click="abort">取消</Button>
+      <el-progress v-if="status === 'uploading'" :percentage="progress" :show-text="false" />
+    </div>
+    <div v-if="error" class="upload-image__error" role="alert">
+      <span>{{ error }}</span>
+      <Button v-if="canRetry" link type="primary" :disabled="disabled" @click="retry">重试</Button>
+      <Button link type="info" :disabled="disabled" :confirm="false" @click="reset">清除</Button>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.upload-image__error {
-  margin-top: 4px;
-  color: #f56c6c;
-  font-size: 12px;
-  line-height: 1.2;
+.upload-image__preview {
+  position: relative;
+  width: 148px;
+  height: 148px;
+  overflow: hidden;
+  border: 1px solid var(--el-border-color);
+  border-radius: 6px;
 }
+.upload-image__preview .el-image { width: 100%; height: 100%; }
+.upload-image__remove { position: absolute; bottom: 4px; right: 4px; }
+.upload-image__unavailable { display: grid; place-items: center; height: 100%; font-size: 12px; color: var(--el-text-color-secondary); }
+.upload-image__state { margin-top: 6px; max-width: 320px; font-size: 12px; color: var(--el-text-color-secondary); }
+.upload-image__error { margin-top: 4px; color: var(--el-color-danger); font-size: 12px; line-height: 1.5; }
 </style>

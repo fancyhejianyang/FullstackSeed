@@ -10,13 +10,14 @@
  * - 暴露 `validate()` / `resetFields()`，页面提交和重置时可直接调用
  * - 复杂字段可设置 `slot: true` 并使用 `#field-字段名` 自定义渲染
  */
-import { ref, computed, unref, type Ref } from 'vue';
+import { ref, computed, provide, shallowReactive, unref, type Ref } from 'vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import Input, { type InputMode } from './Input.vue';
 import Select, { type SelectOption } from './Select.vue';
 import SelectMultiple from './SelectMultiple.vue';
 import { FORM_COMPONENT_MAP, getFormComponent } from './componentRegistry';
 import type { ComponentName } from './Component';
+import { UPLOAD_FORM_KEY, type UploadFormControl } from './uploadForm';
 type DicValue = string | number | boolean | null;
 type FormOption = {
   label?: string;
@@ -79,6 +80,20 @@ defineEmits<{
 const formRef = ref<FormInstance>();
 type NumberInputRef = { validate: () => true | string };
 const numberInputs = new Map<string, NumberInputRef>();
+const uploadControls = shallowReactive(new Set<UploadFormControl>());
+provide(UPLOAD_FORM_KEY, {
+  register(control) {
+    uploadControls.add(control);
+    return () => uploadControls.delete(control);
+  },
+});
+const uploading = computed(() =>
+  [...uploadControls].some((control) => control.uploading.value),
+);
+
+function resetUploads() {
+  uploadControls.forEach((control) => control.reset());
+}
 
 function setNumberInputRef(prop: string, instance: unknown) {
   if (
@@ -114,19 +129,32 @@ async function validate() {
       invalidFields[field.prop] = [{ field: field.prop, message: result }];
     }
   }
+  const collectUploadErrors = () => {
+    for (const [index, control] of [...uploadControls].entries()) {
+      const result = control.validate();
+      if (typeof result !== 'string') continue;
+      const prop = control.prop || `upload-${index}`;
+      invalidFields[prop] = [{ field: prop, message: result }];
+    }
+  };
+  collectUploadErrors();
   let valid: boolean | undefined;
   try {
     valid = await formRef.value?.validate();
   } catch (fields) {
+    collectUploadErrors();
     // 保留 Element Plus 原有字段错误，同时附上组件范围错误。
     if (fields && typeof fields === 'object' && !(fields instanceof Error))
       throw { ...fields, ...invalidFields };
     throw fields;
   }
+  // 字段规则可能异步执行，返回前再次检查期间新开始的上传。
+  collectUploadErrors();
   if (Object.keys(invalidFields).length) throw invalidFields;
   return valid;
 }
 function resetFields() {
+  resetUploads();
   formRef.value?.resetFields();
 }
 
@@ -185,7 +213,7 @@ function setSelectMultipleModel(field: ResolvedFormField, value: string[]) {
   model.value[field.prop] = value.map(String);
 }
 
-defineExpose({ validate, resetFields });
+defineExpose({ validate, resetFields, resetUploads, uploading });
 </script>
 
 <template>
