@@ -1,5 +1,13 @@
 # CHANGELOG
 
+### 2026-10-29 准备输入框组件设计与讲解视频方案
+
+- 基于现有 Input、InputNumber、InputAmount、InputEmail、InputPhone、inputRules 与 Form 源码，准备约 6 分钟的视频选题、组件职责与数据流、逐段口播、分镜、教学代码及演示清单，覆盖编辑缓冲、金额/百分比换算、邮箱组合输入和 rules 传入。
+- 区分组件同步校验函数与 Element Plus FormRules，明确传入 rules 整组覆盖默认规则、空数组覆盖及 rulesEnabled 关闭本地规则的实际语义；提供公司邮箱规则组合与表单 validator 适配示例。说明 rules 的属性传递不等于 Vue provide/inject。
+- 如实记录当前边界：InputAmount 对完整数值仍 round + clamp，而 InputNumber 范围仅校验；Form 只额外收集动态 InputNumber 的组件规则，其它组件与插槽需单独衔接。未把金额精度、异步校验或所有组件统一提交校验表述为已有能力。讲解仅进入筹备文档，不向业务界面添加说明文案，不修改现有组件或接口。
+- 新增文件：`MD/输入框组件设计与视频讲解方案.md`。修改文件：`CHANGELOG.md`。删除文件：无。保留用户原有 `web/auto-imports.d.ts`、`web/src/api/hotTopic.ts` 修改，不纳入提交。
+- 验证：源码与组件契约交叉核对；检查文档本地链接、代码围栏、Vue/TypeScript 教学片段语法及 diff。未执行行为测试、build、启动或重启服务；本次交付视频前期材料，尚未录屏、配音或导出 MP4，实际交互录制前须按演示清单确认。
+
 ### 2026-10-29 明确前端页面说明文案的展示边界
 
 - 核对页面源码及 Form 的 hint 渲染，确认 Agent 配置、AI 功能配置及角色编辑等位置存在功能说明或实现细节直接展示的情况，如进程内状态、固定 JSON 返回、不调用 Agent、角色树合并逻辑等；本次为针对性源码核对，不是全站文案审计或浏览器验收。
