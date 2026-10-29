@@ -94,10 +94,13 @@
 
 ### `defineExpose`（供页面 ref 调用）
 
-- `refresh()`：刷新表格
-- `search()`：走一遍搜索
+- `refresh()`：使用已提交的搜索条件刷新当前页；未点击查询的输入不参与刷新
+- `search()`：提交搜索条件并回到第 1 页；重置和切换每页数量同样回到第 1 页
 - `runBatchDelete()`：程序化触发批量删除（等价于点批量删除按钮）
 - `getSelectedRows()` / `clearSelection()` / `canBatchDelete`
+
+- 请求结果按发起代次更新，旧请求与卸载后的结果不再覆盖数据或结束当前 loading。
+- 删除从确认开始防止重复触发；批量操作在确认前同时固定 `rows/ids`，期间刷新或改变勾选不改变本次对象。删除已成功但列表刷新失败时，反馈刷新失败，不将删除误报为失败。
 
 ### 权限动作映射
 
@@ -137,19 +140,20 @@
 - Emits：`@enter`（回车触发，用于搜索栏）
 - 插槽：`#field-<prop>` 自定义某个字段渲染
 - 动态 `InputNumber` 字段的 v-model 必须是 `number | null`；空值统一写 `null`，禁止用空字符串 `''`，否则会触发 Vue prop 类型警告。对应 API 表单类型也应保持同一契约，让 TypeScript 在编译期拦截错误赋值。
-- `Form.validate()` 同时检查当前动态 `InputNumber` 的组件校验和原有 Element Plus 字段规则；越界等错误会拒绝提交，不会自动改成边界值。自定义插槽仍由页面规则或组件 ref 校验，不自动扫描插槽内部。
+- `InputNumber/InputAmount/InputEmail/InputPhone` 通过 `useFormControl` 向最近的 Form 登记内置校验；动态字段和字段插槽均生效，卸载自动注销。`Form.validate()` 汇总组件错误与 Element Plus 字段规则，异步规则完成后再次核对当前控件状态；不通过组件名称分支或扫描插槽猜测校验能力。自定义业务组件可复用该登记契约，未登记的控件仍使用字段规则或自行检查。
 - `UploadFile` / `UploadImage` 通过注入向最近的 `Form` 登记，动态字段和插槽内使用均参与 `validate()`：校验中、上传中或未清除的上传错误会阻止提交。`Form.uploading` 汇总当前上传状态，`resetUploads()` 取消待处理上传并清除临时状态，`resetFields()` 也会调用它；不改变父页面保存的 URL。组件在 Form 外使用时，页面需检查组件 `validate()` 或上传状态。
 - 两列表单的同排字段统一顶部对齐；某个字段带 `hint` 或产生多行辅助内容时，只增加当前栅格行高度，不得把同排无提示字段垂直居中或下移。业务页面禁止通过空提示文案、空白字符或局部 margin 人工占位。
 
 ### `defineExpose`
 
-- `validate()` / `resetFields()` / `resetUploads()` / `uploading`
+- `validate()` / `resetFields()` / `clearValidate(props?)` / `resetUploads()` / `uploading`
+- `clearValidate()` 清除字段规则及已登记输入的错误，不改变数据；`resetFields()` 复位字段数据、编辑缓冲和错误，并取消待处理上传。
 
 ### `FormField.type`
 
 - `input` / `textarea` / `select` / `selectMultiple`
 - `select` 默认使用项目封装 `Select`；`selectMultiple` 默认使用项目封装 `SelectMultiple`
-- 更复杂的封装组件建议通过 `component: ComponentName` 使用，动态组件 props 支持 `ref/computed` 自动解包
+- 更复杂的封装组件建议通过 `component: ComponentName` 使用，动态组件 props 支持逐项 `ref/computed` 自动解包。`FormField` 按 `component/type` 限定 `componentProps`，例如单选不能配置 `maxSelections`、文本输入不能配置 `precision`；模型和事件由 Form 管理。`ComponentPropsMap` 从实际组件 props 派生，新增组件仍需登记 `componentRegistry.ts` 白名单。
 - `hint` 同样支持 `ref/computed` 自动解包；配置页的阈值、权重、时长等字段应优先用它说明当前值的实际含义与取舍
 
 ---
@@ -161,18 +165,30 @@
 - 输入中的 `-`、`.`、`-.`、尾随小数点及小数零由内部草稿保留，数值同步不覆盖草稿；父表单赋入不同值时正常回显。
 - change/blur、显式 `validate()` 和 Enter 时执行校验，越界显示原有错误提示，保留输入值；校验失败不发出 `enter`。重新输入时清除旧提示。
 - `required` 默认关闭；`rulesEnabled=false` 关闭内置校验，`rules` 可覆盖默认 required/range 规则。
-- 暴露 `validate(): true | string`；Form 动态数字字段自动参与提交校验，单独使用或放在插槽内时由调用方检查返回值。
+- 暴露 `validate(): true | string`；Form 内动态字段与字段插槽自动参与提交校验，Form 外使用时由调用方检查返回值。
+
+## InputAmount / InputEmail / InputPhone
+
+- 内置规则沿用 `required/rulesEnabled/rules`；`rules` 覆盖默认规则，Form 内自动登记参与提交校验。
+- `InputAmount` 对外始终保存金额 `number | null`，百分比仅为编辑方式；按 `totalAmount` 转换一次。`min/max` 仅校验金额，不在输入、失焦时强制改成边界值，保留合法编辑缓冲并按精度处理。
+- 数字、金额、邮箱、手机组件的 `disabled` 与父 Form 的禁用状态合并；`readonly` 禁止用户修改。邮箱后缀选择、金额/百分比切换也遵守该状态，不只是主输入框禁用。
+
+## DatePicker / DateRange
+
+- 日期默认 `YYYY-MM-DD`；`datetime/datetimerange` 默认 `YYYY-MM-DD HH:mm:ss`，显示和绑定均保留时间。显式 `format/valueFormat` 分别覆盖默认值。
+- `DatePicker` 清空为 `null`；`DateRange` 的 v-model 和 change 事件清空均为 `[]`，保持 `string[]` 契约。
 
 ---
 
 ## Select / SelectMultiple
 
-- `Select` 单选组件默认在选择/清空后触发所属表单项的 `change` 校验，在输入框失焦时触发 `blur` 校验；校验等待父表单更新完成，遵循字段规则的 `trigger`。可通过 `validateEvent=false` 关闭自动校验，提交校验仍由 Form 执行。
+- `Select/SelectMultiple` 默认在选择、取消选择或清空后触发所属表单项的 `change` 校验，在输入框失焦时触发 `blur` 校验；校验等待父表单更新完成，遵循字段规则的 `trigger`。可通过 `validateEvent=false` 关闭自动校验，提交校验仍由 Form 执行。
 
 **契约**：下拉组件不内置接口查询，只接收 `options: { value: string; text: string }[]`。业务字段建议使用稳定编码，不建议直接用数字 ID；组件会把传入值统一按字符串处理。
 
 ### 共同能力
 
+- `disabled` 与父 Form 禁用状态合并，`readonly` 禁止修改；展开、选择、清空、移除标签和键盘修改都检查该状态。已展开时切为禁用或只读会关闭菜单。
 - 搜索：内置防抖，默认 `250ms`
 - 大数据：默认开启虚拟滚动，`itemHeight` / `visibleCount` 可调
 - 键盘：支持上下选择，`Enter` 确认，`Esc` 关闭
@@ -260,12 +276,18 @@
 | `width` | `string \| number` | `'800px'` | 宽度 |
 | `bodyMaxHeight` | `string` | `'70vh'` | 内容区最大高度（超出滚动，`''` 不限制） |
 | `confirmLoading` | `boolean` | `false` | 确定按钮 loading |
+| `lockOnConfirm` | `boolean` | `false` | 开启后，`confirmLoading` 期间阻止用户关闭；后台任务弹窗可保持默认 |
+| `closeGuard` | `(reason: 'cancel' \| 'dismiss') => boolean \| Promise<boolean>` | — | 内置取消按钮和关闭图标 / Esc / 遮罩共用守卫，返回 false 保持打开 |
+| `beforeClose` | `(done: (cancel?: boolean) => void) => void \| Promise<void>` | — | 兼容原有回调；`done()` 关闭，`done(true)` 拒绝；新代码优先使用 `closeGuard` |
 | `confirmText` / `cancelText` | `string` | `'确定' / '取消'` | 按钮文案 |
 | `showFooter` | `boolean` | `true` | 是否显示默认底部按钮；`false` 时用 `#footer` 插槽自定义 |
 
 - v-model：控制显隐
-- Emits：`@confirm` / `@cancel`
-- 插槽：默认 slot（内容）、`#footer`（自定义底部）
+- Emits：`@confirm` / `@cancel`（内置用户关闭通过后）/ `@close-error`（守卫抛错，弹窗保持打开）
+- 暴露：`requestClose(reason?)` / `closePending` / `closeLocked`。
+- 插槽：默认 slot（内容）、`#footer="{ close, closing, locked }"`（自定义底部可调用 `close()` 复用关闭守卫）。
+- `closeGuard` 或返回 Promise 的 `beforeClose` 在等待期间防止重复关闭；关闭、重开或卸载后屏蔽旧守卫结果。旧式 void 函数的延迟 `done` 仍兼容并受版本保护，但无法从其返回值判断等待期；异步确认应返回 Promise 或使用 `closeGuard`。
+- 父页面主动设置 v-model 为 false 仍可关闭，适用于保存成功后的程序关闭；守卫只约束用户关闭入口，不接管旧回调直接修改外部状态的副作用。
 
 ---
 

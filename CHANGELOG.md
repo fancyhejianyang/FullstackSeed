@@ -1,5 +1,16 @@
 # CHANGELOG
 
+### 2026-10-29 统一表单校验与公共组件交互契约
+
+- 按组件审查顺序完善 Form、Table、金额与组合输入、单/多选、Dialog、日期选择和动态字段类型；按用户要求不修改 Button、AiWorkflowEditor。仅涉及管理后台，后端接口、字段和数据库保持不变。
+- Form 用实际挂载控件登记替代 InputNumber 名称分支，汇总数字、金额、邮箱、手机与上传控件的错误，支持字段插槽、卸载注销、清错与重置；异步字段规则结束后重新采集组件状态，保留原有上传取消/阻止提交能力。金额 min/max 改为范围校验，不强制改写输入值；组合控件及选择组件统一继承父 Form 禁用状态并支持只读。
+- Table 只允许最新请求更新数据与 loading；搜索、重置和调整每页数量回到首页，刷新保留已提交条件。删除从确认开始防重入，批量删除固定本次 rows/ids；删除成功后的刷新失败单独反馈。Dialog 内置关闭入口统一走可选守卫，支持异步判断、提交关闭锁和会话失效保护，保留旧 beforeClose 与自定义 footer 用法。
+- 多选补齐 change/blur 表单校验和 validateEvent；日期时间默认保留时分秒，日期区间清空时 v-model 与 change 统一为空数组。动态 FormField 按 component/type 限定 props，注册类型从实际组件声明派生，保留 ref/computed 和合理的原生属性透传；同步清理一个无效 step 配置和首页字段配置的联合类型写法。
+- 数字、金额、邮箱、手机及多选的事件使用本次计算的新值，避免受控 v-model 尚未回写时发出旧值；金额换算、编辑缓冲和本地校验也使用本次值。补充共享测试装载器、输入/表单/列表/弹窗/日期行为规格与编译期正反类型用例，迁移既有数字与选择组件规格。
+- 新增文件（7）：`web/src/components/formControl.ts`、`web/src/components/formTypes.ts`、`web/src/components/formTypes.typecheck.ts`、`web/src/components/inputFormTestHarness.mjs`、`web/src/components/formInputs.test.mjs`、`web/src/components/datePicker.test.mjs`、`web/src/components/tableDialog.test.mjs`。
+- 修改文件（18）：`web/src/components/Form.vue`、`web/src/components/Table.vue`、`web/src/components/InputNumber.vue`、`web/src/components/InputAmount.vue`、`web/src/components/InputEmail.vue`、`web/src/components/InputPhone.vue`、`web/src/components/Select.vue`、`web/src/components/SelectMultiple.vue`、`web/src/components/Dialog.vue`、`web/src/components/DatePicker.vue`、`web/src/components/DateRange.vue`、`web/src/components/Component.d.ts`、`web/src/components/inputNumber.test.mjs`、`web/src/components/selectDropdown.test.mjs`、`web/src/views/ai-feature-config/Edit.vue`、`web/src/views/dashboard-config/Edit.vue`、`AGENTS-COMPONENTS.md`、本文件。删除文件：无。
+- 验证：前端实际应用源码 `vue-tsc --noEmit -p tsconfig.app.json --composite false --incremental false`（含字段类型正反规格）、6 个相关 `.mjs` 语法检查及差异检查通过。按组件修复约定未执行运行时测试、build、服务启动/重启或浏览器交互验收；测试文件已更新，不将语法检查称为行为测试通过。提交仅包含本次 25 个文件及本条快照，保留原有业务、生成声明、Git 忽略规则和本地视频记录的未提交内容。
+
 ### 2026-10-29 完善文件与图片上传组件及附件回收
 
 - `UploadFile`、`UploadImage` 共用单文件上传状态管理：选择/拖拽均校验大小、空文件和类型，图片另校验实际可解码；失败或超限后清理隐藏队列，可重新选择，传输失败可重试。增加进度、取消、错误反馈和独立 120 秒上传超时；文本先读取成功再上传并同步写回 URL/文件名/内容，避免部分提交。

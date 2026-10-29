@@ -7,6 +7,8 @@
  * - v-model 固定为 string[]，clear/change 空值时回落为空数组
  * - attrs 透传给 el-date-picker，宽度默认撑满父级表单空间
  */
+import { computed } from 'vue';
+
 defineOptions({ inheritAttrs: false });
 
 const props = withDefaults(
@@ -26,13 +28,28 @@ const props = withDefaults(
     endPlaceholder: '结束日期',
     rangeSeparator: '至',
     clearable: true,
-    format: 'YYYY-MM-DD',
-    valueFormat: 'YYYY-MM-DD',
     disabled: false,
   },
 );
 
 const model = defineModel<string[]>({ default: () => [] });
+const defaultFormat = computed(() =>
+  props.type === 'datetimerange' ? 'YYYY-MM-DD HH:mm:ss' : 'YYYY-MM-DD',
+);
+const displayFormat = computed(() => props.format ?? defaultFormat.value);
+const modelFormat = computed(() => props.valueFormat ?? defaultFormat.value);
+
+function normalizeRange(value: string[] | null | undefined): string[] {
+  return Array.isArray(value) ? value : [];
+}
+
+const pickerValue = computed({
+  get: () => normalizeRange(model.value),
+  set: (value: string[] | null | undefined) => {
+    // Element Plus 清空时返回 null；绑定值与 change 事件保持同一数组契约。
+    model.value = normalizeRange(value);
+  },
+});
 
 defineEmits<{
   change: [value: string[]];
@@ -45,17 +62,17 @@ defineEmits<{
 <template>
   <el-date-picker
     v-bind="$attrs"
-    v-model="model"
+    v-model="pickerValue"
     class="date-range"
     :type="props.type"
     :start-placeholder="props.startPlaceholder"
     :end-placeholder="props.endPlaceholder"
     :range-separator="props.rangeSeparator"
     :clearable="props.clearable"
-    :format="props.format"
-    :value-format="props.valueFormat"
+    :format="displayFormat"
+    :value-format="modelFormat"
     :disabled="props.disabled"
-    @change="$emit('change', $event || [])"
+    @change="$emit('change', normalizeRange($event))"
     @clear="$emit('clear')"
     @focus="$emit('focus', $event)"
     @blur="$emit('blur', $event)"

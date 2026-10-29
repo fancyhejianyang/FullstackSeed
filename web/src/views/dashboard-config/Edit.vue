@@ -53,7 +53,9 @@ const fields = computed<FormField[]>(() => [
         : p.type === 'boolean'
           ? { component: 'Switch' }
           : {
-              type: p.type === 'multiSelect' ? 'selectMultiple' : 'select',
+              ...(p.type === 'multiSelect'
+                ? { type: 'selectMultiple' as const }
+                : { type: 'select' as const }),
               options: p.options,
               componentProps: { clearable: false, filterable: false },
             }),

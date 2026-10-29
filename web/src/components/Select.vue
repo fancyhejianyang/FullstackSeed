@@ -36,6 +36,7 @@ const props = withDefaults(
     options?: SelectOption[];
     placeholder?: string;
     disabled?: boolean;
+    readonly?: boolean;
     clearable?: boolean;
     filterable?: boolean;
     debounce?: number;
@@ -49,6 +50,7 @@ const props = withDefaults(
     options: () => [],
     placeholder: '请选择',
     disabled: false,
+    readonly: false,
     clearable: true,
     filterable: true,
     debounce: 250,
@@ -61,7 +63,11 @@ const props = withDefaults(
 );
 
 const model = defineModel<string | null>({ default: '' });
-const { formItem } = useFormItem();
+const { form, formItem } = useFormItem();
+const effectiveDisabled = computed(
+  () => props.disabled || Boolean(form?.disabled),
+);
+const locked = computed(() => effectiveDisabled.value || props.readonly);
 
 async function validateField(trigger: 'change' | 'blur') {
   if (!props.validateEvent || !formItem) return;
@@ -184,7 +190,9 @@ watch(
 
 watch(searchInput, (value) => {
   window.clearTimeout(searchTimer);
+  if (!opened.value || locked.value) return;
   searchTimer = window.setTimeout(() => {
+    if (!opened.value || locked.value) return;
     // 搜索只影响内部过滤和 search 事件，不触发任何内置远程请求。
     keyword.value = value;
     highlightedIndex.value = getInitialHighlightIndex();
@@ -207,7 +215,7 @@ watch(filteredOptions, () => {
 });
 
 function open() {
-  if (props.disabled) return;
+  if (locked.value) return;
   opened.value = true;
   searchInput.value = '';
   keyword.value = '';
@@ -217,6 +225,7 @@ function open() {
 }
 
 function close() {
+  window.clearTimeout(searchTimer);
   opened.value = false;
   searchInput.value = '';
   keyword.value = '';
@@ -225,7 +234,7 @@ function close() {
 
 async function focusInput() {
   await nextTick();
-  inputRef.value?.focus();
+  if (opened.value && !locked.value) inputRef.value?.focus();
 }
 
 function toggleOpen() {
@@ -237,7 +246,7 @@ function toggleOpen() {
 }
 
 function selectOption(option: SelectOption) {
-  if (option.disabled) return;
+  if (locked.value || option.disabled) return;
   model.value = option.value;
   emit('change', option.value);
   void validateField('change');
@@ -246,6 +255,7 @@ function selectOption(option: SelectOption) {
 
 function clearValue(event: MouseEvent) {
   event.stopPropagation();
+  if (locked.value) return;
   model.value = '';
   emit('clear');
   emit('change', '');
@@ -259,13 +269,13 @@ function handleBlur() {
 }
 
 function handleInput(value: Event) {
-  if (!props.filterable) return;
+  if (locked.value || !props.filterable) return;
   searchInput.value = (value.target as HTMLInputElement).value;
   if (!opened.value) open();
 }
 
 function handleKeydown(event: KeyboardEvent) {
-  if (props.disabled) return;
+  if (locked.value) return;
   if (!opened.value && ['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) {
     event.preventDefault();
     open();
@@ -340,10 +350,11 @@ function handleDocumentClick(event: MouseEvent) {
 }
 
 watch(
-  () => props.disabled,
-  (disabled) => {
-    if (disabled) close();
+  locked,
+  (value) => {
+    if (value) close();
   },
+  { flush: 'sync' },
 );
 
 onMounted(() => {
@@ -368,7 +379,7 @@ watch(opened, async (value) => {
   <div
     ref="rootRef"
     class="select"
-    :class="{ 'is-opened': opened, 'is-disabled': props.disabled }"
+    :class="{ 'is-opened': opened, 'is-disabled': effectiveDisabled }"
     v-bind="$attrs"
   >
     <div class="select__control" @mousedown.prevent="toggleOpen">
@@ -376,8 +387,9 @@ watch(opened, async (value) => {
         ref="inputRef"
         class="select__input"
         :value="displayValue"
-        :readonly="!opened || !props.filterable"
-        :disabled="props.disabled"
+        :readonly="props.readonly || !opened || !props.filterable"
+        :disabled="effectiveDisabled"
+        :aria-readonly="props.readonly"
         :placeholder="selectedText ? '' : props.placeholder"
         :title="selectedText"
         @input="handleInput"
@@ -385,7 +397,7 @@ watch(opened, async (value) => {
         @keydown="handleKeydown"
       />
       <button
-        v-if="props.clearable && normalizedValue && !props.disabled"
+        v-if="props.clearable && normalizedValue && !locked"
         class="select__clear"
         type="button"
         @mousedown.stop.prevent

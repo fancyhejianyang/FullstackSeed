@@ -8,13 +8,15 @@
  * - 内置邮箱格式校验，可通过 `rulesEnabled=false` 关闭，或通过 `rules` 覆盖
  * - 宽度默认撑满父级，后缀区保持固定宽度，避免表单布局抖动
  */
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import {
   emailRule,
   requiredRule,
   runInputRules,
   type InputValidator,
 } from './inputRules';
+
+import { useFormControl } from './formControl';
 
 defineOptions({ inheritAttrs: false });
 
@@ -24,6 +26,8 @@ const props = withDefaults(
     domainPlaceholder?: string;
     domains?: string[];
     clearable?: boolean;
+    disabled?: boolean;
+    readonly?: boolean;
     required?: boolean;
     rulesEnabled?: boolean;
     rules?: InputValidator<string | null>[];
@@ -42,6 +46,8 @@ const props = withDefaults(
       'icloud.com',
     ],
     clearable: true,
+    disabled: false,
+    readonly: false,
     required: false,
     rulesEnabled: true,
   },
@@ -104,18 +110,21 @@ function composeValue() {
 }
 
 function updateModel(shouldValidate = false) {
+  if (blocked.value) return;
   const next = composeValue();
   syncing = true;
   model.value = next;
   syncing = false;
   emit('input', next);
   if (shouldValidate) {
-    validate();
-    emit('change', model.value);
+    validate(next);
+    emit('change', next);
   }
 }
 
 function handleAccountInput(value: string | number) {
+  if (blocked.value) return;
+  error.value = '';
   const next = normalize(value);
   const atIndex = next.indexOf('@');
   if (atIndex >= 0) {
@@ -128,24 +137,31 @@ function handleAccountInput(value: string | number) {
 }
 
 function handleAccountChange(value: string | number) {
+  if (blocked.value) return;
   handleAccountInput(value);
   updateModel(true);
 }
 
 function handleDomainChange(value: string | number) {
+  if (blocked.value) return;
   domain.value = normalize(value).replace(/^@+/, '');
   updateModel(true);
 }
 
 function handleBlur(event: FocusEvent) {
+  if (blocked.value) {
+    emit('blur', event);
+    return;
+  }
   account.value = normalize(account.value);
   domain.value = normalize(domain.value).replace(/^@+/, '');
   updateModel();
-  validate();
+  validate(composeValue());
   emit('blur', event);
 }
 
 function handleClear() {
+  if (blocked.value) return;
   account.value = '';
   domain.value = '';
   model.value = '';
@@ -163,14 +179,27 @@ function getRules() {
   ];
 }
 
-function validate() {
-  const result = runInputRules(model.value, getRules());
+function validate(value = model.value) {
+  const result = runInputRules(value, getRules());
   error.value = result === true ? '' : result;
   emit('validate', result);
   return result;
 }
 
-defineExpose({ validate });
+function clearValidate() {
+  error.value = '';
+}
+
+function reset() {
+  syncPartsFromModel(model.value);
+  clearValidate();
+}
+
+const { form } = useFormControl({ validate, clearValidate, reset });
+const effectiveDisabled = computed(() => props.disabled || !!form?.disabled);
+const blocked = computed(() => effectiveDisabled.value || props.readonly);
+
+defineExpose({ validate, clearValidate, reset });
 </script>
 
 <template>
@@ -178,6 +207,8 @@ defineExpose({ validate });
     <div class="input-email__group">
       <el-input
         v-bind="$attrs"
+        :disabled="effectiveDisabled"
+        :readonly="props.readonly"
         class="input-email__account"
         :model-value="account"
         :placeholder="props.placeholder"
@@ -194,7 +225,8 @@ defineExpose({ validate });
       <span class="input-email__at">@</span>
       <el-select
         class="input-email__domain"
-        v-model="domain"
+        :model-value="domain"
+        :disabled="blocked"
         filterable
         allow-create
         default-first-option

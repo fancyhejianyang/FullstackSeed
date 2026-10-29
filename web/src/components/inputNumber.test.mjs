@@ -1,44 +1,10 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
-import ts from 'typescript';
 import * as vue from 'vue';
+import { loadSetup, harness, uploadFormKey } from './inputFormTestHarness.mjs';
 
 // 使用真实组件脚本与 Vue 响应式，覆盖 v-model 返回值后的输入缓冲行为。
 // 不依赖 DOM，不把这些用例当作浏览器输入/光标测试。
-function transpile(source) {
-  return ts.transpileModule(source, {
-    compilerOptions: {
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2022,
-    },
-  }).outputText;
-}
-
-const inputRules = {};
-new Function(
-  'exports',
-  transpile(
-    await readFile(new URL('./inputRules.ts', import.meta.url), 'utf8'),
-  ),
-)(inputRules);
-
-async function loadSetup(file, exported) {
-  const sfc = await readFile(new URL(file, import.meta.url), 'utf8');
-  const source = sfc.match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1];
-  return new Function(
-    'require',
-    'exports',
-    'defineOptions',
-    'defineProps',
-    'withDefaults',
-    'defineModel',
-    'defineEmits',
-    'defineExpose',
-    transpile(`${source}\nexport { ${exported.join(', ')} };`),
-  );
-}
-
 const setupNumber = await loadSetup('./InputNumber.vue', [
   'inputBuffer',
   'error',
@@ -51,47 +17,9 @@ const setupNumber = await loadSetup('./InputNumber.vue', [
 ]);
 const setupForm = await loadSetup('./Form.vue', [
   'formRef',
-  'setNumberInputRef',
   'validate',
   'resetUploads',
 ]);
-const uploadFormKey = Symbol('upload-form');
-
-function harness(setup, options = {}, value = null) {
-  const props = vue.reactive({ ...options });
-  const model = vue.ref(value);
-  const events = [];
-  const provided = new Map();
-  const exports = {};
-  const scope = vue.effectScope();
-  scope.run(() =>
-    setup(
-      (name) => {
-        if (name === 'vue') return { ...vue, provide: (key, value) => provided.set(key, value) };
-        if (name === './inputRules') return inputRules;
-        if (name === './uploadForm') return { UPLOAD_FORM_KEY: uploadFormKey };
-        if (name === './componentRegistry')
-          return { FORM_COMPONENT_MAP: {}, getFormComponent: () => null };
-        throw new Error(`Unexpected import: ${name}`);
-      },
-      exports,
-      () => {},
-      () => props,
-      (_props, defaults) => {
-        for (const [key, defaultValue] of Object.entries(defaults)) {
-          if (props[key] === undefined) props[key] = defaultValue;
-        }
-        return props;
-      },
-      () => model,
-      () =>
-        (...args) =>
-          events.push(args),
-      () => {},
-    ),
-  );
-  return { props, model, events, provided, ...exports, stop: () => scope.stop() };
-}
 
 test('Form blocks pending and failed slot uploads, and resets them with the form', async (t) => {
   const h = harness(setupForm, { fields: [] }, {});
@@ -226,7 +154,6 @@ test('external model updates, clearing, required and custom rule options still w
 });
 
 test('Form rejects invalid InputNumber values even without page-level range rules', async (t) => {
-  const number = harness(setupNumber, { mode: 'integer', min: 10, max: 300 });
   const form = harness(
     setupForm,
     {
@@ -234,6 +161,10 @@ test('Form rejects invalid InputNumber values even without page-level range rule
     },
     {},
   );
+  const number = harness(setupNumber, { mode: 'integer', min: 10, max: 300 }, null, {
+    provided: form.provided,
+    formItemProp: 'timeoutSeconds',
+  });
   t.after(number.stop);
   t.after(form.stop);
   let pageValidationCount = 0;
@@ -243,7 +174,6 @@ test('Form rejects invalid InputNumber values even without page-level range rule
       return true;
     },
   };
-  form.setNumberInputRef('timeoutSeconds', { validate: number.validate });
   number.handleInput('1');
   await vue.nextTick();
   await assert.rejects(form.validate(), (fields) => {
@@ -258,29 +188,16 @@ test('Form rejects invalid InputNumber values even without page-level range rule
   assert.equal(pageValidationCount, 2);
 });
 
-test('Form preserves page errors and excludes removed, unmounted and slot fields', async (t) => {
-  const field = { prop: 'count', component: 'InputNumber' };
-  const h = harness(setupForm, { fields: [field] }, {});
-  t.after(h.stop);
-  h.setNumberInputRef('count', { validate: () => '不能小于 10' });
-  h.formRef.value = {
-    validate: async () => {
-      throw { name: [{ message: '请输入名称' }] };
-    },
-  };
-  await assert.rejects(h.validate(), (fields) => {
-    assert.equal(fields.name[0].message, '请输入名称');
-    assert.equal(fields.count[0].message, '不能小于 10');
-    return true;
+test('Form validates mounted slot inputs and removes their errors after unmount', async (t) => {
+  const form = harness(setupForm, { fields: [{ prop: 'count', label: '数量', slot: true }] }, {});
+  t.after(form.stop);
+  const number = harness(setupNumber, { min: 10 }, 1, {
+    provided: form.provided,
+    formItemProp: 'count',
   });
-  h.formRef.value = { validate: async () => true };
-  h.props.fields = [];
-  assert.equal(await h.validate(), true);
-  h.props.fields = [{ ...field, slot: true }];
-  assert.equal(await h.validate(), true);
-  h.props.fields = [{ ...field, component: 'Input' }];
-  assert.equal(await h.validate(), true);
-  h.props.fields = [field];
-  h.setNumberInputRef('count', null);
-  assert.equal(await h.validate(), true);
+  t.after(number.stop);
+  form.formRef.value = { validate: async () => true };
+  await assert.rejects(form.validate(), (fields) => fields.count[0].message === '不能小于 10');
+  number.stop();
+  assert.equal(await form.validate(), true);
 });

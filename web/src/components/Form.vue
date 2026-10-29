@@ -10,46 +10,17 @@
  * - 暴露 `validate()` / `resetFields()`，页面提交和重置时可直接调用
  * - 复杂字段可设置 `slot: true` 并使用 `#field-字段名` 自定义渲染
  */
-import { ref, computed, provide, shallowReactive, unref, type Ref } from 'vue';
+import { ref, computed, provide, shallowReactive, unref, nextTick } from 'vue';
 import type { FormInstance, FormRules } from 'element-plus';
-import Input, { type InputMode } from './Input.vue';
+import Input from './Input.vue';
 import Select, { type SelectOption } from './Select.vue';
 import SelectMultiple from './SelectMultiple.vue';
 import { FORM_COMPONENT_MAP, getFormComponent } from './componentRegistry';
-import type { ComponentName } from './Component';
+import type { FormField, ResolvedFormField, FormOptionValue } from './formTypes';
+export type { FormField } from './formTypes';
+import { FORM_CONTROL_KEY, type FormControl } from './formControl';
 import { UPLOAD_FORM_KEY, type UploadFormControl } from './uploadForm';
-type DicValue = string | number | boolean | null;
-type FormOption = {
-  label?: string;
-  text?: string;
-  value: DicValue;
-  disabled?: boolean;
-};
-
-export interface FormField {
-  prop: string;
-  label: string;
-  type?: 'input' | 'textarea' | 'select' | 'selectMultiple';
-  component?: ComponentName;
-  componentProps?: Record<string, unknown>;
-  inputMode?: Extract<InputMode, 'text' | 'password' | 'search'>;
-  placeholder?: string;
-  options?: FormOption[] | Ref<FormOption[]>;
-  /** 字段下方的辅助说明；支持传入 ref/computed，适合显示随当前值变化的语义提示 */
-  hint?: string | Ref<string | undefined>;
-  rows?: number;
-  /** 两列表单中占用的列数；未填写时占一列 */
-  span?: 1 | 2;
-  /** 个别复杂字段可让标签显示在控件上方，其余字段保持表单默认布局 */
-  labelPosition?: 'top';
-  // 是否使用具名插槽 #field-[prop] 自定义渲染
-  slot?: boolean;
-}
-
-type ResolvedFormField = Omit<FormField, 'options' | 'hint'> & {
-  options?: FormOption[];
-  hint?: string;
-};
+type DicValue = FormOptionValue;
 
 const props = withDefaults(
   defineProps<{
@@ -78,8 +49,13 @@ defineEmits<{
 }>();
 
 const formRef = ref<FormInstance>();
-type NumberInputRef = { validate: () => true | string };
-const numberInputs = new Map<string, NumberInputRef>();
+const controls = shallowReactive(new Set<FormControl>());
+provide(FORM_CONTROL_KEY, {
+  register(control) {
+    controls.add(control);
+    return () => controls.delete(control);
+  },
+});
 const uploadControls = shallowReactive(new Set<UploadFormControl>());
 provide(UPLOAD_FORM_KEY, {
   register(control) {
@@ -95,19 +71,6 @@ function resetUploads() {
   uploadControls.forEach((control) => control.reset());
 }
 
-function setNumberInputRef(prop: string, instance: unknown) {
-  if (
-    instance &&
-    typeof instance === 'object' &&
-    'validate' in instance &&
-    typeof instance.validate === 'function'
-  ) {
-    numberInputs.set(prop, instance as NumberInputRef);
-  } else {
-    numberInputs.delete(prop);
-  }
-}
-
 /** 将 fields 中可能为 Ref 的 options / hint 统一解包 */
 const resolvedFields = computed<ResolvedFormField[]>(() =>
   props.fields.map((field) => ({
@@ -117,45 +80,51 @@ const resolvedFields = computed<ResolvedFormField[]>(() =>
   })),
 );
 
-async function validate() {
-  // InputNumber 不再强制截断 min/max；提交必须检查其内置/自定义规则。
-  // 仅处理当前实际渲染的数字字段，不改变其它组件或自定义插槽的校验契约。
-  const invalidFields: Record<string, { field: string; message: string }[]> =
-    {};
-  for (const field of resolvedFields.value) {
-    if (field.slot || field.component !== 'InputNumber') continue;
-    const result = numberInputs.get(field.prop)?.validate();
-    if (typeof result === 'string') {
-      invalidFields[field.prop] = [{ field: field.prop, message: result }];
-    }
+function collectControlErrors() {
+  const errors: Record<string, { field: string; message: string }[]> = {};
+  for (const [index, control] of [...controls, ...uploadControls].entries()) {
+    const result = control.validate();
+    if (typeof result !== 'string') continue;
+    const prop = control.prop || 'control-' + index;
+    (errors[prop] ??= []).push({ field: prop, message: result });
   }
-  const collectUploadErrors = () => {
-    for (const [index, control] of [...uploadControls].entries()) {
-      const result = control.validate();
-      if (typeof result !== 'string') continue;
-      const prop = control.prop || `upload-${index}`;
-      invalidFields[prop] = [{ field: prop, message: result }];
-    }
-  };
-  collectUploadErrors();
+  return errors;
+}
+
+async function validate() {
+  collectControlErrors();
   let valid: boolean | undefined;
+  let fieldErrors: Record<string, unknown[]> = {};
   try {
     valid = await formRef.value?.validate();
   } catch (fields) {
-    collectUploadErrors();
-    // 保留 Element Plus 原有字段错误，同时附上组件范围错误。
-    if (fields && typeof fields === 'object' && !(fields instanceof Error))
-      throw { ...fields, ...invalidFields };
-    throw fields;
+    if (!fields || typeof fields !== 'object' || fields instanceof Error) throw fields;
+    fieldErrors = fields as Record<string, unknown[]>;
   }
-  // 字段规则可能异步执行，返回前再次检查期间新开始的上传。
-  collectUploadErrors();
-  if (Object.keys(invalidFields).length) throw invalidFields;
+  // Asynchronous page rules may change mounted controls or start uploads.
+  // Recollect current errors instead of retaining errors from removed/fixed fields.
+  const errors: Record<string, unknown[]> = { ...fieldErrors };
+  for (const [prop, messages] of Object.entries(collectControlErrors())) {
+    errors[prop] = [...(errors[prop] ?? []), ...messages];
+  }
+  if (Object.keys(errors).length) throw errors;
   return valid;
 }
-function resetFields() {
+
+function clearValidate(props?: string | string[]) {
+  const names = props === undefined ? [] : Array.isArray(props) ? props : [props];
+  const selected = names.length ? new Set(names) : null;
+  controls.forEach((control) => {
+    if (!selected || selected.has(control.prop)) control.clearValidate();
+  });
+  formRef.value?.clearValidate(props);
+}
+
+async function resetFields() {
   resetUploads();
   formRef.value?.resetFields();
+  await nextTick();
+  controls.forEach((control) => control.reset());
 }
 
 function getDynamicComponent(field: FormField) {
@@ -213,7 +182,7 @@ function setSelectMultipleModel(field: ResolvedFormField, value: string[]) {
   model.value[field.prop] = value.map(String);
 }
 
-defineExpose({ validate, resetFields, resetUploads, uploading });
+defineExpose({ validate, clearValidate, resetFields, resetUploads, uploading });
 </script>
 
 <template>
@@ -241,11 +210,6 @@ defineExpose({ validate, resetFields, resetUploads, uploading });
       <component
         :is="getDynamicComponent(field)"
         v-else-if="field.component && field.component in FORM_COMPONENT_MAP"
-        :ref="
-          field.component === 'InputNumber'
-            ? (instance) => setNumberInputRef(field.prop, instance)
-            : undefined
-        "
         v-model="model[field.prop]"
         v-bind="getDynamicComponentProps(field)"
         :placeholder="field.placeholder"

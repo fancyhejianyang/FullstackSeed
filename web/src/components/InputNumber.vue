@@ -17,6 +17,8 @@ import {
   type InputValidator,
 } from './inputRules';
 
+import { useFormControl } from './formControl';
+
 defineOptions({ inheritAttrs: false });
 
 export type InputNumberMode = 'number' | 'integer' | 'money';
@@ -26,6 +28,8 @@ const props = withDefaults(
     mode?: InputNumberMode;
     placeholder?: string;
     clearable?: boolean;
+    disabled?: boolean;
+    readonly?: boolean;
     precision?: number;
     min?: number;
     max?: number;
@@ -39,6 +43,8 @@ const props = withDefaults(
     mode: 'number',
     placeholder: '',
     clearable: true,
+    disabled: false,
+    readonly: false,
     precision: 2,
     required: false,
     rulesEnabled: true,
@@ -75,28 +81,38 @@ watch(model, (value) => {
 });
 
 function handleInput(value: string | number) {
+  if (blocked.value) return;
   const normalized = normalizeInput(String(value));
   inputBuffer.value = normalized;
-  model.value = parseValue(normalized);
+  const next = parseValue(normalized);
+  model.value = next;
   error.value = '';
-  emit('input', model.value);
+  emit('input', next);
 }
 
 function handleChange(value: string | number) {
-  model.value = parseValue(String(value));
-  inputBuffer.value = formatInputBuffer(model.value);
-  validate();
-  emit('change', model.value);
+  if (blocked.value) return;
+  const next = parseValue(String(value));
+  model.value = next;
+  inputBuffer.value = formatInputBuffer(next);
+  validate(next);
+  emit('change', next);
 }
 
 function handleBlur(event: FocusEvent) {
-  model.value = parseValue(inputBuffer.value);
-  inputBuffer.value = formatInputBuffer(model.value);
-  validate();
+  if (blocked.value) {
+    emit('blur', event);
+    return;
+  }
+  const next = parseValue(inputBuffer.value);
+  model.value = next;
+  inputBuffer.value = formatInputBuffer(next);
+  validate(next);
   emit('blur', event);
 }
 
 function handleClear() {
+  if (blocked.value) return;
   model.value = null;
   inputBuffer.value = '';
   error.value = '';
@@ -104,6 +120,7 @@ function handleClear() {
 }
 
 function handleEnter() {
+  if (blocked.value) return;
   if (validate() === true) emit('enter', model.value);
 }
 
@@ -164,20 +181,35 @@ function getRules() {
   ];
 }
 
-function validate() {
-  const result = runInputRules(model.value, getRules());
+function validate(value = model.value) {
+  const result = runInputRules(value, getRules());
   error.value = result === true ? '' : result;
   emit('validate', result);
   return result;
 }
 
-defineExpose({ validate });
+function clearValidate() {
+  error.value = '';
+}
+
+function reset() {
+  inputBuffer.value = formatInputBuffer(model.value);
+  clearValidate();
+}
+
+const { form } = useFormControl({ validate, clearValidate, reset });
+const effectiveDisabled = computed(() => props.disabled || !!form?.disabled);
+const blocked = computed(() => effectiveDisabled.value || props.readonly);
+
+defineExpose({ validate, clearValidate, reset });
 </script>
 
 <template>
   <div class="input-number">
     <el-input
       v-bind="$attrs"
+      :disabled="effectiveDisabled"
+      :readonly="props.readonly"
       :model-value="displayValue"
       :placeholder="props.placeholder"
       :clearable="props.clearable"

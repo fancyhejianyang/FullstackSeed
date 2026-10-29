@@ -8,7 +8,7 @@
  * - 保留 el-input attrs 透传，适合在 Form 动态组件里直接撑满使用
  * - 暴露 `validate()`，方便提交前统一校验
  */
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import {
   phoneRule,
   requiredRule,
@@ -16,12 +16,16 @@ import {
   type InputValidator,
 } from './inputRules';
 
+import { useFormControl } from './formControl';
+
 defineOptions({ inheritAttrs: false });
 
 const props = withDefaults(
   defineProps<{
     placeholder?: string;
     clearable?: boolean;
+    disabled?: boolean;
+    readonly?: boolean;
     required?: boolean;
     rulesEnabled?: boolean;
     rules?: InputValidator<string | null>[];
@@ -29,6 +33,8 @@ const props = withDefaults(
   {
     placeholder: '请输入手机号',
     clearable: true,
+    disabled: false,
+    readonly: false,
     required: false,
     rulesEnabled: true,
   },
@@ -48,15 +54,19 @@ const emit = defineEmits<{
 }>();
 
 function handleInput(value: string | number) {
+  if (blocked.value) return;
+  error.value = '';
   const next = String(value).replace(/\D/g, '').slice(0, 11);
   model.value = next;
   emit('input', next);
 }
 
 function handleChange(value: string | number) {
-  model.value = String(value).replace(/\D/g, '').slice(0, 11);
-  validate();
-  emit('change', model.value);
+  if (blocked.value) return;
+  const next = String(value).replace(/\D/g, '').slice(0, 11);
+  model.value = next;
+  validate(next);
+  emit('change', next);
 }
 
 function handleBlur(event: FocusEvent) {
@@ -65,6 +75,7 @@ function handleBlur(event: FocusEvent) {
 }
 
 function handleClear() {
+  if (blocked.value) return;
   model.value = '';
   error.value = '';
   emit('clear');
@@ -79,20 +90,34 @@ function getRules() {
   ];
 }
 
-function validate() {
-  const result = runInputRules(model.value, getRules());
+function validate(value = model.value) {
+  const result = runInputRules(value, getRules());
   error.value = result === true ? '' : result;
   emit('validate', result);
   return result;
 }
 
-defineExpose({ validate });
+function clearValidate() {
+  error.value = '';
+}
+
+function reset() {
+  clearValidate();
+}
+
+const { form } = useFormControl({ validate, clearValidate, reset });
+const effectiveDisabled = computed(() => props.disabled || !!form?.disabled);
+const blocked = computed(() => effectiveDisabled.value || props.readonly);
+
+defineExpose({ validate, clearValidate, reset });
 </script>
 
 <template>
   <div class="input-phone">
     <el-input
       v-bind="$attrs"
+      :disabled="effectiveDisabled"
+      :readonly="props.readonly"
       :model-value="model"
       :placeholder="props.placeholder"
       :clearable="props.clearable"

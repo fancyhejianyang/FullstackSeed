@@ -129,6 +129,7 @@ function harness(
   kind = 'Select',
   options = {},
   value = kind === 'Select' ? '' : [],
+  deferredModelWrite = false,
 ) {
   const original = Object.fromEntries(
     ['window', 'document', 'Node', 'ResizeObserver', 'getComputedStyle'].map(
@@ -184,9 +185,22 @@ function harness(
     onBeforeUnmount: (fn) => unmounted.push(fn),
     onDeactivated: (fn) => deactivated.push(fn),
   };
+  const form = vue.reactive({ disabled: false });
+  const validations = [];
   const ep = {
     useZIndex: () => ({ nextZIndex: () => ++zIndex }),
-    useFormItem: () => ({}),
+    useFormItem: () => ({
+      form,
+      formItem: {
+        validate: async (trigger) => {
+          validations.push({
+            trigger,
+            value: Array.isArray(model.value) ? [...model.value] : model.value,
+          });
+          return true;
+        },
+      },
+    }),
   };
   const hook = loadModule(hookSource, (name) => {
     if (name === 'vue') return runtime;
@@ -209,6 +223,10 @@ function harness(
     'handleDocumentClick',
     'highlightedIndex',
     'filteredOptions',
+    'clearValue',
+    'handleInput',
+    'handleBlur',
+    ...(kind === 'SelectMultiple' ? ['removeValue'] : []),
     kind === 'Select' ? 'selectOption' : 'toggleOption',
   ];
   const source = sources[kind].match(
@@ -234,6 +252,12 @@ function harness(
     ...options,
   });
   const model = vue.ref(value);
+  const modelBinding = deferredModelWrite
+    ? vue.computed({
+        get: () => model.value,
+        set: (next) => { void vue.nextTick(() => { model.value = next; }); },
+      })
+    : model;
   const events = [];
   const exports = {};
   scope.run(() =>
@@ -254,7 +278,7 @@ function harness(
             current[key] = typeof value === 'function' ? value() : value;
         return current;
       },
-      () => model,
+      () => modelBinding,
       () =>
         (...args) =>
           events.push(args),
@@ -291,6 +315,8 @@ function harness(
   return {
     ...exports,
     props,
+    form,
+    validations,
     model,
     events,
     browser,
@@ -306,6 +332,23 @@ function harness(
     deactivate: () => deactivated.forEach((fn) => fn()),
   };
 }
+
+test('SelectMultiple: change carries the next array before a controlled parent writes it back', async () => {
+  const h = harness('SelectMultiple', {}, ['4'], true);
+  try {
+    h.toggleOption(h.props.options[1]);
+    assert.deepEqual(h.model.value, ['4']);
+    assert.deepEqual(h.events.at(-1), ['change', ['4', '6']]);
+    await vue.nextTick();
+    assert.deepEqual(h.validations.at(-1), { trigger: 'change', value: ['4', '6'] });
+    h.removeValue('4', { stopPropagation() {} });
+    assert.deepEqual(h.events.at(-1), ['change', ['6']]);
+    await vue.nextTick();
+    assert.deepEqual(h.model.value, ['6']);
+  } finally {
+    h.restore();
+  }
+});
 
 for (const kind of Object.keys(sources)) {
   test(`${kind}: template teleports its fixed dropdown, retains focus on menu mousedown and compiles`, () => {
@@ -506,6 +549,76 @@ for (const kind of Object.keys(sources)) {
         choose(h.props.options[10]);
         assert.deepEqual(h.model.value, []);
       }
+    } finally {
+      h.restore();
+    }
+  });
+
+  for (const lockSource of ['form', 'disabled', 'readonly']) {
+    test(`${kind}: ${lockSource} prevents stale menu, clear, keyboard and search mutations`, async () => {
+      const initialValue = kind === 'Select' ? '4' : ['4'];
+      const h = harness(kind, {}, initialValue);
+      try {
+        h.open();
+        await vue.nextTick();
+        if (lockSource === 'form') h.form.disabled = true;
+        else h.props[lockSource] = true;
+        assert.equal(h.opened.value, false, 'locking closes an open menu immediately');
+        h.open();
+        h.handleInput({ target: { value: '整行' } });
+        h.handleKeydown({ key: 'ArrowDown', preventDefault() {} });
+        const choose = kind === 'Select' ? h.selectOption : h.toggleOption;
+        choose(h.props.options[1]);
+        h.clearValue({ stopPropagation() {} });
+        if (kind === 'SelectMultiple') h.removeValue('4', { stopPropagation() {} });
+        await vue.nextTick();
+        assert.equal(h.opened.value, false);
+        assert.deepEqual(h.model.value, initialValue);
+        assert.deepEqual(h.events, []);
+        assert.deepEqual(h.validations, []);
+
+        if (lockSource === 'form') h.form.disabled = false;
+        else h.props[lockSource] = false;
+        h.open();
+        choose(h.props.options[1]);
+        assert.deepEqual(h.model.value, kind === 'Select' ? '6' : ['4', '6']);
+      } finally {
+        h.restore();
+      }
+    });
+  }
+
+  test(`${kind}: validates change/clear/blur after the model update; validateEvent can opt out`, async () => {
+    const h = harness(kind);
+    try {
+      const choose = kind === 'Select' ? h.selectOption : h.toggleOption;
+      choose(h.props.options[0]);
+      assert.deepEqual(h.validations, [], 'validation waits for parent v-model writes');
+      await vue.nextTick();
+      assert.deepEqual(h.validations.shift(), {
+        trigger: 'change', value: kind === 'Select' ? '4' : ['4'],
+      });
+      if (kind === 'SelectMultiple') {
+        h.removeValue('4', { stopPropagation() {} });
+        await vue.nextTick();
+        assert.deepEqual(h.validations.shift(), { trigger: 'change', value: [] });
+        choose(h.props.options[1]);
+        await vue.nextTick();
+        h.validations.length = 0;
+      }
+      h.clearValue({ stopPropagation() {} });
+      await vue.nextTick();
+      assert.deepEqual(h.validations.shift(), {
+        trigger: 'change', value: kind === 'Select' ? '' : [],
+      });
+      h.handleBlur();
+      await vue.nextTick();
+      assert.equal(h.validations.shift().trigger, 'blur');
+      h.props.validateEvent = false;
+      choose(h.props.options[0]);
+      h.handleBlur();
+      await vue.nextTick();
+      assert.deepEqual(h.validations, []);
     } finally {
       h.restore();
     }

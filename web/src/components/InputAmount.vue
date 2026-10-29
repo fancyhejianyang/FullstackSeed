@@ -18,6 +18,8 @@ import {
   type InputValidator,
 } from './inputRules';
 
+import { useFormControl } from './formControl';
+
 defineOptions({ inheritAttrs: false });
 
 export type InputAmountMode = 'amount' | 'percent';
@@ -29,6 +31,8 @@ const props = withDefaults(
     totalAmount?: number | null;
     placeholder?: string;
     clearable?: boolean;
+    disabled?: boolean;
+    readonly?: boolean;
     precision?: number;
     percentPrecision?: number;
     min?: number;
@@ -43,6 +47,8 @@ const props = withDefaults(
     totalAmount: null,
     placeholder: '',
     clearable: true,
+    disabled: false,
+    readonly: false,
     precision: 2,
     percentPrecision: 2,
     required: false,
@@ -56,6 +62,7 @@ const amountEditing = ref('');
 const percentEditing = ref('');
 const error = ref('');
 let editingSource: InputAmountMode | null = null;
+let expectedModel: number | null | undefined;
 
 const emit = defineEmits<{
   input: [value: number | null];
@@ -92,7 +99,11 @@ watch(
 
 watch(
   () => model.value,
-  () => {
+  (value) => {
+    if (!Object.is(value, expectedModel)) {
+      editingSource = null;
+      error.value = '';
+    }
     // 用户正在编辑某一侧时，只同步另一侧，避免当前输入框被格式化后造成光标跳动。
     if (editingSource === 'amount') {
       syncPercentValue();
@@ -101,7 +112,6 @@ watch(
     } else {
       syncEditingValues();
     }
-    editingSource = null;
   },
 );
 
@@ -114,35 +124,36 @@ watch(
 
 syncEditingValues();
 
-function syncEditingValues() {
-  syncAmountValue();
-  syncPercentValue();
+function syncEditingValues(value = model.value) {
+  syncAmountValue(value);
+  syncPercentValue(value);
 }
 
-function syncAmountValue() {
-  if (model.value === null || model.value === undefined) {
+function syncAmountValue(value = model.value) {
+  if (value === null || value === undefined) {
     amountEditing.value = '';
     return;
   }
-  amountEditing.value = trimNumber(model.value, props.precision);
+  amountEditing.value = trimNumber(value, props.precision);
 }
 
-function syncPercentValue() {
+function syncPercentValue(value = model.value) {
   if (
-    model.value === null ||
-    model.value === undefined ||
+    value === null ||
+    value === undefined ||
     !canUsePercent.value
   ) {
     percentEditing.value = '';
     return;
   }
   percentEditing.value = trimNumber(
-    (model.value / Number(props.totalAmount)) * 100,
+    (value / Number(props.totalAmount)) * 100,
     props.percentPrecision,
   );
 }
 
 function handleAmountInput(value: string | number) {
+  if (blocked.value) return;
   activeMode.value = 'amount';
   const normalized = normalizeDecimal(
     String(value),
@@ -150,34 +161,41 @@ function handleAmountInput(value: string | number) {
   );
   amountEditing.value = normalized;
   editingSource = 'amount';
-  model.value = toAmountValue(normalized, false);
-  syncPercentValue();
-  emit('input', model.value);
+  error.value = '';
+  const next = toAmountValue(normalized);
+  model.value = expectedModel = next;
+  syncPercentValue(next);
+  emit('input', next);
 }
 
 function handleAmountChange(value: string | number) {
+  if (blocked.value) return;
   activeMode.value = 'amount';
   const normalized = normalizeDecimal(
     String(value),
     props.precision,
   );
   editingSource = null;
-  model.value = toAmountValue(normalized, true);
-  syncEditingValues();
-  validate();
-  emit('change', model.value);
+  const next = toAmountValue(normalized);
+  model.value = expectedModel = next;
+  syncEditingValues(next);
+  validate(next);
+  emit('change', next);
 }
 
 function handleAmountBlur(event: FocusEvent) {
+  if (blocked.value) return;
   activeMode.value = 'amount';
   editingSource = null;
-  model.value = toAmountValue(amountEditing.value, true);
-  syncEditingValues();
-  validate();
+  const next = toAmountValue(amountEditing.value);
+  model.value = expectedModel = next;
+  syncEditingValues(next);
+  validate(next);
   emit('blur', event);
 }
 
 function handlePercentInput(value: string | number) {
+  if (blocked.value) return;
   if (!canUsePercent.value) {
     error.value = '请先提供总金额';
     return;
@@ -186,12 +204,15 @@ function handlePercentInput(value: string | number) {
   const normalized = normalizeDecimal(String(value), props.percentPrecision);
   percentEditing.value = normalized;
   editingSource = 'percent';
-  model.value = toPercentAmountValue(normalized, false);
-  syncAmountValue();
-  emit('input', model.value);
+  error.value = '';
+  const next = toPercentAmountValue(normalized);
+  model.value = expectedModel = next;
+  syncAmountValue(next);
+  emit('input', next);
 }
 
 function handlePercentChange(value: string | number) {
+  if (blocked.value) return;
   if (!canUsePercent.value) {
     error.value = '请先提供总金额';
     return;
@@ -199,22 +220,26 @@ function handlePercentChange(value: string | number) {
   activeMode.value = 'percent';
   const normalized = normalizeDecimal(String(value), props.percentPrecision);
   editingSource = null;
-  model.value = toPercentAmountValue(normalized, true);
-  syncEditingValues();
-  validate();
-  emit('change', model.value);
+  const next = toPercentAmountValue(normalized);
+  model.value = expectedModel = next;
+  syncEditingValues(next);
+  validate(next);
+  emit('change', next);
 }
 
 function handlePercentBlur(event: FocusEvent) {
+  if (blocked.value) return;
   activeMode.value = 'percent';
   editingSource = null;
-  model.value = toPercentAmountValue(percentEditing.value, true);
-  syncEditingValues();
-  validate();
+  const next = toPercentAmountValue(percentEditing.value);
+  model.value = expectedModel = next;
+  syncEditingValues(next);
+  validate(next);
   emit('blur', event);
 }
 
 function handleClear() {
+  if (blocked.value) return;
   amountEditing.value = '';
   percentEditing.value = '';
   model.value = null;
@@ -223,10 +248,13 @@ function handleClear() {
 }
 
 function handleModeToggle() {
+  if (blocked.value) return;
   if (!canUsePercent.value) {
     error.value = '请先提供总金额';
     return;
   }
+  editingSource = null;
+  syncEditingValues();
   activeMode.value = activeMode.value === 'amount' ? 'percent' : 'amount';
   emit('modeChange', activeMode.value);
 }
@@ -279,30 +307,23 @@ function handleSingleBlur(event: FocusEvent) {
   handleAmountBlur(event);
 }
 
-function toAmountValue(value: string, final: boolean) {
-  if (value === '' || value === '-' || value === '.') return final ? null : model.value;
+function toAmountValue(value: string) {
+  if (value === '' || value === '-' || value === '.' || value === '-.') return null;
   const numeric = Number(value);
-  if (Number.isNaN(numeric)) return null;
+  if (!Number.isFinite(numeric)) return null;
 
-  return clampAmount(roundNumber(numeric, props.precision));
+  return roundNumber(numeric, props.precision);
 }
 
-function toPercentAmountValue(value: string, final: boolean) {
-  if (value === '' || value === '-' || value === '.') return final ? null : model.value;
+function toPercentAmountValue(value: string) {
+  if (value === '' || value === '-' || value === '.' || value === '-.') return null;
   if (!canUsePercent.value) return model.value;
   const numeric = Number(value);
-  if (Number.isNaN(numeric)) return null;
+  if (!Number.isFinite(numeric)) return null;
 
   // 组件对外仍输出金额，百分比输入只在这里按 totalAmount 折算一次。
   const amount = (Number(props.totalAmount) * numeric) / 100;
-  return clampAmount(roundNumber(amount, props.precision));
-}
-
-function clampAmount(value: number) {
-  let next = value;
-  if (typeof props.min === 'number') next = Math.max(props.min, next);
-  if (typeof props.max === 'number') next = Math.min(props.max, next);
-  return next;
+  return roundNumber(amount, props.precision);
 }
 
 function normalizeDecimal(value: string, precision: number) {
@@ -350,17 +371,31 @@ function getRules() {
   ];
 }
 
-function validate() {
+function validate(value = model.value) {
   const result =
     activeMode.value === 'percent' && !canUsePercent.value
       ? '请先提供总金额'
-      : runInputRules(model.value, getRules());
+      : runInputRules(value, getRules());
   error.value = result === true ? '' : result;
   emit('validate', result);
   return result;
 }
 
-defineExpose({ validate });
+function clearValidate() {
+  error.value = '';
+}
+
+function reset() {
+  editingSource = null;
+  syncEditingValues();
+  clearValidate();
+}
+
+const { form } = useFormControl({ validate, clearValidate, reset });
+const effectiveDisabled = computed(() => props.disabled || !!form?.disabled);
+const blocked = computed(() => effectiveDisabled.value || props.readonly);
+
+defineExpose({ validate, clearValidate, reset });
 </script>
 
 <template>
@@ -368,6 +403,8 @@ defineExpose({ validate });
     <div v-if="props.switchable" class="input-amount__group">
       <el-input
         v-bind="$attrs"
+        :disabled="effectiveDisabled"
+        :readonly="props.readonly"
         class="input-amount__main"
         :model-value="mainEditingValue"
         :placeholder="
@@ -392,7 +429,7 @@ defineExpose({ validate });
       <div class="input-amount__tail">
         <el-button
           class="input-amount__switch"
-          :disabled="!canUsePercent"
+          :disabled="blocked || !canUsePercent"
           @click="handleModeToggle"
         >
           <el-icon><Sort /></el-icon>
@@ -404,6 +441,8 @@ defineExpose({ validate });
     <el-input
       v-else
       v-bind="$attrs"
+      :disabled="effectiveDisabled"
+      :readonly="props.readonly"
       class="input-amount__single"
       :model-value="singleEditingValue"
       :placeholder="props.placeholder"

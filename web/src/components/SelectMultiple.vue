@@ -20,6 +20,7 @@ import {
   ref,
   watch,
 } from 'vue';
+import { useFormItem } from 'element-plus';
 import type { SelectOption } from './Select.vue';
 import { useSelectDropdown } from './useSelectDropdown';
 
@@ -30,6 +31,7 @@ const props = withDefaults(
     options?: SelectOption[];
     placeholder?: string;
     disabled?: boolean;
+    readonly?: boolean;
     clearable?: boolean;
     filterable?: boolean;
     debounce?: number;
@@ -39,11 +41,13 @@ const props = withDefaults(
     maxTagCount?: number;
     maxSelections?: number;
     notFoundText?: string;
+    validateEvent?: boolean;
   }>(),
   {
     options: () => [],
     placeholder: '请选择',
     disabled: false,
+    readonly: false,
     clearable: true,
     filterable: true,
     debounce: 250,
@@ -53,10 +57,23 @@ const props = withDefaults(
     maxTagCount: 3,
     maxSelections: 0,
     notFoundText: '暂无匹配数据',
+    validateEvent: true,
   },
 );
 
 const model = defineModel<string[]>({ default: () => [] });
+const { form, formItem } = useFormItem();
+const effectiveDisabled = computed(
+  () => props.disabled || Boolean(form?.disabled),
+);
+const locked = computed(() => effectiveDisabled.value || props.readonly);
+
+async function validateField(trigger: 'change' | 'blur') {
+  if (!props.validateEvent || !formItem) return;
+  // 等待父表单写回字符串数组，再执行字段校验。
+  await nextTick();
+  await formItem.validate(trigger).catch(() => undefined);
+}
 const emit = defineEmits<{
   change: [value: string[]];
   clear: [];
@@ -163,6 +180,7 @@ watch(
     // 多选值契约严格保持 string[]，兼容外部误传数字但会立即规范化。
     const next = Array.isArray(value) ? value.map((item) => String(item)) : [];
     if (
+      !Array.isArray(value) ||
       next.length !== value.length ||
       next.some((item, index) => item !== value[index])
     ) {
@@ -173,7 +191,9 @@ watch(
 
 watch(searchInput, (value) => {
   window.clearTimeout(searchTimer);
+  if (!opened.value || locked.value) return;
   searchTimer = window.setTimeout(() => {
+    if (!opened.value || locked.value) return;
     // 搜索只影响内部过滤和 search 事件，不触发任何内置远程请求。
     keyword.value = value;
     highlightedIndex.value = filteredOptions.value.length ? 0 : -1;
@@ -196,13 +216,14 @@ watch(filteredOptions, () => {
 });
 
 function open() {
-  if (props.disabled) return;
+  if (locked.value) return;
   opened.value = true;
   highlightedIndex.value = filteredOptions.value.length ? 0 : -1;
   void focusInput();
 }
 
 function close() {
+  window.clearTimeout(searchTimer);
   opened.value = false;
   searchInput.value = '';
   keyword.value = '';
@@ -211,7 +232,7 @@ function close() {
 
 async function focusInput() {
   await nextTick();
-  inputRef.value?.focus();
+  if (opened.value && !locked.value) inputRef.value?.focus();
 }
 
 function toggleOpen() {
@@ -223,15 +244,17 @@ function toggleOpen() {
 }
 
 function toggleOption(option: SelectOption) {
-  if (isOptionDisabled(option)) return;
+  if (locked.value || isOptionDisabled(option)) return;
   const next = new Set(selectedValues.value);
   if (next.has(option.value)) {
     next.delete(option.value);
   } else {
     next.add(option.value);
   }
-  model.value = Array.from(next);
-  emit('change', model.value);
+  const value = Array.from(next);
+  model.value = value;
+  emit('change', value);
+  void validateField('change');
 }
 
 function isOptionDisabled(option: SelectOption) {
@@ -251,17 +274,27 @@ function getOptionTitle(option: SelectOption) {
 
 function removeValue(value: string, event: MouseEvent) {
   event.stopPropagation();
-  model.value = selectedValues.value.filter((item) => item !== value);
-  emit('change', model.value);
+  if (locked.value) return;
+  const next = selectedValues.value.filter((item) => item !== value);
+  model.value = next;
+  emit('change', next);
+  void validateField('change');
 }
 
 function clearValue(event: MouseEvent) {
   event.stopPropagation();
+  if (locked.value) return;
   model.value = [];
   expanded.value = false;
   emit('clear');
   emit('change', []);
+  void validateField('change');
   close();
+}
+
+function handleBlur() {
+  close();
+  void validateField('blur');
 }
 
 function toggleExpanded(event: MouseEvent) {
@@ -270,13 +303,13 @@ function toggleExpanded(event: MouseEvent) {
 }
 
 function handleInput(value: Event) {
-  if (!props.filterable) return;
+  if (locked.value || !props.filterable) return;
   searchInput.value = (value.target as HTMLInputElement).value;
   if (!opened.value) open();
 }
 
 function handleKeydown(event: KeyboardEvent) {
-  if (props.disabled) return;
+  if (locked.value) return;
   if (!opened.value && ['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) {
     event.preventDefault();
     open();
@@ -336,10 +369,11 @@ function handleDocumentClick(event: MouseEvent) {
 }
 
 watch(
-  () => props.disabled,
-  (disabled) => {
-    if (disabled) close();
+  locked,
+  (value) => {
+    if (value) close();
   },
+  { flush: 'sync' },
 );
 
 onMounted(() => {
@@ -366,7 +400,7 @@ watch(opened, async (value) => {
     class="select-multiple"
     :class="{
       'is-opened': opened,
-      'is-disabled': props.disabled,
+      'is-disabled': effectiveDisabled,
       'is-expanded': expanded,
     }"
     v-bind="$attrs"
@@ -381,7 +415,7 @@ watch(opened, async (value) => {
         >
           {{ tag.text }}
           <button
-            v-if="!props.disabled"
+            v-if="!locked"
             class="select-multiple__tag-close"
             type="button"
             @mousedown.stop.prevent
@@ -412,16 +446,17 @@ watch(opened, async (value) => {
           ref="inputRef"
           class="select-multiple__input"
           :value="searchInput"
-          :readonly="!props.filterable"
-          :disabled="props.disabled"
+          :readonly="props.readonly || !props.filterable"
+          :disabled="effectiveDisabled"
+          :aria-readonly="props.readonly"
           :placeholder="selectedTags.length ? '' : props.placeholder"
           @input="handleInput"
-          @blur="close"
+          @blur="handleBlur"
           @keydown="handleKeydown"
         />
       </div>
       <button
-        v-if="props.clearable && selectedValues.length && !props.disabled"
+        v-if="props.clearable && selectedValues.length && !locked"
         class="select-multiple__clear"
         type="button"
         @mousedown.stop.prevent

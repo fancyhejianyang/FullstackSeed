@@ -11,7 +11,7 @@
  * - 通过 `#toolbar` / `#column-字段名` / `#actions` 保留业务扩展入口
  * - 暴露 refresh/search/clearSelection/getSelectedRows/runBatchDelete 等方法给页面 ref 调用
  */
-import { computed, onMounted, reactive, ref, shallowRef } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { TableInstance } from 'element-plus';
 import type { FormField } from './Form.vue';
@@ -159,6 +159,8 @@ const tableRef = ref<TableInstance>();
 const selectedRows = shallowRef<T[]>([]);
 
 let syncingSingleSelection = false;
+let requestVersion = 0;
+let disposed = false;
 
 function isCancelError(error: unknown) {
   return error === 'cancel' || error === 'close';
@@ -173,12 +175,6 @@ function getRowId(row: T): RowId | undefined {
 
 function getSelectedRows() {
   return [...selectedRows.value];
-}
-
-function getSelectedIds() {
-  return selectedRows.value
-    .map((row) => getRowId(row))
-    .filter((id): id is RowId => id !== undefined);
 }
 
 function emitSelection(rows: T[]) {
@@ -238,6 +234,8 @@ function toggleCardSelection(row: T, checked: boolean) {
 }
 
 async function fetchData() {
+  if (disposed) return;
+  const version = ++requestVersion;
   loading.value = true;
   try {
     const activeFilters = Object.fromEntries(
@@ -250,18 +248,43 @@ async function fetchData() {
       pageSize: pageSize.value,
       ...activeFilters,
     });
+    if (disposed || version !== requestVersion) return;
     list.value = res.list;
     total.value = res.total;
     if (props.displayMode === 'cards') clearSelection();
+  } catch (error) {
+    if (!disposed && version === requestVersion) throw error;
   } finally {
-    loading.value = false;
+    if (!disposed && version === requestVersion) loading.value = false;
   }
 }
 
 async function handleSearch() {
-  if (props.displayMode === 'cards') page.value = 1;
+  page.value = 1;
   appliedSearchModel.value = { ...searchModel };
   await fetchData();
+}
+
+async function handlePageChange(value: number) {
+  if (page.value === value) return;
+  page.value = value;
+  await fetchData();
+}
+
+async function handlePageSizeChange(value: number) {
+  if (pageSize.value === value) return;
+  pageSize.value = value;
+  page.value = 1;
+  // 每页数量变更沿用已提交条件，不把尚未查询的输入带入请求。
+  await fetchData();
+}
+
+async function refreshAfterDelete() {
+  try {
+    await fetchData();
+  } catch {
+    if (!disposed) ElMessage.warning('删除已完成，列表刷新失败，请刷新重试');
+  }
 }
 
 async function handleReset() {
@@ -273,22 +296,26 @@ async function handleReset() {
 
 // 内置删除：组件负责确认、执行 API（可选）与刷新，并通知页面
 async function handleDelete(row: T) {
+  if (disposed || deleting.value || batchDeleting.value || !canDo('delete')) return;
+  deleting.value = true;
   try {
     await ElMessageBox.confirm('确认删除该记录？', '提示', { type: 'warning' });
+    if (disposed || !canDo('delete')) return;
 
     if (props.deleteRequest) {
-      deleting.value = true;
       await props.deleteRequest(row);
+      if (disposed) return;
       ElMessage.success('删除成功');
-      if (props.autoRefreshOnDelete) {
-        await fetchData();
-      }
       clearSelection();
+      emit('delete', row);
+      if (props.autoRefreshOnDelete) {
+        await refreshAfterDelete();
+      }
+    } else {
+      emit('delete', row);
     }
-
-    emit('delete', row);
   } catch (error) {
-    if (!isCancelError(error)) {
+    if (!disposed && !isCancelError(error)) {
       ElMessage.error('删除失败，请稍后重试');
     }
   } finally {
@@ -298,12 +325,19 @@ async function handleDelete(row: T) {
 
 // 批量删除：组件负责确认、执行 API（可选）与刷新，并通知页面
 async function runBatchDelete() {
+  if (disposed || deleting.value || batchDeleting.value || !canBatchDelete.value) return;
   const rows = getSelectedRows();
   if (!rows.length) {
     ElMessage.warning('请先选择要删除的记录');
     return;
   }
+  const ids = rows.map(getRowId).filter((id): id is RowId => id !== undefined);
+  if (props.batchDeleteRequest && ids.length !== rows.length) {
+    ElMessage.warning('所选记录缺少编号，请刷新后重试');
+    return;
+  }
 
+  batchDeleting.value = true;
   try {
     await ElMessageBox.confirm(
       `确认删除选中的 ${rows.length} 条记录？`,
@@ -312,20 +346,22 @@ async function runBatchDelete() {
         type: 'warning',
       },
     );
+    if (disposed || !canBatchDelete.value) return;
 
     if (props.batchDeleteRequest) {
-      batchDeleting.value = true;
-      await props.batchDeleteRequest({ ids: getSelectedIds(), rows });
+      await props.batchDeleteRequest({ ids, rows });
+      if (disposed) return;
       ElMessage.success('批量删除成功');
-      if (props.autoRefreshOnBatchDelete) {
-        await fetchData();
-      }
       clearSelection();
+      emit('batch-delete', rows);
+      if (props.autoRefreshOnBatchDelete) {
+        await refreshAfterDelete();
+      }
+    } else {
+      emit('batch-delete', rows);
     }
-
-    emit('batch-delete', rows);
   } catch (error) {
-    if (!isCancelError(error)) {
+    if (!disposed && !isCancelError(error)) {
       ElMessage.error('批量删除失败，请稍后重试');
     }
   } finally {
@@ -344,6 +380,10 @@ defineExpose({
 });
 
 onMounted(fetchData);
+onBeforeUnmount(() => {
+  disposed = true;
+  requestVersion += 1;
+});
 </script>
 
 <template>
@@ -450,6 +490,7 @@ onMounted(fetchData);
             :auto-icon="false"
             :confirm="false"
             :loading="deleting"
+            :disabled="batchDeleting"
             @click="handleDelete(row)"
             >删除</Button
           >
@@ -506,6 +547,8 @@ onMounted(fetchData);
             v-if="canDelete"
             link
             type="danger"
+            :loading="deleting"
+            :disabled="batchDeleting"
             @click="handleDelete(scope.row)"
           >
             删除
@@ -534,13 +577,13 @@ onMounted(fetchData);
     <!-- 分页 -->
     <div class="pro-table__pagination">
       <el-pagination
-        v-model:current-page="page"
-        v-model:page-size="pageSize"
+        :current-page="page"
+        :page-size="pageSize"
         :total="total"
         :page-sizes="props.pageSizes"
         layout="total, sizes, prev, pager, next"
-        @current-change="fetchData"
-        @size-change="handleSearch"
+        @update:current-page="handlePageChange"
+        @update:page-size="handlePageSizeChange"
       />
     </div>
   </div>

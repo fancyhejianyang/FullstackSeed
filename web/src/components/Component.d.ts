@@ -1,166 +1,61 @@
-import type { InputAmountMode } from './InputAmount.vue';
-import type { InputValidator } from './inputRules';
-import type { CheckboxOption } from './CheckboxGroup.vue';
-import type { InputMode } from './Input.vue';
-import type { InputNumberMode } from './InputNumber.vue';
-import type { SelectOption } from './Select.vue';
-import type { UploadRequest } from '@/api/upload';
+import type { InputProps } from 'element-plus';
+import type { AriaAttributes, InputHTMLAttributes } from 'vue';
+import type Checkbox from './Checkbox.vue';
+import type CheckboxGroup from './CheckboxGroup.vue';
+import type DatePicker from './DatePicker.vue';
+import type DateRange from './DateRange.vue';
+import type Input from './Input.vue';
+import type InputAmount from './InputAmount.vue';
+import type InputEmail from './InputEmail.vue';
+import type InputNumber from './InputNumber.vue';
+import type InputPhone from './InputPhone.vue';
+import type Select from './Select.vue';
+import type SelectMultiple from './SelectMultiple.vue';
+import type Switch from './Switch.vue';
+import type UploadFile from './UploadFile.vue';
+import type UploadImage from './UploadImage.vue';
+
+/** 配置只登记控件 props；模型和事件由 Form 管理，不允许覆盖。 */
+type ConfigProps<T extends abstract new (...args: any[]) => any> = {
+  [K in keyof InstanceType<T>['$props'] as K extends
+    | `on${string}`
+    | `${string}Modifiers`
+    | 'modelValue'
+    | 'key'
+    | 'ref'
+    | 'ref_for'
+    | 'ref_key'
+    ? never : K]?: InstanceType<T>['$props'][K];
+};
+
+/** 文本类封装明确透传的常用 Element Plus 属性，不开放任意字符串键。 */
+type InputAttrs = Partial<Pick<InputProps,
+  | 'disabled' | 'readonly' | 'autocomplete' | 'autofocus'
+  | 'maxlength' | 'minlength' | 'showWordLimit' | 'resize'
+  | 'autosize' | 'name' | 'tabindex' | 'validateEvent'
+  | 'prefixIcon' | 'suffixIcon'
+>> & Pick<InputHTMLAttributes, 'spellcheck' | 'inputmode'> & AriaAttributes;
 
 /**
- * 项目封装组件名称登记表。
- *
- * 用途：
- * - 动态表单只允许从这里匹配组件名，避免业务配置写错组件名后运行期才爆错
- * - ComponentPropsMap 记录每个组件可配置的 props，方便后续做表单设计器/字段配置时复用
- * - 新增二次封装组件时，需要同步补充 ComponentName、ComponentPropsMap 和 componentRegistry.ts
+ * 从实际组件声明派生配置类型，新增 props 无需维护第二份手写定义。
+ * 新增组件时仍需同步 componentRegistry.ts 白名单。
  */
-export type ComponentName =
-  | 'Checkbox'
-  | 'CheckboxGroup'
-  | 'DatePicker'
-  | 'DateRange'
-  | 'Input'
-  | 'InputAmount'
-  | 'InputEmail'
-  | 'InputNumber'
-  | 'InputPhone'
-  | 'Select'
-  | 'SelectMultiple'
-  | 'Switch'
-  | 'UploadFile'
-  | 'UploadImage';
-
 export interface ComponentPropsMap {
-  Checkbox: {
-    label?: string;
-    disabled?: boolean;
-  };
-  CheckboxGroup: {
-    options?: CheckboxOption[];
-    disabled?: boolean;
-  };
-  DatePicker: {
-    type?: 'date' | 'datetime';
-    placeholder?: string;
-    clearable?: boolean;
-    format?: string;
-    valueFormat?: string;
-    disabled?: boolean;
-  };
-  DateRange: {
-    type?: 'daterange' | 'datetimerange';
-    startPlaceholder?: string;
-    endPlaceholder?: string;
-    rangeSeparator?: string;
-    clearable?: boolean;
-    format?: string;
-    valueFormat?: string;
-    disabled?: boolean;
-  };
-  Input: {
-    mode?: InputMode;
-    placeholder?: string;
-    clearable?: boolean;
-    trim?: boolean;
-    precision?: number;
-    min?: number;
-    max?: number;
-    rows?: number;
-    maxlength?: number;
-    prefixText?: string;
-    suffixText?: string;
-  };
-  InputNumber: {
-    mode?: InputNumberMode;
-    placeholder?: string;
-    clearable?: boolean;
-    precision?: number;
-    min?: number;
-    max?: number;
-    required?: boolean;
-    rulesEnabled?: boolean;
-    rules?: InputValidator<number | null>[];
-    prefixText?: string;
-    suffixText?: string;
-  };
-  InputAmount: {
-    mode?: InputAmountMode;
-    switchable?: boolean;
-    totalAmount?: number | null;
-    placeholder?: string;
-    clearable?: boolean;
-    precision?: number;
-    percentPrecision?: number;
-    min?: number;
-    max?: number;
-    required?: boolean;
-    rulesEnabled?: boolean;
-    rules?: InputValidator<number | null>[];
-  };
-  InputEmail: {
-    placeholder?: string;
-    domainPlaceholder?: string;
-    domains?: string[];
-    clearable?: boolean;
-    required?: boolean;
-    rulesEnabled?: boolean;
-    rules?: InputValidator<string | null>[];
-  };
-  InputPhone: {
-    placeholder?: string;
-    clearable?: boolean;
-    required?: boolean;
-    rulesEnabled?: boolean;
-    rules?: InputValidator<string | null>[];
-  };
-  Select: {
-    options?: SelectOption[];
-    placeholder?: string;
-    disabled?: boolean;
-    clearable?: boolean;
-    filterable?: boolean;
-    debounce?: number;
-    virtual?: boolean;
-    itemHeight?: number;
-    visibleCount?: number;
-    notFoundText?: string;
-  };
-  SelectMultiple: {
-    options?: SelectOption[];
-    placeholder?: string;
-    disabled?: boolean;
-    clearable?: boolean;
-    filterable?: boolean;
-    debounce?: number;
-    virtual?: boolean;
-    itemHeight?: number;
-    visibleCount?: number;
-    maxTagCount?: number;
-    notFoundText?: string;
-  };
-  Switch: {
-    activeText?: string;
-    inactiveText?: string;
-    disabled?: boolean;
-  };
-  UploadFile: {
-    accept?: string;
-    maxSizeMb?: number;
-    disabled?: boolean;
-    dragText?: string;
-    readText?: boolean;
-    contextKey?: string | number;
-    validateEvent?: boolean;
-    uploadRequest?: UploadRequest;
-  };
-  UploadImage: {
-    accept?: string;
-    maxSizeMb?: number;
-    disabled?: boolean;
-    contextKey?: string | number;
-    validateEvent?: boolean;
-    uploadRequest?: UploadRequest;
-  };
+  Checkbox: ConfigProps<typeof Checkbox>;
+  CheckboxGroup: ConfigProps<typeof CheckboxGroup>;
+  DatePicker: ConfigProps<typeof DatePicker>;
+  DateRange: ConfigProps<typeof DateRange>;
+  Input: ConfigProps<typeof Input> & InputAttrs;
+  InputNumber: ConfigProps<typeof InputNumber> & InputAttrs;
+  InputAmount: ConfigProps<typeof InputAmount> & InputAttrs;
+  InputEmail: ConfigProps<typeof InputEmail> & InputAttrs;
+  InputPhone: ConfigProps<typeof InputPhone> & InputAttrs;
+  Select: ConfigProps<typeof Select>;
+  SelectMultiple: ConfigProps<typeof SelectMultiple>;
+  Switch: ConfigProps<typeof Switch>;
+  UploadFile: Omit<ConfigProps<typeof UploadFile>, 'name' | 'content'>;
+  UploadImage: ConfigProps<typeof UploadImage>;
 }
 
+export type ComponentName = keyof ComponentPropsMap;
 export type ComponentProps<T extends ComponentName> = ComponentPropsMap[T];

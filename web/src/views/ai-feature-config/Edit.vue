@@ -606,7 +606,7 @@ const fields = computed<FormField[]>(() => {
         prop: "temperature",
         label: "温度",
         component: "InputNumber",
-        componentProps: { min: 0, max: 2, precision: 2, step: 0.1 },
+        componentProps: { min: 0, max: 2, precision: 2 },
         hint:
           Number(form.temperature) <= 0.2
             ? `当前 ${form.temperature}：输出更稳定、可复现，适合客服、解析和结构化结果。`
